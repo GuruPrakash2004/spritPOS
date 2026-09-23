@@ -1,10 +1,31 @@
 import { useState, useMemo } from 'react';
-import { 
+import {
   Package, Receipt, Truck, TrendingUp, Trash2,
-  ChevronLeft, ChevronRight, BarChart3
+  ChevronLeft, ChevronRight, BarChart3,
+
 } from 'lucide-react';
-import { numberToWords } from './formatters';
 import { SAMPLE_STOCK_DATA } from './stockData';
+
+function numberToWords(num: number): string {
+  if (!num || isNaN(num) || num === 0) return 'Zero Rupees Only';
+  const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const n = Math.floor(num);
+  const paisa = Math.round((num - n) * 100);
+
+  function inWords(n: number): string {
+    if (n < 20) return a[n];
+    if (n < 100) return b[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + a[n % 10] : ' ');
+    if (n < 1000) return a[Math.floor(n / 100)] + 'Hundred ' + (n % 100 !== 0 ? inWords(n % 100) : '');
+    if (n < 100000) return inWords(Math.floor(n / 1000)) + 'Thousand ' + (n % 1000 !== 0 ? inWords(n % 1000) : '');
+    if (n < 10000000) return inWords(Math.floor(n / 100000)) + 'Lakh ' + (n % 100000 !== 0 ? inWords(n % 100000) : '');
+    return inWords(Math.floor(n / 10000000)) + 'Crore ' + (n % 10000000 !== 0 ? inWords(n % 10000000) : '');
+  }
+
+  let str = 'Rupees ' + inWords(n).trim();
+  if (paisa > 0) str += ' and ' + inWords(paisa).trim() + ' Paise';
+  return str + ' Only';
+}
 
 // --- DASHBOARD ---
 export const Dashboard = () => {
@@ -46,29 +67,39 @@ export const Dashboard = () => {
           );
         })}
       </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="xl:col-span-2 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-start justify-between mb-6">
+            <div><h3 className="font-heading font-bold text-slate-900 dark:text-white">Sales performance</h3><p className="text-xs text-slate-500 mt-1">Bills value in thousands, last 7 days</p></div>
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+12.4%</span>
+          </div>
+          <div className="h-44 flex items-end gap-2 sm:gap-4 border-b border-slate-200 dark:border-slate-800 px-2">
+            {[112, 145, 128, 168, 154, 192, 185].map((amount, index) => (
+              <div key={amount + index} className="flex-1 h-full flex flex-col justify-end items-center gap-2">
+                <span className="text-[10px] text-slate-400">₹{amount}k</span>
+                <div className="w-full max-w-10 rounded-t-lg bg-emerald-500/80" style={{ height: `${(amount / 192) * 78}%` }} />
+                <span className="text-[10px] font-medium text-slate-500">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <h3 className="font-heading font-bold text-slate-900 dark:text-white">Inventory mix</h3><p className="text-xs text-slate-500 mt-1">Share of current stock value</p>
+          <div className="flex items-center gap-5 mt-5"><div className="h-28 w-28 rounded-full" style={{ background: 'conic-gradient(#10b981 0 42%, #3b82f6 42% 68%, #f59e0b 68% 86%, #f43f5e 86% 100%)' }}><div className="h-16 w-16 rounded-full bg-white dark:bg-slate-900 m-6 flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-200">100%</div></div><div className="space-y-2 text-xs">{[['Whisky', '42%', 'bg-emerald-500'], ['Beer', '26%', 'bg-blue-500'], ['Rum & Vodka', '18%', 'bg-amber-500'], ['Scotch', '14%', 'bg-rose-500']].map(([label, value, color]) => <div key={label} className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${color}`} /><span className="text-slate-500">{label}</span><strong className="text-slate-800 dark:text-slate-200">{value}</strong></div>)}</div></div>
+        </div>
+      </div>
+
+      <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between mb-5"><div><h3 className="font-heading font-bold text-slate-900 dark:text-white">Stock movement</h3><p className="text-xs text-slate-500 mt-1">Today&apos;s inventory flow across the store</p></div><BarChart3 size={18} className="text-emerald-500" /></div>
+        <div className="grid grid-cols-3 gap-4">{[['Opening stock', '1,248', '88%', 'bg-slate-400'], ['Received', '+168', '58%', 'bg-blue-500'], ['Issued', '-96', '34%', 'bg-rose-500']].map(([label, value, width, color]) => <div key={label} className="border-l-2 border-slate-200 dark:border-slate-700 pl-3"><p className="text-xs text-slate-500">{label}</p><strong className="text-xl font-heading text-slate-800 dark:text-slate-200">{value}</strong><div className="mt-2 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800"><div className={`h-full rounded-full ${color}`} style={{ width }} /></div></div>)}</div>
+      </div>
     </div>
   );
 };
 
-// --- ITEM MASTER ---
-const ItemField = ({ label, value, readOnly = false, type = 'text', className = '' }: {
-  label: string;
-  value: string | number;
-  readOnly?: boolean;
-  type?: string;
-  className?: string;
-}) => (
-  <div>
-    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">{label}</label>
-    <input
-      type={type}
-      defaultValue={value}
-      readOnly={readOnly}
-      className={`w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 ${className}`}
-    />
-  </div>
-);
-
+// --- ITEM MASTER (Page 6) ---
 export const ItemMaster = () => {
   const [idx, setIdx] = useState(0);
   const current = SAMPLE_STOCK_DATA[idx];
@@ -78,7 +109,7 @@ export const ItemMaster = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
           <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">Item Master</h2>
-          <p className="text-xs text-slate-500">Liquor catalogue, KSBCL barcode mappings, MRP & excise taxes.</p>
+          <p className="text-xs text-slate-500">Liquor catalogue, KSBCL barcode mappings, MRP & excise taxes (Page 6).</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setIdx((idx - 1 + SAMPLE_STOCK_DATA.length) % SAMPLE_STOCK_DATA.length)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200">
@@ -93,14 +124,32 @@ export const ItemMaster = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <ItemField label="Item Code / Description" value={current.name} readOnly className="font-mono font-medium bg-slate-50 dark:bg-slate-800" />
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <ItemField label="UOM" value="Bottle" />
-            <ItemField label="HSN Code" value="22083011" className="font-mono" />
-            <ItemField label="Item Group" value={current.group} />
-            <ItemField label="Category" value={current.cat} className="font-bold text-emerald-600" />
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Item Code / Description</label>
+            <input type="text" value={current.name} readOnly className="w-full px-3 py-2 text-xs font-mono font-medium rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
           </div>
-          <ItemField label="Bottles per Case" value="12" type="number" className="w-32" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">UOM</label>
+              <input type="text" defaultValue="Bottle" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">HSN Code</label>
+              <input type="text" defaultValue="22083011" className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Item Group</label>
+              <input type="text" defaultValue={current.group} className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Category</label>
+              <input type="text" defaultValue={current.cat} className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-emerald-600" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Bottles per Case</label>
+            <input type="number" defaultValue="12" className="w-32 px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+          </div>
         </div>
 
         <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 text-xs">
@@ -131,7 +180,7 @@ export const ItemMaster = () => {
   );
 };
 
-// --- PURCHASE BILL ---
+// --- PURCHASE BILL (Page 18) ---
 export const PurchaseBill = () => {
   const [items, setItems] = useState([
     { id: 1, code: 'VIN-750', name: 'VIN GREEN LABEL BARREL SPECIAL CLASIC WHISKY 750ML', qoh: 48, qty: 24, rate: 759.29 },
@@ -148,7 +197,7 @@ export const PurchaseBill = () => {
             <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">New - Purchase Bill</h2>
             <span className="px-2 py-0.5 text-xs font-mono font-bold bg-purple-100 text-purple-700 rounded-md">PB No: 201</span>
           </div>
-          <p className="text-xs text-slate-500">Consignment procurement from R&D Distributors / KSBCL.</p>
+          <p className="text-xs text-slate-500">Consignment procurement from R&D Distributors / KSBCL (Page 18).</p>
         </div>
         <div className="text-xs font-mono">Date: <span className="font-bold">21/09/2026</span></div>
       </div>
@@ -201,7 +250,7 @@ export const PurchaseBill = () => {
   );
 };
 
-// --- STOCK BALANCE REPORT ---
+// --- STOCK BALANCE REPORT (Page 24) ---
 export const StockBalanceReport = () => {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -210,7 +259,7 @@ export const StockBalanceReport = () => {
           <div className="p-3 bg-amber-500/10 text-amber-600 rounded-xl"><BarChart3 size={24} /></div>
           <div>
             <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">Stock Balance Report</h2>
-            <p className="text-xs text-slate-500">Excise opening, receipt, issued & closing ledger balances.</p>
+            <p className="text-xs text-slate-500">Excise opening, receipt, issued & closing ledger balances (Page 24).</p>
           </div>
         </div>
       </div>
@@ -253,10 +302,10 @@ export const StockBalanceReport = () => {
   );
 };
 
-// --- EXPENSE ENTRY ---
+// --- EXPENSE ENTRY (Page 19) ---
 export const ExpenseEntry = () => (
   <div className="max-w-5xl mx-auto p-6 rounded-2xl bg-white dark:bg-slate-900 border shadow-sm space-y-4">
-    <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">Expense Entry</h2>
+    <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">Expense Entry (Page 19)</h2>
     <div className="overflow-x-auto rounded-xl border">
       <table className="w-full text-xs text-left">
         <thead className="bg-slate-50 uppercase">
@@ -271,10 +320,10 @@ export const ExpenseEntry = () => (
   </div>
 );
 
-// --- STOCK DEDUCTION ---
+// --- STOCK DEDUCTION (Page 20) ---
 export const StockDeduction = () => (
   <div className="max-w-5xl mx-auto p-6 rounded-2xl bg-white dark:bg-slate-900 border shadow-sm space-y-4">
-    <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">Stock Deduction</h2>
+    <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">Stock Deduction (Page 20)</h2>
     <p className="text-xs text-slate-500">Excise breakage, spillage, and damage adjustments.</p>
     <div className="p-4 rounded-xl bg-slate-50 font-mono text-xs">
       Item: VIN GREEN LABEL BARREL SPECIAL CLASIC WHISKY 750ML • Deducted Qty: 2 Bottles • Reason: Unloading crate breakage
@@ -298,14 +347,14 @@ const GenericModule = ({ title, fields }: { title: string; fields: string[] }) =
   </div>
 );
 
-export const ItemGroupMaster = () => <GenericModule title="Item Group Master" fields={['ITEMGROUP Code', 'ITEMGROUP Name', 'Consider for Loyalty', 'Liquor ItemGroup']} />;
-export const UOMMaster = () => <GenericModule title="UOM Master" fields={['UOM Code', 'UOM Name', 'Decimal Places']} />;
-export const CustomerMaster = () => <GenericModule title="Customer Master" fields={['Customer Code', 'Customer Name', 'Phone Number', 'GST Number', 'Address', 'City']} />;
-export const LedgerMaster = () => <GenericModule title="Ledger Master" fields={['Ledger Code', 'Ledger Name', 'Ledger Group', 'Opening Balance']} />;
-export const LedgerGroupMaster = () => <GenericModule title="Ledger Group Master" fields={['Group Code', 'Group Name', 'Nature of Ledger']} />;
-export const SalesCounterMaster = () => <GenericModule title="Sales Counter Master" fields={['Counter Code', 'Counter Name', 'System Name', 'Prefix']} />;
-export const PackageMaster = () => <GenericModule title="Package Master" fields={['Package Code', 'Package Name', 'Ltrs In Reports']} />;
-export const BrandMaster = () => <GenericModule title="Brand Master" fields={['Brand Code', 'Brand Name', 'Manufacturer']} />;
-export const PurchaseIndent = () => <GenericModule title="Purchase Indent" fields={['Indent Number', 'KSBCL Depot', 'Supplier', 'Required Delivery Date']} />;
-export const SalesReturn = () => <GenericModule title="Sales Return" fields={['Return Bill No', 'Customer Name', 'Counter', 'Reason for Return']} />;
+export const ItemGroupMaster = () => <GenericModule title="Item Group Master (Page 7)" fields={['ITEMGROUP Code', 'ITEMGROUP Name', 'Consider for Loyalty', 'Liquor ItemGroup']} />;
+export const UOMMaster = () => <GenericModule title="UOM Master (Page 8)" fields={['UOM Code', 'UOM Name', 'Decimal Places']} />;
+export const CustomerMaster = () => <GenericModule title="Customer Master (Page 9)" fields={['Customer Code', 'Customer Name', 'Phone Number', 'GST Number', 'Address', 'City']} />;
+export const LedgerMaster = () => <GenericModule title="Ledger Master (Page 13)" fields={['Ledger Code', 'Ledger Name', 'Ledger Group', 'Opening Balance']} />;
+export const LedgerGroupMaster = () => <GenericModule title="Ledger Group Master (Page 14)" fields={['Group Code', 'Group Name', 'Nature of Ledger']} />;
+export const SalesCounterMaster = () => <GenericModule title="Sales Counter Master (Page 15)" fields={['Counter Code', 'Counter Name', 'System Name', 'Prefix']} />;
+export const PackageMaster = () => <GenericModule title="Package Master (Page 16)" fields={['Package Code', 'Package Name', 'Ltrs In Reports']} />;
+export const BrandMaster = () => <GenericModule title="Brand Master (Page 17)" fields={['Brand Code', 'Brand Name', 'Manufacturer']} />;
+export const PurchaseIndent = () => <GenericModule title="Purchase Indent (Page 21)" fields={['Indent Number', 'KSBCL Depot', 'Supplier', 'Required Delivery Date']} />;
+export const SalesReturn = () => <GenericModule title="Sales Return (Page 22)" fields={['Return Bill No', 'Customer Name', 'Counter', 'Reason for Return']} />;
 export const SalesInvoice = () => <GenericModule title="Sales Invoice POS" fields={['Invoice No', 'Counter 1', 'Payment Mode (Cash/UPI)', 'Customer Name']} />;

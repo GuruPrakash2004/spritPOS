@@ -5,11 +5,71 @@
 :root {
 	color-scheme: light;
 }
-
 body {
 	margin: 0;
 	min-width: 320px;
-	background: #f7f8f6;
+	background: #f4f1eb;
+}
+
+.workspace-backdrop {
+	position: relative;
+	isolation: isolate;
+	background-image:
+		repeating-linear-gradient(115deg, rgba(120, 85, 45, 0.05) 0, rgba(120, 85, 45, 0.05) 1px, transparent 1px, transparent 72px),
+		radial-gradient(circle at 92% 4%, rgba(232, 112, 42, 0.13), transparent 28%),
+		radial-gradient(circle at 8% 96%, rgba(120, 85, 45, 0.1), transparent 30%);
+	background-size: 72px 72px, 140% 140%, 160% 160%;
+	animation: workspaceDrift 18s ease-in-out infinite alternate;
+}
+
+.workspace-backdrop::before {
+	content: '';
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	pointer-events: none;
+	background:
+		radial-gradient(circle 250px at var(--cursor-x, 50%) var(--cursor-y, 50%), rgba(232, 112, 42, 0.24), transparent 70%),
+		radial-gradient(circle 86px at var(--cursor-x, 50%) var(--cursor-y, 50%), rgba(255, 255, 255, 0.42), transparent 100%);
+	mix-blend-mode: multiply;
+	animation: cursorAura 3.5s ease-in-out infinite;
+	transition: background 180ms ease-out;
+}
+
+.workspace-backdrop > * {
+	position: relative;
+	z-index: 1;
+}
+
+.dark .workspace-backdrop {
+	background-image:
+		repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.025) 0, rgba(255, 255, 255, 0.025) 1px, transparent 1px, transparent 72px),
+		radial-gradient(circle at 92% 4%, rgba(232, 112, 42, 0.14), transparent 30%),
+		radial-gradient(circle at 8% 96%, rgba(109, 78, 40, 0.14), transparent 32%);
+}
+
+.dark .workspace-backdrop::before {
+	background: radial-gradient(circle 240px at var(--cursor-x, 50%) var(--cursor-y, 50%), rgba(232, 112, 42, 0.2), transparent 72%);
+	mix-blend-mode: screen;
+}
+
+@keyframes workspaceDrift {
+	0% {
+		background-position: 0 0, 100% 0, 0 100%;
+	}
+	100% {
+		background-position: 36px 18px, 84% 12%, 12% 88%;
+	}
+}
+
+@keyframes cursorAura {
+	0%,
+	100% {
+		opacity: 0.72;
+	}
+	50% {
+		opacity: 1;
+	}
 }
 
 .dark {
@@ -27,4 +87,15 @@ body {
 .dark input::placeholder,
 .dark textarea::placeholder {
 	color: #94a3b8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.workspace-backdrop {
+		animation: none;
+	}
+
+	.workspace-backdrop::before {
+		transition: none;
+		animation: none;
+	}
 }
