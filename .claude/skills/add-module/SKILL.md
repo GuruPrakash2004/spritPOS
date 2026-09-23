@@ -5,7 +5,7 @@ description: Add a new ERP screen (master, transaction or report) to the vLQMS R
 
 # Adding a module to the React app
 
-All paths are relative to `frontend/VLQM/src/`.
+All paths are relative to `frontend/src/`.
 
 1. **Check the legacy spec first.** Find the module's row in `frontend/LEGACY_PARITY.md`, then read its section in the legacy help doc or spec sheet (see the `legacy-docs` skill). Build what the legacy screen does; don't invent fields.
 
@@ -28,6 +28,6 @@ All paths are relative to `frontend/VLQM/src/`.
    - `<Toast>` for feedback.
    - `rounded-2xl shadow-sm` for cards.
 
-7. **Verify**: from `frontend/VLQM/`, run `npm run build && npm run lint`.
+7. **Verify**: from `frontend/`, run `npm run build && npm run lint`.
 
 8. **Update `frontend/LEGACY_PARITY.md`**: set the module's status and list any legacy features still missing.

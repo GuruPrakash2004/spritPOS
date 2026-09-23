@@ -58,4 +58,4 @@ Form prefixes:
 Collect the `<Data>` values; the captions come first, e.g. `Inv No | SUPPINVNO | Text | …`.
 
 ## Reference images
-`Docs/UI/*.jpg` are splash screens, not screen captures. For real layouts, use `frontend/VLQM/src/images/`.
+`Docs/UI/*.jpg` are splash screens, not screen captures. For real layouts, use `frontend/src/images/`.

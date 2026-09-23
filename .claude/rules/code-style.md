@@ -27,5 +27,6 @@ Colors are **literal Tailwind arbitrary values**, not theme tokens. Use these he
 ## Components
 - **Toasts:** use `components/Toast.tsx` (`<Toast kind="ok|error" text=… />`). It portals to `<body>`. Never render `fixed` overlays inline inside a module: `<main class="workspace-backdrop">` is a stacking context below the z-20 header, and hovered cards apply a transform, so inline `fixed`/`z-50` elements get hidden or displaced.
 - **File size:** promote a module out of `components/OperationalModules.tsx` into its own file once it passes ~100 lines.
+- **500-line limit:** no source file (`.ts`, `.tsx`, `.py`, `.css`) may exceed 500 lines. When one does, turn it into a folder named after the component (`components/PurchaseBill/index.tsx` plus sub-components, a `use…` hook and a data/types `.ts`), keep the default export in `index.tsx` so imports of `./PurchaseBill` still resolve, and keep each piece under 500. The Stop hook `.claude/hooks/check-loc.sh` blocks finishing a turn while any file is over.
 - **Shared data:** shared constants/types go in a non-component `.ts` file (e.g. `salesCounters.ts`, `stockData.ts`). The `react-refresh/only-export-components` lint rule fails if a component file exports constants.
 - **Icons:** `lucide-react`. Remove icon imports you stop using, or `tsc -b` fails the build.

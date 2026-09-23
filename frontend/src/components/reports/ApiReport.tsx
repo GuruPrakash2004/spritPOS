@@ -1,0 +1,8 @@
+import ReportShell from './ReportShell';
+import { REPORTS } from './reportDefs';
+
+// Renders one report from reportDefs by its sidebar name. key= resets the filters when switching reports.
+export default function ApiReport({ name }: { name: string }) {
+  const def = REPORTS[name];
+  return <ReportShell key={name} {...def} />;
+}

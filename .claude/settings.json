@@ -13,5 +13,19 @@
       "Read(./MAIN_Root/**/*.inibak)",
       "Read(./MAIN_Root/**/*.config)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-loc.sh",
+            "timeout": 30,
+            "statusMessage": "Checking file sizes (500-line limit)"
+          }
+        ]
+      }
+    ]
   }
 }

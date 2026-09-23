@@ -1,30 +1,32 @@
 ---
 paths:
-  - "frontend/VLQM/**"
+  - "frontend/src/**"
 ---
 
-# React app (`frontend/VLQM/src/`)
+# React app (`frontend/src/`)
 
 ## Shell and routing
 `main.tsx` → `App.tsx` is the whole shell. There is **no router**: `App` holds `activeTab: string` in `useState`, and `renderContent()` is a `switch` over that string returning the module component.
 
 **The module name string is the routing key.** It must match exactly across the component's `case` in `App.tsx` and its entry in `components/Sidebar.tsx`. Unmatched names fall through to a "Module X is active" placeholder rather than erroring, so typos fail silently. Use the `add-module` skill for the full checklist.
 
-Known routing gaps:
-- `Ledger Group Master` is handled in the switch but has no sidebar entry.
-- The `'Customised Reports'` case is unreachable; the sidebar's "Customised Reports" label routes to `'Reports Dashboard'`.
+`App` shows `Login` until a session exists. Role rights (`modules.ts` → `canOpen`) hide sidebar entries and block modules with a No-access panel; `MODULE_GROUPS` there must list every module name. Admin Master is the only module with its own URL, `/adminMaster` (pushState + popstate in `App`); Administrator-only, and the backend `/admin/*` routes check the `X-User` header that `api.ts` sends. Report names found in `reports/reportDefs.ts` (`REPORTS`) are routed to `ApiReport` before the switch, so a new API report only needs a `REPORTS` entry and a sidebar name.
+
+Known routing gap: the `'Customised Reports'` case is unreachable; the sidebar's "Customised Reports" label routes to `'Reports Dashboard'`.
 
 ## Component layout (`components/`)
-- `OperationalModules.tsx`: a grab bag of ~18 smaller modules exported by name.
-  - Most masters, Purchase Indent and Sales Return are `GenericModule` field-list stubs.
-  - Expense Entry and Stock Deduction are read-only sample displays.
-- `CompanyMaster.tsx`, `SupplierMaster.tsx`, `ReportsDashboard.tsx`, `PurchaseBill.tsx`, `SalesCounterMaster.tsx`, `SalesInvoiceSetup.tsx`, `SalesInvoice.tsx`: modules large enough to warrant their own file.
+- `OperationalModules.tsx`: Dashboard (KPIs from the DSR) and Stock Balance Report.
+- `api.ts`: `api<T>()` fetch wrapper (Vite proxies `/api` to FastAPI on :8000), response types, `qs()`. `ui.ts`: shared class strings and `money()`. `Modal.tsx`: portalled dialog (same reason as Toast). `csv.ts`: CSV parse/export/download.
+- `MasterCrud.tsx` + `masterConfigs.ts`: one config-driven list+form screen for simple masters (`Masters.tsx`, `ItemMaster.tsx`).
+- `ItemLinesEntry.tsx`: shared cases/bottles grid behind Purchase Indent, Sales Return, Stock Deduction (`StockTransactions.tsx`).
+- `reports/`: `ReportShell` (filters, table, totals, Print, Export CSV) + `reportDefs.ts`.
+- `CompanyMaster.tsx`, `SupplierMaster.tsx`, `ReportsDashboard.tsx`, `PurchaseBill/` (index + modals + data), `SalesCounterMaster.tsx`, `SalesInvoiceSetup.tsx`, `SalesInvoice.tsx`: modules large enough to warrant their own file.
 - `Toast.tsx`: the shared, portalled notification. Use it for every save/error message.
 - `stockData.ts`: the shared `SAMPLE_STOCK_DATA` fixture (`as const`). Every stock/report screen derives from it; Sales Invoice templates reference items by index.
 - `salesCounters.ts`: counter/invoice types, `PARTIES`, `PAYMENT_TYPES` and bill-number helpers. It is a separate file because of the only-export-components lint rule.
 - `formatters.ts`: `numberToWords()` (Indian lakh/crore).
 - `images/`: reference screenshots of the bill layouts to match (`purchase_bill.png`, `sales_invoice_bill.png`). Nothing imports them.
-- `App.css` and `frontend/VLQM/README.md` are unused Vite leftovers.
+- `App.css` and `frontend/README.md` are unused Vite leftovers.
 
 ## Sales Invoice flow
 Sales Invoice is two steps:
