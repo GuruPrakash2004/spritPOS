@@ -1,0 +1,6 @@
+# Legacy desktop install: ~211MB of binaries, customer data and plaintext DB credentials
+MAIN_Root/
+
+# Personal Claude Code files
+CLAUDE.local.md
+.claude/settings.local.json

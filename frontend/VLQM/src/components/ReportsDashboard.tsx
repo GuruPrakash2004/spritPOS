@@ -63,9 +63,9 @@ const ReportsDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex justify-between items-center">
+      <div className="p-5 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-teal-500/10 text-teal-600 dark:text-teal-400 rounded-xl">
+          <div className="p-3 bg-[#e8702a]/15 text-[#b84716] dark:text-[#ffb07e] rounded-xl">
             <PieChart size={24} />
           </div>
           <div>
@@ -77,7 +77,7 @@ const ReportsDashboard = () => {
           <button className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-medium flex items-center gap-1.5">
             <Mail size={14} /> Email Report
           </button>
-          <button className="px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+          <button className="px-3.5 py-2 bg-[#e8702a] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm">
             <Download size={14} /> Export XLS
           </button>
         </div>
@@ -85,7 +85,7 @@ const ReportsDashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Side: Report Tree */}
-        <div className="lg:col-span-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+        <div className="lg:col-span-4 p-5 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="max-h-[600px] overflow-y-auto space-y-4 pr-1">
             {reportCategories.map((group, idx) => (
               <div key={idx} className="space-y-1">
@@ -115,7 +115,7 @@ const ReportsDashboard = () => {
 
         {/* Right Side: Filters */}
         <div className="lg:col-span-8 space-y-6">
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+          <div className="p-6 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
             <div className="border-b pb-3 border-slate-100 dark:border-slate-800">
               <span className="text-xs text-slate-400">Report to be Viewed</span>
               <h3 className="font-heading font-bold text-lg text-slate-900 dark:text-white mt-0.5">{selectedReport}</h3>
@@ -124,7 +124,7 @@ const ReportsDashboard = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Filter On</label>
-                <select value={filterOn} onChange={(e) => setFilterOn(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                <select value={filterOn} onChange={(e) => setFilterOn(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800">
                   <option>Exp Date</option>
                   <option>Bill Date</option>
                   <option>Ledger Name</option>
@@ -134,11 +134,11 @@ const ReportsDashboard = () => {
               </div>
               <div>
                 <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">From Date</label>
-                <input type="date" defaultValue="2026-09-01" className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono" />
+                <input type="date" defaultValue="2026-09-01" className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800 font-mono" />
               </div>
               <div>
                 <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">To Date</label>
-                <input type="date" defaultValue="2026-09-21" className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono" />
+                <input type="date" defaultValue="2026-09-21" className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800 font-mono" />
               </div>
             </div>
 
@@ -182,7 +182,7 @@ const ReportsDashboard = () => {
             </div>
 
             <div className="flex justify-end pt-2">
-              <button className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-2">
+              <button className="px-6 py-2.5 bg-[#e8702a] hover:bg-[#b84716] text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-2">
                 <Eye size={14} /> Generate & View Report
               </button>
             </div>

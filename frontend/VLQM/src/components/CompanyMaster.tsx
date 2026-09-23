@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { 
   Building2, ShieldCheck, Calendar, Image as ImageIcon, 
-  FolderArchive, Save, CheckCircle, Upload, Eye, Download, Plus 
+  FolderArchive, Save, Upload, Eye, Download, Plus 
 } from 'lucide-react';
+import Toast from './Toast';
 
 interface FinYear {
   from: string;
@@ -37,14 +38,10 @@ const CompanyMaster = () => {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Toast Notification */}
-      {showToast && (
-        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-sm font-medium animate-bounce">
-          <CheckCircle size={18} /> Company credentials updated successfully!
-        </div>
-      )}
+      {showToast && <Toast text="Company credentials updated successfully!" />}
 
       {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
             <Building2 size={24} />
@@ -63,7 +60,7 @@ const CompanyMaster = () => {
           <button onClick={triggerToast} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-xl transition-all">
             Backup Database
           </button>
-          <button onClick={triggerToast} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+          <button onClick={triggerToast} className="px-4 py-2 bg-[#e8702a] hover:bg-[#b84716] text-white text-xs font-semibold rounded-xl shadow-sm transition-all flex items-center gap-1.5">
             <Save size={14} /> Save Master
           </button>
         </div>
@@ -85,7 +82,7 @@ const CompanyMaster = () => {
               onClick={() => setTab(t.id)}
               className={`px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all flex items-center gap-2 whitespace-nowrap ${
                 tab === t.id 
-                  ? 'bg-white dark:bg-slate-900 border-t-2 border-x border-slate-200 dark:border-slate-800 border-t-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm' 
+                  ? 'bg-[#fffaf5] dark:bg-slate-900 border-t-2 border-x border-slate-200 dark:border-slate-800 border-t-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm' 
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
@@ -97,7 +94,7 @@ const CompanyMaster = () => {
       </div>
 
       {/* Tab Panels */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="p-6 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         {/* Tab 1: Company Info */}
         {tab === 'Company Info' && (
           <div className="space-y-5">
@@ -281,7 +278,7 @@ const CompanyMaster = () => {
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={triggerToast} className="px-3 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-700 dark:text-slate-300">Add Document</button>
-              <button onClick={triggerToast} className="px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-lg">Export To Excel</button>
+              <button onClick={triggerToast} className="px-3 py-1.5 text-xs font-medium bg-[#e8702a] text-white rounded-lg">Export To Excel</button>
             </div>
           </div>
         )}

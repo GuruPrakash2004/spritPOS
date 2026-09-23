@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Midnight Sunset (models/Version5.html).
+ * The stone and slate scales resolve through --ms-* variables so every existing
+ * `text-stone-*` / `bg-slate-*` class picks up the theme: warm clay tints in light
+ * mode, midnight navy tints under `.dark`. `inline` makes utilities read the
+ * variable where they are used, so the `.dark` override below takes effect.
+ */
+@theme inline {
+	--color-stone-50: var(--ms-50);
+	--color-stone-100: var(--ms-100);
+	--color-stone-200: var(--ms-200);
+	--color-stone-300: var(--ms-300);
+	--color-stone-400: var(--ms-400);
+	--color-stone-500: var(--ms-500);
+	--color-stone-600: var(--ms-600);
+	--color-stone-700: var(--ms-700);
+	--color-stone-800: var(--ms-800);
+	--color-stone-900: var(--ms-900);
+	--color-stone-950: var(--ms-950);
+
+	--color-slate-50: var(--ms-50);
+	--color-slate-100: var(--ms-100);
+	--color-slate-200: var(--ms-200);
+	--color-slate-300: var(--ms-300);
+	--color-slate-400: var(--ms-400);
+	--color-slate-500: var(--ms-500);
+	--color-slate-600: var(--ms-600);
+	--color-slate-700: var(--ms-700);
+	--color-slate-800: var(--ms-800);
+	--color-slate-900: var(--ms-900);
+	--color-slate-950: var(--ms-950);
+}
+
+:root {
+	color-scheme: light;
+	--ms-50: #fffaf5;
+	--ms-100: #f6efe8;
+	--ms-200: #f1e3d8;
+	--ms-300: #e1c9b6;
+	--ms-400: #b39585;
+	--ms-500: #896f65;
+	--ms-600: #6e5750;
+	--ms-700: #56423d;
+	--ms-800: #43302c;
+	--ms-900: #342421;
+	--ms-950: #241816;
+	--ms-shadow: 0 14px 42px rgba(112, 58, 28, 0.12);
+	--ms-shadow-hover: 0 18px 40px rgba(112, 58, 28, 0.18);
+}
+
+.dark {
+	color-scheme: dark;
+	--ms-50: #f7f3ff;
+	--ms-100: #ebe8f7;
+	--ms-200: #d6d8ea;
+	--ms-300: #bfc2da;
+	--ms-400: #a6aac4;
+	--ms-500: #7f84a3;
+	--ms-600: #5b6185;
+	--ms-700: #343b59;
+	--ms-800: #20253a;
+	--ms-900: #171b2b;
+	--ms-950: #0e101b;
+	--ms-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
+	--ms-shadow-hover: 0 22px 52px rgba(0, 0, 0, 0.45);
+}
+
+body {
+	margin: 0;
+	min-width: 320px;
+	background: #f6efe8;
+}
+
+/* Sunset glow: ember bottom-left, rose top-right, plus a cursor-following aura. */
+.workspace-backdrop {
+	position: relative;
+	isolation: isolate;
+	background-image:
+		radial-gradient(ellipse at 15% 100%, rgba(232, 112, 42, 0.22), transparent 34%),
+		radial-gradient(ellipse at 90% 0%, rgba(231, 91, 111, 0.16), transparent 32%);
+	background-attachment: fixed;
+}
+
+.workspace-backdrop::before {
+	content: '';
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	pointer-events: none;
+	background: radial-gradient(circle 240px at var(--cursor-x, 50%) var(--cursor-y, 50%), rgba(255, 139, 74, 0.22), transparent 70%);
+	animation: sunsetGlow 6s ease-in-out infinite alternate;
+	transition: background 180ms ease-out;
+}
+
+.workspace-backdrop > * {
+	position: relative;
+	z-index: 1;
+}
+
+.dark .workspace-backdrop {
+	background-image:
+		radial-gradient(ellipse at 15% 100%, rgba(232, 112, 42, 0.18), transparent 34%),
+		radial-gradient(ellipse at 90% 0%, rgba(231, 91, 111, 0.14), transparent 32%);
+}
+
+.dark .workspace-backdrop::before {
+	background: radial-gradient(circle 240px at var(--cursor-x, 50%) var(--cursor-y, 50%), rgba(255, 139, 74, 0.18), transparent 72%);
+	mix-blend-mode: screen;
+}
+
+@keyframes sunsetGlow {
+	to {
+		opacity: 0.5;
+		transform: scale(1.1);
+	}
+}
+
+/* Version 5 surfaces: 22px radius, warm drop shadow and a lift on hover for every content card. */
+.workspace-backdrop div.rounded-2xl.shadow-sm {
+	border-radius: 22px;
+	box-shadow: var(--ms-shadow);
+	transition: box-shadow 0.28s ease, transform 0.28s ease;
+}
+
+.workspace-backdrop div.rounded-2xl.shadow-sm:hover {
+	box-shadow: var(--ms-shadow-hover);
+	transform: translateY(-4px);
+}
+
+.dark input:not([type='checkbox']):not([type='radio']),
+.dark textarea,
+.dark select {
+	color: #f7f3ff;
+	background-color: #20253a;
+	border-color: #343b59;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+	color: #a6aac4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.workspace-backdrop::before {
+		transition: none;
+		animation: none;
+	}
+
+	.workspace-backdrop div.rounded-2xl.shadow-sm:hover {
+		transform: none;
+	}
+}

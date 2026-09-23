@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Truck, Save, CheckCircle } from 'lucide-react';
+import { Truck, Save } from 'lucide-react';
+import Toast from './Toast';
 
 const SupplierMaster = () => {
   const [showToast, setShowToast] = useState(false);
@@ -10,12 +11,8 @@ const SupplierMaster = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
-      {showToast && (
-        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-sm font-medium animate-bounce">
-          <CheckCircle size={18} /> Supplier record saved successfully!
-        </div>
-      )}
+    <div className="max-w-5xl mx-auto p-6 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+      {showToast && <Toast text="Supplier record saved successfully!" />}
 
       <div className="flex justify-between items-center border-b pb-4 border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-3">
@@ -27,7 +24,7 @@ const SupplierMaster = () => {
             <p className="text-xs text-slate-500">Distributor accounts, excise warehouse mappings & GST details.</p>
           </div>
         </div>
-        <button onClick={handleSave} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+        <button onClick={handleSave} className="px-4 py-2 bg-[#e8702a] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm">
           <Save size={14} /> Save Supplier
         </button>
       </div>
@@ -41,16 +38,16 @@ const SupplierMaster = () => {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Supp Name</label>
-              <input type="text" defaultValue="R&D DISTRIBUTORS" className="w-full px-3 py-2 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+              <input type="text" defaultValue="R&D DISTRIBUTORS" className="w-full px-3 py-2 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800" />
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Tally Alias</label>
-            <input type="text" defaultValue="R&D DISTRIBUTOR" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+            <input type="text" defaultValue="R&D DISTRIBUTOR" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Billing & Depot Address</label>
-            <textarea rows={3} defaultValue="460, 1ST MAIN ROAD, ALLASANDRA, YELAHANKA" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+            <textarea rows={3} defaultValue="460, 1ST MAIN ROAD, ALLASANDRA, YELAHANKA" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div><label className="block text-xs text-slate-500 mb-1">City</label><input type="text" defaultValue="Bangalore" className="w-full px-2 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700" /></div>
@@ -64,15 +61,15 @@ const SupplierMaster = () => {
           <h4 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] border-b pb-1 border-slate-200 dark:border-slate-700">Header Info</h4>
           <div>
             <label className="block text-slate-500 mb-1">Phone No</label>
-            <input type="text" defaultValue="9900196257" className="w-full px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono" />
+            <input type="text" defaultValue="9900196257" className="w-full px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800 font-mono" />
           </div>
           <div>
             <label className="block text-slate-500 mb-1">GSTNO</label>
-            <input type="text" defaultValue="29AABCR1234F1Z1" className="w-full px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-bold text-emerald-600" />
+            <input type="text" defaultValue="29AABCR1234F1Z1" className="w-full px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800 font-mono font-bold text-emerald-600" />
           </div>
           <div>
             <label className="block text-slate-500 mb-1">Currency [Mst]</label>
-            <input type="text" defaultValue="Rupees" className="w-full px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+            <input type="text" defaultValue="Rupees" className="w-full px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800" />
           </div>
         </div>
       </div>
