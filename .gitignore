@@ -4,3 +4,10 @@ MAIN_Root/
 # Personal Claude Code files
 CLAUDE.local.md
 .claude/settings.local.json
+
+# macOS Finder files
+.DS_Store
+
+# Secrets (database passwords, API keys)
+.env
+.env.*
