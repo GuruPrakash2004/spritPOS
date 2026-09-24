@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date as date_type
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -108,17 +108,17 @@ class Line(BaseModel):
 
 
 class PurchaseIndentIn(BaseModel):
-    date: date
+    date: date_type
     supplier: str = "KSBCL"
     lines: list[Line]
     remarks: str = ""
 
 
 class PurchaseBillIn(BaseModel):
-    date: date
+    date: date_type
     supplier: str = "KSBCL"
     supplier_inv_no: str
-    supplier_inv_date: date
+    supplier_inv_date: date_type
     supplier_inv_value: float = 0
     purchase_type: Literal["Purchase", "Purchase Return", "Stock Transfer In"] = "Purchase"
     copy_from_indent: str | None = Field(None, description="Indent doc no; its lines are used when `lines` is empty")
@@ -136,7 +136,7 @@ class Payment(BaseModel):
 
 
 class SalesInvoiceIn(BaseModel):
-    date: date
+    date: date_type
     counter: str
     customer: str = "CASH"
     salesperson: str | None = None
@@ -150,7 +150,7 @@ class SalesInvoiceIn(BaseModel):
 
 
 class SalesReturnIn(BaseModel):
-    date: date
+    date: date_type
     against_invoice: str | None = None
     customer: str = "CASH"
     lines: list[Line]
@@ -164,13 +164,13 @@ class ExpenseLine(BaseModel):
 
 
 class ExpenseIn(BaseModel):
-    date: date
+    date: date_type
     paid_from: str = "CASH"
     lines: list[ExpenseLine]
 
 
 class StockDeductionIn(BaseModel):
-    date: date
+    date: date_type
     reason: Literal["Breakage", "Leakage", "Sample", "Other"] = "Breakage"
     lines: list[Line]
     remarks: str = ""
@@ -182,7 +182,7 @@ class ClosingStockLine(BaseModel):
 
 
 class ClosingStockIn(BaseModel):
-    as_on: date
+    as_on: date_type
     lines: list[ClosingStockLine]
 
 
@@ -201,7 +201,7 @@ class CancelIn(BaseModel):
 
 
 class DenominationIn(BaseModel):
-    date: date
+    date: date_type
     counts: dict[str, int] = Field(description='Note/coin value → count, e.g. {"500": 12, "coins": 35}')
 
 

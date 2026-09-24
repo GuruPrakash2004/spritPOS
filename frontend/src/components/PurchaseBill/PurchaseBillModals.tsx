@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Modal from '../Modal';
 import type { ApiIndent } from '../api';
 import { SAMPLE_STOCK_DATA } from '../stockData';
@@ -55,6 +56,30 @@ export function CopyFromModal({ indents, onCopy, onClose }: {
           {!indents && <tr><td colSpan={6} className="px-2 py-8 text-center text-stone-400">Loading…</td></tr>}
         </tbody>
       </table>
+    </Modal>
+  );
+}
+
+export function AddSupplierModal({ saving, onSave, onClose }: {
+  saving: boolean; onSave: (name: string, address: string) => void; onClose: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const ready = name.trim() !== '' && !saving;
+  const submit = () => { if (ready) onSave(name.trim().toUpperCase(), address.trim()); };
+  return (
+    <Modal
+      title="Add New Supplier"
+      onClose={onClose}
+      footer={<>
+        <button onClick={onClose} className="rounded-lg border border-[#e1c9b6] px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-[#f1e3d8] dark:border-[#414a6e] dark:text-stone-300 dark:hover:bg-[#20253a]">Cancel</button>
+        <button onClick={submit} disabled={!ready} className="rounded-lg bg-[#e8702a] px-4 py-2 text-xs font-bold text-white hover:bg-[#b84716] disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Saving…' : 'Save Supplier'}</button>
+      </>}
+    >
+      <label className="mb-1 block font-semibold text-[#b84716] dark:text-[#ffb07e]">Supplier Name *</label>
+      <input autoFocus value={name} onChange={e => setName(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && submit()} placeholder="e.g. R&D DISTRIBUTORS" className={`${field} mb-3 w-full`} />
+      <label className="mb-1 block font-semibold text-stone-600 dark:text-stone-300">Billing Address</label>
+      <textarea value={address} onChange={e => setAddress(e.target.value)} rows={3} placeholder="Street, area, city - PIN" className={`${field} w-full resize-none`} />
     </Modal>
   );
 }

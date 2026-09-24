@@ -155,6 +155,13 @@ body {
 	}
 }
 
+/* A zero page margin stops the browser printing its own date/title/URL header and footer;
+   the body padding puts the margin back. */
+@media print {
+  @page { margin: 0; }
+  body { padding: 10mm; }
+}
+
 /* Re-Print Bill: when a .print-area is open, print only that bill instead of the whole screen. */
 @media print {
   body:has(.print-area) * { visibility: hidden; }

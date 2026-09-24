@@ -42,7 +42,7 @@ export default function ModuleSearch({ canOpen, onOpen }: { canOpen: (name: stri
   };
 
   return (
-    <div className="relative ml-auto w-full min-w-0 max-w-xs">
+    <div className="relative ml-auto w-full min-w-0 max-w-xs print:hidden">
       <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
       <input
         ref={inputRef}

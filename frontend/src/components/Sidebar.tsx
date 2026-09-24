@@ -72,9 +72,9 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
 
   return (
     <>
-      {isOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={onClose} />}
+      {isOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden print:hidden" onClick={onClose} />}
 
-      <aside className={`fixed inset-y-0 left-0 z-40 w-[15.6rem] transform border-r border-[#e1c9b6] bg-linear-160 from-[#fffaf5] via-[#f1e3d8] via-70% to-[#ecd2c4] text-stone-800 shadow-2xl transition-transform duration-300 ease-in-out dark:border-[#343b59] dark:from-[#171b2b] dark:via-[#20253a] dark:to-[#3a2432] dark:text-white ${isOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col md:relative md:translate-x-0`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 w-[15.6rem] transform border-r border-[#e1c9b6] bg-linear-160 from-[#fffaf5] via-[#f1e3d8] via-70% to-[#ecd2c4] text-stone-800 shadow-2xl transition-transform duration-300 ease-in-out dark:border-[#343b59] dark:from-[#171b2b] dark:via-[#20253a] dark:to-[#3a2432] dark:text-white ${isOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col md:relative md:translate-x-0 print:hidden`}>
         <div className="flex shrink-0 items-center justify-between border-b border-[#e1c9b6] px-[17px] py-[19px] dark:border-[#343b59]">
           <div className="flex items-center gap-3">
             <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-linear-135 from-[#e8702a] to-[#e75b6f] shadow-[0_0_22px_rgba(232,112,42,0.3)] text-white font-bold text-sm">V</div>

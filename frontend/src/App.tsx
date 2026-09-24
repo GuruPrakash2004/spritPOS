@@ -140,7 +140,7 @@ export default function App() {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="z-20 flex shrink-0 items-center justify-between border-b border-[#e1c9b6] bg-[#fffaf5]/90 min-h-[70px] gap-2 px-3 py-2 shadow-sm sm:px-6 sm:py-[13px] backdrop-blur dark:border-[#343b59] dark:bg-[#171b2b]/90">
           <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-            <button className="shrink-0 rounded-lg p-1 text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800 md:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
+            <button className="shrink-0 rounded-lg p-1 text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800 md:hidden print:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
               <Menu size={22} />
             </button>
             {/* One line each on phones, so the header never grows into the active-module bar below. */}
@@ -150,13 +150,13 @@ export default function App() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1 sm:gap-3">
-            <button onClick={() => setDarkMode(!darkMode)} className="rounded-xl p-2 text-stone-500 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800" title="Toggle Dark / Light Theme" aria-label="Toggle Dark / Light Theme">
+            <button onClick={() => setDarkMode(!darkMode)} className="rounded-xl p-2 text-stone-500 transition-colors print:hidden hover:bg-stone-100 dark:hover:bg-stone-800" title="Toggle Dark / Light Theme" aria-label="Toggle Dark / Light Theme">
               {darkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             <div className="flex items-center gap-2 border-l border-[#e1c9b6] pl-3 text-sm text-stone-700 dark:border-[#343b59] dark:text-stone-300">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-linear-135 from-[#e8702a] to-[#e75b6f] text-xs font-bold text-white">{user.user.slice(0, 2)}</div>
               <span className="hidden text-xs font-medium sm:block">{user.user} <span className="text-stone-400">• {user.role}</span></span>
-              <button onClick={() => { setSession(null); setAuthUser(''); setBillOpen(false); }} className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 hover:text-red-600 dark:hover:bg-stone-800" title="Log out" aria-label="Log out"><LogOut size={16} /></button>
+              <button onClick={() => { setSession(null); setAuthUser(''); setBillOpen(false); }} className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 hover:text-red-600 print:hidden dark:hover:bg-stone-800" title="Log out" aria-label="Log out"><LogOut size={16} /></button>
             </div>
           </div>
         </header>

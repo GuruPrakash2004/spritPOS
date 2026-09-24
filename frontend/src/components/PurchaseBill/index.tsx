@@ -11,7 +11,7 @@ import {
   amt, blankRow, cell, cloneRow, field, FY_PREFIX, headCell, iconButton, infoBar, INITIAL_SUPPLIERS, isFilled,
   ITEM_CODES, money, panel, PB_SERIES, pctOf, PURCHASE_TYPES, stockRow, today, type Row, type Supplier,
 } from './purchaseBillData';
-import { CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
+import { AddSupplierModal, CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
 
 export default function PurchaseBill() {
   const [pbSeries, setPbSeries] = useState('');
@@ -85,18 +85,20 @@ export default function PurchaseBill() {
       .catch(() => undefined);
   }, []);
 
-  const addSupplier = () => {
-    const name = window.prompt('New supplier name')?.trim().toUpperCase();
-    if (!name) return;
-    const address = window.prompt(`Billing address for ${name}`)?.trim() ?? '';
+  const [supplierOpen, setSupplierOpen] = useState(false);
+  const [supplierSaving, setSupplierSaving] = useState(false);
+  const addSupplier = (name: string, address: string) => {
     const code = name.replace(/[^A-Z0-9]+/g, '-').slice(0, 20);
+    setSupplierSaving(true);
     api('/masters/suppliers', { method: 'POST', body: { code, name, city: address } })
       .then(() => {
         setSuppliers([...suppliers, { name, address }]);
         setSupplier(name);
         setBillingAddress(address);
+        setSupplierOpen(false);
       })
-      .catch(e => setToast({ kind: 'error', text: errorText(e) }));
+      .catch(e => setToast({ kind: 'error', text: errorText(e) }))
+      .finally(() => setSupplierSaving(false));
   };
 
   const updateRow = (uid: number, patch: Partial<Row>) => setRows(rows.map(r => (r.uid === uid ? { ...r, ...patch } : r)));
@@ -264,7 +266,7 @@ export default function PurchaseBill() {
               </div>
               <div className="flex items-center gap-2">
                 <label htmlFor="pb-supplier" className="w-24 font-semibold text-red-700 dark:text-red-400">Supplier</label>
-                <button onClick={addSupplier} className="rounded-lg border border-[#e1c9b6] bg-[#fffaf5] p-1.5 text-sky-700 hover:border-[#e8702a] dark:border-[#414a6e] dark:bg-[#20253a] dark:text-sky-400" title="Add new supplier" aria-label="Add new supplier"><UserPlus size={14} /></button>
+                <button onClick={() => setSupplierOpen(true)} className="rounded-lg border border-[#e1c9b6] bg-[#fffaf5] p-1.5 text-sky-700 hover:border-[#e8702a] dark:border-[#414a6e] dark:bg-[#20253a] dark:text-sky-400" title="Add new supplier" aria-label="Add new supplier"><UserPlus size={14} /></button>
                 <input id="pb-supplier" list="pb-suppliers" value={supplier} onChange={e => selectSupplier(e.target.value)} placeholder="Select or type supplier" className={`${field} flex-1`} />
                 <datalist id="pb-suppliers">{suppliers.map(s => <option key={s.name} value={s.name} />)}</datalist>
               </div>
@@ -480,6 +482,7 @@ export default function PurchaseBill() {
       {lookupOpen && (
         <ItemLookupModal filter={lookupFilter} onFilter={setLookupFilter} onPick={pickFromLookup} onClose={() => setLookupOpen(false)} />
       )}
+      {supplierOpen && <AddSupplierModal saving={supplierSaving} onSave={addSupplier} onClose={() => setSupplierOpen(false)} />}
       {copyOpen && <CopyFromModal indents={indents} onCopy={copyFromIndent} onClose={() => setCopyOpen(false)} />}
     </div>
   );
