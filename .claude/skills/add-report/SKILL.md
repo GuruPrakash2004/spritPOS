@@ -11,7 +11,7 @@ Most reports need no new component. `App.tsx` renders any module whose name is a
 2. **Frontend definition:** add an entry to `REPORTS`: `{ title, subtitle, endpoint: '/reports/<path>', filters, columns }`.
    - `filters`: any of `'on'` (single date → `on`), `'range'` (→ `from_date`, `to_date`), `'item'` (→ `item_code`), `'months'` (→ `months`). `ReportShell.tsx` builds the query string.
    - `columns`: `{ key, label, kind?: 'text' | 'number' | 'money', total?: true }`. Each `key` must match a key in the backend rows.
-3. **Sidebar and rights:** add the name to `REPORT_ITEMS` in `frontend/src/components/Sidebar.tsx`, to the Reports group in `MODULE_GROUPS` and to `MODULE_KEYWORDS` (`frontend/src/components/modules.ts`), to `MATRIX_SCREENS` in `matrixDefs.ts` (Admin Master rights grid), and to the relevant roles in `backend/app/store.py` `ROLES`.
+3. **Sidebar and rights:** add the name to `REPORT_ITEMS` in `frontend/src/components/layout/Sidebar.tsx`, to the Reports group in `MODULE_GROUPS` and to `MODULE_KEYWORDS` (`frontend/src/lib/modules.ts`), to `MATRIX_SCREENS` in `matrixDefs.ts` (Admin Master rights grid), and to the relevant roles in `backend/app/store.py` `ROLES`.
 4. **Check:** run `npm run build` and `npm run lint`, open the report while logged in as ADMIN, and compare the totals with the Stock Balance or DSR for the same dates.
 5. **Parity doc:** update the Reports table in `frontend/LEGACY_PARITY.md`.
 

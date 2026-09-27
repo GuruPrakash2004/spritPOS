@@ -1,8 +1,14 @@
+// Renders popups from toastStore at the bottom centre of the screen.
+//
+// - <SnackbarContainer />: mounted once in App.tsx; draws the stacked cards with a countdown bar.
+// - <Toast kind text />: legacy per-screen API. Rendering it just forwards the message to toastStore,
+//   so older screens that keep `toast` state still get the shared popup.
+
 import { useEffect, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertCircle, Trash2, X, RefreshCw, DatabaseBackup } from 'lucide-react';
 import { toastStore, type ToastKind } from './toastStore';
-import RunwayLoader from './ui/runway-loader';
+import RunwayLoader from '../ui/runway-loader';
 
 export function SnackbarContainer() {
   const items = useSyncExternalStore(toastStore.subscribe, toastStore.getSnapshot, toastStore.getSnapshot);

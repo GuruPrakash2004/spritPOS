@@ -1,9 +1,12 @@
+// Roles tab of Admin Master: the screen × action (Open/Add/Edit/Delete) tick grid for one role.
+// Keyboard handling (arrows move, Space toggles) lives in AdminMaster.tsx.
+
 import { Fragment } from 'react';
 import { Check, Minus } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import type { RoleDraft } from './matrixDefs';
 import { GROUPS, MATRIX_SCREENS } from './matrixDefs';
-import { tableHead } from './ui';
+import { tableHead } from '../../lib/styles';
 
 type Action = 'open' | 'add' | 'edit' | 'delete';
 

@@ -1,14 +1,20 @@
+// Purchase Bill (legacy frmTrnPB): receive stock from a supplier.
+//
+// Supplier invoice no/date/value, cases/bottles grid, GST/Cess/TCS, amount in words, Copy From a
+// Purchase Indent, and Add Supplier. Saves with POST /transactions/purchase-bill, which adds stock on
+// the backend (store.move_stock).
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronsDown, ChevronsUp, Copy, FileInput,
   Info, Paperclip, PlusCircle, RefreshCw, Save, Search, Settings2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
-import { useConfirm } from '../ConfirmDialog';
-import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, secondaryButton, sectionTitle, tableHead } from '../ui';
-import Toast from '../Toast';
-import { api, errorText, type ApiDoc, type ApiIndent, type ApiSupplier } from '../api';
-import { SAMPLE_STOCK_DATA } from '../stockData';
-import { numberToWords } from '../formatters';
+import { useConfirm } from '../../common/ConfirmDialog';
+import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, secondaryButton, sectionTitle, tableHead } from '../../../lib/styles';
+import Toast from '../../common/Toast';
+import { api, errorText, type ApiDoc, type ApiIndent, type ApiSupplier } from '../../../lib/api';
+import { SAMPLE_STOCK_DATA } from '../../../data/stockData';
+import { numberToWords } from '../../../lib/formatters';
 import {
   amt, blankRow, cell, cloneRow, field, FY_PREFIX, headCell, iconButton, infoBar, INITIAL_SUPPLIERS, isFilled,
   ITEM_CODES, money, panel, PB_SERIES, pctOf, PURCHASE_TYPES, stockRow, today, type Row, type Supplier,

@@ -1,9 +1,13 @@
+// Supplier Master form (legacy layout).
+// Note: this screen is not wired to the API yet. Save only updates local state and shows a toast;
+// nothing is sent to /masters/suppliers. Use MasterCrud or add the api() calls to make it persist.
+
 import { useState, useEffect } from 'react';
 import { Save } from 'lucide-react';
-import { TextField } from './FormField';
-import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, sectionTitle } from './ui';
-import Toast from './Toast';
-import { FormErrorSummary } from './FormErrorSummary';
+import { TextField } from '../common/FormField';
+import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, sectionTitle } from '../../lib/styles';
+import Toast from '../common/Toast';
+import { FormErrorSummary } from '../common/FormErrorSummary';
 
 const SupplierMaster = () => {
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);

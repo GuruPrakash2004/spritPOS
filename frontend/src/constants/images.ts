@@ -1,11 +1,14 @@
-import imgLoginHero from '../../img/login_hero.jpg';
+// Bundled images (login hero, banners, product photos) and productImage(), which picks a product
+// photo by matching words in an item's group, name or code.
+
+import imgLoginHero from '../img/login_hero.jpg';
 // High-resolution assets for the Heritage Luxury Light & Dark Enterprise theme.
-import bannerDistillery from '../../img/banner_distillery.jpg';
-import imgRoyalChallenge from '../../img/products/royal_challenge.jpg';
-import imgVinGreenLabel from '../../img/products/vin_green_label.jpg';
-import imgMcDowells from '../../img/products/mcdowells.jpg';
-import imgKingfisher from '../../img/products/kingfisher.jpg';
-import imgCompanyStore from '../../img/company_store_1.webp';
+import bannerDistillery from '../img/banner_distillery.jpg';
+import imgRoyalChallenge from '../img/products/royal_challenge.jpg';
+import imgVinGreenLabel from '../img/products/vin_green_label.jpg';
+import imgMcDowells from '../img/products/mcdowells.jpg';
+import imgKingfisher from '../img/products/kingfisher.jpg';
+import imgCompanyStore from '../img/company_store_1.webp';
 
 export const IMAGES = {
   login: {

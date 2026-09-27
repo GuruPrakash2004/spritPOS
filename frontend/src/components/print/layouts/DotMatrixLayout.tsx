@@ -1,7 +1,9 @@
+// Print layout: monospaced text for 80-column dot-matrix printers on continuous stationery.
+
 import React from 'react';
-import type { ApiCompany, ApiInvoice } from '../../api';
-import { money } from '../../ui';
-import { numberToWords } from '../../formatters';
+import type { ApiCompany, ApiInvoice } from '../../../lib/api';
+import { money } from '../../../lib/styles';
+import { numberToWords } from '../../../lib/formatters';
 import { SAMPLE_INVOICE_DATA } from '../samplePrintData';
 
 interface DotMatrixLayoutProps {

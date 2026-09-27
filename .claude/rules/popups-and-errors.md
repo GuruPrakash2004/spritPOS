@@ -6,8 +6,7 @@ This repository follows standard UX patterns for notifications, form mistakes, a
 - **Positioning**: Fixed at bottom centre (`fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000]`), sliding up without blocking the search bar or header buttons.
 - **Card Aesthetics**: Calm surface card (`bg-surface dark:bg-[#141414] border border-line shadow-2xl rounded-xl`) with a 1.5px coloured left stripe (green for success, red for errors).
 - **Dismissal & Timing**:
-  - Success messages (`kind: 'ok'`): Auto-dismiss after 4 seconds with a thin bottom countdown bar. Pauses on mouse hover (`onMouseEnter`), resumes on `onMouseLeave`.
-  - Server errors (`kind: 'error'`): Persist until manually closed via the `✕` button so the user has time to read them.
+  - Every popup (success and error) auto-dismisses after **3 seconds** (`TOAST_DURATION_MS` in `toastStore.ts`) with a thin bottom countdown bar. Hovering pauses it (`onMouseEnter`) so the user can read a long message, and `onMouseLeave` resumes it. The `✕` button closes it early.
 - **De-duplication**: Repeated triggers of the exact same message shake the existing card, display a multiplier (`×2`, `×3`), and restart the timer rather than spawning duplicates.
 - **Stacking**: Maximum 3 cards stacked vertically.
 - **Dark Mode**: Both snackbars and modals follow the active dark mode theme classes (`dark:bg-[#141414] dark:border-[#2A2A2A]`).

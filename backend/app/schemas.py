@@ -1,3 +1,9 @@
+"""Pydantic request/response models for every endpoint.
+
+The master models (Company, Item, ItemGroup, ...) are also the field lists of the React
+master screens: frontend/src/components/masters/masterConfigs.ts mirrors them, so change
+both together. Models ending in "In" are request bodies for transactions and admin calls.
+"""
 from datetime import date as date_type
 import re
 from typing import Literal

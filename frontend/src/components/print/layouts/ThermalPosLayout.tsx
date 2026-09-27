@@ -1,7 +1,9 @@
+// Print layout: 80 mm thermal POS receipt (legacy fmtSPInvPrint*.rpt).
+
 import React from 'react';
-import type { ApiCompany, ApiInvoice, ApiFullDsr } from '../../api';
-import { money } from '../../ui';
-import { numberToWords } from '../../formatters';
+import type { ApiCompany, ApiInvoice, ApiFullDsr } from '../../../lib/api';
+import { money } from '../../../lib/styles';
+import { numberToWords } from '../../../lib/formatters';
 import { SAMPLE_INVOICE_DATA } from '../samplePrintData';
 
 interface ThermalPosLayoutProps {

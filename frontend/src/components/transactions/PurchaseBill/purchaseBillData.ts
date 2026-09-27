@@ -1,4 +1,7 @@
-import { SAMPLE_STOCK_DATA } from '../stockData';
+// Purchase Bill row type, empty-row factory and cell/amount helpers, plus prototype constants
+// (supplier list, item codes) used until those lookups come fully from the API.
+
+import { SAMPLE_STOCK_DATA } from '../../../data/stockData';
 
 export type Row = {
   uid: number; stock: number | null; code: string; name: string; qoh: number;
@@ -30,7 +33,7 @@ export const amt = (r: Row) => r.qty * r.rate;
 export const pctOf = (r: Row, pct: number) => (amt(r) * pct) / 100;
 export const isFilled = (r: Row) => r.stock !== null || r.name.trim() !== '';
 
-export { panel, field, iconButton } from '../ui';
+export { panel, field, iconButton } from '../../../lib/styles';
 export const cell = 'w-full rounded-md border border-transparent bg-transparent px-1.5 py-1 text-xs tabular-nums outline-none hover:border-line-strong focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/20';
 export const infoBar = 'flex items-center gap-2 rounded-lg bg-subtle px-3 py-2 text-xs text-stone-600 dark:text-stone-300';
 export const headCell = 'px-2 py-2.5 text-left';

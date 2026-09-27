@@ -1,10 +1,13 @@
+// Sales Invoice step 1: choose counter, invoice number, payment type and customer.
+// App.tsx keeps the result as `invoiceDraft` and then opens SalesInvoice.
+
 import { useState } from 'react';
 import { AlertTriangle, Monitor, Receipt, Save } from 'lucide-react';
-import { field, label as labelBase, pageHeader, pageSub, pageTitle, panel, primaryButton, sectionTitle } from './ui';
+import { field, label as labelBase, pageHeader, pageSub, pageTitle, panel, primaryButton, sectionTitle } from '../../lib/styles';
 import {
   FIRST_BILL_SEQ, PARTIES, PAYMENT_TYPES, billNumber,
   type InvoiceSetup, type PaymentType, type SalesCounter,
-} from './salesCounters';
+} from '../../data/salesCounters';
 
 const inputClass = field;
 const okBorder = '';

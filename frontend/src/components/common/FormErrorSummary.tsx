@@ -1,3 +1,7 @@
+// Form-validation widgets (see .claude/rules/popups-and-errors.md):
+// - FormErrorSummary: the "There was a problem" card at the top of a form; clicking a line focuses that field.
+// - InlineError: the red message shown under a single field.
+
 import type { FC } from 'react';
 import { AlertCircle } from 'lucide-react';
 

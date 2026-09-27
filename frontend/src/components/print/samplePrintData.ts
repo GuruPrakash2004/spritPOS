@@ -1,4 +1,6 @@
-import type { ApiCompany, ApiInvoice, ApiFullDsr } from '../api';
+// Sample documents for print previews, used when a screen opens the print dialog without real data.
+
+import type { ApiCompany, ApiInvoice, ApiFullDsr } from '../../lib/api';
 import type { AnalyticalReportData } from './layouts/AnalyticalReportLayout';
 import type { DocumentCategory } from './rptRegistry';
 

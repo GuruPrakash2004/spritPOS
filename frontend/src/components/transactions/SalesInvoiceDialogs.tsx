@@ -1,11 +1,16 @@
+// Dialogs used by SalesInvoice:
+// - ReprintDialog: fetch a saved bill (/reprint) and print it in a chosen .rpt format.
+// - CancelInvoiceDialog: cancel with a mandatory remark (stock and points go back).
+// - HeldBillsDialog: list held bills and recall one into the invoice (onRecall).
+
 import { useEffect, useState } from 'react';
 import { Printer, Search, Undo2, XCircle } from 'lucide-react';
-import Modal from './Modal';
-import { api, errorText, qs, type ApiInvoice } from './api';
-import { numberToWords } from './formatters';
-import {  dangerButton, field, label, money, primaryButton, secondaryButton, tableBody, tableHead , printButton } from './ui';
-import { useCompanyProfile } from './useCompanyProfile';
-import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
+import Modal from '../common/Modal';
+import { api, errorText, qs, type ApiInvoice } from '../../lib/api';
+import { numberToWords } from '../../lib/formatters';
+import {  dangerButton, field, label, money, primaryButton, secondaryButton, tableBody, tableHead , printButton } from '../../lib/styles';
+import { useCompanyProfile } from '../../hooks/useCompanyProfile';
+import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
 const path = (no: string) => `/transactions/sales-invoice/${no}`;
 

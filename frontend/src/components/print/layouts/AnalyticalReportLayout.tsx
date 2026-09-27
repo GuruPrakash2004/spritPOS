@@ -1,6 +1,8 @@
+// Print layout: generic A4 table report (title, columns, rows, totals) for the Customised Reports.
+
 import React from 'react';
-import type { ApiCompany } from '../../api';
-import { money } from '../../ui';
+import type { ApiCompany } from '../../../lib/api';
+import { money } from '../../../lib/styles';
 
 export interface AnalyticalReportData {
   title: string;

@@ -1,9 +1,13 @@
+// Daily Summary Report / DSR (legacy frmRptDailySummary; fields follow Docs/WebDash.xlsx):
+// KPI tiles and payment, counter, salesperson, group, expense and cancelled-bill tables from
+// GET /reports/dsr. Printable in the DSR audit formats.
+
 import { useCallback, useEffect, useState } from 'react';
 import { Printer, RefreshCw } from 'lucide-react';
-import Toast from './Toast';
-import { api, errorText, qs, todayIso, type ApiFullDsr } from './api';
-import {  field, money, pageSub, pageTitle, panel, secondaryButton, pageHeader , printButton } from './ui';
-import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
+import Toast from '../common/Toast';
+import { api, errorText, qs, todayIso, type ApiFullDsr } from '../../lib/api';
+import {  field, money, pageSub, pageTitle, panel, secondaryButton, pageHeader , printButton } from '../../lib/styles';
+import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
 // Legacy frmRptDailySummary; fields follow Docs/WebDash.xlsx.
 export default function DailySummaryReport() {

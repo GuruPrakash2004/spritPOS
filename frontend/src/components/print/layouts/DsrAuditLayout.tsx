@@ -1,6 +1,8 @@
+// Print layout: Daily Summary Report audit sheet (legacy RptDSR*.rpt).
+
 import React from 'react';
-import type { ApiCompany, ApiFullDsr } from '../../api';
-import { money } from '../../ui';
+import type { ApiCompany, ApiFullDsr } from '../../../lib/api';
+import { money } from '../../../lib/styles';
 import { SAMPLE_DSR_DATA } from '../samplePrintData';
 
 interface DsrAuditLayoutProps {

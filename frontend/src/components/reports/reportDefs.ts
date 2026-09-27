@@ -1,3 +1,8 @@
+// Table-driven reports. Each REPORTS entry is one legacy report screen (frmRpt*): its endpoint in
+// backend/app/routers/reports.py, which filters to show, and the columns to display.
+// App.tsx renders any module whose name is a key here, so a simple report needs no new component
+// (see the add-report skill; remember REPORT_ITEMS in Sidebar.tsx).
+
 import type { ReportColumn, ReportFilter } from './ReportShell';
 
 export type ReportDef = { title: string; subtitle: string; endpoint: string; filters: ReportFilter[]; columns: ReportColumn[] };

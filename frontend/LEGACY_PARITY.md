@@ -19,7 +19,7 @@ The legacy menu itself lives in the `MstMenu` SQL table of the office database, 
 | Item Price List Maintenance | Built | Group filter, MRP or purchase rate, Load, change by amount with preview, Apply. |
 | Item Group Master | Built | Liquor flag and Consider for Loyalty (generic `MasterCrud`). |
 | UOM / Package / Brand Master | Built | Package holds litres per bottle, which drives litre totals. |
-| Supplier Master | Built | — |
+| Supplier Master | Partial | Legacy-style form only: Save changes local state and shows a toast, but nothing is sent to `/masters/suppliers` (the endpoint exists). Suppliers used by Purchase Bill come from the API. |
 | Customer Master | Built | Mobile, Loyalty Card No, points, Send SMS flag (SMS itself not sent). |
 | Ledger / Ledger Group Master | Built | Both in the sidebar; Expense Entry draws ledgers from here. |
 | Sales Counter Master | Built | Legacy requires a counter before any Sales Invoice (the React flow already enforces this through Invoice Setup). |

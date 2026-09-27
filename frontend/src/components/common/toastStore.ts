@@ -1,4 +1,15 @@
+// Popup (snackbar) state, shared by the whole app.
+//
+// Call showToast(kind, text) or toast.ok/error(...) from anywhere; <SnackbarContainer /> in App.tsx
+// renders them. Rules (see .claude/rules/popups-and-errors.md):
+// - every popup closes after TOAST_DURATION_MS (3 s); hovering pauses the countdown;
+// - the same message again shakes the existing card and shows ×2, ×3 instead of stacking;
+// - at most 3 cards are shown.
+// Use popups for server results only; form mistakes are shown inline (FormField / InlineError).
+
 export type ToastKind = 'ok' | 'error' | 'delete' | 'refresh' | 'backup';
+
+export const TOAST_DURATION_MS = 3000;
 
 export interface ToastItem {
   id: string;
@@ -6,7 +17,7 @@ export interface ToastItem {
   text: string;
   count: number;
   shakeKey: number;
-  duration: number; // 2000 for error, 4000 for standard popups
+  duration: number; // TOAST_DURATION_MS (3000) for every popup
   remaining: number;
   paused: boolean;
 }
@@ -81,9 +92,9 @@ class ToastStore {
     if (!text || !text.trim()) return;
     const cleanText = text.trim();
 
-    // Check if error: error toasts stay for 2 seconds and automatically close!
+    // Every popup (success or error) closes automatically after 3 seconds.
     const isError = kind === 'error' || /\b(already exists|error|failed|invalid|required)\b/i.test(cleanText);
-    const duration = isError ? 2000 : 4000;
+    const duration = TOAST_DURATION_MS;
 
     // Check if an existing toast matches
     const existingIndex = this.items.findIndex(i => i.text === cleanText && i.kind === kind);
@@ -154,6 +165,7 @@ class ToastStore {
 
 export const toastStore = new ToastStore();
 
+// Show a popup from anywhere, e.g. `toast.ok('Item saved')` or `toast.error(errorText(e))`.
 export const showToast = (kind: ToastKind, text: string) => toastStore.add(kind, text);
 export const toast = {
   ok: (text: string) => toastStore.add('ok', text),

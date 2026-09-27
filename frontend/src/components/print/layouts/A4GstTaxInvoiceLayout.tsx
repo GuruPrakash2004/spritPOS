@@ -1,7 +1,9 @@
+// Print layout: full-page A4 GST tax invoice with statutory details (legacy fmtSInv_GST.rpt).
+
 import React from 'react';
-import type { ApiCompany, ApiInvoice } from '../../api';
-import { money } from '../../ui';
-import { numberToWords } from '../../formatters';
+import type { ApiCompany, ApiInvoice } from '../../../lib/api';
+import { money } from '../../../lib/styles';
+import { numberToWords } from '../../../lib/formatters';
 
 interface A4GstTaxInvoiceLayoutProps {
   modelId: string;

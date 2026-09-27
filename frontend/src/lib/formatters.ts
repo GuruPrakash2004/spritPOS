@@ -1,3 +1,6 @@
+// Text formatters. numberToWords() spells an amount the Indian way (lakh/crore) for printed bills,
+// e.g. 1250.5 → "Rupees One Thousand Two Hundred Fifty and Fifty Paise Only".
+
 const ones = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
 const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 

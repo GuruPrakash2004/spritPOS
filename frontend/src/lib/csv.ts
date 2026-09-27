@@ -1,4 +1,6 @@
-// Minimal CSV reader/writer for the Item import (handles quoted fields and embedded commas/quotes).
+// Minimal CSV reader/writer (handles quoted fields and embedded commas/quotes).
+// Used by the Item Master import and the report "Export CSV" buttons.
+
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];

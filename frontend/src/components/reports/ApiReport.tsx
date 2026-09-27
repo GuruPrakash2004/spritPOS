@@ -1,3 +1,5 @@
+// Renders one report from reportDefs by its module name. key= resets the filters when switching reports.
+
 import ReportShell from './ReportShell';
 import { REPORTS } from './reportDefs';
 

@@ -1,7 +1,10 @@
+// Generic dialog. Portalled to <body> so it sits above the header and sidebar;
+// Esc and a backdrop click close it. Pass `footer` for the button row and `wide` for large content.
+
 import { useEffect, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { iconButton } from './ui';
+import { iconButton } from '../../lib/styles';
 
 // Portalled to <body> so it always sits above the header and sidebar. Esc and a backdrop click close it.
 export default function Modal({ title, onClose, children, footer, wide = false }: {

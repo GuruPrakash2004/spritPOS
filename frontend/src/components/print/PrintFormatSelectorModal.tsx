@@ -1,9 +1,13 @@
+// Print dialog: pick a legacy .rpt format for the current document, preview it with the matching web
+// layout from print/layouts/, then print (⌘/Ctrl+P). Uses sample data when a screen has nothing
+// to print yet (samplePrintData.ts).
+
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, FileText, Printer, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
-import { api } from '../api';
-import { useCompanyProfile } from '../useCompanyProfile';
-import { printButton, secondaryButton } from '../ui';
+import { api } from '../../lib/api';
+import { useCompanyProfile } from '../../hooks/useCompanyProfile';
+import { printButton, secondaryButton } from '../../lib/styles';
 import {
 	type DocumentCategory,
 	type RptModelDef,

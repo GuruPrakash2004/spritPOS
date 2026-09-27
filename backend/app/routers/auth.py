@@ -1,3 +1,14 @@
+"""Login and Admin Master (users, roles, rights).
+
+- POST /auth/login checks the password and returns a JWT (HS256, 24 h) plus the user's
+  role and the module names that role may open. GET /auth/me returns the same for a token.
+- get_current_user / require_admin are FastAPI dependencies. Use them as
+  Depends(require_admin); they read "Authorization: Bearer <token>" or the legacy
+  X-User header. Do not call require_admin(x_user) directly (it fails with a 500).
+- /admin/users and /admin/roles are Administrator-only. Users and roles live in
+  store.USERS / store.ROLES, so changes are lost on restart.
+- JWT_SECRET comes from backend/.env; never hard-code secrets or passwords here.
+"""
 import os
 import base64
 import secrets

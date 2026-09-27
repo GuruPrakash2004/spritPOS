@@ -1,13 +1,19 @@
-import Pattern from './ui/c-chart-21';
+// Home screen after login: today's KPIs and charts.
+//
+// Reads GET /reports/dsr (today), /reports/sales/daily (last 7 days), /reports/stock-movement,
+// /transactions/purchase-indent, /masters/items and the first company image. Each panel shows a
+// "Live" badge when its data came from the API and "Unavailable" when the call failed.
+
+import Pattern from '../ui/c-chart-21';
 import { useEffect, useState } from 'react';
 import {
   ArrowUpRight, ArrowDownRight,
   Package, Receipt, TrendingUp, Truck, Wine,
 } from 'lucide-react';
-import { api, qs, todayIso, type ApiDailySale, type ApiFullDsr, type ApiIndent, type ApiItem, type ApiStockMovement } from './api';
-import { money, panel } from './ui';
-import { IMAGES, productImage } from './constants/images';
-import { useCompanyProfile } from './useCompanyProfile';
+import { api, qs, todayIso, type ApiDailySale, type ApiFullDsr, type ApiIndent, type ApiItem, type ApiStockMovement } from '../../lib/api';
+import { money, panel } from '../../lib/styles';
+import { IMAGES, productImage } from '../../constants/images';
+import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 
 const LiveBadge = ({ live }: { live: boolean }) => (
   <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${live

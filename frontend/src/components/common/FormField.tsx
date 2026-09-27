@@ -1,5 +1,8 @@
+// TextField: a labelled input that shows the inline-error style (red border, shake, message below)
+// when `error` is set. Part of the form-validation pattern in .claude/rules/popups-and-errors.md.
+
 import type { ChangeEvent } from 'react';
-import { field, label } from './ui';
+import { field, label } from '../../lib/styles';
 import { InlineError } from './FormErrorSummary';
 
 // Labelled input supporting Amazon-style error highlight and inline errors.

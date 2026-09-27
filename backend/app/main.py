@@ -1,3 +1,9 @@
+"""FastAPI application: CORS, routers, startup DB load, and a few small endpoints.
+
+Run from backend/:  .venv/bin/uvicorn app.main:app --reload --port 8001
+On startup it connects to SQL Server (settings in backend/.env) and loads live data into
+the in-memory store; without a connection it runs on the seed data in store.py.
+"""
 import logging
 
 from fastapi import FastAPI

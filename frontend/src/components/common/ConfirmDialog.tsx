@@ -1,7 +1,12 @@
+// useConfirm(): an async replacement for window.confirm.
+//   const { confirm, dialog } = useConfirm();
+//   if (!(await confirm('Delete X?'))) return;
+// Render `{dialog}` once in the screen.
+
 import { useCallback, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import Modal from './Modal';
-import { dangerButton, secondaryButton } from './ui';
+import { dangerButton, secondaryButton } from '../../lib/styles';
 
 // Drop-in for window.confirm: `if (!(await confirm('Delete X?'))) return;`. Render `dialog` once in the screen.
 export function useConfirm() {

@@ -1,3 +1,5 @@
+// Third-party (shadcn/ui style) Card primitives. Used by c-chart-21.tsx; prefer lib/styles.ts `panel` in app code.
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

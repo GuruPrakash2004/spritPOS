@@ -1,5 +1,9 @@
-// Shared Tailwind class strings — the vLQMS design system. Colours are semantic tokens from index.css
-// (surface, subtle, line, accent, …) that switch in dark mode on their own, so no dark: colour variants here.
+// Shared Tailwind class strings (the vLQMS design system): panels, fields, buttons, tables.
+//
+// Use these instead of writing new class lists so every screen looks the same. Colours are hex values
+// with explicit dark: variants (light: burgundy #64283A on cream; dark: gold #D4A847 on #141414).
+// money() formats a rupee amount for tables.
+
 const btn = 'inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-all duration-180 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45';
 
 export const panel = 'rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] shadow-[0_8px_30px_rgba(72,53,38,0.06)] dark:border-[#2A2A2A] dark:bg-[#141414] dark:shadow-card';

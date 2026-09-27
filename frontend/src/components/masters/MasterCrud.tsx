@@ -1,10 +1,18 @@
+// Generic master screen (the web version of legacy frmMstGeneral): list + search on the left,
+// form on the right, New / Edit / Delete / Save.
+//
+// Talks to the backend CRUD factory at /masters/<path> (backend/app/routers/masters.py).
+// `fields` (see masterConfigs.ts) describes the form; `optionsFrom` fills a select from another master.
+// Keyboard: Enter/⌘S save, Esc cancel, ⌘N/Alt+N new, ↑/↓ move between fields.
+// Cashiers cannot delete items (hidden here and refused with 403 by the backend).
+
 import { useEffect, useState, type ReactNode } from 'react';
 import { Edit3, FilePlus, Save, Search, Trash2, X } from 'lucide-react';
-import { useConfirm } from './ConfirmDialog';
-import Toast from './Toast';
-import { FormErrorSummary, InlineError } from './FormErrorSummary';
-import { api, errorText, getAuthRole } from './api';
-import { badge, field, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from './ui';
+import { useConfirm } from '../common/ConfirmDialog';
+import Toast from '../common/Toast';
+import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
+import { api, errorText, getAuthRole } from '../../lib/api';
+import { badge, field, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
 
 export type MasterField = {
   key: string;

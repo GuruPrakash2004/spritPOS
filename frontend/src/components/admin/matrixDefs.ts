@@ -1,3 +1,6 @@
+// Screens shown in the Admin Master rights grid, with which actions each supports, and helpers that
+// convert a backend role ({name, modules}) into the grid's draft state. Add an entry here when you add a module.
+
 export interface MatrixScreen {
   id: string;
   name: string;

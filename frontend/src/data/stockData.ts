@@ -1,3 +1,6 @@
+// Hard-coded sample stock rows from the prototype, plus litresPerBottle(). Still used by the
+// Sales Invoice bill templates and the Purchase Bill item lookup; the other screens read stock from the API.
+
 export const SAMPLE_STOCK_DATA = [
   { code: 'VIN-750', group: 'WHISKY', brand: 'ABD', name: 'VIN GREEN LABEL BARREL SPECIAL CLASIC WHISKY', pkg: '750ml', opQty: 48, recQty: 24, issQty: 16, clQty: 56, rate: 835.00, purchaseRate: 759.29, cat: 'IML', ksbcl: 'KSBCL-102948' },
   { code: 'RC-750', group: 'WHISKY', brand: 'Royal Challenge', name: 'ROYAL CHALLENGE SELECT PREMIUM WHISKY', pkg: '750ml', opQty: 60, recQty: 36, issQty: 28, clQty: 68, rate: 950.00, purchaseRate: 860.00, cat: 'IML', ksbcl: 'KSBCL-104412' },

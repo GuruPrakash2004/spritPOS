@@ -1,6 +1,8 @@
+// Print layout: stock balance / excise register on A4 landscape (legacy RptStk*.rpt).
+
 import React from 'react';
-import type { ApiCompany } from '../../api';
-import { money } from '../../ui';
+import type { ApiCompany } from '../../../lib/api';
+import { money } from '../../../lib/styles';
 import { SAMPLE_STOCK_BALANCE_DATA } from '../samplePrintData';
 
 interface StockRow {

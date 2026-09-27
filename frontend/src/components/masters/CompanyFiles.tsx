@@ -1,11 +1,15 @@
+// Company Master → Images / Documents tabs. Files are uploaded as base64 to /company/files
+// and stored by the backend in backend/uploads/company/ (8 MB limit). Upload/edit/delete are
+// Administrator only.
+
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useConfirm } from './ConfirmDialog';
+import { useConfirm } from '../common/ConfirmDialog';
 import { Download, Edit3, Eye, FileSpreadsheet, ImagePlus, Save, Trash2, Upload } from 'lucide-react';
-import Modal from './Modal';
-import Toast from './Toast';
-import { api, errorText } from './api';
-import { downloadText, toCsv } from './csv';
-import {  field, label, primaryButton, secondaryButton, tableBody, tableHead , exportButton } from './ui';
+import Modal from '../common/Modal';
+import Toast from '../common/Toast';
+import { api, errorText } from '../../lib/api';
+import { downloadText, toCsv } from '../../lib/csv';
+import {  field, label, primaryButton, secondaryButton, tableBody, tableHead , exportButton } from '../../lib/styles';
 
 // Company Master → Images / Documents, stored by the backend under backend/uploads/company.
 export type CompanyFile = {

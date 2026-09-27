@@ -1,11 +1,14 @@
+// Item Master: MasterCrud for /masters/items plus the legacy "Import Item from Excel" flow
+// (pick the template saved as CSV → preview with duplicates in red → POST /masters/items/import).
+
 import { useRef, useState } from 'react';
 import { FileDown, FileUp, Upload } from 'lucide-react';
 import MasterCrud from './MasterCrud';
-import Modal from './Modal';
-import { api, errorText, type ApiItemFull } from './api';
-import { downloadText, parseCsv, toCsv } from './csv';
+import Modal from '../common/Modal';
+import { api, errorText, type ApiItemFull } from '../../lib/api';
+import { downloadText, parseCsv, toCsv } from '../../lib/csv';
 import { ITEM_FIELDS, ITEM_IMPORT_COLUMNS, ITEM_IMPORT_NUMERIC } from './masterConfigs';
-import { primaryButton, secondaryButton, tableBody, tableHead } from './ui';
+import { primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
 type Preview = { row: Record<string, string | number>; duplicate: boolean; problem: string };
 

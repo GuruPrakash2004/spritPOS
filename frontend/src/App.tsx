@@ -1,37 +1,47 @@
-import { SnackbarContainer } from './components/Toast';
+// App shell and screen router.
+//
+// - Shows <Login /> until a user signs in, then the header, <Sidebar /> and the active screen.
+// - There is no router library: `activeTab` holds a module name (see lib/modules.ts) and
+//   renderContent() switches on it. The only real URL is /adminMaster (Admin Master).
+// - A module name that is a key of REPORTS (reports/reportDefs.ts) renders through <ApiReport />.
+// - Sales Invoice is two steps: <SalesInvoiceSetup /> fills `invoiceDraft`, then <SalesInvoice /> opens.
+// - To add a screen: add its name to MODULE_GROUPS/MODULE_KEYWORDS, the Sidebar, MATRIX_SCREENS,
+//   backend ROLES, and a `case` below.
+
+import { SnackbarContainer } from './components/common/Toast';
 import { useEffect, useState } from 'react';
 import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard } from 'lucide-react';
-import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
-import AdminMaster from './components/AdminMaster';
-import { api, setAuthUser, todayIso, type ApiDsr, type ApiUser } from './components/api';
-import { ADMIN_MASTER, ADMIN_PATH, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './components/modules';
-import { iconButton, primaryButton } from './components/ui';
-import CashDenomination from './components/CashDenomination';
-import ClosingStockEntry from './components/ClosingStockEntry';
-import CompanyMaster from './components/CompanyMaster';
-import DailySummaryReport from './components/DailySummaryReport';
-import ExpenseEntry from './components/ExpenseEntry';
-import ItemMaster from './components/ItemMaster';
-import Login from './components/Login';
-import ModuleSearch from './components/ModuleSearch';
+import KeyboardShortcutsModal from './components/common/KeyboardShortcutsModal';
+import AdminMaster from './components/admin/AdminMaster';
+import { api, setAuthUser, todayIso, type ApiDsr, type ApiUser } from './lib/api';
+import { ADMIN_MASTER, ADMIN_PATH, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
+import { iconButton, primaryButton } from './lib/styles';
+import CashDenomination from './components/transactions/CashDenomination';
+import ClosingStockEntry from './components/transactions/ClosingStockEntry';
+import CompanyMaster from './components/masters/CompanyMaster';
+import DailySummaryReport from './components/reports/DailySummaryReport';
+import ExpenseEntry from './components/transactions/ExpenseEntry';
+import ItemMaster from './components/masters/ItemMaster';
+import Login from './components/auth/Login';
+import ModuleSearch from './components/layout/ModuleSearch';
 import {
   BrandMaster, CustomerMaster, ItemGroupMaster, LedgerGroupMaster, LedgerMaster, PackageMaster, UOMMaster,
-} from './components/Masters';
-import PriceListMaintenance from './components/PriceListMaintenance';
+} from './components/masters/Masters';
+import PriceListMaintenance from './components/masters/PriceListMaintenance';
 import ApiReport from './components/reports/ApiReport';
 import { REPORTS } from './components/reports/reportDefs';
-import { PurchaseIndent, SalesReturn, StockDeduction } from './components/StockTransactions';
-import PurchaseBill from './components/PurchaseBill';
-import ReportsDashboard from './components/ReportsDashboard';
-import SalesCounterMaster from './components/SalesCounterMaster';
-import { DEFAULT_COUNTER, FIRST_BILL_SEQ, billNumber, type InvoiceSetup, type SalesCounter } from './components/salesCounters';
-import SalesInvoice from './components/SalesInvoice';
-import SalesInvoiceSetup from './components/SalesInvoiceSetup';
-import Sidebar from './components/Sidebar';
-import SupplierMaster from './components/SupplierMaster';
-import { Dashboard } from './components/OperationalModules';
-import StockBalanceReport from './components/StockBalanceReport';
-import { useCompanyProfile } from './components/useCompanyProfile';
+import { PurchaseIndent, SalesReturn, StockDeduction } from './components/transactions/StockTransactions';
+import PurchaseBill from './components/transactions/PurchaseBill';
+import ReportsDashboard from './components/reports/ReportsDashboard';
+import SalesCounterMaster from './components/masters/SalesCounterMaster';
+import { DEFAULT_COUNTER, FIRST_BILL_SEQ, billNumber, type InvoiceSetup, type SalesCounter } from './data/salesCounters';
+import SalesInvoice from './components/transactions/SalesInvoice';
+import SalesInvoiceSetup from './components/transactions/SalesInvoiceSetup';
+import Sidebar from './components/layout/Sidebar';
+import SupplierMaster from './components/masters/SupplierMaster';
+import { Dashboard } from './components/dashboard/Dashboard';
+import StockBalanceReport from './components/reports/StockBalanceReport';
+import { useCompanyProfile } from './hooks/useCompanyProfile';
 
 export default function App() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);

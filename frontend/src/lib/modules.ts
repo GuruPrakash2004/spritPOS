@@ -1,5 +1,10 @@
-// Every module a role can be given, grouped as in the sidebar. Names are the routing keys used by
-// App.tsx and Sidebar.tsx, and are what the backend stores in a role's rights.
+// Module registry: the list of every screen ("module"), grouped as in the sidebar.
+//
+// A module name is a key used in four places, so it must be spelled identically everywhere:
+// App.tsx (switch), components/layout/Sidebar.tsx, components/admin/matrixDefs.ts and
+// backend/app/store.py ROLES (a role's rights are a list of these names; "*" means all).
+// MODULE_KEYWORDS adds search words (legacy abbreviations such as "SINV", "DSR") for ModuleSearch.
+
 export const MODULE_GROUPS: { group: string; modules: string[] }[] = [
   { group: 'General', modules: ['Dashboard'] },
   {

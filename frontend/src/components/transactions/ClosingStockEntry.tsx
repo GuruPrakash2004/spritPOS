@@ -1,10 +1,14 @@
+// Closing Stock Entry (legacy frmTrnCloseStk): load items with their opening qty for the As-on Date,
+// enter the physical closing stock, and the difference becomes the day's sales
+// (Sales Qty = OP − Closing). Save, then Generate Sales Invoice for that quantity.
+
 import { useEffect, useState } from 'react';
 import { Download, FileOutput, Save } from 'lucide-react';
-import Modal from './Modal';
-import Toast from './Toast';
-import { api, errorText, qs, todayIso, type ApiClosingLoad, type ApiCounter, type ApiDoc } from './api';
-import { SALES_PERSONS } from './salesCounters';
-import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from './ui';
+import Modal from '../common/Modal';
+import Toast from '../common/Toast';
+import { api, errorText, qs, todayIso, type ApiClosingLoad, type ApiCounter, type ApiDoc } from '../../lib/api';
+import { SALES_PERSONS } from '../../data/salesCounters';
+import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 type Row = ApiClosingLoad & { closing: string };
 

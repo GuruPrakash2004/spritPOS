@@ -1,11 +1,15 @@
+// Customised Reports (module key "Reports Dashboard"): the list of legacy report names, with
+// Generate & View, Export XLS and Print. Data comes from GET /reports/custom
+// (backend/app/routers/custom_reports.py).
+
 import { useEffect, useState } from 'react';
 import { Mail, Download, Eye, Plus, X, Loader2, Printer } from 'lucide-react';
-import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from './ui';
-import Toast from './Toast';
-import { api, errorText } from './api';
-import { downloadXls, type ReportColumn, type ReportRow } from './xlsExport';
-import { useCompanyProfile } from './useCompanyProfile';
-import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
+import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
+import Toast from '../common/Toast';
+import { api, errorText } from '../../lib/api';
+import { downloadXls, type ReportColumn, type ReportRow } from '../../lib/xlsExport';
+import { useCompanyProfile } from '../../hooks/useCompanyProfile';
+import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
 const toDmy = (iso: string) => iso.split('-').reverse().join('/');
 

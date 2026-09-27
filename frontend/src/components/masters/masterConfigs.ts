@@ -1,3 +1,6 @@
+// Field lists for the simple masters rendered by MasterCrud, plus the Item import column layout.
+// Each list mirrors a Pydantic model in backend/app/schemas.py; change both together.
+
 import type { MasterField } from './MasterCrud';
 
 // Field lists mirror backend/app/schemas.py. Kept at module level so the arrays are stable across renders.

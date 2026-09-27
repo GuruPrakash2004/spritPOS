@@ -1,8 +1,11 @@
+// Price List Maintenance (legacy frmMstPriceMaintenance): choose an item group, Load, change MRP or
+// purchase rate by an amount, preview, then Apply via POST /masters/items/price-list.
+
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Download } from 'lucide-react';
-import Toast from './Toast';
-import { api, errorText, type ApiItemFull } from './api';
-import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from './ui';
+import Toast from '../common/Toast';
+import { api, errorText, type ApiItemFull } from '../../lib/api';
+import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 type Column = 'mrp' | 'purchase_rate';
 

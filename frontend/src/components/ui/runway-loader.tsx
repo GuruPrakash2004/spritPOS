@@ -1,3 +1,4 @@
+// Third-party animated progress bar (truck / plane on a runway). Toast.tsx uses it as the popup countdown bar.
 "use client";
 
 import { useLayoutEffect, useEffect, useRef, useState } from "react";

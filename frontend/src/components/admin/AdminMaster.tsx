@@ -1,14 +1,21 @@
+// Admin Master (/adminMaster, Administrator only): users, roles and per-screen rights
+// (legacy frmMstRole + frmUtlAssignRights).
+//
+// Endpoints: /admin/users (GET/POST/PUT/DELETE) and /admin/roles (GET/PUT/DELETE).
+// Note: only the list of modules a role may open is saved. The Add/Edit/Delete ticks in the grid
+// are UI-only; the backend does not store them.
+
 import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   FilePlus, KeyRound, Save, Trash2, Users, X,
   Eye, Edit3,
 } from 'lucide-react';
-import { useConfirm } from './ConfirmDialog';
-import Toast from './Toast';
-import { FormErrorSummary } from './FormErrorSummary';
-import { api, errorText, type ApiAdminUser, type ApiRole } from './api';
-import { ADMIN_ROLE } from './modules';
-import { badge, label, pageHeader, pageSub, pageTitle, primaryButton, secondaryButton, dangerButton } from './ui';
+import { useConfirm } from '../common/ConfirmDialog';
+import Toast from '../common/Toast';
+import { FormErrorSummary } from '../common/FormErrorSummary';
+import { api, errorText, type ApiAdminUser, type ApiRole } from '../../lib/api';
+import { ADMIN_ROLE } from '../../lib/modules';
+import { badge, label, pageHeader, pageSub, pageTitle, primaryButton, secondaryButton, dangerButton } from '../../lib/styles';
 import { MATRIX_SCREENS, type RoleDraft, parseRoleToDraft } from './matrixDefs';
 import AdminUsersTab, { type UserForm } from './AdminUsersTab';
 import PermissionMatrixTable from './PermissionMatrixTable';

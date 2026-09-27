@@ -1,3 +1,5 @@
+// The vLQMS logo mark (inline SVG) with optional wordmark, in three sizes.
+
 import React from 'react';
 
 interface VlqmsLogoProps {

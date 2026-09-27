@@ -1,3 +1,4 @@
+// Third-party (shadcn/ui style) wrappers around recharts: ChartContainer, tooltip and legend. Used by c-chart-21.tsx.
 "use client"
 
 import * as React from "react"

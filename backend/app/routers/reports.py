@@ -1,5 +1,14 @@
-"""Reports: Stock Balance, Stock Ledger, Profit Margin and the Daily Summary
-Report (field list from Docs/WebDash.xlsx)."""
+"""Report endpoints under /reports.
+
+Stock Balance, Stock Ledger, Stock Ageing, Profit Margin, Reorder (Stock Level), the Daily
+Summary Report (field list from Docs/WebDash.xlsx), hourly/daily/brand-wise sales, litre
+reports, the Dashboard's stock-movement summary, and the list of legacy .rpt files in
+backend/Rpts/. Stock figures are computed from store.MOVEMENTS, so they only include
+movements made through store.move_stock() (plus the seeded sales history).
+
+The frontend renders most of these through REPORTS in
+frontend/src/components/reports/reportDefs.ts.
+"""
 from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path

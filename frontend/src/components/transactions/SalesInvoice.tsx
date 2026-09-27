@@ -1,14 +1,20 @@
+// Sales Invoice (POS billing, legacy frmTrnSINV), step 2 after SalesInvoiceSetup.
+//
+// Barcode/item entry, qty +/-, collected amount → payback/shortage, loyalty points, total litres,
+// Hold / New Bill / Cancel / Re-Print. Saves with POST /transactions/sales-invoice, which reduces
+// stock on the backend (store.move_stock). Held bills get their own HOLD- series.
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileStack, PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine, ChevronDown } from 'lucide-react';
-import { useConfirm } from './ConfirmDialog';
-import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from './ui';
-import Toast from './Toast';
-import { api, errorText, todayIso, type ApiCustomer, type ApiDoc, type ApiInvoice } from './api';
+import { useConfirm } from '../common/ConfirmDialog';
+import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
+import Toast from '../common/Toast';
+import { api, errorText, todayIso, type ApiCustomer, type ApiDoc, type ApiInvoice } from '../../lib/api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
-import { SAMPLE_STOCK_DATA, litresPerBottle } from './stockData';
-import { numberToWords } from './formatters';
-import { PARTIES, PAYMENT_TYPES, SALES_PERSONS, type InvoiceSetup, type PaymentType } from './salesCounters';
-import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
+import { SAMPLE_STOCK_DATA, litresPerBottle } from '../../data/stockData';
+import { numberToWords } from '../../lib/formatters';
+import { PARTIES, PAYMENT_TYPES, SALES_PERSONS, type InvoiceSetup, type PaymentType } from '../../data/salesCounters';
+import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
 type Line = { id: number; name: string; qoh: number; qty: number; rate: number; discPct: number };
 

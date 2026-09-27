@@ -1,5 +1,8 @@
-// Registry of legacy .RPT report models and modern web print layouts.
-// Maps document contexts to compatible .rpt models and physical printer structures.
+// Registry of the legacy Crystal Reports (.rpt) print formats.
+//
+// Maps each document type (sales invoice, purchase bill, DSR, stock balance, …) to the .rpt models
+// the desktop app offered and the printer each targets (thermal 80/58 mm, A4/A5 laser, dot-matrix).
+// The chosen model per document type is remembered in localStorage.
 
 export type PrinterStructure =
   | 'THERMAL_80MM'      // 80mm (3-inch) POS continuous thermal slip

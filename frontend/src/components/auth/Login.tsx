@@ -1,9 +1,13 @@
+// Sign-in page (legacy frmLogin). Posts to POST /auth/login and hands the returned user
+// (role, modules, JWT) and the chosen financial year to App.tsx via onLogin.
+// Has its own light/dark toggle and shows the company name from useCompanyProfile().
+
 import { useState, useEffect, type FormEvent } from 'react';
 import { AlertCircle, Loader2, LogIn, Moon, Sun, Wine } from 'lucide-react';
-import { api, errorText, type ApiUser } from './api';
-import { IMAGES } from './constants/images';
-import VlqmsLogo from './VlqmsLogo';
-import { useCompanyProfile } from './useCompanyProfile';
+import { api, errorText, type ApiUser } from '../../lib/api';
+import { IMAGES } from '../../constants/images';
+import VlqmsLogo from '../layout/VlqmsLogo';
+import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 
 const FIN_YEARS = ['01/04/2026 - 31/03/2027', '01/04/2025 - 31/03/2026'];
 

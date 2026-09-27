@@ -1,6 +1,9 @@
+// The keyboard-shortcut cheat sheet, opened with `?` or the keyboard button in the header.
+// Shows ⌘ on macOS and Ctrl elsewhere.
+
 import { Keyboard, Search, FileText, CheckSquare, X } from 'lucide-react';
 import Modal from './Modal';
-import { secondaryButton } from './ui';
+import { secondaryButton } from '../../lib/styles';
 
 interface ShortcutGroup {
   category: string;

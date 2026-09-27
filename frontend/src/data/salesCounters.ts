@@ -1,3 +1,9 @@
+// Sales-invoice types and constants shared by the invoice screens.
+//
+// Real data (counters, customers) comes from the API; DEFAULT_COUNTER and PARTIES are prototype
+// fallbacks still used by the invoice setup. billNumber() builds a doc number the same way the
+// backend does: `<FY>/<counter prefix>-<7-digit seq>`, e.g. 26/c10-0083718.
+
 export type SalesCounter = { code: string; name: string; systemName: string; prefix: string; inactive: boolean };
 
 export const DEFAULT_COUNTER: SalesCounter = { code: 'counter10', name: 'counter10', systemName: 'PRADEEP', prefix: 'c10', inactive: false };

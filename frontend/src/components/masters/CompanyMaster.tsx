@@ -1,15 +1,20 @@
+// Company Master: the store's profile (name, address, GSTIN, licence, FY) plus Images and Documents tabs.
+// Loads GET /masters/company and saves with PUT (Administrator only). After a save it calls
+// notifyCompanyProfileUpdated() so the header, login page and prints refresh.
+// Known backend bug: PUT /masters/company currently returns 500 (see .claude/CLAUDE.md).
+
 import { useState, useEffect } from 'react';
 import { 
   Building2, ShieldCheck, Calendar, Image as ImageIcon,
   FolderArchive, Save, Plus, DatabaseBackup,
 } from 'lucide-react';
 import { CompanyDocuments, CompanyImages } from './CompanyFiles';
-import { TextField } from './FormField';
-import Toast from './Toast';
-import { FormErrorSummary, InlineError } from './FormErrorSummary';
-import { api, errorText, type ApiCompany } from './api';
-import { notifyCompanyProfileUpdated } from './useCompanyProfile';
-import { badge, field, ghostButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from './ui';
+import { TextField } from '../common/FormField';
+import Toast from '../common/Toast';
+import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
+import { api, errorText, type ApiCompany } from '../../lib/api';
+import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
+import { badge, field, ghostButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
 
 interface FinYear {
   from: string;

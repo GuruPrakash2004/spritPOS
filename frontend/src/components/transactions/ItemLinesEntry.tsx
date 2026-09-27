@@ -1,10 +1,14 @@
+// Shared item-line grid (cases + bottles → qty, rate, amount, litres) for the stock transactions:
+// Purchase Indent, Sales Return, Stock Deduction. The screen supplies its own header fields and turns
+// the lines into the request body.
+
 import { useEffect, useState, type ReactNode } from 'react';
 import { PlusCircle, Save, Trash2, XCircle, Printer } from 'lucide-react';
-import Toast from './Toast';
-import { api, errorText, type ApiDoc, type ApiItemFull, type ApiInvoice } from './api';
-import { field, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader, printButton } from './ui';
-import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
-import { type DocumentCategory } from './print/rptRegistry';
+import Toast from '../common/Toast';
+import { api, errorText, type ApiDoc, type ApiItemFull, type ApiInvoice } from '../../lib/api';
+import { field, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader, printButton } from '../../lib/styles';
+import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import { type DocumentCategory } from '../print/rptRegistry';
 
 export type EntryLine = { item_code: string; cases: number; bottles: number; rate: number };
 

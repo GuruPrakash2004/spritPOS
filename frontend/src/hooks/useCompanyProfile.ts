@@ -1,5 +1,10 @@
+// useCompanyProfile(): the company profile (name, address, GSTIN, …) from GET /masters/company.
+//
+// Used by the header, login page, dashboard and printouts. After Company Master saves, it calls
+// notifyCompanyProfileUpdated(), which fires a window event so every mounted hook re-fetches.
+
 import { useEffect, useState } from 'react';
-import { api, type ApiCompany } from './api';
+import { api, type ApiCompany } from '../lib/api';
 
 export const COMPANY_PROFILE_UPDATED = 'company-profile-updated';
 

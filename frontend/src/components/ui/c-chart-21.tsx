@@ -1,3 +1,4 @@
+// Third-party donut chart (recharts) used on the Dashboard.
 "use client";
 
 import { Cell, Pie, PieChart } from "recharts";

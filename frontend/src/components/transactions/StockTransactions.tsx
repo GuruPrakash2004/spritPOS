@@ -1,7 +1,12 @@
+// The three stock transactions built on ItemLinesEntry:
+// - PurchaseIndent: order to a supplier; no stock effect; later copied into a Purchase Bill.
+// - SalesReturn: optionally against a saved invoice; adds stock.
+// - StockDeduction: breakage/leakage/sample/other; reduces stock.
+
 import { useEffect, useState } from 'react';
 import ItemLinesEntry from './ItemLinesEntry';
-import { api, todayIso, type ApiInvoice, type ApiSupplier } from './api';
-import { field, label } from './ui';
+import { api, todayIso, type ApiInvoice, type ApiSupplier } from '../../lib/api';
+import { field, label } from '../../lib/styles';
 
 // The three stock transactions built on ItemLinesEntry. Each only adds its own header fields.
 

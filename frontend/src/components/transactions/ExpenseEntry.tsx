@@ -1,8 +1,11 @@
+// Expense Entry: post amounts against ledgers from Ledger Master, paid from Cash or Bank.
+// Cash expenses reduce the DSR cash balance. POST /transactions/expense.
+
 import { useEffect, useState } from 'react';
 import { PlusCircle, Save, Trash2 } from 'lucide-react';
-import Toast from './Toast';
-import { api, errorText, todayIso, type ApiLedger } from './api';
-import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from './ui';
+import Toast from '../common/Toast';
+import { api, errorText, todayIso, type ApiLedger } from '../../lib/api';
+import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 type Line = { ledger: string; amount: string; narration: string };
 const blank = (): Line => ({ ledger: '', amount: '', narration: '' });

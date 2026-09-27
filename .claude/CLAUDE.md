@@ -43,21 +43,45 @@ Demo logins: `ADMIN`/`admin` (Administrator), `GURU`/`guru` (Manager), `PRADEEP`
 
 ## Frontend architecture (`frontend/src`)
 
-- **No router library.** `src/App.tsx` stores the active module name in `activeTab` state, and `renderContent()` switches on that string. The only URL route is `/adminMaster` (history pushState and popstate). After login the app always opens the Dashboard unless the URL is `/adminMaster`. To add a screen: add its name to `MODULE_GROUPS` in `src/components/modules.ts` (this feeds the sidebar, the module search and role rights), add search words to `MODULE_KEYWORDS`, then add a `case` in `App.tsx`.
+Folder layout. Every source file starts with a header comment that says what it does:
+
+```
+App.tsx, main.tsx     app shell + screen switch, entry point
+lib/                  non-UI code: api.ts (HTTP client + response types), modules.ts (module registry, canOpen),
+                      styles.ts (shared Tailwind classes, money()), csv.ts, xlsExport.ts, formatters.ts, utils.ts
+hooks/                useCompanyProfile.ts
+data/                 prototype data still in use: stockData.ts, salesCounters.ts (invoice types + constants)
+constants/images.ts   bundled images, productImage()
+components/
+  common/             Modal, ConfirmDialog (useConfirm), Toast + toastStore, FormField, FormErrorSummary, KeyboardShortcutsModal
+  layout/             Sidebar, ModuleSearch, VlqmsLogo
+  auth/               Login
+  dashboard/          Dashboard
+  admin/              AdminMaster (+ AdminUsersTab, PermissionMatrixTable, matrixDefs)
+  masters/            MasterCrud engine + masterConfigs, Masters (simple masters), Item/Company/Supplier/Sales Counter/Price List screens
+  transactions/       SalesInvoice (+ Setup, Dialogs), PurchaseBill/, ItemLinesEntry + StockTransactions, Expense, Closing Stock, Cash Denomination
+  reports/            reportDefs + ApiReport + ReportShell (table reports), DailySummaryReport, StockBalanceReport, ReportsDashboard (Customised Reports)
+  print/              rptRegistry, PrintFormatSelectorModal, layouts/ (one per printer format)
+  ui/                 third-party components (charts, loader); don't restyle app screens with these
+```
+
+Put a new screen in the folder for its sidebar group, and put shared non-UI code in `lib/`.
+
+- **No router library.** `src/App.tsx` stores the active module name in `activeTab` state, and `renderContent()` switches on that string. The only URL route is `/adminMaster` (history pushState and popstate). After login the app always opens the Dashboard unless the URL is `/adminMaster`. To add a screen: add its name to `MODULE_GROUPS` in `src/lib/modules.ts` (this feeds the sidebar, the module search and role rights), add search words to `MODULE_KEYWORDS`, then add a `case` in `App.tsx`.
 - **Module names are keys.** The same string is used for routing, in the sidebar, and in the per-role rights in `backend/app/store.py` `ROLES`. Renaming a module means changing both.
 - **Auth.** `Login` returns an `ApiUser` with `role`, `modules` and a JWT. `canOpen()` gates the screens (`'*'` = Administrator = everything). `setAuthUser(user, role, token)` stores the token in `localStorage` (`vlqms_jwt_token`), and every request sends both `Authorization: Bearer` and `X-User`. The session itself is React state, so a page reload goes back to the login screen.
 - **Admin Master** (`AdminMaster.tsx`, `AdminUsersTab.tsx`, `PermissionMatrixTable.tsx`, screen list in `matrixDefs.ts`) shows Open/Add/Edit/Delete ticks per screen, but only the module names are saved (`PUT /admin/roles/{name}` with `{name, modules}`). The Add/Edit/Delete ticks are not stored. When you add a module, also add it to `MATRIX_SCREENS`.
-- **API client.** `src/components/api.ts` exports `api<T>(path, {method, body})`, `errorText`, and TypeScript shapes for backend responses. The shapes stay snake_case, as FastAPI returns them. Error messages come from FastAPI's `detail`.
+- **API client.** `src/lib/api.ts` exports `api<T>(path, {method, body})`, `errorText`, and TypeScript shapes for backend responses. The shapes stay snake_case, as FastAPI returns them. Error messages come from FastAPI's `detail`.
 - **Reusable screen engines** (these mirror the legacy generic forms):
   - `MasterCrud.tsx` with field lists in `masterConfigs.ts` → the simple masters at `/masters/<path>`. Field lists mirror `backend/app/schemas.py`, so change both together. `Masters.tsx` wires them together.
   - `reports/reportDefs.ts` (`REPORTS` map: endpoint, filters, columns) rendered by `reports/ApiReport.tsx` and `ReportShell.tsx`. `App.tsx` checks `REPORTS[activeTab]` before its switch, so a simple report only needs a new entry here.
   - `ItemLinesEntry.tsx` is the shared item-line grid used by the stock transactions (`StockTransactions.tsx`: Purchase Indent, Stock Deduction, Sales Return).
   - `print/`: `rptRegistry.ts` maps each document type to the legacy `.rpt` formats and printer types (thermal 80/58 mm, A4/A5 laser, dot-matrix). `PrintFormatSelectorModal.tsx` lets the user pick one, and `print/layouts/*` render the web version of each.
 - **Sales Invoice has two steps.** `SalesInvoiceSetup` (counter, invoice no, payment type, customer) comes first, then `SalesInvoice`. `App.tsx` holds the draft state (`invoiceDraft`, `billOpen`). Saving a Sales Counter Master opens the setup form.
-- **Dashboard** is `Dashboard` in `OperationalModules.tsx`. It reads `/reports/dsr`, `/reports/sales/daily` (last 7 days), `/reports/stock-movement` and the first company image. `ModuleSearch.tsx` (⌘K or `/`) searches module names and `MODULE_KEYWORDS`, and `KeyboardShortcutsModal.tsx` (`?`) lists the shortcuts.
+- **Dashboard** is `Dashboard` in `components/dashboard/Dashboard.tsx`. It reads `/reports/dsr`, `/reports/sales/daily` (last 7 days), `/reports/stock-movement` and the first company image. `ModuleSearch.tsx` (⌘K or `/`) searches module names and `MODULE_KEYWORDS`, and `KeyboardShortcutsModal.tsx` (`?`) lists the shortcuts.
 - **Notifications and validation** follow `.claude/rules/popups-and-errors.md`: server results go to the snackbar (`Toast.tsx` / `toastStore.ts`), and client-side form mistakes are shown inline (`FormField.tsx`, and `InlineError`/`FormErrorSummary` in `FormErrorSummary.tsx`), never as toasts.
-- Some files still hold hard-coded sample data from the prototype (`stockData.ts`, `PARTIES`/`DEFAULT_COUNTER` in `salesCounters.ts`, `PurchaseBill/purchaseBillData.ts`, `print/samplePrintData.ts`). The newer screens use the API.
-- Styling notes (Tailwind v4, palette, shared class strings in `ui.ts`) are in `frontend/CLAUDE.md`.
+- Some files still hold hard-coded sample data from the prototype (`data/stockData.ts`, `PARTIES`/`DEFAULT_COUNTER` in `data/salesCounters.ts`, `transactions/PurchaseBill/purchaseBillData.ts`, `print/samplePrintData.ts`). The newer screens use the API. **Supplier Master is not wired to the API**: its Save only changes local state.
+- Styling notes (Tailwind v4, palette, shared class strings in `lib/styles.ts`) are in `frontend/CLAUDE.md`.
 
 ## Workflow
 

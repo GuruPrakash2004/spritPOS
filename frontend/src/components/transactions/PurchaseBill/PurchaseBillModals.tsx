@@ -1,7 +1,10 @@
+// Dialogs used by the Purchase Bill: ItemLookupModal (pick an item), CopyFromModal (copy lines from a
+// Purchase Indent) and AddSupplierModal.
+
 import { useState } from 'react';
-import Modal from '../Modal';
-import type { ApiIndent } from '../api';
-import { SAMPLE_STOCK_DATA } from '../stockData';
+import Modal from '../../common/Modal';
+import type { ApiIndent } from '../../../lib/api';
+import { SAMPLE_STOCK_DATA } from '../../../data/stockData';
 import { field, headCell, ITEM_CODES, money } from './purchaseBillData';
 
 export function ItemLookupModal({ filter, onFilter, onPick, onClose }: {

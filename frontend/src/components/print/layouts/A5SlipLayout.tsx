@@ -1,7 +1,9 @@
+// Print layout: half-page A5 retail cash memo (legacy fmtSInv.rpt).
+
 import React from 'react';
-import type { ApiCompany, ApiInvoice } from '../../api';
-import { money } from '../../ui';
-import { numberToWords } from '../../formatters';
+import type { ApiCompany, ApiInvoice } from '../../../lib/api';
+import { money } from '../../../lib/styles';
+import { numberToWords } from '../../../lib/formatters';
 import { SAMPLE_INVOICE_DATA } from '../samplePrintData';
 
 interface A5SlipLayoutProps {

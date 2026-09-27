@@ -1,7 +1,9 @@
+// Users tab of Admin Master: the user list plus the add/edit form (user, password, role, active).
+
 import { FilePlus, Pencil, Save, Trash2, X } from 'lucide-react';
-import { FormErrorSummary, InlineError } from './FormErrorSummary';
-import type { ApiAdminUser, ApiRole } from './api';
-import { badge, field, iconButton, label, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from './ui';
+import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
+import type { ApiAdminUser, ApiRole } from '../../lib/api';
+import { badge, field, iconButton, label, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
 
 export type UserForm = { user: string; password: string; role: string; active: boolean; isNew: boolean };
 

@@ -1,8 +1,11 @@
+// Cash Denomination (legacy frmUtlDenom): count notes and coins in the drawer at day end and compare
+// the total with the DSR cash balance. Saved per date via /transactions/denomination.
+
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
-import Toast from './Toast';
-import { api, errorText, qs, todayIso, type ApiDenomination, type ApiFullDsr } from './api';
-import { field, money, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, pageHeader } from './ui';
+import Toast from '../common/Toast';
+import { api, errorText, qs, todayIso, type ApiDenomination, type ApiFullDsr } from '../../lib/api';
+import { field, money, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 const NOTES = [500, 200, 100, 50, 20, 10];
 

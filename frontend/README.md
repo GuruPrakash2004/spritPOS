@@ -15,10 +15,36 @@ Start the backend first (see `../backend/README.md`). Without it the screens sho
 
 ## Where things are
 
-- `src/App.tsx`: login, the app shell, and a `switch` on the active module name. There is no router library. The only URL route is `/adminMaster`.
-- `src/components/modules.ts`: module names and groups (sidebar, search, role rights). `Sidebar.tsx` lists them with icons.
-- `src/components/api.ts`: the fetch wrapper (`api<T>()`), auth token handling, and response types.
-- Generic engines: `MasterCrud.tsx` + `masterConfigs.ts` (simple masters), `reports/reportDefs.ts` + `ApiReport.tsx` (tabular reports), `ItemLinesEntry.tsx` (item-line transactions), and `print/` (legacy `.rpt` print formats).
-- `LEGACY_PARITY.md`: each legacy screen and how complete it is here.
+Every source file starts with a comment that explains what it does, so open the file to read its purpose.
+
+```
+src/
+├── main.tsx              entry point
+├── App.tsx               login gate, app shell, and the switch that picks the screen for the active module
+├── lib/                  code without UI
+│   ├── api.ts            api<T>() fetch wrapper, login token, backend response types
+│   ├── modules.ts        every module (screen) name, sidebar groups, search words, canOpen()
+│   ├── styles.ts         shared Tailwind class strings (panel, field, buttons, tables) and money()
+│   └── csv.ts, xlsExport.ts, formatters.ts, utils.ts
+├── hooks/                useCompanyProfile()
+├── data/                 prototype data still in use (sample stock, invoice constants)
+├── constants/images.ts   bundled images
+├── img/                  image files
+└── components/
+    ├── common/           Modal, confirm dialog, popups (Toast + toastStore), form fields and errors
+    ├── layout/           Sidebar, module search, logo
+    ├── auth/             Login
+    ├── dashboard/        Dashboard
+    ├── admin/            Admin Master: users, roles, rights
+    ├── masters/          MasterCrud engine + all master screens
+    ├── transactions/     Sales Invoice, Purchase Bill, stock transactions, expenses, closing stock, cash count
+    ├── reports/          table-driven reports (reportDefs) + DSR, Stock Balance, Customised Reports
+    ├── print/            legacy .rpt print formats and their web layouts
+    └── ui/               third-party chart/loader components
+```
+
+How a screen is shown: the module name (e.g. `'Item Master'`) is listed in `lib/modules.ts`, drawn by `layout/Sidebar.tsx`, allowed by the user's role (`canOpen`), and rendered by a `case` in `App.tsx`. The same name is used in the backend's `ROLES`.
+
+To add something, follow the recipes in `../.claude/skills/add-master/SKILL.md` and `../.claude/skills/add-report/SKILL.md`. `LEGACY_PARITY.md` lists each legacy screen and how complete it is here.
 
 Developer notes for Claude Code are in `../.claude/CLAUDE.md` and `CLAUDE.md` (styling).

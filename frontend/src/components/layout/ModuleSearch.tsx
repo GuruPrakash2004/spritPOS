@@ -1,6 +1,9 @@
+// Header search box (⌘/Ctrl+K or `/`). Matches the typed text against module names and
+// MODULE_KEYWORDS, shows only modules the user can open, and opens the chosen one.
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
-import { ADMIN_MASTER, MODULE_GROUPS, MODULE_KEYWORDS } from './modules';
+import { ADMIN_MASTER, MODULE_GROUPS, MODULE_KEYWORDS } from '../../lib/modules';
 
 // The label users see for a module where it differs from the routing key.
 const LABELS: Record<string, string> = { 'Reports Dashboard': 'Customised Reports' };

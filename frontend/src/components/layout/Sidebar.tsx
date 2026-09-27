@@ -1,3 +1,7 @@
+// Left navigation. Lists every module explicitly (one item(...) line each, grouped by heading) and hides
+// the ones the user's role can't open. Reports from reportDefs are listed via REPORT_ITEMS, which must be
+// updated by hand when a report is added. On small screens it slides in over the page.
+
 import VlqmsLogo from './VlqmsLogo';
 import {
   BarChart2, Building, CreditCard, Database, FileText, LayoutDashboard,
@@ -6,8 +10,8 @@ import {
   Droplets, FolderTree, IndianRupee, ShieldCheck, Wine,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { ADMIN_MASTER, MODULE_GROUPS } from './modules';
-import { useCompanyProfile } from './useCompanyProfile';
+import { ADMIN_MASTER, MODULE_GROUPS } from '../../lib/modules';
+import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 
 interface SidebarProps {
   isOpen: boolean;

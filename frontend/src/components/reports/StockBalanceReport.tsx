@@ -1,8 +1,11 @@
+// Stock Balance report: opening, receipts, issues, closing and value per item for a date
+// (GET /reports/stock-balance). Printable in the stock register formats.
+
 import { useEffect, useState } from 'react';
 import { Printer } from 'lucide-react';
-import { api, errorText, todayIso, type ApiItem, type ApiStockRow } from './api';
-import { badge, money, pageHeader, pageSub, pageTitle, panel, tableBody, tableHead, tableRow, printButton } from './ui';
-import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
+import { api, errorText, todayIso, type ApiItem, type ApiStockRow } from '../../lib/api';
+import { badge, money, pageHeader, pageSub, pageTitle, panel, tableBody, tableHead, tableRow, printButton } from '../../lib/styles';
+import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
 type StockRow = { group: string; brand: string; name: string; pkg: string; opQty: number; recQty: number; issQty: number; clQty: number; rate: number; value: number };
 

@@ -1,8 +1,11 @@
+// Shared frame for the table-driven reports: filter row → Run → table with totals, Print and Export CSV.
+// Filters map to query params: on → `on`, range → `from_date`/`to_date`, item → `item_code`, months → `months`.
+
 import { useEffect, useState } from 'react';
 import { FileDown, Play, Printer } from 'lucide-react';
-import { api, errorText, qs, todayIso, type ApiItem } from '../api';
-import { downloadText, toCsv } from '../csv';
-import { badge, field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow, exportButton, printButton } from '../ui';
+import { api, errorText, qs, todayIso, type ApiItem } from '../../lib/api';
+import { downloadText, toCsv } from '../../lib/csv';
+import { badge, field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow, exportButton, printButton } from '../../lib/styles';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
 export type ReportColumn = { key: string; label: string; kind?: 'text' | 'number' | 'money'; total?: boolean };

@@ -1,17 +1,21 @@
+// Sales Counter Master: POS counters with their bill prefix and system user
+// (/masters/sales-counters). The legacy app needs a counter before any Sales Invoice, so saving a
+// counter opens Sales Invoice setup (onSave).
+
 import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Edit3, FilePlus,
   MoreHorizontal, Paperclip, Plus, Save, Search, Trash2, X,
 } from 'lucide-react';
-import { useConfirm } from './ConfirmDialog';
-import Toast from './Toast';
-import { FormErrorSummary, InlineError } from './FormErrorSummary';
-import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from './ui';
-import { api, errorText, type ApiCounter } from './api';
-import { DEFAULT_COUNTER, type SalesCounter } from './salesCounters';
-import { downloadText, toCsv } from './csv';
-import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
-import { SAMPLE_INVOICE_DATA } from './print/samplePrintData';
+import { useConfirm } from '../common/ConfirmDialog';
+import Toast from '../common/Toast';
+import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
+import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from '../../lib/styles';
+import { api, errorText, type ApiCounter } from '../../lib/api';
+import { DEFAULT_COUNTER, type SalesCounter } from '../../data/salesCounters';
+import { downloadText, toCsv } from '../../lib/csv';
+import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import { SAMPLE_INVOICE_DATA } from '../print/samplePrintData';
 
 const fromApi = (c: ApiCounter): SalesCounter => ({ code: c.code, name: c.name, systemName: c.system_name, prefix: c.prefix, inactive: c.inactive });
 const toApi = (c: SalesCounter): ApiCounter => ({ code: c.code, name: c.name, system_name: c.systemName, prefix: c.prefix, inactive: c.inactive });

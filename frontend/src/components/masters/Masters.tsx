@@ -1,3 +1,6 @@
+// The simple masters: each is MasterCrud with a title, API path and field list. Add new
+// code/name style masters here (see the add-master skill).
+
 import MasterCrud from './MasterCrud';
 import {
   BRAND_FIELDS, CUSTOMER_FIELDS, ITEM_GROUP_FIELDS, LEDGER_FIELDS, LEDGER_GROUP_FIELDS, PACKAGE_FIELDS, UOM_FIELDS,

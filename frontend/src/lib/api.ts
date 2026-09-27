@@ -1,4 +1,10 @@
-// Thin client for the FastAPI backend. Vite proxies /api to localhost:8001 (see vite.config.ts).
+// HTTP client for the FastAPI backend, plus the TypeScript shapes of its responses.
+//
+// - Every call goes to /api/<path>; Vite proxies that to http://localhost:8001 (see vite.config.ts).
+// - After login, setAuthUser() stores the JWT (localStorage `vlqms_jwt_token`); each request then sends
+//   `Authorization: Bearer <token>` and the legacy `X-User` header.
+// - Failed requests throw ApiError with FastAPI's `detail` text; show it with errorText(e).
+// - The Api* types mirror backend/app/schemas.py and the router responses, so they stay snake_case.
 
 export class ApiError extends Error {}
 
@@ -18,6 +24,7 @@ export const setAuthToken = (token: string) => {
 
 export const getAuthToken = () => authToken;
 
+// Called by App.tsx after login (and with empty strings on logout). Every later api() call sends these.
 export const setAuthUser = (user: string, role: string = '', token?: string) => {
   authUser = user;
   authRole = role;
@@ -28,6 +35,9 @@ export const setAuthUser = (user: string, role: string = '', token?: string) => 
 export const getAuthUser = () => authUser;
 export const getAuthRole = () => authRole;
 
+// Call the backend: `await api<ApiItem[]>('/masters/items')`, or
+// `await api('/masters/items', { method: 'POST', body: item })`. `path` is the backend route without /api.
+// Returns the parsed JSON (undefined for 204) or throws ApiError with the server's message.
 export async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   let res: Response;
   try {
@@ -42,7 +52,7 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
       body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch {
-    throw new ApiError('Backend is not reachable. Start it with: cd backend && .venv/bin/uvicorn app.main:app --reload');
+    throw new ApiError('Backend is not reachable. Start it with: cd backend && .venv/bin/uvicorn app.main:app --reload --port 8001');
   }
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => null);
@@ -55,8 +65,10 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
   return data as T;
 }
 
+// Message text for any caught error, ready for a toast.
 export const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+// Today as YYYY-MM-DD, the date format every backend date parameter expects.
 export const todayIso = () => new Date().toISOString().slice(0, 10);
 
 // Shapes returned by the backend (snake_case, as FastAPI sends them).

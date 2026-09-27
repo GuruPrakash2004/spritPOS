@@ -1,8 +1,15 @@
-"""In-memory store seeded with the same sample data as the React prototype.
+"""In-memory store: every table the API serves, as module-level dicts.
 
-There is no database yet: everything resets when the server restarts. Stock
-movements (purchase adds, sale reduces, return adds, deduction reduces) are
-applied to ITEMS[code]["qoh"] so the reports stay consistent.
+Seeded with sample data. At startup, if SQL Server is reachable, db_store.load_masters()
+replaces the masters (ITEMS, CUSTOMERS, SUPPLIERS, USERS, ...) with live rows and
+load_transactions() fills DOCS with recent invoices and bills. All writes change only
+these dicts, so they are lost when the server restarts.
+
+Key rules:
+- Change stock only through move_stock(): it updates ITEMS[code]["qoh"] and logs a
+  MOVEMENTS row, which the Stock Ledger, Stock Balance and DSR reports read.
+- Documents live in DOCS[kind][doc_no]; numbers come from next_doc_no().
+- ROLES maps a role to the module names it may open (the React sidebar names; "*" = all).
 """
 from datetime import date
 from itertools import count
@@ -164,10 +171,15 @@ def find(table: dict, key: str) -> dict | None:
 
 
 def next_doc_no(kind: str, prefix: str) -> str:
+    """Next number in a document series, e.g. next_doc_no("sales_invoice", "c10") -> "26/c10-0083718"."""
     return f"{FY_PREFIX}/{prefix}-{next(_seq[kind]):07d}"
 
 
 def move_stock(item_code: str, qty: float, kind: str, doc_no: str, on: date, rate: float) -> None:
+    """Add (+qty) or remove (-qty) stock and log the movement for the reports.
+
+    kind is "purchase", "sale", "sale-cancel", "sales-return" or "deduction".
+    """
     ITEMS[item_code]["qoh"] += qty
     if kind == "purchase" and qty > 0:
         LAST_PURCHASE[item_code] = on.isoformat()
