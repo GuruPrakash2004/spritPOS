@@ -1,32 +1,13 @@
+import VlqmsLogo from './VlqmsLogo';
 import {
-  BarChart2,
-  Building,
-  CreditCard,
-  Database,
-  FileText,
-  LayoutDashboard,
-  Monitor,
-  Package,
-  PackageMinus,
-  RotateCcw,
-  Scale,
-  ShoppingCart,
-  Tag,
-  Truck,
-  Users,
-  ClipboardList,
-  X,
-  Banknote,
-  Boxes,
-  CalendarCheck,
-  ClipboardCheck,
-  Droplets,
-  FolderTree,
-  IndianRupee,
-  ShieldCheck,
+  BarChart2, Building, CreditCard, Database, FileText, LayoutDashboard,
+  Monitor, Package, PackageMinus, RotateCcw, Scale, ShoppingCart, Tag, Truck,
+  Users, ClipboardList, X, Banknote, Boxes, CalendarCheck, ClipboardCheck,
+  Droplets, FolderTree, IndianRupee, ShieldCheck, Wine,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ADMIN_MASTER, MODULE_GROUPS } from './modules';
+import { useCompanyProfile } from './useCompanyProfile';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -34,61 +15,60 @@ interface SidebarProps {
   onClose: () => void;
   onOpenModule: (moduleName: string) => void;
   user: string;
-  canOpen: (moduleName: string) => boolean; // role rights from Admin Master
+  canOpen: (moduleName: string) => boolean;
 }
 
-interface SidebarItemProps {
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-  active: boolean;
-}
-
-const SidebarItem = ({ icon, label, onClick, active }: SidebarItemProps) => (
+const SidebarItem = ({ icon, label, onClick, active }: { icon: ReactNode; label: string; onClick: () => void; active: boolean }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-full text-xs transition-colors ${
+    aria-current={active ? 'page' : undefined}
+    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-all duration-200 ${
       active
-        ? 'bg-[#e8702a]/15 text-[#b84716] dark:text-[#ffb07e] font-bold border-l-2 border-[#e8702a] shadow-[0_6px_18px_rgba(232,112,42,0.12)]'
-        : 'text-stone-600 dark:text-stone-300 hover:bg-[#f1e3d8] dark:hover:bg-[#20253a] hover:text-stone-950 dark:hover:text-white'
+        ? 'bg-[#64283A] text-white font-semibold shadow-[0_4px_12px_rgba(100,40,58,0.14)] dark:bg-[#D4A847]/12 dark:text-[#E8C36A] dark:shadow-[0_0_12px_rgba(212,168,71,0.06)]'
+        : 'text-[#70675F] hover:bg-[#E8DFD2] hover:text-[#29231F] dark:text-stone-400 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-200'
     }`}
   >
-    <span>{icon}</span>
+    <span className={`shrink-0 transition-colors ${
+      active
+        ? 'text-[#D3BB89] dark:text-[#D4A847]'
+        : 'text-[#8E847A] dark:text-stone-500'
+    }`}>{icon}</span>
     <span className="truncate">{label}</span>
   </button>
 );
 
-// Report entries are routed through ApiReport; names must match reports/reportDefs.ts.
 const REPORT_ITEMS = ['Stock Ledger', 'Stock Ageing', 'Profit Margin', 'Hourly Sales', 'Daily Sales', 'Brand-wise Sales', 'Day-wise Litres', 'Stock in Litres', 'Stock Level / Reorder'];
 
 export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user, canOpen }: SidebarProps) {
-  // Modules the user's role can't open are left out of the menu entirely.
+  const { company, isOnline } = useCompanyProfile();
   const item = (icon: ReactNode, name: string, label = name) => (canOpen(name)
     ? <SidebarItem key={name} icon={icon} label={label} onClick={() => onOpenModule(name)} active={activeTab === name} />
     : null);
   const heading = (text: string, names: string[]) => (names.some(canOpen)
-    ? <div className="px-[11px] pb-1.5 pt-5 text-[10px] font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">{text}</div>
+    ? <div className="px-2.5 pb-1 pt-5 text-[10px] font-bold tracking-[0.15em] text-[#B08A45] dark:text-stone-500 uppercase">{text}</div>
     : null);
 
   return (
     <>
-      {isOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden print:hidden" onClick={onClose} />}
+      {isOpen && <div className="fixed inset-0 z-30 bg-overlay md:hidden print:hidden" onClick={onClose} />}
 
-      <aside className={`fixed inset-y-0 left-0 z-40 w-[15.6rem] transform border-r border-[#e1c9b6] bg-linear-160 from-[#fffaf5] via-[#f1e3d8] via-70% to-[#ecd2c4] text-stone-800 shadow-2xl transition-transform duration-300 ease-in-out dark:border-[#343b59] dark:from-[#171b2b] dark:via-[#20253a] dark:to-[#3a2432] dark:text-white ${isOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col md:relative md:translate-x-0 print:hidden`}>
-        <div className="flex shrink-0 items-center justify-between border-b border-[#e1c9b6] px-[17px] py-[19px] dark:border-[#343b59]">
-          <div className="flex items-center gap-3">
-            <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-linear-135 from-[#e8702a] to-[#e75b6f] shadow-[0_0_22px_rgba(232,112,42,0.3)] text-white font-bold text-sm">V</div>
-            <div>
-              <h1 className="text-sm font-bold tracking-wide text-stone-900 dark:text-white">Softvent vLQMS</h1>
-              <div className="text-[10px] font-medium text-[#b84716] dark:text-[#ffb07e]">Cloud ERP Net 8.0</div>
-            </div>
+      <aside aria-label="Main navigation" className={`fixed inset-y-0 left-0 z-40 flex w-60 transform flex-col
+        border-r bg-[#F0EBE2] text-[#29231F] border-[#E2D8CC]
+        dark:border-[#1E1E1E] dark:bg-[#0E0E0E] dark:text-stone-100
+        transition-transform duration-200 ease-out ${isOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full'}
+        md:relative md:translate-x-0 md:shadow-none print:hidden`}>
+
+        {/* Brand */}
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-[#E2D8CC] dark:border-[#1E1E1E] px-4">
+          <div className="flex items-center gap-2.5 p-[4px]">
+            <VlqmsLogo size="sm" showText={true} />
           </div>
-          <button className="text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white md:hidden" onClick={onClose}>
-            <X size={20} />
+          <button className="rounded-lg p-1.5 text-[#8E847A] hover:bg-[#E8DFD2] hover:text-[#29231F] md:hidden dark:text-stone-500 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-50" onClick={onClose} aria-label="Close navigation">
+            <X size={18} />
           </button>
         </div>
 
-        <nav className="flex-1 px-[13px] py-[15px] space-y-1 overflow-y-auto pb-20 custom-scrollbar text-xs">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3 text-xs">
           {item(<LayoutDashboard size={16} />, 'Dashboard')}
           {heading('Masters', MODULE_GROUPS.find(g => g.group === 'Masters')!.modules)}
           {item(<Building size={16} />, 'Company Master')}
@@ -121,12 +101,18 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
           {item(<ShieldCheck size={16} />, ADMIN_MASTER)}
         </nav>
 
-        <div className="shrink-0 space-y-1 border-t border-[#e1c9b6] bg-[#f1e3d8] p-3 text-[11px] text-stone-500 dark:border-[#343b59] dark:bg-[#20253a] dark:text-stone-400">
+        <div className="shrink-0 border-t border-[#E2D8CC] dark:border-[#1E1E1E] px-4 py-3 text-[11px] text-[#70675F] dark:text-stone-500">
           <div className="flex items-center justify-between">
-            <span>DB: vLQMSLHOUSE</span>
-            <span className="flex items-center gap-1 text-[#b84716] dark:text-[#ffb07e]"><div className="h-1.5 w-1.5 rounded-full bg-[#e8702a]" /> Online</span>
+            <span className="truncate">{company?.name || 'vLQMS'}</span>
+            <span className={`flex items-center gap-1.5 ${isOnline ? 'text-emerald-700 dark:text-emerald-400' : 'text-[#9A4B45] dark:text-red-400'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-[#9A4B45]'}`} />
+              {isOnline === null ? 'Checking' : isOnline ? 'Online' : 'Offline'}
+            </span>
           </div>
-          <div>Login: {user} • Bangalore-92</div>
+          <div className="mt-0.5 truncate">Signed in as <span className="font-medium text-[#64283A] dark:text-[#D4A847]">{user}</span></div>
+          <div className="mt-2 flex justify-center opacity-10" aria-hidden="true">
+            <Wine size={14} className="text-[#B08A45] dark:text-[#D4A847]" />
+          </div>
         </div>
       </aside>
     </>

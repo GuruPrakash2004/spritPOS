@@ -1,12 +1,13 @@
 """Master screens. Legacy vLQMS drives most masters through one generic engine
 (frmMstGeneral), so here one CRUD factory serves every master table."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from .. import store
 from ..schemas import (
     Brand, Company, Customer, Item, ItemGroup, Ledger, LedgerGroup, Package, PriceUpdate, SalesCounter, Supplier, Uom,
 )
+from .auth import require_admin
 
 router = APIRouter(prefix="/masters")
 
@@ -42,7 +43,11 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str) -> None:
         return table[body.code]
 
     @router.delete(f"/{path}/{{code}}", status_code=204, tags=[tag], name=f"Delete {tag}")
-    def delete(code: str):
+    def delete(code: str, x_user: str | None = Header(None)):
+        if path == "items" and x_user:
+            u = store.USERS.get(x_user.strip().upper())
+            if u and u.get("role") == "Cashier":
+                raise HTTPException(403, "Cashiers are not permitted to delete items. Manager or Administrator approval required.")
         if table.pop(code, None) is None:
             raise HTTPException(404, f"{tag} '{code}' not found")
 
@@ -53,7 +58,8 @@ def get_company():
 
 
 @router.put("/company", response_model=Company, tags=["Company Master"])
-def update_company(body: Company):
+def update_company(body: Company, x_user: str | None = Header(None)):
+    require_admin(x_user)
     store.COMPANY.update(body.model_dump())
     return store.COMPANY
 

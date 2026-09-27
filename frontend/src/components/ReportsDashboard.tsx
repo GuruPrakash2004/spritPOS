@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { PieChart, Mail, Download, Eye, ChevronRight, X, Loader2 } from 'lucide-react';
+import { Mail, Download, Eye, Plus, X, Loader2, Printer } from 'lucide-react';
+import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from './ui';
 import Toast from './Toast';
 import { api, errorText } from './api';
 import { downloadXls, type ReportColumn, type ReportRow } from './xlsExport';
+import { useCompanyProfile } from './useCompanyProfile';
+import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
 
 const toDmy = (iso: string) => iso.split('-').reverse().join('/');
 
@@ -26,6 +29,7 @@ const fmtCell = (v: ReportRow[string], col: ReportColumn) => {
 };
 
 const ReportsDashboard = () => {
+  const { company } = useCompanyProfile();
   const [selectedReport, setSelectedReport] = useState<string>('Expense Ledger Report');
   const [filterOn, setFilterOn] = useState<string>('Exp Date');
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([
@@ -49,6 +53,7 @@ const ReportsDashboard = () => {
   const [toDate, setToDate] = useState('2026-09-21');
   const [result, setResult] = useState<ReportResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -146,7 +151,7 @@ const ReportsDashboard = () => {
     const res = await fetchReport();
     if (!res) return;
     if (!res.rows.length) return setToast({ kind: 'error', text: 'Nothing to export for this period.' });
-    downloadXls(`${res.name} ${res.from_date} to ${res.to_date}`, `THE LIQUOR HOUSE - ${res.name}`,
+    downloadXls(`${res.name} ${res.from_date} to ${res.to_date}`, `${company?.name || 'Company'} - ${res.name}`,
       `Period: ${toDmy(res.from_date)} to ${toDmy(res.to_date)}`, res.columns, res.rows);
     setToast({ kind: 'ok', text: `${res.name} exported to XLS` });
   };
@@ -156,70 +161,55 @@ const ReportsDashboard = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="mx-auto max-w-7xl space-y-5">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
-      <div className="p-5 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-3 bg-[#e8702a]/15 text-[#b84716] dark:text-[#ffb07e] rounded-xl">
-            <PieChart size={24} />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">Customised Reports Explorer</h2>
-            <p className="text-xs text-slate-500">Comprehensive audit & MIS reporting across 30+ liquor modules.</p>
-          </div>
+      <div className={pageHeader}>
+        <div>
+          <h1 className={pageTitle}>Customised Reports</h1>
+          <p className={pageSub}>Audit and MIS reporting across purchase, sales, stock and expenses.</p>
         </div>
-        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0">
-          <button onClick={emailStub} className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 whitespace-nowrap">
-            <Mail size={14} /> Email Report
-          </button>
-          <button onClick={exportXls} disabled={busy} className="disabled:opacity-60 px-3.5 py-2 bg-[#e8702a] text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap hover:bg-[#b84716] shadow-sm">
-            <Download size={14} /> Export XLS
-          </button>
+        <div className="flex items-center gap-2">
+          <button onClick={emailStub} className={secondaryButton}><Mail size={14} />Email</button>
+          <button onClick={exportXls} disabled={busy} className={secondaryButton}><Download size={14} />Export XLS</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Side: Report Tree */}
-        <div className="lg:col-span-4 p-5 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="max-h-[600px] overflow-y-auto space-y-4 pr-1">
-            {reportCategories.map((group, idx) => (
-              <div key={idx} className="space-y-1">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1">
-                  {group.cat}
-                </div>
-                <div className="space-y-0.5">
-                  {group.reports.map((rep) => (
-                    <button
-                      key={rep}
-                      onClick={() => setSelectedReport(rep)}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs transition-colors flex items-center justify-between ${
-                        selectedReport === rep
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border-l-4 border-l-emerald-500'
-                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      <span className="truncate">{rep}</span>
-                      {selectedReport === rep && <ChevronRight size={12} />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right Side: Filters */}
-        <div className="lg:col-span-8 space-y-6">
-          <div className="p-6 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-            <div className="border-b pb-3 border-slate-100 dark:border-slate-800">
-              <span className="text-xs text-slate-400">Report to be Viewed</span>
-              <h3 className="font-heading font-bold text-lg text-slate-900 dark:text-white mt-0.5">{selectedReport}</h3>
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+        {/* Report catalogue */}
+        <nav aria-label="Reports" className={`${panel} max-h-[640px] overflow-y-auto p-2`}>
+          {reportCategories.map(group => (
+            <div key={group.cat} className="mb-2 last:mb-0">
+              <div className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-stone-500 dark:text-stone-400">{group.cat}</div>
+              {group.reports.map(rep => (
+                <button
+                  key={rep}
+                  onClick={() => setSelectedReport(rep)}
+                  aria-current={selectedReport === rep ? 'true' : undefined}
+                  className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors ${
+                    selectedReport === rep
+                      ? 'bg-accent-soft font-semibold text-accent-ink'
+                      : 'text-stone-600 hover:bg-subtle hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-50'
+                  }`}
+                >
+                  {rep}
+                </button>
+              ))}
             </div>
+          ))}
+        </nav>
 
-            <div className={`grid grid-cols-1 gap-4 text-xs ${masterFilter(filterOn) ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
+        {/* Filters */}
+        <div className={`${panel} divide-y divide-line`}>
+          <div className="px-5 py-4">
+            <div className="text-[11px] font-medium text-stone-500 dark:text-stone-400">Selected report</div>
+            <h2 className="mt-0.5 text-base font-semibold text-stone-900 dark:text-stone-50">{selectedReport}</h2>
+          </div>
+
+          <div className="space-y-4 p-5">
+            <div className={`grid grid-cols-1 gap-4 ${masterFilter(filterOn) ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'}`}>
               <div>
-                <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Filter On</label>
-                <select value={filterOn} onChange={(e) => { setFilterOn(e.target.value); setFilterValue(''); }} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800">
+                <label htmlFor="cr-on" className={label}>Filter on</label>
+                <select id="cr-on" value={filterOn} onChange={(e) => { setFilterOn(e.target.value); setFilterValue(''); }} className={field}>
                   <option>Exp Date</option>
                   <option>Bill Date</option>
                   <option>Ledger Name</option>
@@ -229,100 +219,79 @@ const ReportsDashboard = () => {
               </div>
               {masterFilter(filterOn) && (
                 <div>
-                  <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">{filterOn}</label>
-                  <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800">
+                  <label htmlFor="cr-val" className={label}>{filterOn}</label>
+                  <select id="cr-val" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className={field}>
                     <option value="">{masters[filterOn] ? `Select ${filterOn}…` : 'Loading…'}</option>
                     {masters[filterOn]?.map(m => <option key={m.code} value={m.code}>{m.name}</option>)}
                   </select>
                 </div>
               )}
               <div>
-                <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">From Date</label>
-                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800 font-mono" />
+                <label htmlFor="cr-from" className={label}>From</label>
+                <input id="cr-from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={`${field} tabular-nums`} />
               </div>
               <div>
-                <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">To Date</label>
-                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#fffaf5] dark:bg-slate-800 font-mono" />
+                <label htmlFor="cr-to" className={label}>To</label>
+                <input id="cr-to" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={`${field} tabular-nums`} />
               </div>
             </div>
 
-            <div className="flex justify-between items-center pt-2">
-              <button onClick={addFilter} className="px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-lg text-slate-700 dark:text-slate-300">
-                + Apply Selected Filter
-              </button>
-              <button onClick={() => setActiveFilters([])} className="text-xs text-rose-500 hover:underline">
-                Clear All Filters
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={addFilter} className={secondaryButton}><Plus size={14} />Add filter</button>
+              {activeFilters.map((f, i) => (
+                <span key={i} className={`${badge('neutral')} py-1 pl-2 pr-1 text-xs`}>
+                  <span className="text-stone-500">{f.on}:</span>
+                  <span className="font-medium">{f.val}</span>
+                  <button onClick={() => removeFilter(i)} className="ml-0.5 rounded p-0.5 text-stone-500 hover:bg-surface hover:text-red-600" aria-label={`Remove filter ${f.on}`}><X size={12} /></button>
+                </span>
+              ))}
+              {activeFilters.length === 0 && <span className="text-xs text-stone-500">No filters. The whole period is shown.</span>}
+              {activeFilters.length > 0 && (
+                <button onClick={() => setActiveFilters([])} className={`${ghostButton} ml-auto hover:!text-red-600`}>Clear all</button>
+              )}
             </div>
+          </div>
 
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase tracking-wider">
-                  <tr>
-                    <th className="px-4 py-2">Filtered On</th>
-                    <th className="px-4 py-2">Filtered Value</th>
-                    <th className="px-4 py-2 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {activeFilters.map((f, i) => (
-                    <tr key={i}>
-                      <td className="px-4 py-2 font-semibold text-slate-700 dark:text-slate-300">{f.on}</td>
-                      <td className="px-4 py-2 font-mono text-slate-600 dark:text-slate-400">{f.val}</td>
-                      <td className="px-4 py-2 text-right">
-                        <button onClick={() => removeFilter(i)} className="text-slate-400 hover:text-rose-500">
-                          <X size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {activeFilters.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-4 text-center text-slate-400 italic">No custom filters active (showing full period data)</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button onClick={generate} disabled={busy} className="disabled:opacity-60 px-6 py-2.5 bg-[#e8702a] hover:bg-[#b84716] text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-2">
-                {busy ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />} Generate & View Report
-              </button>
-            </div>
+          <div className="flex justify-end bg-subtle/60 px-5 py-3">
+            <button onClick={generate} disabled={busy} className={primaryButton}>
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}Generate report
+            </button>
           </div>
         </div>
       </div>
 
       {result && (
-        <div className="p-5 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">
-            <h3 className="font-heading font-bold text-slate-900 dark:text-white">{result.name}</h3>
-            <span className="text-xs text-slate-500">
-              {toDmy(result.from_date)} to {toDmy(result.to_date)} · {result.rows.length} row{result.rows.length === 1 ? '' : 's'}
-            </span>
+        <section aria-label="Report results" className={`${panel} overflow-hidden`}>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-3.5">
+            <h2 className={sectionTitle}>{result.name}</h2>
+            <div className="flex items-center gap-2 text-xs text-stone-500">
+              <span className="tabular-nums">{toDmy(result.from_date)} – {toDmy(result.to_date)}</span>
+              <span className={badge('neutral')}>{result.rows.length} row{result.rows.length === 1 ? '' : 's'}</span>
+              <button onClick={() => setShowPrintModal(true)} className={iconButton} aria-label="Print report" title="Print report"><Printer size={14} /></button>
+              <button onClick={exportXls} className={iconButton} aria-label="Export XLS" title="Export XLS"><Download size={14} /></button>
+            </div>
           </div>
           {/* Wide reports scroll sideways inside the card so the page itself never scrolls horizontally on mobile. */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto max-h-[520px] overflow-y-auto">
-            <table className="w-full text-xs text-left whitespace-nowrap">
-              <thead className="sticky top-0 bg-[#f1e3d8] dark:bg-[#20253a] text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+          <div className="max-h-[560px] overflow-auto">
+            <table className="w-full whitespace-nowrap text-left text-xs">
+              <thead className={tableHead}>
                 <tr>
                   {result.columns.map(c => (
-                    <th key={c.key} className={`px-3 py-2 ${c.align === 'right' ? 'text-right' : ''}`}>{c.label}</th>
+                    <th key={c.key} className={`px-4 py-2.5 ${c.align === 'right' ? 'text-right' : ''}`}>{c.label}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className={tableBody}>
                 {result.rows.map((row, i) => (
-                  <tr key={i} className="text-slate-700 dark:text-slate-300">
+                  <tr key={i} className={`${tableRow} text-stone-700 dark:text-stone-200`}>
                     {result.columns.map(c => (
-                      <td key={c.key} className={`px-3 py-2 ${c.align === 'right' ? 'text-right font-mono' : ''}`}>{fmtCell(row[c.key], c)}</td>
+                      <td key={c.key} className={`px-4 py-2 ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>{fmtCell(row[c.key], c)}</td>
                     ))}
                   </tr>
                 ))}
                 {result.rows.length === 0 && (
                   <tr>
-                    <td colSpan={result.columns.length} className="px-4 py-6 text-center text-slate-400 italic">
+                    <td colSpan={result.columns.length} className="px-4 py-12 text-center text-stone-500">
                       No transactions in this period.
                     </td>
                   </tr>
@@ -330,7 +299,26 @@ const ReportsDashboard = () => {
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
+      )}
+
+      {showPrintModal && result && (
+        <PrintFormatSelectorModal
+          category="GENERIC_REPORT"
+          data={{
+            title: result.name,
+            subtitle: `Period: ${toDmy(result.from_date)} to ${toDmy(result.to_date)}`,
+            columns: result.columns.map(column => ({
+              key: column.key,
+              label: column.label,
+              kind: column.align === 'right' ? 'number' : 'text',
+              total: result.rows.length > 0 && result.rows.every(row => typeof row[column.key] === 'number'),
+            })),
+            rows: result.rows,
+          }}
+          title={`Print: ${result.name}`}
+          onClose={() => setShowPrintModal(false)}
+        />
       )}
     </div>
   );

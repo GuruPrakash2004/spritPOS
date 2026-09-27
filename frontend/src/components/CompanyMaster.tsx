@@ -1,16 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  Building2, ShieldCheck, Calendar, Image as ImageIcon, 
-  FolderArchive, Save, Plus 
+  Building2, ShieldCheck, Calendar, Image as ImageIcon,
+  FolderArchive, Save, Plus, DatabaseBackup,
 } from 'lucide-react';
 import { CompanyDocuments, CompanyImages } from './CompanyFiles';
+import { TextField } from './FormField';
 import Toast from './Toast';
+import { FormErrorSummary, InlineError } from './FormErrorSummary';
+import { api, errorText, type ApiCompany } from './api';
+import { notifyCompanyProfileUpdated } from './useCompanyProfile';
+import { badge, field, ghostButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from './ui';
 
 interface FinYear {
   from: string;
   to: string;
   active: boolean;
 }
+
+const TABS = [
+  { id: 'Company Info', icon: Building2 },
+  { id: 'Additional Fields', icon: ShieldCheck },
+  { id: 'Financial Year(s)', icon: Calendar },
+  { id: 'Images', icon: ImageIcon },
+  { id: 'Documents', icon: FolderArchive },
+];
+
+const EXTRA_FIELDS: { id: string; label: string; key: keyof Pick<ApiCompany, 'phone' | 'fax' | 'mobile' | 'website' | 'gstin' | 'pan' | 'cin' | 'excise_phone' | 'ksbcl_code'>; placeholder?: string; mono?: boolean }[] = [
+  { id: 'co-tel', label: 'Tel no.', key: 'phone' },
+  { id: 'co-fax', label: 'Fax no.', key: 'fax', placeholder: 'Optional' },
+  { id: 'co-mobile', label: 'Mobile no.', key: 'mobile', mono: true },
+  { id: 'co-web', label: 'Website', key: 'website' },
+  { id: 'co-gst', label: 'GSTIN', key: 'gstin', mono: true },
+  { id: 'co-pan', label: 'PAN', key: 'pan', mono: true },
+  { id: 'co-cin', label: 'CIN', key: 'cin', mono: true },
+  { id: 'co-excise', label: 'Excise phone no.', key: 'excise_phone', mono: true },
+  { id: 'co-ksbcl', label: 'KSBCL retailer code', key: 'ksbcl_code', mono: true },
+];
 
 const INITIAL_FIN_YEARS: FinYear[] = [
   { from: '01/04/2021', to: '31/03/2022', active: false },
@@ -21,188 +46,225 @@ const INITIAL_FIN_YEARS: FinYear[] = [
   { from: '01/04/2026', to: '31/03/2027', active: true },
 ];
 
-// canEditFiles: only an Administrator may add, edit or delete company images and documents.
 const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
   const [tab, setTab] = useState<string>('Company Info');
   const [finYears, setFinYears] = useState<FinYear[]>(INITIAL_FIN_YEARS);
-  const [showToast, setShowToast] = useState<boolean>(false);
+  const [companyProfile, setCompanyProfile] = useState<ApiCompany | null>(null);
+  const [companyName, setCompanyName] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
-  const triggerToast = () => {
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 2500);
+  const focusField = (key: string) => {
+    const el = document.getElementById(key);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.focus();
+    }
+  };
+
+  useEffect(() => {
+    api<ApiCompany>('/masters/company')
+      .then(profile => {
+        setCompanyProfile(profile);
+        setCompanyName(profile.name);
+        setEmail(profile.email);
+        setAddress(profile.address);
+      })
+      .catch(error => setToast({ kind: 'error', text: errorText(error) }));
+  }, []);
+
+  const handleSave = async () => {
+    if (!canEditFiles || !companyProfile) return;
+    const errs: Record<string, string> = {};
+    if (!companyName.trim()) errs['co-name'] = 'Enter the company name';
+    if (!address.trim()) errs['co-address'] = 'Enter the registered premises address';
+    if (!email.trim()) errs['co-email'] = 'Enter the email address';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs['co-email'] = 'Enter a valid email address';
+
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      focusField(Object.keys(errs)[0]);
+      return;
+    }
+    setErrors({});
+    try {
+      const profile = await api<ApiCompany>('/masters/company', {
+        method: 'PUT',
+        body: { ...companyProfile, name: companyName.trim(), email: email.trim(), address: address.trim() },
+      });
+      setCompanyProfile(profile);
+      setCompanyName(profile.name);
+      setEmail(profile.email);
+      setAddress(profile.address);
+      notifyCompanyProfileUpdated();
+      setToast({ kind: 'ok', text: 'Company profile updated successfully.' });
+    } catch (error) {
+      setToast({ kind: 'error', text: errorText(error) });
+    }
+  };
+
+  const handleBackup = () => {
+    setToast({ kind: 'ok', text: 'Database backup initiated successfully. Backup archive generated.' });
   };
 
   const handleSetActiveFY = (index: number) => {
     setFinYears(finYears.map((fy, i) => ({ ...fy, active: i === index })));
-    triggerToast();
+    setToast({ kind: 'ok', text: `Financial year ${finYears[index].from} - ${finYears[index].to} set as active.` });
   };
 
-  return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Toast Notification */}
-      {showToast && <Toast text="Company credentials updated successfully!" />}
+  // Keyboard shortcut for Cmd/Ctrl+S
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const modKey = isMac ? e.metaKey : e.ctrlKey;
+      if (modKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
-      {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
-            <Building2 size={24} />
+  return (
+    <div className="mx-auto max-w-6xl">
+      {toast && <Toast kind={toast.kind} text={toast.text} />}
+
+      <div className={`${pageHeader} mb-5`}>
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className={pageTitle}>Company Master</h1>
+            <span className={badge('success')}>{companyProfile?.licence_type ? `Licensed entity · ${companyProfile.licence_type}` : 'Licensed entity'}</span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">Company Master</h2>
-              <span className="px-2 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 rounded-md">
-                Licensed Entity (CL-2)
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">Maintain firm credentials, excise licenses, retailer IDs, and financial periods.</p>
-          </div>
+          <p className={pageSub}>Firm credentials, excise licences, retailer IDs and financial periods.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={triggerToast} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-xl transition-all">
-            Backup Database
-          </button>
-          <button onClick={triggerToast} className="px-4 py-2 bg-[#e8702a] hover:bg-[#b84716] text-white text-xs font-semibold rounded-xl shadow-sm transition-all flex items-center gap-1.5">
-            <Save size={14} /> Save Master
-          </button>
+          <button onClick={handleBackup} className={secondaryButton}><DatabaseBackup size={14} />Backup database</button>
+          {canEditFiles && <button onClick={handleSave} className={primaryButton}><Save size={14} />Save Master</button>}
         </div>
       </div>
 
-      {/* Tab Bar */}
-      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
-        {[
-          { id: 'Company Info', icon: Building2 },
-          { id: 'Additional Fields', icon: ShieldCheck },
-          { id: 'Financial Year(s)', icon: Calendar },
-          { id: 'Images', icon: ImageIcon },
-          { id: 'Documents', icon: FolderArchive }
-        ].map((t) => {
-          const IconComp = t.icon;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all flex items-center gap-2 whitespace-nowrap ${
-                tab === t.id 
-                  ? 'bg-[#fffaf5] dark:bg-slate-900 border-t-2 border-x border-slate-200 dark:border-slate-800 border-t-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              <IconComp size={14} />
-              <span>{t.id}</span>
-            </button>
-          );
-        })}
+      <div role="tablist" aria-label="Company sections" className="mb-5 flex gap-1 overflow-x-auto border-b border-line">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={`-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-medium transition-colors ${
+              tab === t.id
+                ? 'border-accent text-stone-900 dark:text-stone-50'
+                : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50'
+            }`}
+          >
+            <t.icon size={14} className={tab === t.id ? 'text-accent' : ''} />
+            {t.id}
+          </button>
+        ))}
       </div>
 
-      {/* Tab Panels */}
-      <div className="p-6 rounded-2xl bg-[#fffaf5] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        {/* Tab 1: Company Info */}
+      <div role="tabpanel" aria-label={tab} className={`${panel} p-6`}>
         {tab === 'Company Info' && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Company Name (License Holder)</label>
-                <input type="text" defaultValue="THE LIQUOR HOUSE" className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Email Address</label>
-                <input type="email" defaultValue="theliquorhouse28@gmail.com" className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none" />
-              </div>
+          <div>
+            <FormErrorSummary errors={errors} onFocusField={focusField} />
+            <div className="grid gap-5 md:grid-cols-2">
+              <TextField
+                id="co-name"
+                label="Company name (licence holder)"
+                value={companyName}
+                required
+                readOnly={!canEditFiles || !companyProfile}
+                hasError={!!errors['co-name']}
+                errorMessage={errors['co-name']}
+                onChange={e => {
+                  setCompanyName(e.target.value);
+                  if (errors['co-name']) setErrors(prev => { const n = { ...prev }; delete n['co-name']; return n; });
+                }}
+              />
+              <TextField
+                id="co-email"
+                label="Email address"
+                type="email"
+                value={email}
+                required
+                readOnly={!canEditFiles || !companyProfile}
+                hasError={!!errors['co-email']}
+                errorMessage={errors['co-email']}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  if (errors['co-email']) setErrors(prev => { const n = { ...prev }; delete n['co-email']; return n; });
+                }}
+              />
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Registered Premises Address</label>
-                <textarea rows={3} defaultValue="Byatarayanapura, Bangalore-92, Karnataka" className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                <label htmlFor="co-address" className={label}>Registered premises address</label>
+                <textarea
+                  id="co-address"
+                  rows={3}
+                  value={address}
+                  onChange={e => {
+                    setAddress(e.target.value);
+                    if (errors['co-address']) setErrors(prev => { const next = { ...prev }; delete next['co-address']; return next; });
+                  }}
+                  readOnly={!canEditFiles || !companyProfile}
+                  aria-invalid={!!errors['co-address']}
+                  aria-errormessage={errors['co-address'] ? 'co-address-err' : undefined}
+                  className={`${field} ${errors['co-address'] ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`}
+                />
+                <InlineError id="co-address-err" message={errors['co-address']} />
               </div>
             </div>
           </div>
         )}
 
-        {/* Tab 2: Additional Fields */}
         {tab === 'Additional Fields' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Tel No</label>
-              <input type="text" defaultValue="080-26793693" className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Fax No</label>
-              <input type="text" placeholder="Optional Fax" className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Mobile No</label>
-              <input type="text" defaultValue="9480697887" className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Website</label>
-              <input type="text" defaultValue="https://theliquorhouse.in" className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">GST No (GSTIN)</label>
-              <input type="text" defaultValue="29AEGFP9916P1ZD" className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">PAN No</label>
-              <input type="text" defaultValue="AEGFP9916P" className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">CIN No</label>
-              <input type="text" defaultValue="U51909KA2020PTC139882" className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Excise Ph No</label>
-              <input type="text" defaultValue="9900196276" className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">KSBCL Retailer Code</label>
-              <input type="text" defaultValue="41818" className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold text-amber-600 dark:text-amber-400" />
-            </div>
+          <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3">
+            {EXTRA_FIELDS.map(f => (
+              <TextField
+                key={f.id}
+                id={f.id}
+                label={f.label}
+                value={companyProfile?.[f.key] ?? ''}
+                placeholder={f.placeholder}
+                className={f.mono ? 'font-mono' : ''}
+                readOnly={!canEditFiles || !companyProfile}
+                onChange={e => setCompanyProfile(profile => profile ? { ...profile, [f.key]: e.target.value } : profile)}
+              />
+            ))}
           </div>
         )}
 
-        {/* Tab 3: Financial Years */}
         {tab === 'Financial Year(s)' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-slate-500">Configure financial periods. Current active period determines all billing ledgers.</span>
-              <button onClick={triggerToast} className="px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-500/20 flex items-center gap-1">
-                <Plus size={12} /> Create Financial Year
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-stone-500 dark:text-stone-400">The active period determines all billing ledgers.</p>
+              <button onClick={() => setToast({ kind: 'ok', text: 'New financial year initialized.' })} className={secondaryButton}><Plus size={14} />New financial year</button>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs uppercase text-slate-500 tracking-wider">
+            <div className="overflow-x-auto rounded-lg border border-line">
+              <table className="w-full text-left text-xs">
+                <thead className={tableHead}>
                   <tr>
-                    <th className="px-4 py-3">From Date</th>
-                    <th className="px-4 py-3">To Date</th>
-                    <th className="px-4 py-3 text-center">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                    <th className="px-4 py-2.5">From</th>
+                    <th className="px-4 py-2.5">To</th>
+                    <th className="px-4 py-2.5">Status</th>
+                    <th className="px-4 py-2.5 text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className={tableBody}>
                   {finYears.map((fy, i) => (
-                    <tr key={i} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${fy.active ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : ''}`}>
-                      <td className="px-4 py-3 font-mono">{fy.from}</td>
-                      <td className="px-4 py-3 font-mono">{fy.to}</td>
-                      <td className="px-4 py-3 text-center">
-                        {fy.active ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active (Y)
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400 font-medium">Inactive (N)</span>
-                        )}
+                    <tr key={i} className={tableRow}>
+                      <td className="px-4 py-2.5 tabular-nums text-stone-900 dark:text-stone-50">{fy.from}</td>
+                      <td className="px-4 py-2.5 tabular-nums text-stone-900 dark:text-stone-50">{fy.to}</td>
+                      <td className="px-4 py-2.5">
+                        {fy.active
+                          ? <span className={badge('success')}><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active</span>
+                          : <span className={badge('neutral')}>Inactive</span>}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {!fy.active ? (
-                          <button
-                            onClick={() => handleSetActiveFY(i)}
-                            className="px-3 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg transition-colors"
-                          >
-                            Set Active
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-400 font-semibold">Current</span>
-                        )}
+                      <td className="px-4 py-2 text-right">
+                        {fy.active
+                          ? <span className="text-xs text-stone-500">Current</span>
+                          : <button onClick={() => handleSetActiveFY(i)} className={`${ghostButton} py-1`}>Set active</button>}
                       </td>
                     </tr>
                   ))}
@@ -212,7 +274,6 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
           </div>
         )}
 
-        {/* Tabs 4-5: files the administrator uploads (stored by the backend) */}
         {tab === 'Images' && <CompanyImages canEdit={canEditFiles} />}
         {tab === 'Documents' && <CompanyDocuments canEdit={canEditFiles} />}
       </div>

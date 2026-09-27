@@ -1,8 +1,11 @@
+import { SnackbarContainer } from './components/Toast';
 import { useEffect, useState } from 'react';
-import { Menu, Settings, Moon, Sun, LogOut, ShieldAlert } from 'lucide-react';
+import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard } from 'lucide-react';
+import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import AdminMaster from './components/AdminMaster';
 import { api, setAuthUser, todayIso, type ApiDsr, type ApiUser } from './components/api';
-import { ADMIN_MASTER, ADMIN_PATH, ADMIN_ROLE, canOpen } from './components/modules';
+import { ADMIN_MASTER, ADMIN_PATH, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './components/modules';
+import { iconButton, primaryButton } from './components/ui';
 import CashDenomination from './components/CashDenomination';
 import ClosingStockEntry from './components/ClosingStockEntry';
 import CompanyMaster from './components/CompanyMaster';
@@ -26,34 +29,33 @@ import SalesInvoice from './components/SalesInvoice';
 import SalesInvoiceSetup from './components/SalesInvoiceSetup';
 import Sidebar from './components/Sidebar';
 import SupplierMaster from './components/SupplierMaster';
-import { Dashboard, StockBalanceReport } from './components/OperationalModules';
+import { Dashboard } from './components/OperationalModules';
+import StockBalanceReport from './components/StockBalanceReport';
+import { useCompanyProfile } from './components/useCompanyProfile';
 
 export default function App() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  // /adminMaster deep-links to Admin Master; every other module lives at /.
-  const [activeTab, setActiveTab] = useState(() => (window.location.pathname === ADMIN_PATH ? ADMIN_MASTER : 'Dashboard'));
+  const [activeTab, setActiveTab] = useState('Dashboard');
   const [darkMode, setDarkMode] = useState(false);
   const [invoiceDraft, setInvoiceDraft] = useState<InvoiceSetup>({
     counter: DEFAULT_COUNTER, invoiceNo: billNumber(DEFAULT_COUNTER.prefix, FIRST_BILL_SEQ), paymentType: 'CASH', customer: '',
   });
   const [billOpen, setBillOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [dsr, setDsr] = useState<ApiDsr | null>(null);
   const [session, setSession] = useState<{ user: ApiUser; finYear: string } | null>(null);
+  const { company } = useCompanyProfile();
 
   // Refresh the footer's bill count / today's sales from the backend DSR whenever the screen changes.
   useEffect(() => {
     api<ApiDsr>(`/reports/dsr?on=${todayIso()}`).then(setDsr).catch(() => setDsr(null));
   }, [activeTab, billOpen]);
 
+  // Dialogs and toasts are portalled to <body>, so the theme class lives on <html> as well.
   useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
-      document.documentElement.style.setProperty('--cursor-x', `${event.clientX}px`);
-      document.documentElement.style.setProperty('--cursor-y', `${event.clientY}px`);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    return () => window.removeEventListener('pointermove', handlePointerMove);
-  }, []);
+    document.documentElement.classList.toggle('dark', darkMode);
+    document.body.classList.toggle('dark', darkMode);
+  }, [darkMode]);
 
   useEffect(() => {
     const onPop = () => setActiveTab(window.location.pathname === ADMIN_PATH ? ADMIN_MASTER : 'Dashboard');
@@ -78,11 +80,11 @@ export default function App() {
 
   const renderContent = () => {
     if (session && !canOpen(session.user.modules, session.user.role, activeTab)) return (
-      <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-[#e1c9b6] bg-[#fffaf5] p-8 text-center dark:border-[#343b59] dark:bg-[#171b2b]">
-        <ShieldAlert size={44} className="mb-3 text-red-500" />
-        <h3 className="text-lg font-bold text-stone-800 dark:text-stone-100">No access to {activeTab}</h3>
-        <p className="mt-1 text-sm text-stone-500">Your role ({session.user.role}) doesn't include this module. Ask an Administrator to change it in Admin Master.</p>
-        <button onClick={() => openModule('Dashboard')} className="mt-4 rounded-lg bg-[#e8702a] px-4 py-2 text-xs font-bold text-white hover:bg-[#b84716]">Go to Dashboard</button>
+      <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#D4C8BA] bg-[#FFFCF7] p-8 text-center dark:border-line-strong dark:bg-surface">
+        <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#9A4B45]/10 text-[#9A4B45] dark:text-red-400"><ShieldAlert size={22} /></span>
+        <h3 className="text-base font-semibold text-[#29231F] dark:text-stone-50">You don't have access to {activeTab}</h3>
+        <p className="mt-1 max-w-md text-sm text-[#70675F] dark:text-stone-400">Your role ({session.user.role}) doesn't include this module. Ask an Administrator to grant it in Admin Master.</p>
+        <button onClick={() => openModule('Dashboard')} className={`${primaryButton} mt-5`}>Go to Dashboard</button>
       </div>
     );
     if (activeTab === ADMIN_MASTER) return <AdminMaster currentUser={session?.user.user ?? ''} />;
@@ -116,77 +118,109 @@ export default function App() {
       case 'Reports Dashboard':
       case 'Customised Reports': return <ReportsDashboard />;
       default: return (
-        <div className="flex h-full flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-[#fffaf5] p-8 text-stone-400 dark:border-stone-700 dark:bg-stone-900">
-          <Settings size={48} className="mb-4 text-stone-300 dark:text-stone-600" />
-          <h3 className="text-lg font-medium text-stone-600 dark:text-stone-300">Module "{activeTab}" is active.</h3>
-          <p className="mt-2 text-sm text-stone-400">Softvent vLQMS Cloud ERP • License 827106637</p>
+        <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#D4C8BA] bg-[#FFFCF7] p-8 text-center dark:border-line-strong dark:bg-surface">
+          <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-stone-500"><Settings size={22} /></span>
+          <h3 className="text-base font-semibold text-[#29231F] dark:text-stone-50">{activeTab}</h3>
+          <p className="mt-1 text-sm text-[#70675F] dark:text-stone-400">This screen isn't available in the web edition yet.</p>
         </div>
       );
     }
   };
 
-  // After login, keep a /adminMaster deep link; otherwise start on the Dashboard.
+  // After login, always start on Dashboard first and reset path to /
   if (!session) return <Login onLogin={(user, finYear) => {
-    setAuthUser(user.user);
+    setAuthUser(user.user, user.role, user.access_token || user.token);
     setSession({ user, finYear });
-    setActiveTab(window.location.pathname === ADMIN_PATH ? ADMIN_MASTER : 'Dashboard');
+    if (window.location.pathname === ADMIN_PATH) {
+      window.history.replaceState(null, '', '/');
+    }
+    setActiveTab('Dashboard');
   }} />;
   const { user, finYear } = session;
+  const moduleGroup = activeTab === ADMIN_MASTER ? 'Administration'
+    : REPORTS[activeTab] ? 'Reports'
+    : MODULE_GROUPS.find(g => g.modules.includes(activeTab))?.group ?? 'General';
+  const moduleLabel = activeTab === 'Reports Dashboard' ? 'Customised Reports' : activeTab;
 
   return (
-    <div className={`app-shell flex h-screen overflow-hidden font-sans transition-colors duration-300 ${darkMode ? 'dark bg-[#0e101b] text-stone-100' : 'bg-[#f6efe8] text-stone-800'}`}>
+    <div className={`app-shell flex h-screen overflow-hidden font-sans ${darkMode ? 'dark bg-[#0A0A0A] text-stone-100' : 'bg-[#F5F1E9] text-[#29231F]'}`}>
       <Sidebar isOpen={isSidebarOpen} activeTab={activeTab} onClose={() => setSidebarOpen(false)} onOpenModule={openModule} user={user.user} canOpen={name => canOpen(user.modules, user.role, name)} />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="z-20 flex shrink-0 items-center justify-between border-b border-[#e1c9b6] bg-[#fffaf5]/90 min-h-[70px] gap-2 px-3 py-2 shadow-sm sm:px-6 sm:py-[13px] backdrop-blur dark:border-[#343b59] dark:bg-[#171b2b]/90">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-            <button className="shrink-0 rounded-lg p-1 text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800 md:hidden print:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
-              <Menu size={22} />
-            </button>
-            {/* One line each on phones, so the header never grows into the active-module bar below. */}
-            <div className="min-w-0">
-              <h2 className="truncate text-base font-extrabold leading-tight tracking-[0.05em] text-stone-900 dark:text-stone-100 sm:text-[19px]">THE LIQUOR HOUSE</h2>
-              <span className="block truncate font-mono text-[11px] text-stone-500 sm:text-xs">FY: {finYear}<span className="hidden sm:inline"> • CL-2 License</span></span>
-            </div>
+        {/* z-20 so the search results drop down over the workspace. */}
+        <header className="relative z-20 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-3 py-2.5 sm:h-16 sm:flex-nowrap sm:gap-4 sm:px-6 sm:py-0
+                           bg-[#FFFCF7] border-[#E3D9CD]
+                           dark:border-[#1E1E1E] dark:bg-[#0E0E0E]/95 dark:backdrop-blur-xl">
+          <button className={`${iconButton} shrink-0 md:hidden print:hidden`} onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
+            <Menu size={20} />
+          </button>
+          <div className="min-w-0 flex-1 sm:flex-none sm:shrink">
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs text-[#70675F] dark:text-stone-400">
+              <span className="hidden truncate sm:inline">{company?.name || user.company.name}</span>
+              <ChevronRight size={12} className="hidden shrink-0 sm:block" />
+              <span className="truncate">{moduleGroup}</span>
+            </nav>
+            <h2 className="truncate text-[15px] font-semibold leading-tight text-[#29231F] dark:text-stone-50">{moduleLabel}</h2>
           </div>
-          <div className="flex shrink-0 items-center gap-1 sm:gap-3">
-            <button onClick={() => setDarkMode(!darkMode)} className="rounded-xl p-2 text-stone-500 transition-colors print:hidden hover:bg-stone-100 dark:hover:bg-stone-800" title="Toggle Dark / Light Theme" aria-label="Toggle Dark / Light Theme">
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+
+          <div className="order-last w-full sm:order-none sm:ml-auto sm:w-auto sm:flex-1 sm:max-w-md flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <ModuleSearch canOpen={name => canOpen(user.modules, user.role, name)} onOpen={openModule} />
+            </div>
+            <button
+              onClick={() => setShowShortcuts(true)}
+                className="hidden lg:inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#E3D9CD] bg-[#FFFCF7] px-2.5 text-xs font-medium text-[#70675F] hover:bg-[#F3EEE6] hover:text-[#29231F] transition-all duration-180 active:scale-[0.98] dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-300 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-100 shrink-0 shadow-2xs"
+              title="Keyboard Shortcuts (Press ?)"
+              aria-label="Show keyboard shortcuts"
+            >
+              <Keyboard size={15} className="text-[#64283A] dark:text-[#D4A847]" />
+              <span className="hidden sm:inline">Shortcuts</span>
             </button>
-            <div className="flex items-center gap-2 border-l border-[#e1c9b6] pl-3 text-sm text-stone-700 dark:border-[#343b59] dark:text-stone-300">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-linear-135 from-[#e8702a] to-[#e75b6f] text-xs font-bold text-white">{user.user.slice(0, 2)}</div>
-              <span className="hidden text-xs font-medium sm:block">{user.user} <span className="text-stone-400">• {user.role}</span></span>
-              <button onClick={() => { setSession(null); setAuthUser(''); setBillOpen(false); }} className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 hover:text-red-600 print:hidden dark:hover:bg-stone-800" title="Log out" aria-label="Log out"><LogOut size={16} /></button>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <span className="hidden rounded-md border px-2 py-1 text-[11px] font-medium tabular-nums lg:inline
+                             border-[#E3D9CD] text-[#64283A]
+                             dark:border-[#2A2A2A] dark:text-[#D4A847]" title="Financial year">FY {finYear}</span>
+            <button onClick={() => setDarkMode(!darkMode)} className={`${iconButton} print:hidden`} title={darkMode ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}>
+              {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+            <div className="ml-1 flex items-center gap-2 border-l pl-3 border-[#E3D9CD] dark:border-[#2A2A2A]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold
+                              bg-[#64283A]/10 text-[#64283A]
+                              dark:bg-gradient-to-br dark:from-[#D4A847]/20 dark:to-[#C8952E]/10 dark:text-[#D4A847] dark:ring-1 dark:ring-[#D4A847]/20" aria-hidden="true">{user.user.slice(0, 2)}</div>
+              <div className="hidden leading-tight sm:block">
+                <div className="text-xs font-medium text-[#29231F] dark:text-stone-50">{user.user}</div>
+                <div className="text-[11px] text-[#70675F] dark:text-stone-400">{user.role}</div>
+              </div>
+              <button onClick={() => { setSession(null); setAuthUser('', '', ''); setBillOpen(false); setActiveTab('Dashboard'); }} className={`${iconButton} hover:text-[#9A4B45] print:hidden dark:hover:text-red-400`} title="Log out" aria-label="Log out"><LogOut size={16} /></button>
             </div>
           </div>
         </header>
 
-        {/* z-10 so the search results drop down over the workspace (a separate stacking context). */}
-        <div className="relative z-10 flex h-[46px] shrink-0 items-center gap-3 border-b border-[#e1c9b6] bg-[#f1e3d8]/80 px-3 dark:border-[#343b59] dark:bg-[#20253a]/80 sm:px-5">
-          <div className="flex h-8 min-w-0 shrink items-center gap-2 rounded-full border border-[#e1c9b6] bg-[#fffaf5] px-[18px] text-xs font-bold text-[#b84716] shadow-[0_5px_16px_rgba(112,58,28,0.12)] dark:border-[#343b59] dark:bg-[#171b2b] dark:text-[#ffb07e]">
-            <span className="h-2 w-2 rounded-full bg-[#e8702a]" />
-            <span className="truncate">{activeTab}</span>
-          </div>
-          <ModuleSearch canOpen={name => canOpen(user.modules, user.role, name)} onOpen={openModule} />
-        </div>
-
-        <main className="workspace-backdrop flex-1 overflow-auto bg-[#f6efe8] p-6 transition-colors duration-300 dark:bg-[#0e101b]">
+        <main className="flex-1 overflow-auto p-4 sm:p-6 bg-[#F5F1E9] dark:bg-[#0A0A0A]">
           {renderContent()}
         </main>
 
-        <footer className="flex h-10 shrink-0 items-center justify-between border-t border-[#e1c9b6] bg-[#fffaf5]/90 px-5 backdrop-blur font-mono text-[11px] text-stone-500 dark:border-[#343b59] dark:bg-[#171b2b]/90">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 font-semibold text-[#b84716]"><span className="h-1.5 w-1.5 rounded-full bg-[#e8702a]" />Ready</span>
-            <span className="hidden sm:inline">{dsr ? 'API: connected' : 'API: offline'}</span>
-            <span className="hidden md:inline">Login: {user.user}</span>
+        <footer className="flex h-9 shrink-0 items-center justify-between gap-4 border-t px-4 text-[11px] sm:px-6 print:hidden
+                           bg-[#FFFCF7] border-[#E3D9CD] text-[#70675F]
+                           dark:border-[#1E1E1E] dark:bg-[#0E0E0E] dark:text-stone-500">
+         <div className="flex items-center gap-2 sm:gap-3">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className={`h-1.5 w-1.5 rounded-full ${dsr ? 'bg-[#55745A] dark:bg-emerald-500 dark:shadow-[0_0_6px_rgba(16,185,129,0.5)]' : 'bg-[#9A4B45]'}`} />
+              {dsr ? 'Connected' : 'Offline'}
+            </span>
+            <span className="text-[#A4998E] dark:text-stone-600">·</span>
+            <span>Licence 827106637</span>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="hidden font-semibold text-stone-700 dark:text-stone-300 sm:inline">Licensed Copy: 827106637</span>
-            <span className="hidden md:inline">Total Bills: {dsr?.total_bills ?? '—'}</span>
-            <span className="font-bold text-[#b84716] dark:text-[#ffb07e]">Today's Sales: ₹ {(dsr?.sales_incl_gst ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <div className="flex items-center gap-4 tabular-nums">
+            <span className="hidden sm:inline">Bills today <span className="font-medium text-[#29231F] dark:text-stone-200">{dsr?.total_bills ?? '—'}</span></span>
+            <span>Sales today <span className="font-semibold text-[#64283A] dark:text-[#D4A847]">₹ {(dsr?.sales_incl_gst ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
           </div>
         </footer>
       </div>
+      <SnackbarContainer />
+      {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );
 }

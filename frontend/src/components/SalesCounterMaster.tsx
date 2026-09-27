@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Edit3, FilePlus,
-  Monitor, Paperclip, Plus, Save, Search, Settings2, Trash2, X,
+  MoreHorizontal, Paperclip, Plus, Save, Search, Trash2, X,
 } from 'lucide-react';
+import { useConfirm } from './ConfirmDialog';
+import Toast from './Toast';
+import { FormErrorSummary, InlineError } from './FormErrorSummary';
+import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from './ui';
 import { api, errorText, type ApiCounter } from './api';
 import { DEFAULT_COUNTER, type SalesCounter } from './salesCounters';
+import { downloadText, toCsv } from './csv';
+import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
+import { SAMPLE_INVOICE_DATA } from './print/samplePrintData';
 
 const fromApi = (c: ApiCounter): SalesCounter => ({ code: c.code, name: c.name, systemName: c.system_name, prefix: c.prefix, inactive: c.inactive });
 const toApi = (c: SalesCounter): ApiCounter => ({ code: c.code, name: c.name, system_name: c.systemName, prefix: c.prefix, inactive: c.inactive });
@@ -13,9 +20,7 @@ const EMPTY_COUNTER: SalesCounter = { code: '', name: '', systemName: '', prefix
 
 type Mode = 'View' | 'New' | 'Edit';
 
-const inputClass = 'w-full rounded-lg border border-[#e1c9b6] bg-[#fffaf5] px-3 py-1.5 font-mono text-xs text-stone-800 outline-none focus:border-[#e8702a] read-only:bg-stone-100 read-only:text-stone-500 dark:border-[#414a6e] dark:bg-[#20253a] dark:text-stone-100 dark:read-only:bg-[#1b2033] dark:read-only:text-stone-400';
-const toolButton = 'flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40';
-const navButton = 'rounded-lg border border-[#e1c9b6] bg-[#fffaf5] p-2 text-stone-600 hover:border-[#e8702a] hover:text-[#b84716] dark:border-[#414a6e] dark:bg-[#20253a] dark:text-stone-300';
+const inputClass = `${field} font-mono read-only:bg-subtle read-only:text-stone-600 dark:read-only:text-stone-300`;
 
 export default function SalesCounterMaster({ onSave }: { onSave: (counter: SalesCounter) => void }) {
   const [records, setRecords] = useState<SalesCounter[]>([DEFAULT_COUNTER]);
@@ -25,8 +30,32 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
   const [files, setFiles] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const { confirm, dialog } = useConfirm();
+
+  const handlePrintList = () => {
+    setOptionsOpen(false);
+    setShowPrintModal(true);
+  };
+
+  const handleExportExcel = () => {
+    setOptionsOpen(false);
+    if (!records.length) return setToast({ kind: 'error', text: 'No counter records to export.' });
+    const header = ['Counter Code', 'Counter Name', 'System Name', 'Bill Prefix', 'Status'];
+    const rows = records.map(r => [r.code, r.name, r.systemName, r.prefix, r.inactive ? 'Inactive' : 'Active']);
+    downloadText('Sales_Counters.csv', toCsv([header, ...rows]));
+    setToast({ kind: 'ok', text: `${records.length} counter records exported to CSV.` });
+  };
+
+  const handleAuditTrail = () => {
+    setOptionsOpen(false);
+    const active = records[index] || form;
+    setToast({ kind: 'ok', text: `Audit Trail: Counter ${active.code} (${active.name}) is configured and active.` });
+  };
 
   useEffect(() => {
     api<ApiCounter[]>('/masters/sales-counters')
@@ -35,7 +64,25 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
   }, []);
 
   const readOnly = mode === 'View';
-  const update = <K extends keyof SalesCounter>(key: K, value: SalesCounter[K]) => setForm(prev => ({ ...prev, [key]: value }));
+  const update = <K extends keyof SalesCounter>(key: K, value: SalesCounter[K]) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+    if (formErrors[key as string]) {
+      setFormErrors(prev => {
+        const next = { ...prev };
+        delete next[key as string];
+        return next;
+      });
+    }
+  };
+
+  const focusField = (key: string) => {
+    const id = `sc-${key}`;
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.focus();
+    }
+  };
 
   const goTo = (next: number) => {
     if (!records.length) return;
@@ -50,8 +97,8 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
   const handleEdit = () => { setMode('Edit'); setError(''); };
   const handleClose = () => goTo(index);
 
-  const handleDelete = () => {
-    if (!window.confirm(`Delete sales counter "${form.code}"?`)) return;
+  const handleDelete = async () => {
+    if (!(await confirm(`Delete sales counter "${form.code}"?`))) return;
     api(`/masters/sales-counters/${encodeURIComponent(form.code)}`, { method: 'DELETE' }).catch(e => setError(errorText(e)));
     const next = records.filter((_, i) => i !== index);
     setRecords(next);
@@ -69,17 +116,29 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
   };
 
   const handleSave = () => {
-    if (!form.code.trim() || !form.name.trim()) return setError('SC Code and SC Name are required.');
-    if (!form.prefix.trim()) return setError('Prefix is required — it is used in every bill number for this counter.');
-    if (form.inactive) return setError('This counter is marked Inactive. Untick Inactive to open a sales bill on it.');
-    const duplicate = records.findIndex(r => r.code.toLowerCase() === form.code.trim().toLowerCase());
-    if (mode === 'New' && duplicate !== -1) return setError(`SC Code "${form.code}" already exists.`);
+    const errs: Record<string, string> = {};
+    if (!form.code.trim()) errs.code = 'Enter the SC code';
+    if (!form.name.trim()) errs.name = 'Enter the SC name';
+    if (!form.prefix.trim()) errs.prefix = 'Enter the bill prefix';
+
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs);
+      const first = Object.keys(errs)[0];
+      focusField(first);
+      return;
+    }
+    setFormErrors({});
 
     const saved = { ...form, code: form.code.trim(), name: form.name.trim(), prefix: form.prefix.trim() };
     const path = mode === 'New' ? '/masters/sales-counters' : `/masters/sales-counters/${encodeURIComponent(records[index].code)}`;
     api(path, { method: mode === 'New' ? 'POST' : 'PUT', body: toApi(saved) })
-      .then(() => commit(saved))
-      .catch(e => setError(errorText(e)));
+      .then(() => {
+        commit(saved);
+        setToast({ kind: 'ok', text: `Sales Counter "${saved.code}" saved.` });
+      })
+      .catch(e => {
+        setToast({ kind: 'error', text: errorText(e) });
+      });
   };
 
   const commit = (saved: SalesCounter) => {
@@ -94,103 +153,144 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
     onSave(saved);
   };
 
+  const lbl = `${label} flex items-center gap-0.5`;
+
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e1c9b6] bg-[#fffaf5] px-5 py-3 shadow-sm dark:border-[#343b59] dark:bg-[#171b2b]">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-[#e8702a]/10 p-2.5 text-[#b84716] dark:text-[#ffb07e]"><Monitor size={20} /></div>
-          <div>
-            <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">{mode}: Sales Counter Master</h2>
-            <p className="text-xs text-stone-500">Record {records.length ? index + 1 : 0} of {records.length} • Saving opens the Sales Invoice setup for this counter.</p>
+    <div className="mx-auto max-w-6xl">
+      {toast && <Toast kind={toast.kind} text={toast.text} />}
+      {dialog}
+      <div className={`${pageHeader} mb-5`}>
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className={pageTitle}>Sales Counter Master</h1>
+            <span className={badge(mode === 'View' ? 'neutral' : 'accent')}>{mode === 'View' ? 'View' : mode === 'New' ? 'New record' : 'Editing'}</span>
           </div>
+          <p className={pageSub}>Saving opens the Sales Invoice setup for this counter.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <label htmlFor="sc-search" className="text-xs font-bold text-stone-600 dark:text-stone-300">Search</label>
-          <input id="sc-search" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} placeholder="Code / name" className={`${inputClass} w-44`} />
-          <button onClick={handleSearch} className={navButton} aria-label="Search counters"><Search size={14} /></button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+                <button onClick={() => setOptionsOpen(!optionsOpen)} aria-expanded={optionsOpen} aria-label="More options" className={iconButton}><MoreHorizontal size={16} /></button>
+                {optionsOpen && (
+                  <div className="absolute right-0 top-full z-10 mt-1 w-44 overflow-hidden rounded-xl border border-line bg-surface p-1 text-xs shadow-pop">
+                    <button type="button" onClick={handlePrintList} className="block w-full rounded-lg px-3 py-2 text-left text-stone-700 hover:bg-subtle dark:text-stone-200">Print List</button>
+                    <button type="button" onClick={handleExportExcel} className="block w-full rounded-lg px-3 py-2 text-left text-stone-700 hover:bg-subtle dark:text-stone-200">Export to Excel</button>
+                    <button type="button" onClick={handleAuditTrail} className="block w-full rounded-lg px-3 py-2 text-left text-stone-700 hover:bg-subtle dark:text-stone-200">Audit Trail</button>
+                  </div>
+                )}
+              </div>
+          {readOnly ? (
+            <>
+              <button onClick={handleDelete} disabled={!records.length} className={`${ghostButton} hover:!text-red-600 dark:hover:!text-red-400`}><Trash2 size={14} />Delete</button>
+              <button onClick={handleEdit} disabled={!records.length} className={secondaryButton}><Edit3 size={14} />Edit</button>
+              <button onClick={handleNew} className={secondaryButton}><FilePlus size={14} />New</button>
+            </>
+          ) : (
+            <button onClick={handleClose} className={secondaryButton}><X size={14} />Cancel</button>
+          )}
+          <button onClick={handleSave} className={primaryButton}><Save size={14} />Save Master</button>
+        </div>
+      </div>
+
+      {/* Record navigator + search */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1" role="group" aria-label="Record navigation">
+          <button onClick={() => goTo(0)} disabled={!readOnly} className={iconButton} aria-label="First record"><ChevronsLeft size={16} /></button>
+          <button onClick={() => goTo(index - 1)} disabled={!readOnly} className={iconButton} aria-label="Previous record"><ChevronLeft size={16} /></button>
+          <span className="px-2 text-xs tabular-nums text-stone-600 dark:text-stone-300">Record <span className="font-semibold text-stone-900 dark:text-stone-50">{records.length ? index + 1 : 0}</span> of {records.length}</span>
+          <button onClick={() => goTo(index + 1)} disabled={!readOnly} className={iconButton} aria-label="Next record"><ChevronRight size={16} /></button>
+          <button onClick={() => goTo(records.length - 1)} disabled={!readOnly} className={iconButton} aria-label="Last record"><ChevronsRight size={16} /></button>
+        </div>
+        <div className="flex w-full gap-2 sm:w-72">
+          <input id="sc-search" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} placeholder="Find counter by code or name" aria-label="Search counters" className={field} />
+          <button onClick={handleSearch} className={secondaryButton} aria-label="Search counters"><Search size={14} /></button>
         </div>
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-          <AlertTriangle size={14} /> {error}
+        <div role="alert" className="mb-4 flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs font-medium text-red-700 dark:text-red-300">
+          <AlertTriangle size={14} className="shrink-0" /> {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="flex flex-col gap-4 rounded-2xl border border-[#e1c9b6] bg-[#fffaf5] p-5 shadow-sm dark:border-[#343b59] dark:bg-[#171b2b]">
-          <div className="grid grid-cols-[90px_1fr] items-center gap-x-4 gap-y-3 text-xs">
-            <label htmlFor="sc-code" className="font-semibold text-[#b84716] dark:text-[#ffb07e]">SC Code *</label>
-            <input id="sc-code" value={form.code} readOnly={readOnly || mode === 'Edit'} onChange={e => update('code', e.target.value)} className={inputClass} />
-            <label htmlFor="sc-name" className="font-semibold text-[#b84716] dark:text-[#ffb07e]">SC Name *</label>
-            <input id="sc-name" value={form.name} readOnly={readOnly} onChange={e => update('name', e.target.value)} className={inputClass} />
-            <span />
-            <label className="flex items-center gap-2 text-stone-600 dark:text-stone-300">
-              <input type="checkbox" checked={form.inactive} disabled={readOnly} onChange={e => update('inactive', e.target.checked)} className="accent-[#e8702a]" />
-              Inactive
+      <div className={`${panel} divide-y divide-line p-6`}>
+        {!readOnly && <FormErrorSummary errors={formErrors} onFocusField={focusField} />}
+        <section className="grid gap-6 p-6 md:grid-cols-[200px_minmax(0,1fr)]">
+          <div>
+            <h2 className={sectionTitle}>Counter</h2>
+            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">The code can't be changed after the counter is created.</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="sc-code" className={lbl}>SC code<span className="text-red-600" aria-hidden="true">*</span></label>
+              <input id="sc-code" value={form.code} readOnly={readOnly || mode === 'Edit'} onChange={e => update('code', e.target.value)} aria-invalid={!!formErrors.code} className={`${inputClass} ${formErrors.code ? '!border-red-500 !ring-2 !ring-red-500/20 animate-shake' : ''}`} />
+              <InlineError message={formErrors.code} />
+            </div>
+            <div>
+              <label htmlFor="sc-name" className={lbl}>SC name<span className="text-red-600" aria-hidden="true">*</span></label>
+              <input id="sc-name" value={form.name} readOnly={readOnly} onChange={e => update('name', e.target.value)} aria-invalid={!!formErrors.name} className={`${inputClass} ${formErrors.name ? '!border-red-500 !ring-2 !ring-red-500/20 animate-shake' : ''}`} />
+              <InlineError message={formErrors.name} />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-stone-700 sm:col-span-2 dark:text-stone-300">
+              <input type="checkbox" checked={form.inactive} disabled={readOnly} onChange={e => update('inactive', e.target.checked)} className="h-4 w-4 accent-accent" />
+              Counter is inactive
             </label>
           </div>
+        </section>
 
-          <div className="mt-auto overflow-hidden rounded-xl border border-[#e1c9b6] dark:border-[#414a6e]">
-            <div className="flex items-center justify-between bg-[#e8702a] px-3 py-2 text-xs font-bold text-white">
-              <span>File Attachment ({files.length})</span>
-              <button onClick={() => fileInput.current?.click()} aria-label="Attach file" className="rounded p-0.5 hover:bg-white/20"><Plus size={14} /></button>
-              <input ref={fileInput} type="file" multiple hidden onChange={e => setFiles([...files, ...Array.from(e.target.files ?? []).map(f => f.name)])} />
+        <section className="grid gap-6 p-6 md:grid-cols-[200px_minmax(0,1fr)]">
+          <div>
+            <h2 className={sectionTitle}>Billing</h2>
+            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">The machine that runs this counter and its bill number prefix.</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="sc-system" className={label}>System name</label>
+              <input id="sc-system" value={form.systemName} readOnly={readOnly} onChange={e => update('systemName', e.target.value.toUpperCase())} className={inputClass} />
             </div>
-            <ul className="min-h-20 divide-y divide-[#f1e3d8] bg-[#fffaf5] text-xs dark:divide-[#343b59] dark:bg-[#1b2033]">
-              {files.length === 0 && <li className="px-3 py-6 text-center text-stone-400">No files attached</li>}
+            <div>
+              <label htmlFor="sc-prefix" className={lbl}>Bill prefix<span className="text-red-600" aria-hidden="true">*</span></label>
+              <input id="sc-prefix" value={form.prefix} readOnly={readOnly} onChange={e => update('prefix', e.target.value)} aria-invalid={!!formErrors.prefix} className={`${inputClass} ${formErrors.prefix ? '!border-red-500 !ring-2 !ring-red-500/20 animate-shake' : ''}`} />
+              <InlineError message={formErrors.prefix} />
+            </div>
+            <p className="text-xs text-stone-500 sm:col-span-2 dark:text-stone-400">
+              Bills on this counter are numbered like <span className="rounded bg-subtle px-1.5 py-0.5 font-mono text-stone-800 dark:text-stone-200">26/{form.prefix || '<prefix>'}-0083718</span>
+            </p>
+          </div>
+        </section>
+
+        <section className="grid gap-6 p-6 md:grid-cols-[200px_minmax(0,1fr)]">
+          <div>
+            <h2 className={sectionTitle}>Attachments</h2>
+            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">{files.length ? `${files.length} file${files.length > 1 ? 's' : ''}` : 'Optional supporting files.'}</p>
+          </div>
+          <div>
+            <ul className="divide-y divide-line-soft rounded-lg border border-line text-xs">
+              {files.length === 0 && <li className="px-3 py-5 text-center text-stone-500">No files attached</li>}
               {files.map((name, i) => (
-                <li key={`${name}-${i}`} className="flex items-center justify-between px-3 py-1.5">
-                  <span className="flex items-center gap-1.5 text-stone-700 dark:text-stone-300"><Paperclip size={12} />{name}</span>
-                  <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className="text-stone-400 hover:text-red-500" aria-label={`Remove ${name}`}><X size={12} /></button>
+                <li key={`${name}-${i}`} className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="flex min-w-0 items-center gap-2 text-stone-700 dark:text-stone-300"><Paperclip size={14} className="shrink-0 text-stone-400" /><span className="truncate">{name}</span></span>
+                  <button onClick={() => setFiles(files.filter((_, j) => j !== i))} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${name}`}><X size={14} /></button>
                 </li>
               ))}
             </ul>
+            <button onClick={() => fileInput.current?.click()} className={`${ghostButton} mt-2`}><Plus size={14} />Attach file</button>
+            <input ref={fileInput} type="file" multiple hidden onChange={e => setFiles([...files, ...Array.from(e.target.files ?? []).map(f => f.name)])} />
           </div>
-        </div>
-
-        <div className="rounded-2xl border border-[#e1c9b6] bg-[#fffaf5] p-5 shadow-sm dark:border-[#343b59] dark:bg-[#171b2b]">
-          <span className="inline-block rounded-t-lg border border-b-0 border-[#e1c9b6] bg-[#fffaf5] px-3 py-1 text-xs font-bold text-stone-700 dark:border-[#414a6e] dark:bg-[#20253a] dark:text-stone-200">Header Info</span>
-          <table className="w-full border border-[#e1c9b6] text-xs dark:border-[#414a6e]">
-            <tbody>
-              <tr className="border-b border-[#e1c9b6] dark:border-[#414a6e]">
-                <th className="w-32 bg-[#f1e3d8] px-3 py-2 text-left font-semibold text-stone-600 dark:bg-[#20253a] dark:text-stone-300">System Name</th>
-                <td className="p-1"><input value={form.systemName} readOnly={readOnly} onChange={e => update('systemName', e.target.value.toUpperCase())} className={inputClass} aria-label="System Name" /></td>
-              </tr>
-              <tr>
-                <th className="bg-[#f1e3d8] px-3 py-2 text-left font-semibold text-stone-600 dark:bg-[#20253a] dark:text-stone-300">Prefix *</th>
-                <td className="bg-[#e8702a]/15 p-1"><input value={form.prefix} readOnly={readOnly} onChange={e => update('prefix', e.target.value)} className={`${inputClass} font-bold text-[#b84716]`} aria-label="Prefix" /></td>
-              </tr>
-            </tbody>
-          </table>
-          <p className="mt-3 text-xs text-stone-500">
-            Bill numbers on this counter look like <span className="font-mono font-bold text-[#b84716] dark:text-[#ffb07e]">26/{form.prefix || '<prefix>'}-0083718</span>.
-          </p>
-        </div>
+        </section>
       </div>
 
-      <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-[#e1c9b6] bg-[#fffaf5] px-4 py-3 shadow-sm dark:border-[#343b59] dark:bg-[#171b2b]">
-        <button onClick={handleNew} disabled={!readOnly} className={`${toolButton} bg-sky-600 hover:bg-sky-700`}><FilePlus size={14} />New</button>
-        <button onClick={handleEdit} disabled={!readOnly || !records.length} className={`${toolButton} bg-stone-600 hover:bg-stone-700`}><Edit3 size={14} />Edit</button>
-        <button onClick={handleDelete} disabled={!readOnly || !records.length} className={`${toolButton} bg-red-600 hover:bg-red-700`}><Trash2 size={14} />Delete</button>
-        <button onClick={handleClose} disabled={readOnly} className={`${toolButton} bg-stone-400 hover:bg-stone-500`}><X size={14} />Close</button>
-        <button onClick={handleSave} className={`${toolButton} bg-[#e8702a] hover:bg-[#b84716]`}><Save size={14} />Save Master</button>
-        <div className="relative">
-          <button onClick={() => setOptionsOpen(!optionsOpen)} className={`${toolButton} bg-[#e8702a] hover:bg-[#b84716]`}><Settings2 size={14} />Options</button>
-          {optionsOpen && (
-            <div className="absolute bottom-full left-0 z-10 mb-2 w-40 overflow-hidden rounded-xl border border-[#e1c9b6] bg-[#fffaf5] text-xs shadow-lg dark:border-[#414a6e] dark:bg-[#20253a]">
-              {['Print List', 'Export to Excel', 'Audit Trail'].map(option => (
-                <button key={option} onClick={() => { setOptionsOpen(false); alert(`${option} — not available in the prototype.`); }} className="block w-full px-3 py-2 text-left text-stone-700 hover:bg-[#f6efe8] dark:text-stone-200 dark:hover:bg-[#343b59]">{option}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        <span className="mx-1 h-6 w-px bg-[#e1c9b6] dark:bg-[#414a6e]" />
-        <button onClick={() => goTo(0)} disabled={!readOnly} className={navButton} aria-label="First record"><ChevronsLeft size={14} /></button>
-        <button onClick={() => goTo(index - 1)} disabled={!readOnly} className={navButton} aria-label="Previous record"><ChevronLeft size={14} /></button>
-        <button onClick={() => goTo(index + 1)} disabled={!readOnly} className={navButton} aria-label="Next record"><ChevronRight size={14} /></button>
-        <button onClick={() => goTo(records.length - 1)} disabled={!readOnly} className={navButton} aria-label="Last record"><ChevronsRight size={14} /></button>
-      </div>
+      {showPrintModal && (
+        <PrintFormatSelectorModal
+          category="SALES_INVOICE"
+          data={{
+            ...SAMPLE_INVOICE_DATA,
+            counter: (records[index] || form).name || (records[index] || form).code || 'Counter 1',
+            doc_no: `26/${(records[index] || form).prefix || 'c1'}-0083718`,
+          }}
+          title={`Print Bill Format (${(records[index] || form).name || (records[index] || form).code || 'Counter'})`}
+          onClose={() => setShowPrintModal(false)}
+        />
+      )}
     </div>
   );
 }

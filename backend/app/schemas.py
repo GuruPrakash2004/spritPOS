@@ -1,16 +1,44 @@
 from datetime import date as date_type
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------- Masters ----------
 class Company(BaseModel):
     name: str
+    email: str
+    address: str
+    phone: str = ""
+    fax: str = ""
+    mobile: str = ""
+    website: str = ""
+    gstin: str = ""
+    pan: str = ""
+    cin: str = ""
+    excise_phone: str = ""
+    ksbcl_code: str = ""
     licence_type: str = "CL-2"
     state: str = "Karnataka"
     fy_start: str
     fy_end: str
+
+    @field_validator("name", "address")
+    @classmethod
+    def required_company_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This company field cannot be blank")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def valid_company_email(cls, value: str) -> str:
+        value = value.strip()
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("Enter a valid company email address")
+        return value
 
 
 class Item(BaseModel):
@@ -18,14 +46,14 @@ class Item(BaseModel):
     name: str
     short_name: str = ""
     hsn_code: str = ""
-    group: str
+    group: str = ""
     brand: str = ""
-    liqtype: Literal["IML", "Beer", "Wine", "Others"] = "IML"
+    liqtype: str = "IML"
     uom: str = "BTL"
-    package: str
-    bottles_per_case: int = Field(12, ge=1, description="Must be ≥ 1 (legacy rule)")
-    mrp: float = Field(ge=0)
-    purchase_rate: float = Field(ge=0)
+    package: str = ""
+    bottles_per_case: int = Field(12, ge=1, description="Must be ≥ 1")
+    mrp: float = Field(0.0, ge=0)
+    purchase_rate: float = Field(0.0, ge=0)
     cgst_per: float = 0
     sgst_per: float = 0
     rol: int = 0

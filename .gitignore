@@ -1,13 +1,35 @@
-# Legacy desktop install: ~211MB of binaries, customer data and plaintext DB credentials
-MAIN_Root/
-
-# Personal Claude Code files
-CLAUDE.local.md
-.claude/settings.local.json
-
-# macOS Finder files
-.DS_Store
-
-# Secrets (database passwords, API keys)
+# Environment & Secret files
 .env
 .env.*
+*.env
+!.env.example
+
+# Large database backups and raw dumps
+*.bak
+*.BAK
+untitled folder/
+
+# Python & Virtual Environments
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# Node & Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# OS & Editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+
+# Legacy connection files hold DB credentials
+SvtConn.ini

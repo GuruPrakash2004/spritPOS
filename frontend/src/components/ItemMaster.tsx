@@ -19,7 +19,7 @@ export default function ItemMaster() {
 
   const downloadTemplate = () => {
     const header = ITEM_IMPORT_COLUMNS.map(([col]) => col);
-    const example = ['KF-330', 'KINGFISHER PREMIUM LAGER BEER 330ML', 'KF330', '2203', '1.BEER', 'Kingfisher', 'Beer', 'BTL', '650ml', 24, 110, 95, 0, 0, 24, 48];
+    const example = ['KF-330', 'KINGFISHER PREMIUM LAGER BEER 330ML', 'KF330', '2203', 'BEER', 'Kingfisher', 'Beer', 'BTL', '650ml', 24, 110, 95, 0, 0, 24, 48];
     downloadText('ItemImport_Template.csv', toCsv([header, example]));
   };
 
@@ -76,7 +76,7 @@ export default function ItemMaster() {
         </>}
       />
       {message && !preview && (
-        <p role="status" className="mx-auto mt-3 max-w-6xl rounded-lg bg-[#e8702a]/10 px-4 py-2 text-xs font-medium text-[#b84716] dark:text-[#ffb07e]">{message}</p>
+        <p role="status" className="mx-auto mt-3 max-w-6xl rounded-lg bg-accent/10 px-4 py-2 text-xs font-medium text-accent-ink">{message}</p>
       )}
       {preview && (
         <Modal

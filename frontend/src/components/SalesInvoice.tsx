@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FileStack, PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift } from 'lucide-react';
+import { FileStack, PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine, ChevronDown } from 'lucide-react';
+import { useConfirm } from './ConfirmDialog';
+import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from './ui';
 import Toast from './Toast';
 import { api, errorText, todayIso, type ApiCustomer, type ApiDoc, type ApiInvoice } from './api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
 import { SAMPLE_STOCK_DATA, litresPerBottle } from './stockData';
 import { numberToWords } from './formatters';
 import { PARTIES, PAYMENT_TYPES, SALES_PERSONS, type InvoiceSetup, type PaymentType } from './salesCounters';
+import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
 
 type Line = { id: number; name: string; qoh: number; qty: number; rate: number; discPct: number };
 
@@ -32,10 +35,8 @@ const parseInvoiceNo = (invoiceNo: string) => {
   return match ? { head: match[1], seq: Number(match[2]), width: match[2].length } : { head: `${invoiceNo}-`, seq: 1, width: 1 };
 };
 
-const panel = 'rounded-xl border border-[#e1c9b6] bg-[#fffaf5] shadow-sm dark:border-[#343b59] dark:bg-[#171b2b]';
-const field = 'rounded-lg border border-[#e1c9b6] bg-[#fffaf5] px-2.5 py-1.5 text-xs text-stone-800 outline-none focus:border-[#e8702a] dark:border-[#414a6e] dark:bg-[#20253a] dark:text-stone-100';
-const cellInput = 'w-16 rounded border border-transparent bg-transparent px-1 py-0.5 text-right font-mono hover:border-[#e1c9b6] focus:border-[#e8702a] focus:bg-[#fffaf5] focus:outline-none dark:focus:bg-[#20253a]';
-const fnButton = 'flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-white shadow-sm';
+const field = baseField;
+const cellInput = 'w-16 rounded-md border border-transparent bg-transparent px-1.5 py-1 text-right tabular-nums hover:border-line-strong focus:border-accent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-accent/20';
 
 export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; onClose: () => void }) {
   const { counter } = setup;
@@ -61,7 +62,9 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   const [dialog, setDialog] = useState<'reprint' | 'cancel' | 'held' | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [printInvoiceData, setPrintInvoiceData] = useState<ApiInvoice | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -203,12 +206,49 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     setToast({ kind: 'ok', text: `Recalled held bill ${inv.doc_no}.` });
   };
 
-  const cancelBill = () => {
-    if (lines.length && !window.confirm('Cancel this bill? All items will be removed.')) return;
+  const cancelBill = async () => {
+    if (lines.length && !(await confirm('Cancel this bill? All items will be removed.'))) return;
     resetBill();
   };
 
-  const saveBill = () => {
+  const buildCurrentInvoice = (docNo: string): ApiInvoice => ({
+    doc_no: docNo,
+    date: todayIso(),
+    time: now.toLocaleTimeString('en-IN'),
+    counter: setup.counter.name || setup.counter.code,
+    customer: party || 'CASH',
+    salesperson: salesPerson,
+    status: 'SAVED',
+    lines: lines.map(l => ({
+      item_code: SAMPLE_STOCK_DATA[l.id]?.code || `ITM${l.id}`,
+      item_name: SAMPLE_STOCK_DATA[l.id]?.name || l.name,
+      cases: 0,
+      bottles: l.qty,
+      qty: l.qty,
+      rate: l.rate,
+      amount: l.qty * l.rate,
+      litres: l.qty * (SAMPLE_STOCK_DATA[l.id] ? litresPerBottle(SAMPLE_STOCK_DATA[l.id].pkg) : 0.75),
+    })),
+    totals: {
+      qty: totals.qty,
+      litres: totals.litres,
+      basic: totals.basic,
+      cgst: totals.cgst,
+      sgst: totals.sgst,
+      discount: totals.disc,
+      points_redeemed: totals.points,
+      points_earned: Math.round(totals.invoice / 100),
+      net: totals.invoice,
+    },
+    payment: { cash: totals.cash, card: totals.card, upi: totals.other, credit: 0 },
+  });
+
+  const openDraftPrint = () => {
+    if (!lines.length) return setToast({ kind: 'error', text: 'Add items to preview bill.' });
+    setPrintInvoiceData(buildCurrentInvoice(billNo));
+  };
+
+  const saveBill = (andPrint = false) => {
     if (!lines.length) return setToast({ kind: 'error', text: 'Add at least one item before saving the bill.' });
     if (lines.some(l => !l.qty || !l.rate)) return setToast({ kind: 'error', text: 'Every item needs a quantity and a rate.' });
     if (totals.card + totals.other > totals.invoice) return setToast({ kind: 'error', text: 'Card + other payment exceeds the invoice value.' });
@@ -220,263 +260,284 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
       api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(() => undefined);
       setPrevBill({ no: doc.doc_no, time: now.toLocaleTimeString('en-IN'), amount: doc.totals.net });
       setToast({ kind: 'ok', text: `Bill ${doc.doc_no} saved — ₹ ${money(doc.totals.net)}.` });
+      if (andPrint) {
+        setPrintInvoiceData(buildCurrentInvoice(doc.doc_no));
+      }
       setSeq(seq + 1);
       resetBill();
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
   const totalRows: [string, number][] = [
-    ['Total Basic Amt', totals.basic], ['Total Disc Amt', totals.disc], ['Total CGST Amt', totals.cgst],
-    ['Total SGST Amt', totals.sgst], ['Total Cess Amt', totals.cess], ['Total Comp.Cess', totals.compCess], ['Points Redeemed', totals.points], ['Total', totals.total],
+    ['Basic amount', totals.basic], ['Discount', totals.disc], ['CGST', totals.cgst],
+    ['SGST', totals.sgst], ['Cess', totals.cess], ['Comp. cess', totals.compCess], ['Points redeemed', totals.points],
   ];
+  const payRow = 'flex items-center justify-between gap-3 py-1.5';
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-3">
+    <div className="mx-auto flex max-w-[1440px] flex-col gap-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
+      {confirmDialog}
 
-      {/* Header strip: date, bill no, previous bill, brand */}
-      <div className={`${panel} flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5`}>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-bold text-stone-500">Date</span>
-          <span className="rounded-lg border border-[#e1c9b6] bg-[#fffaf5] px-2.5 py-1 font-mono text-stone-800 dark:border-[#414a6e] dark:bg-[#20253a] dark:text-stone-100">
-            {now.toLocaleDateString('en-GB')} {now.toLocaleTimeString('en-IN')}
+      {/* Document header: bill no, time, counter, previous bill */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Sales invoice</h1>
+            <span className={badge('accent')}>Draft</span>
+          </div>
+          <p className="mt-0.5 text-xs tabular-nums text-stone-500 dark:text-stone-400">
+            <span className="font-mono font-medium text-stone-800 dark:text-stone-200">{billNo}</span> · {now.toLocaleDateString('en-GB')} {now.toLocaleTimeString('en-IN')} · Counter <span className="font-mono">{counter.code}</span>
+          </p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <span className="hidden text-xs text-stone-500 lg:inline dark:text-stone-400">
+            Last bill {prevBill ? <><span className="font-mono text-stone-700 dark:text-stone-300">{prevBill.no}</span> · {prevBill.time} · <span className="tabular-nums font-medium text-stone-800 dark:text-stone-200">₹ {money(prevBill.amount)}</span></> : '—'}
           </span>
-        </div>
-        <span className="rounded-lg bg-[#e8702a] px-4 py-1.5 font-mono text-lg font-bold tracking-wide text-white shadow-sm">{billNo}</span>
-        <div className="flex flex-wrap gap-4 text-xs text-stone-600 dark:text-stone-300">
-          <span><b>Prev bill:</b> <span className="font-mono">{prevBill?.no ?? '—'}</span></span>
-          <span><b>Time:</b> <span className="font-mono">{prevBill?.time ?? '—'}</span></span>
-          <span><b>Amount:</b> <span className="font-mono">{prevBill ? `₹ ${money(prevBill.amount)}` : '—'}</span></span>
-        </div>
-        <div className="ml-auto text-right">
-          <div className="text-sm font-black tracking-tight text-[#b84716] dark:text-[#ffb07e]">Softvent</div>
-          <div className="font-mono text-[10px] text-stone-500">vLQMS • support@softvent.com</div>
+          <button onClick={() => setDialog('held')} className={secondaryButton}><Undo2 size={14} />Held bills</button>
+          <button onClick={openDraftPrint} disabled={!lines.length} className={secondaryButton}><Printer size={14} />Print preview</button>
+          <button onClick={() => setDialog('reprint')} className={printButton}><Printer size={14} />Re-print</button>
+          <button onClick={() => setDialog('cancel')} className={`${ghostButton} hover:!text-red-600 dark:hover:!text-red-400`}><Ban size={14} />Cancel invoice</button>
+          <button onClick={onClose} className={ghostButton}><DoorOpen size={14} />Close</button>
         </div>
       </div>
 
-      {/* Party / sales person / counter */}
-      <div className={`${panel} flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5 text-xs`}>
-        <label className="flex items-center gap-2 font-bold text-stone-600 dark:text-stone-300">
-          Party
-          <input list="si-parties" value={party} onChange={e => setParty(e.target.value)} className={`${field} w-72`} />
-          <datalist id="si-parties">{(customers.length ? customers.map(c => c.name) : PARTIES).map(p => <option key={p} value={p} />)}</datalist>
-        </label>
-        {customer && customer.points > 0 && (
-          <label className="flex items-center gap-2 font-bold text-stone-600 dark:text-stone-300">
-            <Gift size={14} className="text-[#e8702a]" />
-            <span>{customer.points} pts</span>
-            <input type="number" min={0} max={customer.points} value={redeem} onChange={e => setRedeem(e.target.value)} placeholder="Redeem" className={`${field} w-24 text-right font-mono`} aria-label="Points to redeem" />
-          </label>
-        )}
-        <label className="ml-auto flex items-center gap-2 font-bold text-stone-600 dark:text-stone-300">
-          Sales Person
-          <select value={salesPerson} onChange={e => setSalesPerson(e.target.value)} className={`${field} font-bold text-[#b84716] dark:text-[#ffb07e]`}>
-            {SALES_PERSONS.map(p => <option key={p}>{p}</option>)}
-          </select>
-        </label>
-        <span className="flex items-center gap-2 font-bold text-stone-600 dark:text-stone-300">
-          Counter
-          <span className="rounded-lg bg-[#e8702a]/15 px-2.5 py-1.5 font-mono text-[#b84716] dark:text-[#ffb07e]">{counter.code}</span>
-        </span>
-      </div>
-
-      {/* Scan row */}
-      <div className={`${panel} flex flex-wrap items-end gap-3 px-4 py-2.5`}>
-        <div>
-          <label htmlFor="si-barcode" className="block text-sm font-bold text-stone-800 dark:text-stone-100">Scan Barcode</label>
-          <input id="si-barcode" ref={barcodeRef} autoFocus list="si-items" value={barcode} onChange={e => setBarcode(e.target.value)} onKeyDown={e => e.key === 'Enter' && scan()} className={`${field} w-80 font-mono`} placeholder="KSBCL code or item name" />
-          <datalist id="si-items">{SAMPLE_STOCK_DATA.map(i => <option key={i.ksbcl} value={i.ksbcl}>{i.brand} {i.pkg}</option>)}</datalist>
-          <p className="mt-1 text-[10px] text-stone-400">Scan, or type a KSBCL code or item name and pick from the list</p>
-        </div>
-        <div>
-          <label htmlFor="si-qty" className="block text-sm font-bold text-stone-800 dark:text-stone-100">Qty</label>
-          <input id="si-qty" type="number" min={1} value={scanQty} onChange={e => setScanQty(e.target.value)} onKeyDown={e => e.key === 'Enter' && scan()} className={`${field} w-20 text-right font-mono`} />
-          <p className="mt-1 text-[10px] text-transparent">.</p>
-        </div>
-        <button onClick={scan} className="mb-5 rounded-lg bg-stone-700 px-4 py-1.5 text-xs font-bold text-white hover:bg-stone-800 dark:bg-stone-600">OK</button>
-        <button
-          onClick={() => setQuickOpen(!quickOpen)}
-          aria-expanded={quickOpen}
-          aria-controls="si-quick"
-          className={`mb-5 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${quickOpen
-            ? 'border-[#e8702a] bg-[#e8702a] text-white hover:bg-[#b84716]'
-            : 'border-[#e1c9b6] bg-[#fffaf5] text-[#b84716] hover:bg-[#e8702a]/10 dark:border-[#414a6e] dark:bg-[#20253a] dark:text-[#ffb07e]'}`}
-        >
-          {quickOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}Quick Selection
-        </button>
-        <div className="mb-5 ml-auto text-right">
-          <span className="text-xs font-bold text-stone-500">Inv Val:</span>{' '}
-          <span className="font-mono text-2xl font-bold text-[#b84716] dark:text-[#ffb07e]">₹ {money(totals.invoice)}</span>
-        </div>
-      </div>
-
-      <div className={`grid grid-cols-1 gap-3 ${quickOpen ? 'lg:grid-cols-[230px_1fr]' : ''}`}>
-        {/* Quick selection: docked leftmost while open */}
-        {quickOpen && (
-          <div id="si-quick" className={`${panel} flex max-h-[460px] flex-col overflow-hidden`}>
-            <div className="flex items-center justify-between bg-stone-800 px-3 py-2 text-xs font-bold text-white dark:bg-[#20253a]">
-              Quick Selection
-              <button onClick={() => setQuickOpen(false)} className="rounded p-0.5 hover:bg-white/15" aria-label="Close Quick Selection"><X size={14} /></button>
-            </div>
-            <div className="relative border-b border-[#e1c9b6] p-2 dark:border-[#343b59]">
-              <Search size={12} className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
-              <input autoFocus value={quickFilter} onChange={e => setQuickFilter(e.target.value)} onKeyDown={e => e.key === 'Escape' && setQuickOpen(false)} placeholder="Filter…" className={`${field} w-full pl-7`} />
-            </div>
-            <ul className="flex-1 divide-y divide-[#f1e3d8] overflow-auto text-xs dark:divide-[#343b59]">
-              {quickItems.map(item => (
-                <li key={item.ksbcl}>
-                  <button onClick={() => addItem(item.stock, 1)} className="w-full px-3 py-2 text-left hover:bg-[#e8702a]/10">
-                    <span className="block font-semibold text-stone-800 dark:text-stone-100">{item.brand} <span className="text-stone-400">{item.pkg}</span></span>
-                    <span className="flex justify-between font-mono text-[10px] text-stone-500"><span>QOH {item.clQty}</span><span>₹ {money(item.rate)}</span></span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Item grid */}
-        <div className={`${panel} min-h-[300px] overflow-auto`}>
-          <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 whitespace-nowrap bg-[#f1e3d8] text-stone-600 dark:bg-[#20253a] dark:text-stone-300">
-              <tr>
-                <th className="px-3 py-2">Sl No</th>
-                <th className="px-3 py-2">Item</th>
-                <th className="px-3 py-2 text-right">QOH</th>
-                <th className="px-3 py-2 text-right">Qty</th>
-                <th className="px-3 py-2 text-right">Rate</th>
-                <th className="px-3 py-2 text-right">Disc.%</th>
-                <th className="px-3 py-2 text-right">Disc.Amt</th>
-                <th className="px-3 py-2 text-right">Amount</th>
-                <th className="px-2 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#f1e3d8] font-mono dark:divide-[#343b59]">
-              {lines.length === 0 && (
-                <tr><td colSpan={9} className="px-3 py-16 text-center font-sans text-stone-400">Scan a barcode or pick from Quick Selection to start the bill.</td></tr>
-              )}
-              {lines.map((line, i) => (
-                <tr key={line.id} onClick={() => setSelectedId(line.id)} className={`cursor-pointer ${selectedId === line.id ? 'bg-[#e8702a]/10' : 'hover:bg-stone-50 dark:hover:bg-[#1b2033]'}`}>
-                  <td className="px-3 py-2 font-sans text-stone-400">{i + 1}</td>
-                  <td className="px-3 py-2 font-sans font-medium text-stone-900 dark:text-stone-100">{line.name}</td>
-                  <td className="px-3 py-2 text-right text-stone-500">{line.qoh}</td>
-                  <td className="px-3 py-2 text-right"><input type="number" min={1} max={line.qoh} value={line.qty || ''} onChange={e => updateLine(line.id, { qty: Number(e.target.value) })} onBlur={() => line.qty || updateLine(line.id, { qty: 1 })} className={`${cellInput} font-bold`} aria-label={`Qty for ${line.name}`} /></td>
-                  <td className="px-3 py-2 text-right"><input type="number" min={0} step="0.01" value={line.rate || ''} onChange={e => updateLine(line.id, { rate: Number(e.target.value) })} className={`${cellInput} w-20`} aria-label={`Rate for ${line.name}`} /></td>
-                  <td className="px-3 py-2 text-right"><input type="number" min={0} max={100} value={line.discPct || ''} placeholder="0" onChange={e => updateLine(line.id, { discPct: Number(e.target.value) })} className={cellInput} aria-label={`Discount % for ${line.name}`} /></td>
-                  <td className="px-3 py-2 text-right text-stone-500">{money(discAmt(line))}</td>
-                  <td className="px-3 py-2 text-right font-bold text-stone-900 dark:text-stone-100">{money(gross(line) - discAmt(line))}</td>
-                  <td className="px-2 py-2 text-center">
-                    <button onClick={e => { e.stopPropagation(); setLines(lines.filter(l => l.id !== line.id)); }} className="text-stone-400 hover:text-red-500" aria-label={`Remove ${line.name}`}><Trash2 size={13} /></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Totals & payment: below the item list so the grid gets the full width */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr]">
-        <div className={`${panel} overflow-hidden text-xs md:col-span-2 xl:col-span-1`}>
-          <div className="border-b border-[#e1c9b6] bg-[#f1e3d8] px-3 py-1.5 font-bold text-stone-600 dark:border-[#343b59] dark:bg-[#20253a] dark:text-stone-300">Amounts</div>
-          <dl className="grid grid-cols-1 sm:grid-cols-2">
-            {totalRows.map(([label, value]) => (
-              <div key={label} className={`flex justify-between gap-3 border-b border-[#f1e3d8] px-3 py-1.5 dark:border-[#343b59] sm:odd:border-r ${label === 'Total' ? 'bg-[#e8702a]/10 font-bold sm:col-span-2 sm:border-r-0' : ''}`}>
-                <dt className="font-medium text-stone-600 dark:text-stone-300">{label}</dt>
-                <dd className="font-mono">{money(value)}</dd>
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        {/* LEFT: scan + lines */}
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className={`${panel} flex flex-wrap items-end gap-3 p-4`}>
+            <div className="min-w-0 flex-1 basis-64">
+              <label htmlFor="si-barcode" className={labelClass}>Scan or search item</label>
+              <div className="relative">
+                <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input id="si-barcode" ref={barcodeRef} autoFocus list="si-items" value={barcode} onChange={e => setBarcode(e.target.value)} onKeyDown={e => e.key === 'Enter' && scan()} className={`${field} h-10 pl-9 font-mono text-sm`} placeholder="KSBCL code or item name, then Enter" />
               </div>
-            ))}
-          </dl>
-        </div>
-
-        <div className={`${panel} overflow-hidden text-xs`}>
-          <table className="w-full">
-            <tbody className="divide-y divide-[#f1e3d8] dark:divide-[#343b59]">
-              <tr>
-                <th className="px-3 py-1.5 text-left font-medium text-stone-600 dark:text-stone-300">Write Off Amt</th>
-                <td className="px-3 py-1 text-right"><input type="number" min={0} value={writeOff} onChange={e => setWriteOff(e.target.value)} className={`${field} w-24 py-0.5 text-right font-mono`} aria-label="Write off amount" /></td>
-              </tr>
-              <tr>
-                <th className="px-3 py-1.5 text-left font-medium text-stone-600 dark:text-stone-300">Payment Type</th>
-                <td className="px-3 py-1 text-right">
-                  <select value={paymentType} onChange={e => setPaymentType(e.target.value as PaymentType)} className={`${field} py-0.5 font-bold`} aria-label="Payment type">
-                    {PAYMENT_TYPES.map(p => <option key={p}>{p}</option>)}
-                  </select>
-                </td>
-              </tr>
-              <tr>
-                <th className="px-3 py-1.5 text-left font-medium text-stone-600 dark:text-stone-300">Other Pay Amt</th>
-                <td className="px-3 py-1 text-right">
-                  {paymentType === 'SPLIT'
-                    ? <input type="number" min={0} value={otherPay} onChange={e => setOtherPay(e.target.value)} className={`${field} w-24 py-0.5 text-right font-mono`} aria-label="Other pay amount" />
-                    : <span className="font-mono">{money(totals.other)}</span>}
-                </td>
-              </tr>
-              <tr>
-                <th className="px-3 py-1.5 text-left font-medium text-stone-600 dark:text-stone-300">Card Amount</th>
-                <td className="px-3 py-1 text-right">
-                  {paymentType === 'SPLIT'
-                    ? <input type="number" min={0} value={cardInput} onChange={e => setCardInput(e.target.value)} className={`${field} w-24 py-0.5 text-right font-mono`} aria-label="Card amount" />
-                    : <span className="font-mono">{money(totals.card)}</span>}
-                </td>
-              </tr>
-              <tr>
-                <th className="px-3 py-1.5 text-left font-medium text-stone-600 dark:text-stone-300">Cash Amt</th>
-                <td className="px-3 py-1.5 text-right font-mono">{money(totals.cash)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div className={`${panel} flex flex-col justify-between gap-3 p-3 text-xs`}>
-          <div className="rounded-lg bg-[#e8702a]/10 px-3 py-2">
-            <div className="font-bold text-[#b84716] dark:text-[#ffb07e]">Invoice Value</div>
-            <div className="text-right font-mono text-2xl font-bold text-[#b84716] dark:text-[#ffb07e]">₹ {money(totals.invoice)}</div>
+              <datalist id="si-items">{SAMPLE_STOCK_DATA.map(i => <option key={i.ksbcl} value={i.ksbcl}>{i.brand} {i.pkg}</option>)}</datalist>
+            </div>
+            <div className="w-20">
+              <label htmlFor="si-qty" className={labelClass}>Qty</label>
+              <input id="si-qty" type="number" min={1} value={scanQty} onChange={e => setScanQty(e.target.value)} onKeyDown={e => e.key === 'Enter' && scan()} className={`${field} h-10 text-right text-sm tabular-nums`} />
+            </div>
+            <button onClick={scan} className={`${primaryButton} h-10 px-4`}>Add</button>
+            <button
+              onClick={() => setQuickOpen(!quickOpen)}
+              aria-expanded={quickOpen}
+              aria-controls="si-quick"
+              className={`${secondaryButton} h-10 ${quickOpen ? '!border-accent !bg-accent-soft !text-accent-ink' : ''}`}
+            >
+              {quickOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}Quick pick
+            </button>
           </div>
-          <div>
-            <label htmlFor="si-collected" className="mb-1.5 block font-bold text-stone-700 dark:text-stone-200">Collected Amount / Tender Change</label>
-            <div className="flex items-center gap-2">
-              <input id="si-collected" type="number" min={0} value={collected} onChange={e => setCollected(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveBill()} className={`${field} w-28 text-right font-mono`} placeholder="0.00" />
-              <span className={`ml-auto rounded-lg px-3 py-1.5 font-mono font-bold ${change < 0 ? 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'}`}>
-                {change < 0 ? 'Short' : 'Change'} ₹ {money(Math.abs(change))}
-              </span>
+
+          <div className={`grid grid-cols-1 gap-4 ${quickOpen ? 'lg:grid-cols-[240px_minmax(0,1fr)]' : ''}`}>
+            {quickOpen && (
+              <div id="si-quick" className={`${panel} flex max-h-[480px] flex-col overflow-hidden`}>
+                <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
+                  <span className="text-xs font-semibold text-stone-900 dark:text-stone-50">Quick pick</span>
+                  <button onClick={() => setQuickOpen(false)} className={`${iconButton} h-7 w-7`} aria-label="Close quick pick"><X size={14} /></button>
+                </div>
+                <div className="relative border-b border-line p-2">
+                  <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input autoFocus value={quickFilter} onChange={e => setQuickFilter(e.target.value)} onKeyDown={e => e.key === 'Escape' && setQuickOpen(false)} placeholder="Filter items…" aria-label="Filter items" className={`${field} pl-8`} />
+                </div>
+                <ul className="flex-1 overflow-auto p-1 text-xs">
+                  {quickItems.map(item => (
+                    <li key={item.ksbcl}>
+                      <button onClick={() => addItem(item.stock, 1)} className="w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-subtle">
+                        <span className="block truncate font-medium text-stone-900 dark:text-stone-50">{item.brand}</span>
+                        <span className="mt-0.5 flex justify-between text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
+                          <span>{item.pkg} · {item.clQty} in stock</span><span className="font-medium text-stone-700 dark:text-stone-300">₹ {money(item.rate)}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  {!quickItems.length && <li className="px-3 py-6 text-center text-stone-500">No items match.</li>}
+                </ul>
+              </div>
+            )}
+
+            <div className={`${panel} flex min-h-[320px] flex-col overflow-hidden`}>
+              <div className="flex-1 overflow-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className={tableHead}>
+                    <tr>
+                      <th className="w-10 px-4 py-2.5">#</th>
+                      <th className="min-w-[220px] px-3 py-2.5">Item</th>
+                      <th className="px-3 py-2.5 text-right">In stock</th>
+                      <th className="px-3 py-2.5 text-right">Qty</th>
+                      <th className="px-3 py-2.5 text-right">Rate</th>
+                      <th className="px-3 py-2.5 text-right">Disc %</th>
+                      <th className="px-3 py-2.5 text-right">Disc amt</th>
+                      <th className="px-3 py-2.5 text-right">Amount</th>
+                      <th className="w-10 px-2 py-2.5"><span className="sr-only">Remove</span></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line-soft tabular-nums">
+                    {lines.length === 0 && (
+                      <tr><td colSpan={9} className="px-4 py-20 text-center">
+                        <ScanLine size={28} className="mx-auto mb-2 text-stone-300 dark:text-stone-600" />
+                        <p className="text-sm font-medium text-stone-700 dark:text-stone-200">No items on this bill</p>
+                        <p className="mt-0.5 text-xs text-stone-500">Scan a barcode or use Quick pick to add items.</p>
+                      </td></tr>
+                    )}
+                    {lines.map((line, i) => {
+                      const low = line.qty >= line.qoh;
+                      return (
+                        <tr key={line.id} onClick={() => setSelectedId(line.id)} aria-selected={selectedId === line.id} className={`cursor-pointer transition-colors ${selectedId === line.id ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
+                          <td className="px-4 py-2 text-stone-400">{i + 1}</td>
+                          <td className="px-3 py-2 font-medium text-stone-900 dark:text-stone-50">{line.name}</td>
+                          <td className={`px-3 py-2 text-right ${low ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500'}`}>{line.qoh}</td>
+                          <td className="px-3 py-1.5 text-right"><input type="number" min={1} max={line.qoh} value={line.qty || ''} onChange={e => updateLine(line.id, { qty: Number(e.target.value) })} onBlur={() => line.qty || updateLine(line.id, { qty: 1 })} className={`${cellInput} font-semibold`} aria-label={`Qty for ${line.name}`} /></td>
+                          <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={line.rate || ''} onChange={e => updateLine(line.id, { rate: Number(e.target.value) })} className={`${cellInput} w-20`} aria-label={`Rate for ${line.name}`} /></td>
+                          <td className="px-3 py-1.5 text-right"><input type="number" min={0} max={100} value={line.discPct || ''} placeholder="0" onChange={e => updateLine(line.id, { discPct: Number(e.target.value) })} className={cellInput} aria-label={`Discount % for ${line.name}`} /></td>
+                          <td className="px-3 py-2 text-right text-stone-500">{money(discAmt(line))}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-stone-900 dark:text-stone-50">{money(gross(line) - discAmt(line))}</td>
+                          <td className="px-2 py-2 text-center">
+                            <button onClick={e => { e.stopPropagation(); setLines(lines.filter(l => l.id !== line.id)); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${line.name}`}><Trash2 size={14} /></button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Line summary + line actions */}
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line bg-subtle/60 px-4 py-2.5 text-xs text-stone-600 dark:text-stone-300">
+                <span>Items <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{lines.length}</span></span>
+                <span>Qty <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.qty}</span></span>
+                <span>Litres <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.litres.toFixed(3)}</span></span>
+                <div className="ml-auto flex flex-wrap gap-1">
+                  <div className="relative">
+                    <button onClick={() => setTemplatesOpen(!templatesOpen)} aria-expanded={templatesOpen} className={ghostButton}><FileStack size={14} />Template<ChevronDown size={12} /></button>
+                    {templatesOpen && (
+                      <div className="absolute bottom-full right-0 z-10 mb-1 w-52 overflow-hidden rounded-xl border border-line bg-surface p-1 text-xs shadow-pop">
+                        {TEMPLATES.map((t, i) => (
+                          <button key={t.name} onClick={() => loadTemplate(i)} className="block w-full rounded-lg px-3 py-2 text-left text-stone-700 hover:bg-subtle dark:text-stone-200">{t.name}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={deleteItem} disabled={!lines.length} className={ghostButton}><Trash2 size={14} />Delete item</button>
+                  <button onClick={clearItems} disabled={!lines.length} className={ghostButton}><Eraser size={14} />Clear</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Summary bar */}
-      <div className={`${panel} flex flex-wrap items-center justify-between gap-3 px-5 py-2.5`}>
-        <span className="text-sm font-bold text-stone-700 dark:text-stone-200"># Items: <span className="font-mono">{lines.length}</span></span>
-        <span className="text-sm font-bold text-stone-700 dark:text-stone-200">Total Qty: <span className="font-mono">{totals.qty}</span></span>
-        <span className="text-sm font-bold text-stone-700 dark:text-stone-200">Total Litres: <span className="font-mono">{totals.litres.toFixed(3)}</span></span>
-        <button onClick={() => setDialog('held')} className="flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300">
-          <Undo2 size={12} />Held Bills
-        </button>
-        <span className="hidden text-[11px] italic text-stone-500 xl:inline">{numberToWords(totals.invoice)}</span>
-        <span className="text-sm font-bold text-[#b84716] dark:text-[#ffb07e]">Invoice Value: <span className="font-mono text-lg">₹ {money(totals.invoice)}</span></span>
-      </div>
+        {/* RIGHT: customer, totals, payment, actions */}
+        <aside aria-label="Bill summary" className="flex flex-col gap-4 xl:sticky xl:top-0">
+          <div className={`${panel} grid grid-cols-2 gap-3 p-4`}>
+            <div className="col-span-2 sm:col-span-1">
+              <label htmlFor="si-party" className={labelClass}>Customer</label>
+              <input id="si-party" list="si-parties" value={party} onChange={e => setParty(e.target.value)} className={field} placeholder="Walk-in customer" />
+              <datalist id="si-parties">{(customers.length ? customers.map(c => c.name) : PARTIES).map(p => <option key={p} value={p} />)}</datalist>
+            </div>
+            {customer && customer.points > 0 && (
+              <div className="col-span-2 flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-xs text-accent-ink">
+                <Gift size={14} className="shrink-0" />
+                <span className="flex-1"><span className="font-semibold tabular-nums">{customer.points}</span> loyalty points</span>
+                <input type="number" min={0} max={customer.points} value={redeem} onChange={e => setRedeem(e.target.value)} placeholder="Redeem" className={`${field} w-24 py-1 text-right tabular-nums`} aria-label="Points to redeem" />
+              </div>
+            )}
+            <div className="col-span-2 sm:col-span-1">
+              <label htmlFor="si-salesperson" className={labelClass}>Sales person</label>
+              <select id="si-salesperson" value={salesPerson} onChange={e => setSalesPerson(e.target.value)} className={field}>
+                {SALES_PERSONS.map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
 
-      {/* Function keys */}
-      <div className="flex flex-wrap justify-center gap-2">
-        <button onClick={clearItems} className={`${fnButton} bg-stone-600 hover:bg-stone-700`}><Eraser size={14} />Clear Items</button>
-        <div className="relative">
-          <button onClick={() => setTemplatesOpen(!templatesOpen)} className={`${fnButton} bg-sky-600 hover:bg-sky-700`}><FileStack size={14} />Load Template</button>
-          {templatesOpen && (
-            <div className="absolute bottom-full left-0 z-10 mb-2 w-52 overflow-hidden rounded-xl border border-[#e1c9b6] bg-[#fffaf5] text-xs shadow-lg dark:border-[#414a6e] dark:bg-[#20253a]">
-              {TEMPLATES.map((t, i) => (
-                <button key={t.name} onClick={() => loadTemplate(i)} className="block w-full px-3 py-2 text-left text-stone-700 hover:bg-[#f6efe8] dark:text-stone-200 dark:hover:bg-[#343b59]">{t.name}</button>
+          <div className={`${panel} space-y-3 p-4 text-xs`}>
+            <div className="rounded-lg bg-subtle px-3 py-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-stone-500 dark:text-stone-400">Invoice value</span>
+                <span className="text-[11px] tabular-nums text-stone-500 dark:text-stone-400">{lines.length} items · {totals.qty} qty</span>
+              </div>
+              <div className="mt-0.5 text-3xl font-semibold tracking-tight tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.invoice)}</div>
+              <div className="mt-1 text-[11px] italic leading-snug text-stone-500 dark:text-stone-400">{numberToWords(totals.invoice)}</div>
+            </div>
+            <details className="group rounded-lg border border-line">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-stone-600 hover:bg-subtle/70 dark:text-stone-300 [&::-webkit-details-marker]:hidden">
+                <span>Amount breakdown</span>
+                <span className="flex items-center gap-1.5 tabular-nums text-stone-900 dark:text-stone-50">{money(totals.total)}<ChevronDown size={14} className="text-stone-400 transition-transform group-open:rotate-180" /></span>
+              </summary>
+              <dl className="space-y-1.5 border-t border-line px-3 py-2.5 tabular-nums">
+                {totalRows.map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-3">
+                    <dt className="text-stone-500 dark:text-stone-400">{label}</dt>
+                    <dd className={value ? 'text-stone-800 dark:text-stone-200' : 'text-stone-400'}>{money(value)}</dd>
+                  </div>
+                ))}
+                <div className="flex justify-between gap-3 border-t border-line pt-1.5 font-medium">
+                  <dt className="text-stone-700 dark:text-stone-200">Total</dt>
+                  <dd className="text-stone-900 dark:text-stone-50">{money(totals.total)}</dd>
+                </div>
+              </dl>
+            </details>
+            <div className={payRow}>
+              <label htmlFor="si-writeoff" className="whitespace-nowrap text-stone-500 dark:text-stone-400">Write-off</label>
+              <input id="si-writeoff" type="number" min={0} value={writeOff} onChange={e => setWriteOff(e.target.value)} className={`${field} w-28 py-1 text-right tabular-nums`} />
+            </div>
+            <div role="radiogroup" aria-label="Payment type" className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
+              {PAYMENT_TYPES.map(p => (
+                <button
+                  key={p}
+                  role="radio"
+                  aria-checked={paymentType === p}
+                  onClick={() => setPaymentType(p)}
+                  className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${paymentType === p ? 'bg-surface text-stone-900 shadow-card dark:text-stone-50' : 'text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-50'}`}
+                >{p}</button>
               ))}
             </div>
-          )}
-        </div>
-        <button onClick={holdOrNew} className={`${fnButton} bg-amber-600 hover:bg-amber-700`}><PauseCircle size={14} />Hold / New Bill</button>
-        <button onClick={deleteItem} className={`${fnButton} bg-red-600 hover:bg-red-700`}><Trash2 size={14} />Delete Item</button>
-        <button onClick={cancelBill} className={`${fnButton} bg-stone-400 hover:bg-stone-500`}><XCircle size={14} />Cancel</button>
-        <button onClick={() => setDialog('reprint')} className={`${fnButton} bg-sky-600 hover:bg-sky-700`}><Printer size={14} />Re-Print Bill</button>
-        <button onClick={() => setDialog('cancel')} className={`${fnButton} bg-red-700 hover:bg-red-800`}><Ban size={14} />Cancel Invoice</button>
-        <button onClick={saveBill} className={`${fnButton} bg-[#e8702a] hover:bg-[#b84716]`}><Save size={14} />Save Bill</button>
-        <button onClick={onClose} className={`${fnButton} bg-[#e8702a] hover:bg-[#b84716]`}><DoorOpen size={14} />Close</button>
+            <dl className="tabular-nums">
+              <div className={payRow}>
+                <dt className="text-stone-500 dark:text-stone-400">Card</dt>
+                <dd>{paymentType === 'SPLIT'
+                  ? <input type="number" min={0} value={cardInput} onChange={e => setCardInput(e.target.value)} className={`${field} w-28 py-1 text-right tabular-nums`} aria-label="Card amount" />
+                  : <span className="text-stone-800 dark:text-stone-200">{money(totals.card)}</span>}</dd>
+              </div>
+              <div className={payRow}>
+                <dt className="text-stone-500 dark:text-stone-400">UPI / other</dt>
+                <dd>{paymentType === 'SPLIT'
+                  ? <input type="number" min={0} value={otherPay} onChange={e => setOtherPay(e.target.value)} className={`${field} w-28 py-1 text-right tabular-nums`} aria-label="Other pay amount" />
+                  : <span className="text-stone-800 dark:text-stone-200">{money(totals.other)}</span>}</dd>
+              </div>
+              <div className={payRow}>
+                <dt className="font-medium text-stone-700 dark:text-stone-200">Cash</dt>
+                <dd className="font-semibold text-stone-900 dark:text-stone-50">{money(totals.cash)}</dd>
+              </div>
+            </dl>
+            <div>
+              <label htmlFor="si-collected" className={labelClass}>Cash tendered</label>
+              <div className="flex items-center gap-2">
+                <input id="si-collected" type="number" min={0} value={collected} onChange={e => setCollected(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveBill()} className={`${field} flex-1 text-right text-sm tabular-nums`} placeholder="0.00" />
+                <span className={`${badge(change < 0 ? 'danger' : 'success')} px-2 py-1.5 text-xs tabular-nums`}>
+                  {change < 0 ? 'Short' : 'Change'} ₹ {money(Math.abs(change))}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => saveBill(true)}
+                className={`${printButton} h-11 w-full text-sm font-bold shadow-md hover:shadow-lg`}
+              >
+                <Printer size={16} />Save & Print · ₹ {money(totals.invoice)}
+              </button>
+              <button
+                onClick={() => saveBill(false)}
+                className={`${secondaryButton} h-9 w-full text-xs font-semibold`}
+              >
+                <Save size={14} />Save only (No print)
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={holdOrNew} className={secondaryButton}><PauseCircle size={14} />Hold / new</button>
+              <button onClick={cancelBill} className={`${secondaryButton} hover:!text-red-600 dark:hover:!text-red-400`}><XCircle size={14} />Cancel bill</button>
+            </div>
+          </div>
+        </aside>
       </div>
 
       {dialog === 'reprint' && <ReprintDialog initialNo={prevBill?.no ?? ''} onClose={() => setDialog(null)} />}
@@ -488,6 +549,15 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
         />
       )}
       {dialog === 'held' && <HeldBillsDialog onClose={() => setDialog(null)} onRecall={recall} />}
+
+      {printInvoiceData && (
+        <PrintFormatSelectorModal
+          category="SALES_INVOICE"
+          data={printInvoiceData}
+          title={`Print Sales Invoice (${printInvoiceData.doc_no})`}
+          onClose={() => setPrintInvoiceData(null)}
+        />
+      )}
     </div>
   );
 }

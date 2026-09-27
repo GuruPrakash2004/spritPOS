@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { PlusCircle, Save, Trash2 } from 'lucide-react';
 import Toast from './Toast';
 import { api, errorText, todayIso, type ApiLedger } from './api';
-import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from './ui';
+import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from './ui';
 
 type Line = { ledger: string; amount: string; narration: string };
 const blank = (): Line => ({ ledger: '', amount: '', narration: '' });
@@ -44,18 +44,18 @@ export default function ExpenseEntry() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
-      <div className={`${panel} flex flex-wrap items-center justify-between gap-3 px-5 py-3`}>
+      <div className={pageHeader}>
         <div>
-          <h2 className={pageTitle}>Expense Entry</h2>
+          <h1 className={pageTitle}>Expense Entry</h1>
           <p className={pageSub}>Shop expenses posted against ledgers.</p>
         </div>
         <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
       </div>
 
       <div className={`${panel} flex flex-wrap items-end gap-3 px-5 py-3`}>
-        <div><label htmlFor="ex-date" className={`${label} !text-red-600 dark:!text-red-400`}>Date</label><input id="ex-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
+        <div><label htmlFor="ex-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="ex-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} tabular-nums`} /></div>
         <div>
-          <label htmlFor="ex-paid" className={`${label} !text-red-600 dark:!text-red-400`}>Paid From</label>
+          <label htmlFor="ex-paid" className={label}>Paid From<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
           <select id="ex-paid" value={paidFrom} onChange={e => setPaidFrom(e.target.value)} className={field}>
             {payLedgers.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
           </select>
@@ -77,16 +77,16 @@ export default function ExpenseEntry() {
                     {expenseLedgers.map(x => <option key={x.code} value={x.code}>{x.name}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={l.amount} onChange={e => update(i, { amount: e.target.value })} className={`${field} w-28 text-right font-mono`} aria-label={`Amount row ${i + 1}`} /></td>
+                <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={l.amount} onChange={e => update(i, { amount: e.target.value })} className={`${field} w-28 text-right tabular-nums`} aria-label={`Amount row ${i + 1}`} /></td>
                 <td className="px-3 py-1.5"><input value={l.narration} onChange={e => update(i, { narration: e.target.value })} className={`${field} w-full`} aria-label={`Narration row ${i + 1}`} /></td>
                 <td className="px-3 py-1.5 text-center"><button onClick={() => setLines(lines.length > 1 ? lines.filter((_, x) => x !== i) : [blank()])} className="text-stone-400 hover:text-red-500" aria-label={`Remove row ${i + 1}`}><Trash2 size={13} /></button></td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="flex items-center justify-between border-t border-[#e1c9b6] px-3 py-2 dark:border-[#343b59]">
+        <div className="flex items-center justify-between border-t border-line px-3 py-2">
           <button onClick={() => setLines([...lines, blank()])} className={secondaryButton}><PlusCircle size={14} />Add Row</button>
-          <span className="text-sm font-bold text-[#b84716] dark:text-[#ffb07e]">Total ₹ {money(total)}</span>
+          <span className="text-sm font-bold text-accent-ink">Total ₹ {money(total)}</span>
         </div>
       </div>
     </div>

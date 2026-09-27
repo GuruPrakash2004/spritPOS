@@ -4,7 +4,7 @@ import Modal from './Modal';
 import Toast from './Toast';
 import { api, errorText, qs, todayIso, type ApiClosingLoad, type ApiCounter, type ApiDoc } from './api';
 import { SALES_PERSONS } from './salesCounters';
-import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from './ui';
+import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from './ui';
 
 type Row = ApiClosingLoad & { closing: string };
 
@@ -69,15 +69,15 @@ export default function ClosingStockEntry() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
-      <div className={`${panel} flex flex-wrap items-end justify-between gap-3 px-5 py-3`}>
+      <div className={pageHeader}>
         <div>
-          <h2 className={pageTitle}>Closing Stock Entry</h2>
+          <h1 className={pageTitle}>Closing Stock Entry</h1>
           <p className={pageSub}>Enter the physical closing stock; the difference from opening is billed as the day's sales.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div>
-            <label htmlFor="cse-date" className={`${label} !text-red-600 dark:!text-red-400`}>As-on Date</label>
-            <input id="cse-date" type="date" value={asOn} onChange={e => setAsOn(e.target.value)} className={`${field} font-mono`} />
+            <label htmlFor="cse-date" className={label}>As-on Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
+            <input id="cse-date" type="date" value={asOn} onChange={e => setAsOn(e.target.value)} className={`${field} tabular-nums`} />
           </div>
           <button onClick={load} className={secondaryButton}><Download size={14} />Load Items</button>
           <button onClick={save} disabled={!rows.length || Boolean(savedDoc)} className={primaryButton}><Save size={14} />Save</button>
@@ -94,7 +94,7 @@ export default function ClosingStockEntry() {
               <th className="px-3 py-2 text-right">Sales Qty</th><th className="px-3 py-2 text-right">MRP</th><th className="px-3 py-2 text-right">Sales Value</th>
             </tr>
           </thead>
-          <tbody className={`${tableBody} font-mono`}>
+          <tbody className={`${tableBody} tabular-nums`}>
             {!rows.length && <tr><td colSpan={8} className="px-3 py-12 text-center font-sans text-stone-400">Pick the As-on Date and press Load Items.</td></tr>}
             {rows.map((r, i) => {
               const sq = salesQty(r);
@@ -124,7 +124,7 @@ export default function ClosingStockEntry() {
       {rows.length > 0 && (
         <div className={`${panel} flex flex-wrap justify-between gap-3 px-5 py-3 text-sm font-bold text-stone-700 dark:text-stone-200`}>
           <span>{entered.length} of {rows.length} items entered{savedDoc && <span className="ml-3 font-mono text-emerald-600 dark:text-emerald-400">Saved as {savedDoc}</span>}</span>
-          <span className="text-[#b84716] dark:text-[#ffb07e]">Sales Value: ₹ {money(totalSales)}</span>
+          <span className="text-accent-ink">Sales Value: ₹ {money(totalSales)}</span>
         </div>
       )}
 

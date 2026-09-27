@@ -1,13 +1,15 @@
 """Reports: Stock Balance, Stock Ledger, Profit Margin and the Daily Summary
 Report (field list from Docs/WebDash.xlsx)."""
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
 from .. import store
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
+RPTS_DIR = Path(__file__).resolve().parent.parent.parent / "Rpts"
 
 
 def _litres(code: str, qty: float) -> float:
@@ -170,7 +172,45 @@ def daily_sales(from_date: date, to_date: date):
         d["qty"] += inv["totals"]["qty"]
         d["litres"] = round(d["litres"] + inv["totals"]["litres"], 3)
         d["amount"] = round(d["amount"] + inv["totals"]["net"], 2)
-    return [{"date": k, **v} for k, v in sorted(days.items())]
+    cur = from_date
+    result = []
+    while cur <= to_date:
+        ds = cur.isoformat()
+        v = days[ds]
+        result.append({
+            "date": ds,
+            "day": cur.strftime("%a"),
+            "bills": v["bills"],
+            "qty": v["qty"],
+            "litres": v["litres"],
+            "amount": v["amount"],
+        })
+        cur += timedelta(days=1)
+    return result
+
+
+@router.get("/stock-movement")
+def stock_movement(on: date | None = None):
+    target_date = on or date.today()
+    bal = stock_balance(target_date, target_date)
+    op = sum(r["op_qty"] for r in bal)
+    rec = sum(r["rec_qty"] for r in bal)
+    iss = sum(r["iss_qty"] for r in bal)
+    cl = sum(r["cl_qty"] for r in bal)
+    max_val = max(op, rec, iss, cl, 1)
+
+    return {
+        "date": target_date.isoformat(),
+        "opening_stock": int(op),
+        "received": int(rec),
+        "issued": int(iss),
+        "closing_stock": int(cl),
+        "flow": [
+            {"label": "Opening stock", "value": f"{int(op):,}", "pct": max(15, min(100, round((op / max_val) * 100))), "color": "bg-[#958B81] dark:bg-stone-400"},
+            {"label": "Received", "value": f"+{int(rec):,}", "pct": max(15, min(100, round((rec / max_val) * 100))), "color": "bg-[#55745A]"},
+            {"label": "Issued", "value": f"−{int(iss):,}", "pct": max(15, min(100, round((iss / max_val) * 100))), "color": "bg-[#64283A] dark:bg-accent"},
+        ],
+    }
 
 
 @router.get("/sales/brand-wise")
@@ -202,3 +242,105 @@ def stock_in_litres(on: date):
     return [{"item_code": r["item_code"], "item_name": r["item_name"], "package": r["package"],
              "liqtype": store.ITEMS[r["item_code"]]["liqtype"], "cl_qty": r["cl_qty"], "cl_litres": r["cl_litres"]}
             for r in stock_balance(on, on)]
+
+
+@router.get("/rpt-files")
+def list_rpt_files(category: str | None = None):
+    """List available legacy Crystal Reports (.rpt) template files from backend/Rpts."""
+    files = []
+    if RPTS_DIR.exists():
+        for p in sorted(RPTS_DIR.glob("*.rpt")):
+            fname = p.name
+            cat = "GENERIC_REPORT"
+            printer = "LASER_A4_PORTRAIT"
+            paper = "A4 Portrait"
+            badge = "A4"
+            desc = "Crystal Reports document template"
+
+            if fname.startswith("fmtSPInvPrint") or fname in ("fmtSInv.rpt", "fmtSInv_GST.rpt", "fmtPSE.rpt", "fmtQTN.rpt", "fmtSR.rpt"):
+                cat = "SALES_INVOICE"
+                if "SPInvPrint" in fname:
+                    printer = "THERMAL_80MM"
+                    paper = "80mm Roll (Thermal POS)"
+                    badge = "80mm"
+                    desc = "Standard 80mm roll POS cash bill format"
+                elif fname == "fmtSInv.rpt":
+                    printer = "LASER_A5_LANDSCAPE"
+                    paper = "A5 Landscape (148 x 210 mm)"
+                    badge = "A5"
+                    desc = "Half-page compact retail cash memo"
+                elif fname == "fmtSInv_GST.rpt":
+                    printer = "LASER_A4_PORTRAIT"
+                    paper = "A4 Portrait (210 x 297 mm)"
+                    badge = "A4 GST"
+                    desc = "Full A4 GST tax invoice with statutory details"
+                else:
+                    printer = "THERMAL_80MM"
+                    paper = "80mm Roll"
+                    badge = "Thermal"
+                    desc = "POS receipt format"
+            elif fname.startswith("RptDSR") or fname == "RptDropsDSR.rpt":
+                cat = "DSR"
+                if fname == "RptDSR_S.rpt":
+                    printer = "THERMAL_80MM"
+                    paper = "80mm Roll"
+                    badge = "Thermal"
+                    desc = "Compact thermal audit slip"
+                elif fname == "RptDSR_8.5.rpt":
+                    printer = "DOT_MATRIX_80"
+                    paper = '8.5" Continuous Roll'
+                    badge = "DMP 80"
+                    desc = "Dot-matrix audit continuous stationery"
+                else:
+                    printer = "LASER_A4_PORTRAIT"
+                    paper = "A4 Portrait"
+                    badge = "A4"
+                    desc = "Full daily summary audit sheet"
+            elif fname.startswith("RptStk"):
+                cat = "STOCK_BALANCE"
+                printer = "LASER_A4_LANDSCAPE"
+                paper = "A4 Landscape"
+                badge = "A4 L"
+                desc = "Stock balance and excise audit register"
+            elif fname.startswith("fmtPB"):
+                cat = "PURCHASE_BILL"
+                printer = "LASER_A4_PORTRAIT" if "A4" in fname else "THERMAL_80MM"
+                paper = "A4 Portrait" if "A4" in fname else "80mm Roll"
+                badge = "A4" if "A4" in fname else "80mm"
+                desc = "Goods inward receipt voucher"
+            elif fname.startswith("fmtPI"):
+                cat = "PURCHASE_INDENT"
+                printer = "LASER_A4_PORTRAIT"
+                paper = "A4 Portrait"
+                badge = "A4"
+                desc = "KSBCL indent requisition order"
+            elif fname.startswith("fmtSTKDED"):
+                cat = "STOCK_DEDUCTION"
+                printer = "LASER_A4_PORTRAIT" if "A4" in fname else "THERMAL_80MM"
+                paper = "A4 Portrait" if "A4" in fname else "80mm Roll"
+                badge = "A4" if "A4" in fname else "80mm"
+                desc = "Breakage and deduction voucher"
+            else:
+                cat = "GENERIC_REPORT"
+                printer = "LASER_A4_LANDSCAPE" if any(w in fname for w in ("Sales", "Item", "Pur", "Dis")) else "LASER_A4_PORTRAIT"
+                paper = "A4 Landscape" if printer == "LASER_A4_LANDSCAPE" else "A4 Portrait"
+                badge = "Landscape" if printer == "LASER_A4_LANDSCAPE" else "Portrait"
+                desc = "MIS Analytical and transactional register"
+
+            if category and cat != category:
+                continue
+
+            files.append({
+                "id": fname.replace(".rpt", "").replace(" ", "_"),
+                "filename": fname,
+                "rptFileName": fname,
+                "name": fname.replace(".rpt", "").replace("_", " "),
+                "category": cat,
+                "printer": printer,
+                "paperName": paper,
+                "badge": badge,
+                "description": desc,
+                "size_bytes": p.stat().st_size
+            })
+    return files
+

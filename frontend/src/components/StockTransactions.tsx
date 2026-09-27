@@ -26,9 +26,9 @@ export function PurchaseIndent() {
       rateLabel="PB Rate"
       buildBody={lines => ({ date, supplier, remarks, lines: toLines(lines) })}
       header={<>
-        <div><label htmlFor="pi-date" className={`${label} !text-red-600 dark:!text-red-400`}>Indent Date</label><input id="pi-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
+        <div><label htmlFor="pi-date" className={label}>Indent Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="pi-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div className="w-full min-w-0 sm:w-auto">
-          <label htmlFor="pi-sup" className={`${label} !text-red-600 dark:!text-red-400`}>Supplier</label>
+          <label htmlFor="pi-sup" className={label}>Supplier<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
           <select id="pi-sup" value={supplier} onChange={e => setSupplier(e.target.value)} className={`${field} w-full sm:w-80`}>
             {suppliers.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
           </select>
@@ -61,7 +61,7 @@ export function SalesReturn() {
       rateLabel="Rate"
       buildBody={lines => ({ date, against_invoice: against || null, customer: invoice?.customer ?? 'CASH', remarks, lines: toLines(lines) })}
       header={<>
-        <div><label htmlFor="sr-date" className={`${label} !text-red-600 dark:!text-red-400`}>Return Date</label><input id="sr-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
+        <div><label htmlFor="sr-date" className={label}>Return Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="sr-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div className="w-full min-w-0 sm:w-auto">
           <label htmlFor="sr-inv" className={label}>Against Invoice</label>
           <select id="sr-inv" value={against} onChange={e => setAgainst(e.target.value)} className={`${field} w-full font-mono sm:w-72`}>
@@ -93,9 +93,9 @@ export function StockDeduction() {
       rateLabel="Purchase Rate"
       buildBody={lines => ({ date, reason, remarks, lines: toLines(lines) })}
       header={<>
-        <div><label htmlFor="sd-date" className={`${label} !text-red-600 dark:!text-red-400`}>Date</label><input id="sd-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
+        <div><label htmlFor="sd-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="sd-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div>
-          <label htmlFor="sd-reason" className={`${label} !text-red-600 dark:!text-red-400`}>Reason</label>
+          <label htmlFor="sd-reason" className={label}>Reason<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
           <select id="sd-reason" value={reason} onChange={e => setReason(e.target.value)} className={field}>{REASONS.map(r => <option key={r}>{r}</option>)}</select>
         </div>
         <div className="w-full min-w-0 sm:w-auto sm:flex-1"><label htmlFor="sd-rmk" className={label}>Remarks</label><input id="sd-rmk" value={remarks} onChange={e => setRemarks(e.target.value)} className={`${field} w-full`} placeholder="e.g. unloading crate breakage" /></div>

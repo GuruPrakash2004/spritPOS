@@ -1,20 +1,44 @@
-// Thin client for the FastAPI backend. Vite proxies /api to localhost:8000 (see vite.config.ts).
+// Thin client for the FastAPI backend. Vite proxies /api to localhost:8001 (see vite.config.ts).
 
 export class ApiError extends Error {}
 
-// The logged-in user, sent as X-User so admin-only endpoints can check the role (demo auth only).
+// The logged-in user and JWT token.
 let authUser = '';
-export const setAuthUser = (user: string) => { authUser = user; };
+let authRole = '';
+let authToken = localStorage.getItem('vlqms_jwt_token') || '';
+
+export const setAuthToken = (token: string) => {
+  authToken = token;
+  if (token) {
+    localStorage.setItem('vlqms_jwt_token', token);
+  } else {
+    localStorage.removeItem('vlqms_jwt_token');
+  }
+};
+
+export const getAuthToken = () => authToken;
+
+export const setAuthUser = (user: string, role: string = '', token?: string) => {
+  authUser = user;
+  authRole = role;
+  if (token !== undefined) {
+    setAuthToken(token);
+  }
+};
+export const getAuthUser = () => authUser;
+export const getAuthRole = () => authRole;
 
 export async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   let res: Response;
   try {
+    const headers: Record<string, string> = {
+      ...(init?.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(authUser ? { 'X-User': authUser } : {}),
+    };
     res = await fetch(`/api${path}`, {
       method: init?.method ?? 'GET',
-      headers: {
-        ...(init?.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        ...(authUser ? { 'X-User': authUser } : {}),
-      },
+      headers,
       body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch {
@@ -52,6 +76,19 @@ export type ApiDoc = { doc_no: string; totals: { net: number; qty: number; litre
 
 export type ApiDsr = { total_bills: number; sales_incl_gst: number };
 
+export type ApiDailySale = { date: string; day?: string; bills: number; qty: number; litres: number; amount: number };
+
+export type ApiStockMovementItem = { label: string; value: string; pct: number; color: string };
+
+export type ApiStockMovement = {
+  date: string;
+  opening_stock: number;
+  received: number;
+  issued: number;
+  closing_stock: number;
+  flow: ApiStockMovementItem[];
+};
+
 export type ApiLine = { item_code: string; item_name: string; cases: number; bottles: number; qty: number; rate: number; amount: number; litres: number };
 
 export type ApiInvoice = {
@@ -69,7 +106,21 @@ export type ApiSupplier = { code: string; name: string; gstin: string; city: str
 
 export type ApiLedger = { code: string; name: string; group: string };
 
-export type ApiUser = { user: string; role: string; modules: string[]; company: { name: string; fy_start: string; fy_end: string } };
+export type ApiCompany = {
+  name: string; email: string; address: string; phone: string; fax: string; mobile: string; website: string;
+  gstin: string; pan: string; cin: string; excise_phone: string; ksbcl_code: string;
+  licence_type: string; state: string; fy_start: string; fy_end: string;
+};
+
+export type ApiUser = {
+  user: string;
+  role: string;
+  modules: string[];
+  company: ApiCompany;
+  access_token?: string;
+  token?: string;
+  token_type?: string;
+};
 
 export type ApiAdminUser = { user: string; role: string; active: boolean };
 

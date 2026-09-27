@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, Download } from 'lucide-react';
 import Toast from './Toast';
 import { api, errorText, type ApiItemFull } from './api';
-import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from './ui';
+import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from './ui';
 
 type Column = 'mrp' | 'purchase_rate';
 
@@ -58,9 +58,11 @@ export default function PriceListMaintenance() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
-      <div className={`${panel} px-5 py-3`}>
-        <h2 className={pageTitle}>Item Price List Maintenance</h2>
-        <p className={pageSub}>Change MRP or purchase rate for many items at once.</p>
+      <div className={pageHeader}>
+        <div>
+          <h1 className={pageTitle}>Item Price List Maintenance</h1>
+          <p className={pageSub}>Change MRP or purchase rate for many items at once.</p>
+        </div>
       </div>
 
       <div className={`${panel} flex flex-wrap items-end gap-3 px-5 py-3`}>
@@ -81,7 +83,7 @@ export default function PriceListMaintenance() {
         <button onClick={load} className={secondaryButton}><Download size={14} />Load</button>
         <div className="ml-auto">
           <label htmlFor="pl-change" className={label}>Change by ₹ (negative to reduce)</label>
-          <input id="pl-change" type="number" step="0.01" value={change} onChange={e => setChange(e.target.value)} className={`${field} w-36 text-right font-mono`} />
+          <input id="pl-change" type="number" step="0.01" value={change} onChange={e => setChange(e.target.value)} className={`${field} w-36 text-right tabular-nums`} />
         </div>
         <button onClick={apply} disabled={!items} className={primaryButton}><CheckCircle2 size={14} />Apply</button>
       </div>
@@ -91,26 +93,26 @@ export default function PriceListMaintenance() {
           <thead className={tableHead}>
             <tr>
               <th className="px-3 py-2">
-                <input type="checkbox" aria-label="Select all" className="accent-[#e8702a]" checked={Boolean(items?.length) && picked.size === items?.length}
+                <input type="checkbox" aria-label="Select all" className="accent-accent" checked={Boolean(items?.length) && picked.size === items?.length}
                   onChange={e => setPicked(new Set(e.target.checked ? items?.map(i => i.code) : []))} />
               </th>
               <th className="px-3 py-2">Code</th><th className="px-3 py-2">Item</th><th className="px-3 py-2">Group</th>
               <th className="px-3 py-2 text-right">Current</th><th className="px-3 py-2 text-right">New</th>
             </tr>
           </thead>
-          <tbody className={`${tableBody} font-mono`}>
+          <tbody className={`${tableBody} tabular-nums`}>
             {!items && <tr><td colSpan={6} className="px-3 py-10 text-center font-sans text-stone-400">Choose a group and press Load.</td></tr>}
             {items?.map(i => {
               const on = picked.has(i.code);
               const current = i[column];
               return (
                 <tr key={i.code} className={on ? '' : 'opacity-50'}>
-                  <td className="px-3 py-1.5"><input type="checkbox" checked={on} onChange={() => toggle(i.code)} className="accent-[#e8702a]" aria-label={`Select ${i.name}`} /></td>
+                  <td className="px-3 py-1.5"><input type="checkbox" checked={on} onChange={() => toggle(i.code)} className="accent-accent" aria-label={`Select ${i.name}`} /></td>
                   <td className="px-3 py-1.5">{i.code}</td>
                   <td className="px-3 py-1.5 font-sans text-stone-900 dark:text-stone-100">{i.name}</td>
                   <td className="px-3 py-1.5 font-sans">{i.group}</td>
                   <td className="px-3 py-1.5 text-right">{money(current)}</td>
-                  <td className={`px-3 py-1.5 text-right font-bold ${on && delta ? 'text-[#b84716] dark:text-[#ffb07e]' : ''}`}>{money(on ? Math.max(0, current + delta) : current)}</td>
+                  <td className={`px-3 py-1.5 text-right font-bold ${on && delta ? 'text-accent-ink' : ''}`}>{money(on ? Math.max(0, current + delta) : current)}</td>
                 </tr>
               );
             })}

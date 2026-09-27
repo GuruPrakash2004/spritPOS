@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import Toast from './Toast';
 import { api, errorText, qs, todayIso, type ApiDenomination, type ApiFullDsr } from './api';
-import { field, money, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead } from './ui';
+import { field, money, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, pageHeader } from './ui';
 
 const NOTES = [500, 200, 100, 50, 20, 10];
 
@@ -41,13 +41,13 @@ export default function CashDenomination() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
-      <div className={`${panel} flex flex-wrap items-end justify-between gap-3 px-5 py-3`}>
+      <div className={pageHeader}>
         <div>
-          <h2 className={pageTitle}>Cash Denomination</h2>
+          <h1 className={pageTitle}>Cash Denomination</h1>
           <p className={pageSub}>Count the cash drawer and compare it with the day's cash balance.</p>
         </div>
         <div className="flex items-end gap-2">
-          <input type="date" value={on} onChange={e => setOn(e.target.value)} className={`${field} font-mono`} aria-label="Date" />
+          <input type="date" value={on} onChange={e => setOn(e.target.value)} className={`${field} tabular-nums`} aria-label="Date" />
           <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
         </div>
       </div>
@@ -57,7 +57,7 @@ export default function CashDenomination() {
           <thead className={tableHead}>
             <tr><th className="px-4 py-2">Denomination</th><th className="px-4 py-2 text-right">Count</th><th className="px-4 py-2 text-right">Amount</th></tr>
           </thead>
-          <tbody className={`${tableBody} font-mono`}>
+          <tbody className={`${tableBody} tabular-nums`}>
             {NOTES.map(v => (
               <tr key={v}>
                 <td className="px-4 py-1.5 font-bold text-stone-800 dark:text-stone-100">₹ {v}</td>
@@ -80,16 +80,16 @@ export default function CashDenomination() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className={`${panel} px-4 py-3`}>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Counted</div>
-          <div className="font-mono text-lg font-bold text-stone-900 dark:text-stone-100">₹ {money(total)}</div>
+          <div className="text-xs font-medium text-stone-500 dark:text-stone-400">Counted</div>
+          <div className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-stone-900 dark:text-stone-50">₹ {money(total)}</div>
         </div>
         <div className={`${panel} px-4 py-3`}>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Expected (DSR cash balance)</div>
-          <div className="font-mono text-lg font-bold text-stone-900 dark:text-stone-100">{expected === null ? '—' : `₹ ${money(expected)}`}</div>
+          <div className="text-xs font-medium text-stone-500 dark:text-stone-400">Expected (DSR cash balance)</div>
+          <div className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-stone-900 dark:text-stone-50">{expected === null ? '—' : `₹ ${money(expected)}`}</div>
         </div>
-        <div className={`rounded-xl border border-[#e1c9b6] px-4 py-3 shadow-sm dark:border-[#343b59] ${diff < 0 ? 'bg-red-50 dark:bg-red-950/40' : diff > 0 ? 'bg-amber-50 dark:bg-amber-950/40' : 'bg-emerald-50 dark:bg-emerald-950/40'}`}>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-stone-500">{diff < 0 ? 'Shortage' : diff > 0 ? 'Excess' : 'Balanced'}</div>
-          <div className={`font-mono text-lg font-bold ${diff < 0 ? 'text-red-700 dark:text-red-300' : diff > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>₹ {money(Math.abs(diff))}</div>
+        <div role="status" className={`rounded-xl border px-4 py-3 ${diff < 0 ? 'border-red-500/30 bg-red-500/8' : diff > 0 ? 'border-amber-500/30 bg-amber-500/10' : 'border-emerald-500/30 bg-emerald-500/8'}`}>
+          <div className="text-xs font-medium text-stone-500 dark:text-stone-400">{diff < 0 ? 'Shortage' : diff > 0 ? 'Excess' : 'Balanced'}</div>
+          <div className={`mt-1 text-xl font-semibold tracking-tight tabular-nums ${diff < 0 ? 'text-red-700 dark:text-red-300' : diff > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>₹ {money(Math.abs(diff))}</div>
         </div>
       </div>
     </div>

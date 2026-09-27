@@ -1,26 +1,34 @@
-import type { ReactNode } from 'react';
+import { useEffect, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { iconButton } from './ui';
 
-// Portalled to <body> for the same reason as Toast: .workspace-backdrop is a stacking context below the header.
+// Portalled to <body> so it always sits above the header and sidebar. Esc and a backdrop click close it.
 export default function Modal({ title, onClose, children, footer, wide = false }: {
   title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean;
 }) {
+  const titleId = useId();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return createPortal(
-    <div className="fixed inset-0 z-[900] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[900] flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-sm p-4 transition-all" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         onClick={e => e.stopPropagation()}
-        className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-[#e1c9b6] bg-[#fffaf5] text-stone-800 shadow-2xl dark:border-[#343b59] dark:bg-[#171b2b] dark:text-stone-100 ${wide ? 'max-w-4xl' : 'max-w-lg'}`}
+        className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] text-[#29231F] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100 animate-slideUp ${wide ? 'max-w-4xl' : 'max-w-lg'}`}
       >
-        <div className="flex items-center justify-between border-b border-[#e1c9b6] bg-[#f1e3d8] px-4 py-3 dark:border-[#343b59] dark:bg-[#20253a]">
-          <h3 className="text-sm font-bold">{title}</h3>
-          <button onClick={onClose} className="rounded p-1 text-stone-500 hover:bg-[#e8702a]/10 hover:text-[#b84716] dark:hover:text-[#ffb07e]" aria-label="Close"><X size={16} /></button>
+        <div className="flex items-center justify-between gap-4 border-b border-[#E3D9CD] bg-[#FAF6EF] px-5 py-4 dark:border-[#2A2A2A] dark:bg-[#181818]">
+          <h3 id={titleId} className="text-sm font-bold text-[#29231F] dark:text-stone-50">{title}</h3>
+          <button onClick={onClose} className={`${iconButton} -mr-2 text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100`} aria-label="Close"><X size={16} /></button>
         </div>
-        <div className="flex-1 overflow-auto p-4 text-xs">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-[#e1c9b6] px-4 py-3 dark:border-[#343b59]">{footer}</div>}
+        <div className="flex-1 overflow-auto p-5 text-xs text-stone-700 dark:text-stone-200">{children}</div>
+        {footer && <div className="flex justify-end gap-2 border-t border-[#E3D9CD] bg-[#F5F1E9] px-5 py-3 dark:border-[#2A2A2A] dark:bg-[#101010]">{footer}</div>}
       </div>
     </div>,
     document.body,

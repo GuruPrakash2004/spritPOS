@@ -9,6 +9,17 @@ from itertools import count
 
 COMPANY = {
     "name": "THE LIQUOR HOUSE",
+    "email": "theliquorhouse28@gmail.com",
+    "address": "Byatarayanapura, Bangalore-92, Karnataka",
+    "phone": "080-26793693",
+    "fax": "",
+    "mobile": "9480697887",
+    "website": "https://theliquorhouse.in",
+    "gstin": "29AEGFP9916P1ZD",
+    "pan": "AEGFP9916P",
+    "cin": "U51909KA2020PTC139882",
+    "excise_phone": "9900196276",
+    "ksbcl_code": "41818",
     "licence_type": "CL-2",
     "state": "Karnataka",
     "fy_start": "2026-04-01",
@@ -16,12 +27,12 @@ COMPANY = {
 }
 
 ITEM_GROUPS = {
-    "1.BEER": {"code": "1.BEER", "name": "BEER", "liquor": True, "consider_for_loyalty": True},
-    "2.WHISKY": {"code": "2.WHISKY", "name": "WHISKY", "liquor": True, "consider_for_loyalty": True},
-    "3.RUM": {"code": "3.RUM", "name": "RUM", "liquor": True, "consider_for_loyalty": True},
-    "4.VODKA": {"code": "4.VODKA", "name": "VODKA", "liquor": True, "consider_for_loyalty": True},
-    "5.SCOTCH": {"code": "5.SCOTCH", "name": "SCOTCH", "liquor": True, "consider_for_loyalty": True},
-    "9.SOFT DRINKS": {"code": "9.SOFT DRINKS", "name": "SOFT DRINKS", "liquor": False, "consider_for_loyalty": False},
+    "BEER": {"code": "BEER", "name": "BEER", "liquor": True, "consider_for_loyalty": True},
+    "WHISKY": {"code": "WHISKY", "name": "WHISKY", "liquor": True, "consider_for_loyalty": True},
+    "RUM": {"code": "RUM", "name": "RUM", "liquor": True, "consider_for_loyalty": True},
+    "VODKA": {"code": "VODKA", "name": "VODKA", "liquor": True, "consider_for_loyalty": True},
+    "SCOTCH": {"code": "SCOTCH", "name": "SCOTCH", "liquor": True, "consider_for_loyalty": True},
+    "SOFT DRINKS": {"code": "SOFT DRINKS", "name": "SOFT DRINKS", "liquor": False, "consider_for_loyalty": False},
 }
 
 UOMS = {"BTL": {"code": "BTL", "name": "Bottle"}, "NOS": {"code": "NOS", "name": "Numbers"}}
@@ -48,15 +59,15 @@ def _item(code, name, group, brand, pkg, liqtype, mrp, pur, qoh, bpc=12, gst=0.0
 
 # Liquor carries zero GST (excise is built into MRP); non-liquor items carry GST.
 ITEMS = {i["code"]: i for i in [
-    _item("VIN-750", "VIN GREEN LABEL BARREL SPECIAL CLASIC WHISKY", "2.WHISKY", "ABD", "750ml", "IML", 835.00, 759.29, 56),
-    _item("RC-750", "ROYAL CHALLENGE SELECT PREMIUM WHISKY", "2.WHISKY", "Royal Challenge", "750ml", "IML", 950.00, 860.00, 68),
-    _item("MCD1-180", "MCDOWELLS NO.1 LUXURY PREMIUM WHISKY", "2.WHISKY", "McDowells No.1", "180ml", "IML", 220.00, 198.50, 132, bpc=48),
-    _item("KF-650", "KINGFISHER PREMIUM LAGER BEER", "1.BEER", "Kingfisher", "650ml", "Beer", 180.00, 155.00, 168),
-    _item("KFU-650", "KINGFISHER ULTRA MAX STRONG BEER", "1.BEER", "Kingfisher", "650ml", "Beer", 230.00, 198.00, 64),
-    _item("OM-750", "OLD MONK THE LEGEND XXX RUM", "3.RUM", "Old Monk", "750ml", "IML", 850.00, 770.00, 42),
-    _item("MM-750", "MAGIC MOMENTS REMIX GRAIN VODKA", "4.VODKA", "Magic Moments", "750ml", "IML", 750.00, 678.00, 25),
-    _item("JWB-750", "JOHNNIE WALKER BLACK LABEL 12 YO", "5.SCOTCH", "Johnnie Walker", "750ml", "IML", 3850.00, 3450.00, 24, bpc=6),
-    _item("TU-600", "THUMS UP 600ML", "9.SOFT DRINKS", "Thums Up", "600ml", "Others", 40.00, 32.00, 96, bpc=24, gst=14.0),
+    _item("VIN-750", "VIN GREEN LABEL BARREL SPECIAL CLASIC WHISKY", "WHISKY", "ABD", "750ml", "IML", 835.00, 759.29, 56),
+    _item("RC-750", "ROYAL CHALLENGE SELECT PREMIUM WHISKY", "WHISKY", "Royal Challenge", "750ml", "IML", 950.00, 860.00, 68),
+    _item("MCD1-180", "MCDOWELLS NO.1 LUXURY PREMIUM WHISKY", "WHISKY", "McDowells No.1", "180ml", "IML", 220.00, 198.50, 132, bpc=48),
+    _item("KF-650", "KINGFISHER PREMIUM LAGER BEER", "BEER", "Kingfisher", "650ml", "Beer", 180.00, 155.00, 168),
+    _item("KFU-650", "KINGFISHER ULTRA MAX STRONG BEER", "BEER", "Kingfisher", "650ml", "Beer", 230.00, 198.00, 64),
+    _item("OM-750", "OLD MONK THE LEGEND XXX RUM", "RUM", "Old Monk", "750ml", "IML", 850.00, 770.00, 42),
+    _item("MM-750", "MAGIC MOMENTS REMIX GRAIN VODKA", "VODKA", "Magic Moments", "750ml", "IML", 750.00, 678.00, 25),
+    _item("JWB-750", "JOHNNIE WALKER BLACK LABEL 12 YO", "SCOTCH", "Johnnie Walker", "750ml", "IML", 3850.00, 3450.00, 24, bpc=6),
+    _item("TU-600", "THUMS UP 600ML", "SOFT DRINKS", "Thums Up", "600ml", "Others", 40.00, 32.00, 96, bpc=24, gst=14.0),
 ]}
 
 SUPPLIERS = {
@@ -112,7 +123,7 @@ ROLES = {
         "Stock Ageing", "Profit Margin", "Hourly Sales", "Daily Sales", "Brand-wise Sales", "Day-wise Litres",
         "Stock in Litres", "Stock Level / Reorder", "Reports Dashboard",
     ],
-    "Cashier": ["Dashboard", "Sales Invoice", "Sales Return", "Cash Denomination", "Closing Stock Entry", "Stock Balance Report"],
+    "Cashier": ["Dashboard", "Item Master", "Sales Invoice", "Sales Return", "Cash Denomination", "Closing Stock Entry", "Stock Balance Report"],
 }
 
 # Day-end cash counts, keyed by ISO date.
@@ -161,3 +172,145 @@ def move_stock(item_code: str, qty: float, kind: str, doc_no: str, on: date, rat
     if kind == "purchase" and qty > 0:
         LAST_PURCHASE[item_code] = on.isoformat()
     MOVEMENTS.append({"item": item_code, "qty": qty, "kind": kind, "doc_no": doc_no, "date": on.isoformat(), "rate": rate})
+
+
+def _seed_sales_history():
+    from datetime import timedelta
+    import random
+    rng = random.Random(42)  # Deterministic seed
+    today = date.today()
+
+    # Seed baseline purchase bills and stock movements
+    # Day -6 to Day 0
+    sample_items = [
+        ("RC-750", 950.0, 860.0, 0.75),
+        ("VIN-750", 835.0, 759.29, 0.75),
+        ("KF-650", 180.0, 155.0, 0.65),
+        ("MCD1-180", 220.0, 198.5, 0.18),
+        ("OM-750", 850.0, 770.0, 0.75),
+        ("KFU-650", 230.0, 198.0, 0.65),
+        ("MM-750", 750.0, 678.0, 0.75),
+        ("JWB-750", 3850.0, 3450.0, 0.75),
+        ("TU-600", 40.0, 32.0, 0.60),
+    ]
+    counters = ["counter10", "counter11"]
+    salespersons = ["GURU", "PRADEEP", "RAVI", "ADMIN"]
+
+    # 1. Seed purchase bills
+    for i in range(7):
+        p_date = today - timedelta(days=6 - i)
+        pb_no = f"{FY_PREFIX}/PB-{next(_seq['purchase_bill']):07d}"
+        pb_lines = []
+        pb_tot_qty = 0
+        pb_tot_basic = 0.0
+        for code, mrp, pur_rate, l_per_btl in sample_items[:5]:
+            qty = rng.choice([24, 36, 48, 60])
+            amt = qty * pur_rate
+            litres = round(qty * l_per_btl, 3)
+            move_stock(code, qty, "purchase", pb_no, p_date, pur_rate)
+            pb_lines.append({
+                "item_code": code,
+                "item_name": ITEMS[code]["name"],
+                "cases": qty // 12,
+                "bottles": qty % 12,
+                "qty": qty,
+                "rate": pur_rate,
+                "amount": amt,
+                "litres": litres,
+            })
+            pb_tot_qty += qty
+            pb_tot_basic += amt
+        DOCS["purchase_bill"][pb_no] = {
+            "doc_no": pb_no,
+            "date": p_date.isoformat(),
+            "supplier": "KSBCL-BN",
+            "purchase_type": "Purchase",
+            "lines": pb_lines,
+            "totals": {
+                "qty": pb_tot_qty,
+                "basic": round(pb_tot_basic, 2),
+                "cgst": 0,
+                "sgst": 0,
+                "tcs": 0,
+                "cess": 0,
+                "net": round(pb_tot_basic, 2),
+            },
+        }
+
+    # 2. Seed 7 days sales invoices and sales movements
+    targets = [112000, 145000, 128000, 168000, 154000, 192000, 185000]
+    for day_idx in range(7):
+        target_amt = targets[day_idx]
+        current_date = today - timedelta(days=6 - day_idx)
+        d_str = current_date.isoformat()
+        accum = 0.0
+        bill_idx = 1
+
+        while accum < target_amt:
+            doc_no = f"{FY_PREFIX}/c10-{next(_seq['sales_invoice']):07d}"
+            num_lines = rng.choice([1, 2, 2, 3, 4])
+            lines = []
+            bill_qty = 0
+            bill_litres = 0.0
+            bill_net = 0.0
+
+            chosen = rng.sample(sample_items, min(num_lines, len(sample_items)))
+            for code, mrp, pur_rate, l_per_btl in chosen:
+                qty = rng.choice([1, 1, 2, 2, 3, 4, 6])
+                amt = qty * mrp
+                litres = round(qty * l_per_btl, 3)
+                item_obj = ITEMS.get(code, {})
+                bpc = item_obj.get("bottles_per_case", 12)
+                lines.append({
+                    "item_code": code,
+                    "item_name": item_obj.get("name", code),
+                    "cases": qty // bpc,
+                    "bottles": qty % bpc,
+                    "qty": qty,
+                    "rate": mrp,
+                    "amount": amt,
+                    "litres": litres,
+                })
+                bill_qty += qty
+                bill_litres += litres
+                bill_net += amt
+                move_stock(code, -qty, "sale", doc_no, current_date, mrp)
+
+            bill_net = round(bill_net)
+            accum += bill_net
+
+            pay_type = rng.choice(["CASH", "UPI", "CARD", "CASH", "UPI"])
+            pay = {"cash": 0, "card": 0, "upi": 0, "credit": 0}
+            pay[{"CASH": "cash", "UPI": "upi", "CARD": "card"}[pay_type]] = bill_net
+
+            h = 10 + (bill_idx % 12)
+            m = (bill_idx * 7) % 60
+            s = (bill_idx * 13) % 60
+
+            DOCS["sales_invoice"][doc_no] = {
+                "doc_no": doc_no,
+                "date": d_str,
+                "time": f"{h:02d}:{m:02d}:{s:02d}",
+                "counter": rng.choice(counters),
+                "customer": "CASH",
+                "salesperson": rng.choice(salespersons),
+                "status": "SAVED",
+                "payment_type": pay_type,
+                "lines": lines,
+                "totals": {
+                    "qty": bill_qty,
+                    "litres": round(bill_litres, 3),
+                    "basic": bill_net,
+                    "cgst": 0,
+                    "sgst": 0,
+                    "discount": 0,
+                    "points_redeemed": 0,
+                    "points_earned": 0,
+                    "net": bill_net,
+                },
+                "payment": pay,
+            }
+            bill_idx += 1
+
+
+_seed_sales_history()

@@ -3,15 +3,19 @@ import { Printer, Search, Undo2, XCircle } from 'lucide-react';
 import Modal from './Modal';
 import { api, errorText, qs, type ApiInvoice } from './api';
 import { numberToWords } from './formatters';
-import { dangerButton, field, label, money, primaryButton, secondaryButton, tableBody, tableHead } from './ui';
+import {  dangerButton, field, label, money, primaryButton, secondaryButton, tableBody, tableHead , printButton } from './ui';
+import { useCompanyProfile } from './useCompanyProfile';
+import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
 
 const path = (no: string) => `/transactions/sales-invoice/${no}`;
 
-// Re-Print Bill: fetch a saved bill and show it in a printable layout (legacy fmtSInv).
+// Re-Print Bill: fetch a saved bill and show it in a printable layout with RPT model choices.
 export function ReprintDialog({ initialNo, onClose }: { initialNo: string; onClose: () => void }) {
+  const { company } = useCompanyProfile();
   const [no, setNo] = useState(initialNo);
   const [inv, setInv] = useState<ApiInvoice | null>(null);
   const [error, setError] = useState('');
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
   const load = (billNo: string) => {
     if (!billNo.trim()) return;
@@ -24,14 +28,21 @@ export function ReprintDialog({ initialNo, onClose }: { initialNo: string; onClo
   useEffect(() => { if (initialNo) load(initialNo); }, [initialNo]);
 
   return (
-    <Modal
-      title="Re-Print Bill"
-      onClose={onClose}
-      footer={<>
-        <button onClick={onClose} className={secondaryButton}>Close</button>
-        <button onClick={() => window.print()} disabled={!inv} className={primaryButton}><Printer size={14} />Print</button>
-      </>}
-    >
+    <>
+      <Modal
+        title="Re-Print Bill"
+        onClose={onClose}
+        footer={<>
+          <button onClick={onClose} className={secondaryButton}>Close</button>
+          <button
+            onClick={() => setShowPrintModal(true)}
+            disabled={!inv}
+            className={printButton}
+          >
+            <Printer size={14} />Select Format & Print
+          </button>
+        </>}
+      >
       <div className="mb-3 flex items-end gap-2">
         <div className="flex-1">
           <label htmlFor="rp-no" className={label}>Bill No</label>
@@ -43,8 +54,8 @@ export function ReprintDialog({ initialNo, onClose }: { initialNo: string; onClo
       {inv && (
         <div className="print-area rounded-lg border border-dashed border-stone-400 bg-white p-4 font-mono text-[11px] text-black">
           <div className="text-center">
-            <div className="text-sm font-bold">THE LIQUOR HOUSE</div>
-            <div>Byatarayanapura, Bangalore-92 • CL-2</div>
+            <div className="text-sm font-bold">{company?.name || 'Company profile unavailable'}</div>
+            <div>{company?.address || 'Company address unavailable'} • {company?.licence_type || 'Licence not configured'}</div>
             <div className="mt-1 font-bold">DUPLICATE COPY</div>
           </div>
           <div className="my-2 flex justify-between border-y border-dashed border-stone-400 py-1">
@@ -70,6 +81,15 @@ export function ReprintDialog({ initialNo, onClose }: { initialNo: string; onClo
         </div>
       )}
     </Modal>
+    {showPrintModal && inv && (
+      <PrintFormatSelectorModal
+        category="SALES_INVOICE"
+        data={inv}
+        title={`Print Invoice ${inv.doc_no}`}
+        onClose={() => setShowPrintModal(false)}
+      />
+    )}
+  </>
   );
 }
 
@@ -98,11 +118,11 @@ export function CancelInvoiceDialog({ initialNo, onClose, onDone }: { initialNo:
     >
       <div className="space-y-3">
         <div>
-          <label htmlFor="ci-no" className={`${label} !text-red-600 dark:!text-red-400`}>Bill No</label>
+          <label htmlFor="ci-no" className={label}>Bill No<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
           <input id="ci-no" value={no} onChange={e => setNo(e.target.value)} className={`${field} w-full font-mono`} />
         </div>
         <div>
-          <label htmlFor="ci-rmk" className={`${label} !text-red-600 dark:!text-red-400`}>Reason for cancelling</label>
+          <label htmlFor="ci-rmk" className={label}>Reason for cancelling<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
           <textarea id="ci-rmk" rows={3} value={remarks} onChange={e => setRemarks(e.target.value)} className={`${field} w-full`} placeholder="e.g. customer returned the bottles before leaving" />
         </div>
         {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
@@ -138,8 +158,8 @@ export function HeldBillsDialog({ onClose, onRecall }: { onClose: () => void; on
               <td className="px-3 py-2 font-mono">{b.doc_no}</td>
               <td className="px-3 py-2 font-mono">{b.time ?? ''}</td>
               <td className="px-3 py-2">{b.customer}</td>
-              <td className="px-3 py-2 text-right font-mono">{b.lines.length}</td>
-              <td className="px-3 py-2 text-right font-mono">₹ {money(b.totals.net)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{b.lines.length}</td>
+              <td className="px-3 py-2 text-right tabular-nums">₹ {money(b.totals.net)}</td>
               <td className="px-3 py-2 text-right"><button onClick={() => recall(b)} className={`${primaryButton} ml-auto py-1`}><Undo2 size={12} />Recall</button></td>
             </tr>
           ))}

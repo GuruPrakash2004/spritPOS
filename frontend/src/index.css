@@ -3,13 +3,18 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Midnight Sunset (models/Version5.html).
- * The stone and slate scales resolve through --ms-* variables so every existing
- * `text-stone-*` / `bg-slate-*` class picks up the theme: warm clay tints in light
- * mode, midnight navy tints under `.dark`. `inline` makes utilities read the
- * variable where they are used, so the `.dark` override below takes effect.
+ * DUAL LUXURY THEME SYSTEM
+ * ─────────────────────────
+ * Light → Heritage Luxury Light: warm parchment (#F5F1E9), burgundy brand (#64283A), gold minimal accent (#B08A45)
+ * Dark  → Dark Luxury Enterprise: true black (#0A0A0A), charcoal surfaces, rich gold accent (#D4A847)
+ *
+ * The stone/slate scales resolve through --ms-* variables. `inline` makes
+ * utilities read the variable where they are used, so `.dark` overrides work.
  */
 @theme inline {
+	--font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+
 	--color-stone-50: var(--ms-50);
 	--color-stone-100: var(--ms-100);
 	--color-stone-200: var(--ms-200);
@@ -33,136 +38,446 @@
 	--color-slate-800: var(--ms-800);
 	--color-slate-900: var(--ms-900);
 	--color-slate-950: var(--ms-950);
+
+	/* Semantic tokens (4-layer system):
+	   canvas = app background, surface = panels/cards/inputs, subtle = table heads/hover,
+	   muted = chips/tracks, line = borders. Switch automatically under .dark. */
+	--color-canvas: var(--ds-canvas);
+	--color-surface: var(--ds-surface);
+	--color-subtle: var(--ds-subtle);
+	--color-muted: var(--ds-muted);
+	--color-line: var(--ds-line);
+	--color-line-soft: var(--ds-line-soft);
+	--color-line-strong: var(--ds-line-strong);
+	--color-accent: var(--ds-accent);
+	--color-accent-strong: var(--ds-accent-strong);
+	--color-accent-ink: var(--ds-accent-ink);
+	--color-accent-soft: var(--ds-accent-soft);
+	--color-overlay: var(--ds-overlay);
+
+	--shadow-card: 0 1px 2px var(--ds-shadow), 0 1px 3px var(--ds-shadow);
+	--shadow-pop: 0 12px 32px -8px var(--ds-shadow-strong), 0 2px 6px var(--ds-shadow);
 }
 
+/* ═══════════════════════════════════════════════════
+   LIGHT MODE — HERITAGE LUXURY
+   Warm parchment · Burgundy brand · Gold minimal accent
+   ═══════════════════════════════════════════════════ */
 :root {
 	color-scheme: light;
-	--ms-50: #fffaf5;
-	--ms-100: #f6efe8;
-	--ms-200: #f1e3d8;
-	--ms-300: #e1c9b6;
-	--ms-400: #b39585;
-	--ms-500: #896f65;
-	--ms-600: #6e5750;
-	--ms-700: #56423d;
-	--ms-800: #43302c;
-	--ms-900: #342421;
-	--ms-950: #241816;
-	--ms-shadow: 0 14px 42px rgba(112, 58, 28, 0.12);
-	--ms-shadow-hover: 0 18px 40px rgba(112, 58, 28, 0.18);
+
+	/* Heritage warm neutral scale */
+	--ms-50:  #FFFCF7;
+	--ms-100: #FAF6EF;
+	--ms-200: #F0EBE3;
+	--ms-300: #E3D9CD;
+	--ms-400: #958B81;
+	--ms-500: #70675F;
+	--ms-600: #5A524D;
+	--ms-700: #453E3A;
+	--ms-800: #29231F;
+	--ms-900: #1F1B19;
+	--ms-950: #141110;
+
+	/* Surfaces — warm parchment layers */
+	--ds-canvas:       #F5F1E9;
+	--ds-surface:      #FFFCF7;
+	--ds-subtle:       #F3EEE6;
+	--ds-muted:        #EEE9E1;
+	--ds-line:         #E3D9CD;
+	--ds-line-soft:    #EEE7DD;
+	--ds-line-strong:  #D4C8BA;
+
+	/* Brand — Burgundy/Wine primary */
+	--ds-accent:       #64283A;
+	--ds-accent-strong:#542030;
+	--ds-accent-ink:   #64283A;
+	--ds-accent-soft:  #F0E2E6;
+
+	--ds-overlay:      rgb(41 35 31 / 0.45);
+	--ds-shadow:       rgb(72 53 38 / 0.06);
+	--ds-shadow-strong:rgb(72 53 38 / 0.14);
+
+	/* Luxury gold — used sparingly for labels, icons, dividers */
+	--gold:       #B08A45;
+	--gold-light: #D3BB89;
+	--gold-dark:  #8E6C32;
+	--gold-glow:  rgba(176, 138, 69, 0.10);
+
+	/* Heritage status colours (muted, warm) */
+	--status-success: #55745A;
+	--status-warning: #A87532;
+	--status-danger:  #9A4B45;
+	--status-info:    #687B86;
 }
 
+/* ═══════════════════════════════════════════════════
+   DARK MODE — BLACK + GOLD LUXURY
+   True black canvas · Rich gold accent
+   ═══════════════════════════════════════════════════ */
 .dark {
 	color-scheme: dark;
-	--ms-50: #f7f3ff;
-	--ms-100: #ebe8f7;
-	--ms-200: #d6d8ea;
-	--ms-300: #bfc2da;
-	--ms-400: #a6aac4;
-	--ms-500: #7f84a3;
-	--ms-600: #5b6185;
-	--ms-700: #343b59;
-	--ms-800: #20253a;
-	--ms-900: #171b2b;
-	--ms-950: #0e101b;
-	--ms-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
-	--ms-shadow-hover: 0 22px 52px rgba(0, 0, 0, 0.45);
+
+	/* True-black neutral scale */
+	--ms-50:  #F5F0E8;
+	--ms-100: #E8DFD0;
+	--ms-200: #C4B89E;
+	--ms-300: #9E9580;
+	--ms-400: #7A7264;
+	--ms-500: #5C554A;
+	--ms-600: #3D3832;
+	--ms-700: #2A2520;
+	--ms-800: #1A1714;
+	--ms-900: #111111;
+	--ms-950: #0A0A0A;
+
+	/* Layered dark surfaces */
+	--ds-canvas:       #0A0A0A;
+	--ds-surface:      #141414;
+	--ds-subtle:       #1C1C1C;
+	--ds-muted:        #262626;
+	--ds-line:         #2A2A2A;
+	--ds-line-soft:    #1E1E1E;
+	--ds-line-strong:  #3A3A3A;
+
+	/* Rich Gold accent */
+	--ds-accent:       #D4A847;
+	--ds-accent-strong:#C8952E;
+	--ds-accent-ink:   #E8C36A;
+	--ds-accent-soft:  rgba(212, 168, 71, 0.12);
+
+	--ds-overlay:      rgb(0 0 0 / 0.75);
+	--ds-shadow:       rgb(0 0 0 / 0.45);
+	--ds-shadow-strong:rgb(0 0 0 / 0.70);
+
+	--gold:       #D4A847;
+	--gold-light: #E8C36A;
+	--gold-dark:  #C8952E;
+	--gold-glow:  rgba(212, 168, 71, 0.15);
 }
 
+/* ═══════════════════════════════════════════════════
+   BASE STYLES
+   ═══════════════════════════════════════════════════ */
 body {
 	margin: 0;
 	min-width: 320px;
-	background: #f6efe8;
+	background: var(--ds-canvas);
+	font-feature-settings: "cv11", "ss01";
+	-webkit-font-smoothing: antialiased;
 }
 
-/* Sunset glow: ember bottom-left, rose top-right, plus a cursor-following aura. */
-.workspace-backdrop {
-	position: relative;
-	isolation: isolate;
+/* Subtle warm radial tints — premium parchment feel */
+:root:not(.dark) body {
 	background-image:
-		radial-gradient(ellipse at 15% 100%, rgba(232, 112, 42, 0.22), transparent 34%),
-		radial-gradient(ellipse at 90% 0%, rgba(231, 91, 111, 0.16), transparent 32%);
-	background-attachment: fixed;
+		radial-gradient(ellipse at 15% 85%, rgba(176, 138, 69, 0.025), transparent 55%),
+		radial-gradient(ellipse at 85% 10%, rgba(100, 40, 58, 0.015), transparent 50%);
 }
 
-.workspace-backdrop::before {
-	content: '';
-	position: fixed;
-	inset: 0;
-	z-index: 0;
-	pointer-events: none;
-	background: radial-gradient(circle 240px at var(--cursor-x, 50%) var(--cursor-y, 50%), rgba(255, 139, 74, 0.22), transparent 70%);
-	animation: sunsetGlow 6s ease-in-out infinite alternate;
-	transition: background 180ms ease-out;
-}
+@layer base {
+	:where(.dark) :where(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+		color: var(--ms-50);
+		background-color: var(--ds-subtle);
+		border-color: var(--ds-line-strong);
+	}
+	:where(.dark) :where(input, textarea)::placeholder {
+		color: var(--ms-500);
+	}
 
-.workspace-backdrop > * {
-	position: relative;
-	z-index: 1;
-}
-
-.dark .workspace-backdrop {
-	background-image:
-		radial-gradient(ellipse at 15% 100%, rgba(232, 112, 42, 0.18), transparent 34%),
-		radial-gradient(ellipse at 90% 0%, rgba(231, 91, 111, 0.14), transparent 32%);
-}
-
-.dark .workspace-backdrop::before {
-	background: radial-gradient(circle 240px at var(--cursor-x, 50%) var(--cursor-y, 50%), rgba(255, 139, 74, 0.18), transparent 72%);
-	mix-blend-mode: screen;
-}
-
-@keyframes sunsetGlow {
-	to {
-		opacity: 0.5;
-		transform: scale(1.1);
+	/* Light mode inputs — Heritage spec */
+	:where(:root:not(.dark)) :where(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+		background-color: #FFFCF7;
+		border-color: #DCD1C5;
+		color: #29231F;
+	}
+	:where(:root:not(.dark)) :where(input, textarea)::placeholder {
+		color: #A69D94;
+	}
+	:where(:root:not(.dark)) :where(input, textarea, select):hover {
+		border-color: #CBBEAF;
+	}
+	:where(:root:not(.dark)) :where(input, textarea, select):focus {
+		border-color: #64283A;
+		box-shadow: 0 0 0 3px rgba(100, 40, 58, 0.10);
 	}
 }
 
-/* Version 5 surfaces: 22px radius, warm drop shadow and a lift on hover for every content card. */
-.workspace-backdrop div.rounded-2xl.shadow-sm {
-	border-radius: 22px;
-	box-shadow: var(--ms-shadow);
-	transition: box-shadow 0.28s ease, transform 0.28s ease;
+input[type='checkbox'], input[type='radio'] { accent-color: var(--ds-accent); }
+
+/* ────────────────────────────────────────────────
+   GLASSMORPHISM
+   ──────────────────────────────────────────────── */
+
+/* Dark mode glass — black tinted */
+.glass-card {
+	background: rgba(20, 20, 20, 0.55);
+	backdrop-filter: blur(20px) saturate(1.4);
+	-webkit-backdrop-filter: blur(20px) saturate(1.4);
+	border: 1px solid rgba(212, 168, 71, 0.12);
 }
 
-.workspace-backdrop div.rounded-2xl.shadow-sm:hover {
-	box-shadow: var(--ms-shadow-hover);
-	transform: translateY(-4px);
+/* Light mode glass — warm ivory */
+:root:not(.dark) .glass-card {
+	background: rgba(255, 252, 247, 0.72);
+	backdrop-filter: blur(16px) saturate(1.2);
+	-webkit-backdrop-filter: blur(16px) saturate(1.2);
+	border: 1px solid rgba(255, 255, 255, 0.65);
 }
 
-.dark input:not([type='checkbox']):not([type='radio']),
-.dark textarea,
-.dark select {
-	color: #f7f3ff;
-	background-color: #20253a;
-	border-color: #343b59;
+/* Login-specific glass — higher opacity */
+.glass-card-login {
+	background: rgba(255, 252, 247, 0.88);
+	backdrop-filter: blur(18px) saturate(1.3);
+	-webkit-backdrop-filter: blur(18px) saturate(1.3);
+	border: 1px solid rgba(255, 255, 255, 0.70);
+	box-shadow: 0 24px 60px rgba(55, 38, 25, 0.14);
+}
+.dark .glass-card-login {
+	background: rgba(20, 20, 20, 0.55);
+	border: 1px solid rgba(212, 168, 71, 0.12);
+	box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
 }
 
-.dark input::placeholder,
-.dark textarea::placeholder {
-	color: #a6aac4;
+/* ────────────────────────────────────────────────
+   GOLD GRADIENT TEXT
+   ──────────────────────────────────────────────── */
+.text-gold-gradient {
+	background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 50%, var(--gold) 100%);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+}
+
+/* ────────────────────────────────────────────────
+   GOLD SHIMMER BUTTON
+   ──────────────────────────────────────────────── */
+.btn-gold-shimmer {
+	position: relative;
+	overflow: hidden;
+	background: linear-gradient(135deg, #D4A847, #C8952E);
+}
+.btn-gold-shimmer::after {
+	content: '';
+	position: absolute;
+	top: 0; left: -100%; width: 60%; height: 100%;
+	background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+	animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Burgundy button shimmer for light mode */
+.btn-burgundy-shimmer {
+	position: relative;
+	overflow: hidden;
+}
+.btn-burgundy-shimmer::after {
+	content: '';
+	position: absolute;
+	top: 0; left: -100%; width: 60%; height: 100%;
+	background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+	animation: shimmer 4s ease-in-out infinite;
+}
+
+/* ────────────────────────────────────────────────
+   GLOW EFFECTS
+   ──────────────────────────────────────────────── */
+.glow-gold {
+	box-shadow: 0 8px 30px rgba(72, 53, 38, 0.06);
+}
+.dark .glow-gold {
+	box-shadow: 0 0 30px rgba(212, 168, 71, 0.12),
+	            0 0 80px rgba(212, 168, 71, 0.06);
+}
+
+/* ────────────────────────────────────────────────
+   3D CARD TILT ON HOVER
+   ──────────────────────────────────────────────── */
+.card-3d {
+	transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+	            box-shadow 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	transform-style: preserve-3d;
+	will-change: transform;
+}
+.card-3d:hover {
+	transform: perspective(800px) rotateX(2deg) rotateY(-3deg) translateY(-4px);
+}
+:root:not(.dark) .card-3d:hover {
+	box-shadow: 0 12px 35px rgba(72, 53, 38, 0.10);
+}
+.dark .card-3d:hover {
+	box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4),
+	            0 0 30px rgba(212, 168, 71, 0.08);
+}
+
+/* ────────────────────────────────────────────────
+   KEN BURNS — slow zoom for hero images
+   ──────────────────────────────────────────────── */
+.ken-burns {
+	animation: kenBurns 25s ease-in-out infinite alternate;
+	will-change: transform;
+}
+
+/* ────────────────────────────────────────────────
+   LIQUID DROP ANIMATION
+   ──────────────────────────────────────────────── */
+.liquid-drop {
+	position: absolute;
+	width: 3px;
+	border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+	background: linear-gradient(180deg, rgba(var(--drop-r, 176), var(--drop-g, 138), var(--drop-b, 69), 0.7), rgba(var(--drop-r, 176), var(--drop-g, 138), var(--drop-b, 69), 0.3));
+	filter: blur(0.5px);
+	animation: liquidDrop var(--drop-duration, 4s) var(--drop-delay, 0s) ease-in infinite;
+	opacity: 0;
+}
+:root:not(.dark) .liquid-drop {
+	background: linear-gradient(180deg, rgba(100, 40, 58, 0.5), rgba(176, 138, 69, 0.3));
+}
+.dark .liquid-drop {
+	background: linear-gradient(180deg, rgba(212, 168, 71, 0.7), rgba(200, 149, 46, 0.3));
+}
+.liquid-drop::after {
+	content: '';
+	position: absolute;
+	bottom: -4px; left: 50%;
+	width: 6px; height: 3px;
+	transform: translateX(-50%);
+	border-radius: 50%;
+	background: rgba(var(--drop-r, 176), var(--drop-g, 138), var(--drop-b, 69), 0.3);
+	filter: blur(2px);
+}
+
+/* ────────────────────────────────────────────────
+   ENTRANCE ANIMATIONS
+   ──────────────────────────────────────────────── */
+.animate-fadeInUp {
+	animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-fadeInUp-d1 { animation-delay: 0.1s; }
+.animate-fadeInUp-d2 { animation-delay: 0.2s; }
+.animate-fadeInUp-d3 { animation-delay: 0.3s; }
+.animate-fadeInUp-d4 { animation-delay: 0.4s; }
+.animate-fadeInUp-d5 { animation-delay: 0.5s; }
+
+/* Float / bob */
+.animate-float {
+	animation: float 6s ease-in-out infinite;
+}
+
+/* Pulse gold glow */
+.animate-pulse-gold {
+	animation: pulseGold 3s ease-in-out infinite;
+}
+:root:not(.dark) .animate-pulse-gold {
+	animation: pulseBurgundy 3s ease-in-out infinite;
+}
+
+/* Staggered card entrance */
+.stagger-enter > * {
+	opacity: 0;
+	animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.stagger-enter > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-enter > *:nth-child(2) { animation-delay: 0.10s; }
+.stagger-enter > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-enter > *:nth-child(4) { animation-delay: 0.20s; }
+.stagger-enter > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-enter > *:nth-child(6) { animation-delay: 0.30s; }
+
+/* Image card hover zoom */
+.img-zoom { overflow: hidden; }
+.img-zoom img {
+	transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.img-zoom:hover img {
+	transform: scale(1.035);
+}
+
+/* Luxury divider with gold dot */
+.luxury-divider {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.luxury-divider::before,
+.luxury-divider::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, var(--gold), transparent);
+	opacity: 0.3;
+}
+
+/* ────────────────────────────────────────────────
+   KEYFRAME ANIMATIONS
+   ──────────────────────────────────────────────── */
+@keyframes kenBurns {
+	0%   { transform: scale(1) translate(0, 0); }
+	100% { transform: scale(1.12) translate(-1.5%, -1%); }
+}
+
+@keyframes shimmer {
+	0%   { left: -100%; }
+	50%  { left: 150%; }
+	100% { left: 150%; }
+}
+
+@keyframes liquidDrop {
+	0%   { transform: translateY(-10px) scaleY(0.5); opacity: 0; height: 8px; }
+	5%   { opacity: 0.8; height: 14px; }
+	15%  { transform: translateY(8vh)  scaleY(1.2); opacity: 0.7; height: 18px; }
+	50%  { transform: translateY(45vh) scaleY(1.4); opacity: 0.5; height: 22px; }
+	85%  { transform: translateY(80vh) scaleY(1.6); opacity: 0.3; height: 16px; }
+	95%  { opacity: 0.1; }
+	100% { transform: translateY(100vh) scaleY(0.3); opacity: 0; height: 6px; }
+}
+
+@keyframes fadeInUp {
+	from { opacity: 0; transform: translateY(24px); }
+	to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float {
+	0%, 100% { transform: translateY(0px); }
+	50%      { transform: translateY(-12px); }
+}
+
+@keyframes pulseGold {
+	0%, 100% { box-shadow: 0 0 20px rgba(212, 168, 71, 0.08), 0 4px 16px rgba(0,0,0,0.2); }
+	50%      { box-shadow: 0 0 40px rgba(212, 168, 71, 0.20), 0 8px 24px rgba(0,0,0,0.3); }
+}
+
+@keyframes pulseBurgundy {
+	0%, 100% { box-shadow: 0 4px 12px rgba(100, 40, 58, 0.12); }
+	50%      { box-shadow: 0 8px 24px rgba(100, 40, 58, 0.22); }
+}
+
+@keyframes waveFlow {
+	0%   { transform: translateX(0) translateZ(0); }
+	100% { transform: translateX(-50%) translateZ(0); }
+}
+
+/* ────────────────────────────────────────────────
+   PRESERVED UTILITY RULES
+   ──────────────────────────────────────────────── */
+table input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
+table input[type='number']::-webkit-inner-spin-button,
+table input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+table, .tabular-nums { font-variant-numeric: tabular-nums; }
+
+:focus-visible {
+	outline: 2px solid var(--ds-accent);
+	outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.workspace-backdrop::before {
-		transition: none;
-		animation: none;
-	}
-
-	.workspace-backdrop div.rounded-2xl.shadow-sm:hover {
-		transform: none;
-	}
+	*, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
-/* A zero page margin stops the browser printing its own date/title/URL header and footer;
-   the body padding puts the margin back. */
 @media print {
   @page { margin: 0; }
   body { padding: 10mm; }
 }
 
-/* Re-Print Bill: when a .print-area is open, print only that bill instead of the whole screen. */
 @media print {
   body:has(.print-area) * { visibility: hidden; }
   body:has(.print-area) .print-area,
@@ -170,8 +485,6 @@ body {
   body:has(.print-area) .print-area { position: absolute; inset: 0 auto auto 0; width: 80mm; border: 0; }
 }
 
-/* iOS Safari gives date inputs a fixed intrinsic width that ignores w-full, so they spill out of
-   table cells and filter rows. Let them shrink like any other input. */
 input[type='date'] {
   -webkit-appearance: none;
   appearance: none;
@@ -179,3 +492,342 @@ input[type='date'] {
   max-width: 100%;
 }
 input[type='date']::-webkit-date-and-time-value { text-align: left; }
+
+/* ────────────────────────────────────────────────
+   LIQUID WATERFALL & ROAMING BOTTLE LIQUID
+   ──────────────────────────────────────────────── */
+
+@keyframes waterfallStreamFlow {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(400%); }
+}
+
+@keyframes waterfallGlisten {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.95; }
+}
+
+@keyframes liquidDropletFall {
+  0% {
+    transform: translateY(-10px) scale(0.7, 0.7);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+    transform: translateY(5vh) scale(0.8, 1.3);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translateY(45vh) scale(0.9, 1.7);
+  }
+  80% {
+    opacity: 0.9;
+    transform: translateY(72vh) scale(1.0, 2.0);
+  }
+  95% {
+    transform: translateY(82vh) scale(1.4, 0.6);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(84vh) scale(2.2, 0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes splashRipple {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes roamingLiquidSlosh1 {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-25%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes roamingLiquidSlosh2 {
+  0% {
+    transform: translateX(-50%);
+  }
+  50% {
+    transform: translateX(-25%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes roamingLiquidSlosh3 {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-35%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes bubbleRise {
+  0% {
+    transform: translateY(60px) scale(0.4);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.85;
+  }
+  80% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-50px) scale(1.1);
+    opacity: 0;
+  }
+}
+
+.bottle-container-glass {
+  box-shadow: inset 3px 0 16px rgba(255, 255, 255, 0.12),
+              inset -3px 0 16px rgba(255, 255, 255, 0.08);
+}
+
+/* ────────────────────────────────────────────────
+   REALISTIC LIQUOR DROPLET & SPLASH EFFECT
+   ──────────────────────────────────────────────── */
+
+@keyframes dropletFallAccelerate {
+  0% {
+    transform: translateY(-20px) scale(0.65, 0.85);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(6vh) scale(0.8, 1.2);
+  }
+  45% {
+    opacity: 0.95;
+    transform: translateY(35vh) scale(0.9, 1.6);
+  }
+  75% {
+    opacity: 0.95;
+    transform: translateY(65vh) scale(0.95, 1.9);
+  }
+  92% {
+    transform: translateY(78vh) scale(1.1, 1.4);
+    opacity: 0.95;
+  }
+  97% {
+    transform: translateY(82vh) scale(1.6, 0.5);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(83vh) scale(2.2, 0.1);
+    opacity: 0;
+  }
+}
+
+/* Concentric expanding ripples upon droplet impact */
+@keyframes dropletImpactRipple {
+  0% {
+    transform: scale(0.15);
+    opacity: 0.95;
+    border-width: 2px;
+  }
+  40% {
+    opacity: 0.7;
+    border-width: 1.5px;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+    border-width: 0.5px;
+  }
+}
+
+/* Secondary droplet bead splashes erupting upward */
+@keyframes splashBeadLeft {
+  0% {
+    transform: translate(0, 0) scale(0);
+    opacity: 0;
+  }
+  30% {
+    transform: translate(-14px, -18px) scale(1);
+    opacity: 0.9;
+  }
+  70% {
+    transform: translate(-22px, -8px) scale(0.8);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(-26px, 12px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes splashBeadRight {
+  0% {
+    transform: translate(0, 0) scale(0);
+    opacity: 0;
+  }
+  30% {
+    transform: translate(14px, -20px) scale(1);
+    opacity: 0.9;
+  }
+  70% {
+    transform: translate(22px, -10px) scale(0.8);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(26px, 10px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes splashBeadCenter {
+  0% {
+    transform: translate(0, 0) scale(0);
+    opacity: 0;
+  }
+  35% {
+    transform: translate(0, -25px) scale(1.1);
+    opacity: 0.95;
+  }
+  75% {
+    transform: translate(0, -12px) scale(0.9);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(0, 8px) scale(0.2);
+    opacity: 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   ANIMATIONS & FORM VALIDATION UTILITIES
+   ═══════════════════════════════════════════════════ */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-shake {
+  animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ═══════════════════════════════════════════════════
+   MODERN WEB & LEGACY RPT PRINT ENGINE
+   ═══════════════════════════════════════════════════ */
+@media print {
+  /* Hide the rest of the application interface during active print */
+  #root,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  #vlqms-print-mount {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .print-copy-wrapper {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .print-copy-wrapper:last-child {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* Reset all background colors and shadows */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Thermal 80mm Roll (3-Inch) Configuration */
+  body.print-mode-thermal {
+    width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  @page {
+    margin: 0;
+  }
+}
+
+@page print-thermal {
+  size: 80mm auto;
+  margin: 0;
+}
+
+@page print-a4-portrait {
+  size: A4 portrait;
+  margin: 8mm;
+}
+
+@page print-a4-landscape {
+  size: A4 landscape;
+  margin: 6mm;
+}
+
+@page print-a5-landscape {
+  size: A5 landscape;
+  margin: 6mm;
+}
+
+body.print-mode-thermal {
+  page: print-thermal;
+}
+
+body.print-mode-a4-portrait {
+  page: print-a4-portrait;
+}
+
+body.print-mode-a4-landscape {
+  page: print-a4-landscape;
+}
+
+body.print-mode-a5 {
+  page: print-a5-landscape;
+}
+

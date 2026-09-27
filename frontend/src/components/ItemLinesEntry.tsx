@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { PlusCircle, Save, Trash2, XCircle } from 'lucide-react';
+import { PlusCircle, Save, Trash2, XCircle, Printer } from 'lucide-react';
 import Toast from './Toast';
-import { api, errorText, type ApiDoc, type ApiItemFull } from './api';
-import { field, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from './ui';
+import { api, errorText, type ApiDoc, type ApiItemFull, type ApiInvoice } from './api';
+import { field, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader, printButton } from './ui';
+import PrintFormatSelectorModal from './print/PrintFormatSelectorModal';
+import { type DocumentCategory } from './print/rptRegistry';
 
 export type EntryLine = { item_code: string; cases: number; bottles: number; rate: number };
 
@@ -22,6 +24,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   const [items, setItems] = useState<ApiItemFull[]>([]);
   const [lines, setLines] = useState<EntryLine[]>([blankLine()]);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [printDoc, setPrintDoc] = useState<ApiInvoice | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -46,12 +49,64 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
     return next;
   }));
 
-  const save = () => {
+  const category: DocumentCategory = title.includes('Indent')
+    ? 'PURCHASE_INDENT'
+    : title.includes('Return')
+    ? 'SALES_RETURN'
+    : title.includes('Deduction')
+    ? 'STOCK_DEDUCTION'
+    : 'PURCHASE_BILL';
+
+  const makeDoc = (docNo: string): ApiInvoice => ({
+    doc_no: docNo,
+    date: new Date().toISOString().slice(0, 10),
+    time: new Date().toLocaleTimeString('en-IN'),
+    counter: 'Main Store',
+    customer: title,
+    salesperson: 'Store Manager',
+    status: 'SAVED',
+    lines: filled.map(l => {
+      const it = byCode.get(l.item_code);
+      const q = qty(l);
+      return {
+        item_code: l.item_code,
+        item_name: it?.name || l.item_code,
+        cases: l.cases,
+        bottles: l.bottles,
+        qty: q,
+        rate: l.rate,
+        amount: q * l.rate,
+        litres: q * 0.75,
+      };
+    }),
+    totals: {
+      qty: filled.reduce((acc, l) => acc + qty(l), 0),
+      litres: 0,
+      basic: total,
+      cgst: 0,
+      sgst: 0,
+      discount: 0,
+      points_redeemed: 0,
+      points_earned: 0,
+      net: total,
+    },
+    payment: { cash: total, card: 0, upi: 0, credit: 0 },
+  });
+
+  const previewPrint = () => {
+    if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one item to preview print.' });
+    setPrintDoc(makeDoc('DRAFT-01'));
+  };
+
+  const save = (andPrint = false) => {
     if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one item.' });
     if (filled.some(l => qty(l) <= 0)) return setToast({ kind: 'error', text: 'Every item needs cases or bottles.' });
     api<ApiDoc>(endpoint, { method: 'POST', body: buildBody(filled) })
       .then(doc => {
         setToast({ kind: 'ok', text: `${title} ${doc.doc_no} saved — ${doc.totals.qty} bottles.` });
+        if (andPrint) {
+          setPrintDoc(makeDoc(doc.doc_no));
+        }
         setLines([blankLine()]);
       })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
@@ -60,13 +115,15 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
-      <div className={`${panel} flex flex-wrap items-center justify-between gap-3 px-5 py-3`}>
+      <div className={pageHeader}>
         <div>
-          <h2 className={pageTitle}>{title}</h2>
+          <h1 className={pageTitle}>{title}</h1>
           <p className={pageSub}>{subtitle}</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => save(true)} className={printButton}><Printer size={14} />Save & Print</button>
+          <button onClick={() => save(false)} className={primaryButton}><Save size={14} />Save</button>
+          <button onClick={previewPrint} disabled={!filled.length} className={secondaryButton}><Printer size={14} />Print Preview</button>
           <button onClick={() => setLines([blankLine()])} className={secondaryButton}><XCircle size={14} />Clear</button>
         </div>
       </div>
@@ -83,7 +140,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
               <th className="px-3 py-2 text-right">{rateLabel}</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2" />
             </tr>
           </thead>
-          <tbody className={`${tableBody} font-mono`}>
+          <tbody className={`${tableBody} tabular-nums`}>
             {lines.map((l, i) => {
               const item = byCode.get(l.item_code);
               return (
@@ -110,11 +167,20 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
           </tbody>
         </table>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#e1c9b6] px-3 py-2 dark:border-[#343b59]">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2">
           <button onClick={() => setLines([...lines, blankLine()])} className={secondaryButton}><PlusCircle size={14} />Add Row</button>
-          <span className="text-sm font-bold text-[#b84716] dark:text-[#ffb07e]">{filled.length} items • ₹ {money(total)}</span>
+          <span className="text-sm font-bold text-accent-ink">{filled.length} items • ₹ {money(total)}</span>
         </div>
       </div>
+
+      {printDoc && (
+        <PrintFormatSelectorModal
+          category={category}
+          data={printDoc}
+          title={`Print ${title} (${printDoc.doc_no})`}
+          onClose={() => setPrintDoc(null)}
+        />
+      )}
     </div>
   );
 }

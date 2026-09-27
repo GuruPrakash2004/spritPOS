@@ -14,16 +14,16 @@ export function ItemLookupModal({ filter, onFilter, onPick, onClose }: {
     <Modal title="Add Item" onClose={onClose} wide>
       <input autoFocus value={filter} onChange={e => onFilter(e.target.value)} placeholder="Search code, brand or name" className={`${field} mb-3 w-full`} />
       <table className="w-full text-xs">
-        <thead className="bg-[#f1e3d8] text-stone-600 dark:bg-[#20253a] dark:text-stone-300">
+        <thead className="bg-subtle text-stone-600 dark:text-stone-300">
           <tr><th className={headCell}>Code</th><th className={headCell}>Item</th><th className={`${headCell} text-right`}>QOH</th><th className={`${headCell} text-right`}>Purchase Rate</th></tr>
         </thead>
-        <tbody className="divide-y divide-[#f1e3d8] dark:divide-[#343b59]">
+        <tbody className="divide-y divide-line-soft">
           {lookupItems.map(item => (
-            <tr key={item.ksbcl} onClick={() => onPick(item.stock)} className="cursor-pointer hover:bg-[#e8702a]/10">
+            <tr key={item.ksbcl} onClick={() => onPick(item.stock)} className="cursor-pointer hover:bg-accent/10">
               <td className="px-2 py-2 font-mono">{item.code}</td>
               <td className="px-2 py-2">{item.name} <span className="text-stone-400">{item.pkg}</span></td>
-              <td className="px-2 py-2 text-right font-mono">{item.clQty}</td>
-              <td className="px-2 py-2 text-right font-mono">{money(item.purchaseRate)}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{item.clQty}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{money(item.purchaseRate)}</td>
             </tr>
           ))}
         </tbody>
@@ -38,18 +38,18 @@ export function CopyFromModal({ indents, onCopy, onClose }: {
   return (
     <Modal title="Copy From Purchase Indent" onClose={onClose} wide>
       <table className="w-full text-xs">
-        <thead className="bg-[#f1e3d8] text-stone-600 dark:bg-[#20253a] dark:text-stone-300">
+        <thead className="bg-subtle text-stone-600 dark:text-stone-300">
           <tr><th className={headCell}>Indent No</th><th className={headCell}>Date</th><th className={headCell}>Supplier</th><th className={`${headCell} text-right`}>Items</th><th className={`${headCell} text-right`}>Qty</th><th className={headCell} /></tr>
         </thead>
-        <tbody className="divide-y divide-[#f1e3d8] dark:divide-[#343b59]">
+        <tbody className="divide-y divide-line-soft">
           {indents?.map(ind => (
             <tr key={ind.doc_no}>
               <td className="px-2 py-2 font-mono">{ind.doc_no}</td>
               <td className="px-2 py-2 font-mono">{ind.date}</td>
               <td className="px-2 py-2">{ind.supplier}</td>
-              <td className="px-2 py-2 text-right font-mono">{ind.lines.length}</td>
-              <td className="px-2 py-2 text-right font-mono">{ind.totals.qty}</td>
-              <td className="px-2 py-2 text-right"><button onClick={() => onCopy(ind)} className="rounded-lg bg-[#e8702a] px-3 py-1 font-bold text-white hover:bg-[#b84716]">Copy</button></td>
+              <td className="px-2 py-2 text-right tabular-nums">{ind.lines.length}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{ind.totals.qty}</td>
+              <td className="px-2 py-2 text-right"><button onClick={() => onCopy(ind)} className="rounded-lg bg-accent px-3 py-1 font-bold text-white hover:bg-accent-strong">Copy</button></td>
             </tr>
           ))}
           {indents && !indents.length && <tr><td colSpan={6} className="px-2 py-8 text-center text-stone-400">No purchase indents yet. Raise one in Purchase Indent first.</td></tr>}
@@ -72,11 +72,11 @@ export function AddSupplierModal({ saving, onSave, onClose }: {
       title="Add New Supplier"
       onClose={onClose}
       footer={<>
-        <button onClick={onClose} className="rounded-lg border border-[#e1c9b6] px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-[#f1e3d8] dark:border-[#414a6e] dark:text-stone-300 dark:hover:bg-[#20253a]">Cancel</button>
-        <button onClick={submit} disabled={!ready} className="rounded-lg bg-[#e8702a] px-4 py-2 text-xs font-bold text-white hover:bg-[#b84716] disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Saving…' : 'Save Supplier'}</button>
+        <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-subtle dark:text-stone-300">Cancel</button>
+        <button onClick={submit} disabled={!ready} className="rounded-lg bg-accent px-4 py-2 text-xs font-bold text-white hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Saving…' : 'Save Supplier'}</button>
       </>}
     >
-      <label className="mb-1 block font-semibold text-[#b84716] dark:text-[#ffb07e]">Supplier Name *</label>
+      <label className="mb-1 block font-semibold text-accent-ink">Supplier Name *</label>
       <input autoFocus value={name} onChange={e => setName(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && submit()} placeholder="e.g. R&D DISTRIBUTORS" className={`${field} mb-3 w-full`} />
       <label className="mb-1 block font-semibold text-stone-600 dark:text-stone-300">Billing Address</label>
       <textarea value={address} onChange={e => setAddress(e.target.value)} rows={3} placeholder="Street, area, city - PIN" className={`${field} w-full resize-none`} />

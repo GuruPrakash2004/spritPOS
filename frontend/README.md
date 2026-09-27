@@ -1,75 +1,24 @@
-# React + TypeScript + Vite
+# vLQMS web (React + TypeScript + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The browser front end of vLQMS, Softvent's liquor-store ERP: masters, purchase and sales transactions, stock, the Daily Summary Report (DSR) and other reports. It talks to the FastAPI backend in `../backend`.
 
-Currently, two official plugins are available:
+## Run
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev      # http://localhost:5173, proxies /api/* to the backend on :8001
+npm run build    # type-check (tsc -b) and production build into dist/
+npm run lint     # eslint
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Start the backend first (see `../backend/README.md`). Without it the screens show "API: offline" and API calls fail. Log in as `ADMIN` / `admin` to see every module. `GURU`/`guru` is a Manager, and `PRADEEP`/`pradeep` and `RAVI`/`ravi` are Cashiers.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Where things are
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- `src/App.tsx`: login, the app shell, and a `switch` on the active module name. There is no router library. The only URL route is `/adminMaster`.
+- `src/components/modules.ts`: module names and groups (sidebar, search, role rights). `Sidebar.tsx` lists them with icons.
+- `src/components/api.ts`: the fetch wrapper (`api<T>()`), auth token handling, and response types.
+- Generic engines: `MasterCrud.tsx` + `masterConfigs.ts` (simple masters), `reports/reportDefs.ts` + `ApiReport.tsx` (tabular reports), `ItemLinesEntry.tsx` (item-line transactions), and `print/` (legacy `.rpt` print formats).
+- `LEGACY_PARITY.md`: each legacy screen and how complete it is here.
 
-```
+Developer notes for Claude Code are in `../.claude/CLAUDE.md` and `CLAUDE.md` (styling).

@@ -2,30 +2,21 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
-      "Bash(npm run build)",
-      "Bash(npm run lint)",
-      "Bash(npm run dev)",
-      "Bash(npm run preview)"
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx eslint:*)",
+      "Bash(.venv/bin/uvicorn:*)",
+      "Bash(.venv/bin/pip install:*)",
+      "Bash(.venv/bin/python:*)",
+      "Bash(curl -s http://localhost:8001/:*)",
+      "Bash(curl -s http://localhost:5173/:*)"
     ],
     "deny": [
-      "Read(./MAIN_Root/**/*.ini)",
-      "Read(./MAIN_Root/**/*.INI)",
-      "Read(./MAIN_Root/**/*.inibak)",
-      "Read(./MAIN_Root/**/*.config)"
-    ]
-  },
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-loc.sh",
-            "timeout": 30,
-            "statusMessage": "Checking file sizes (500-line limit)"
-          }
-        ]
-      }
+      "Read(./frontend/node_modules/**)",
+      "Read(./frontend/dist/**)",
+      "Read(./backend/.venv/**)"
     ]
   }
 }

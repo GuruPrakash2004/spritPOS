@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { ADMIN_MASTER, MODULE_GROUPS, MODULE_KEYWORDS } from './modules';
 
@@ -34,6 +34,19 @@ export default function ModuleSearch({ canOpen, onOpen }: { canOpen: (name: stri
       .sort((a, b) => a.score - b.score);
   }, [query, canOpen]);
 
+  // Ctrl/⌘+K or "/" (outside a text field) jumps to the search box from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]');
+      if ((e.key === 'k' && (e.ctrlKey || e.metaKey)) || (e.key === '/' && !typing)) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const choose = (name: string) => {
     onOpen(name);
     setQuery('');
@@ -42,7 +55,7 @@ export default function ModuleSearch({ canOpen, onOpen }: { canOpen: (name: stri
   };
 
   return (
-    <div className="relative ml-auto w-full min-w-0 max-w-xs print:hidden">
+    <div className="relative w-full min-w-0 print:hidden">
       <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
       <input
         ref={inputRef}
@@ -57,32 +70,34 @@ export default function ModuleSearch({ canOpen, onOpen }: { canOpen: (name: stri
           if (e.key === 'Enter' && results[highlight]) choose(results[highlight].name);
           if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur(); }
         }}
-        placeholder="Search screens… e.g. SINV, breakage, DSR"
+        placeholder="Search screens…"
         aria-label="Search screens"
         role="combobox"
         aria-expanded={open}
         aria-controls="module-search-list"
-        className="h-8 w-full rounded-full border border-[#e1c9b6] bg-[#fffaf5] pl-8 pr-8 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#e8702a] dark:border-[#343b59] dark:bg-[#171b2b] dark:text-stone-100"
+        className="h-9 w-full rounded-lg border border-line bg-subtle pl-8 pr-14 text-xs text-stone-800 outline-none transition-colors placeholder:text-stone-500 hover:border-line-strong focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/20 dark:text-stone-100"
       />
-      {query && (
-        <button onClick={() => { setQuery(''); inputRef.current?.focus(); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-[#b84716]" aria-label="Clear search"><X size={14} /></button>
+      {query ? (
+        <button onClick={() => { setQuery(''); inputRef.current?.focus(); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded text-stone-400 hover:text-stone-700" aria-label="Clear search"><X size={14} /></button>
+      ) : (
+        <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded border border-line bg-surface px-1.5 py-px font-sans text-[10px] font-medium text-stone-500 sm:block">Ctrl K</kbd>
       )}
       {open && (
-        <ul id="module-search-list" role="listbox" className="absolute right-0 top-full z-30 mt-1.5 max-h-80 w-full min-w-[240px] overflow-auto rounded-xl border border-[#e1c9b6] bg-[#fffaf5] py-1 text-xs shadow-xl dark:border-[#343b59] dark:bg-[#171b2b]">
+        <ul id="module-search-list" role="listbox" className="absolute right-0 top-full z-30 mt-1 max-h-80 w-full min-w-[260px] overflow-auto rounded-xl border border-line bg-surface p-1 text-xs shadow-pop">
           {results.map((m, i) => (
             <li key={m.name} role="option" aria-selected={i === highlight}>
               <button
                 onMouseDown={e => e.preventDefault()}
                 onClick={() => choose(m.name)}
                 onMouseEnter={() => setHighlight(i)}
-                className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left ${i === highlight ? 'bg-[#e8702a]/15 text-[#b84716] dark:text-[#ffb07e]' : 'text-stone-700 dark:text-stone-200'}`}
+                className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left ${i === highlight ? 'bg-subtle text-stone-900 dark:text-stone-50' : 'text-stone-700 dark:text-stone-200'}`}
               >
-                <span className="font-semibold">{LABELS[m.name] ?? m.name}</span>
-                <span className="text-[10px] uppercase tracking-wider text-stone-400">{m.group}</span>
+                <span className="font-medium">{LABELS[m.name] ?? m.name}</span>
+                <span className="text-[11px] text-stone-500">{m.group}</span>
               </button>
             </li>
           ))}
-          {!results.length && <li className="px-3 py-3 text-center text-stone-400">No screen matches “{query}”.</li>}
+          {!results.length && <li className="px-3 py-4 text-center text-stone-500">No screen matches “{query}”.</li>}
         </ul>
       )}
     </div>

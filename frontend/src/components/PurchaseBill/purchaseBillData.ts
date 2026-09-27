@@ -30,12 +30,10 @@ export const amt = (r: Row) => r.qty * r.rate;
 export const pctOf = (r: Row, pct: number) => (amt(r) * pct) / 100;
 export const isFilled = (r: Row) => r.stock !== null || r.name.trim() !== '';
 
-export const panel = 'rounded-xl border border-[#e1c9b6] bg-[#fffaf5] shadow-sm dark:border-[#343b59] dark:bg-[#171b2b]';
-export const field = 'rounded-lg border border-[#e1c9b6] bg-[#fffaf5] px-2.5 py-1.5 text-xs text-stone-800 outline-none focus:border-[#e8702a] dark:border-[#414a6e] dark:bg-[#20253a] dark:text-stone-100';
-export const cell = 'w-full rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-xs outline-none hover:border-[#e1c9b6] focus:border-[#e8702a] focus:bg-[#fffaf5] dark:hover:border-[#414a6e] dark:focus:bg-[#20253a]';
-export const iconButton = 'relative rounded-lg p-1.5 text-stone-600 hover:bg-[#e8702a]/10 hover:text-[#b84716] disabled:opacity-40 dark:text-stone-300 dark:hover:text-[#ffb07e]';
-export const infoBar = 'flex items-center gap-2 rounded-lg bg-[#f1e3d8] px-3 py-2 text-xs text-stone-600 dark:bg-[#20253a] dark:text-stone-300';
-export const headCell = 'px-2 py-2 text-left font-semibold';
+export { panel, field, iconButton } from '../ui';
+export const cell = 'w-full rounded-md border border-transparent bg-transparent px-1.5 py-1 text-xs tabular-nums outline-none hover:border-line-strong focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/20';
+export const infoBar = 'flex items-center gap-2 rounded-lg bg-subtle px-3 py-2 text-xs text-stone-600 dark:text-stone-300';
+export const headCell = 'px-2 py-2.5 text-left';
 
 // Copy the selected row under a fresh uid so React keys stay unique.
 export const cloneRow = (r: Row): Row => ({ ...r, uid: nextUid++ });

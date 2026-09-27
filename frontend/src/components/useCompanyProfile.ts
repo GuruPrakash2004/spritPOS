@@ -1,0 +1,36 @@
+import { useEffect, useState } from 'react';
+import { api, type ApiCompany } from './api';
+
+export const COMPANY_PROFILE_UPDATED = 'company-profile-updated';
+
+export const notifyCompanyProfileUpdated = () => {
+  window.dispatchEvent(new Event(COMPANY_PROFILE_UPDATED));
+};
+
+export const useCompanyProfile = () => {
+  const [company, setCompany] = useState<ApiCompany | null>(null);
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const load = () => api<ApiCompany>('/masters/company')
+      .then(profile => {
+        setCompany(profile);
+        setIsOnline(true);
+      })
+      .catch(() => {
+        setCompany(null);
+        setIsOnline(false);
+      });
+    load();
+    const interval = setInterval(load, 30000);
+    window.addEventListener('focus', load);
+    window.addEventListener(COMPANY_PROFILE_UPDATED, load);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', load);
+      window.removeEventListener(COMPANY_PROFILE_UPDATED, load);
+    };
+  }, []);
+
+  return { company, isOnline };
+};

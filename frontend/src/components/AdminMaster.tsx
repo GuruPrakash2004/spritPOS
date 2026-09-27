@@ -1,47 +1,102 @@
-import { useCallback, useEffect, useState } from 'react';
-import { FilePlus, KeyRound, Save, ShieldCheck, Trash2, Users, X } from 'lucide-react';
+import { useCallback, useEffect, useState, useRef } from 'react';
+import {
+  FilePlus, KeyRound, Save, Trash2, Users, X,
+  Eye, Edit3,
+} from 'lucide-react';
+import { useConfirm } from './ConfirmDialog';
 import Toast from './Toast';
+import { FormErrorSummary } from './FormErrorSummary';
 import { api, errorText, type ApiAdminUser, type ApiRole } from './api';
-import { ADMIN_ROLE, MODULE_GROUPS } from './modules';
-import { dangerButton, field, label, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from './ui';
+import { ADMIN_ROLE } from './modules';
+import { badge, label, pageHeader, pageSub, pageTitle, primaryButton, secondaryButton, dangerButton } from './ui';
+import { MATRIX_SCREENS, type RoleDraft, parseRoleToDraft } from './matrixDefs';
+import AdminUsersTab, { type UserForm } from './AdminUsersTab';
+import PermissionMatrixTable from './PermissionMatrixTable';
 
-type UserForm = { user: string; password: string; role: string; active: boolean; isNew: boolean };
-const tabButton = (on: boolean) => `flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold ${on
-  ? 'bg-[#e8702a] text-white'
-  : 'text-stone-600 hover:bg-[#e8702a]/10 hover:text-[#b84716] dark:text-stone-300 dark:hover:text-[#ffb07e]'}`;
-
-// Admin Master (/adminMaster): users, roles and module rights. The web version of the legacy
-// User Master, Role Master and Assign Rights screens. Administrator-only, enforced by the backend too.
+const tabButton = (on: boolean) => `-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-xs font-semibold transition-colors ${on
+  ? 'border-[#64283A] text-[#64283A] dark:border-[#D4A847] dark:text-[#E8C36A]'
+  : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50'}`;
 export default function AdminMaster({ currentUser }: { currentUser: string }) {
-  const [tab, setTab] = useState<'users' | 'roles'>('users');
+  const [tab, setTab] = useState<'users' | 'roles'>('roles');
   const [users, setUsers] = useState<ApiAdminUser[]>([]);
   const [roles, setRoles] = useState<ApiRole[]>([]);
   const [userForm, setUserForm] = useState<UserForm | null>(null);
-  const [roleName, setRoleName] = useState('');
-  const [roleDraft, setRoleDraft] = useState<{ name: string; modules: Set<string> } | null>(null);
-  const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [userFormErrors, setUserFormErrors] = useState<Record<string, string>>({});
+  const [roleName, setRoleName] = useState('Manager');
+  const { confirm, dialog } = useConfirm();
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 3000);
-    return () => clearTimeout(timer);
-  }, [toast]);
+  // Role draft with structured module rights and action button permissions
+  const [roleDraft, setRoleDraft] = useState<RoleDraft>(() =>
+    parseRoleToDraft({
+      name: 'Manager',
+      modules: MATRIX_SCREENS.filter(s => s.id !== 'Admin Master').map(s => s.id),
+    })
+  );
+
+  const [roleFormErrors, setRoleFormErrors] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const gridRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   const fail = (e: unknown) => setToast({ kind: 'error', text: errorText(e) });
 
+  const loadRoleIntoDraft = useCallback((r: ApiRole) => {
+    setRoleName(r.name);
+    setRoleDraft(parseRoleToDraft(r));
+    setRoleFormErrors({});
+  }, []);
+
   const reload = useCallback(() => {
     api<ApiAdminUser[]>('/admin/users').then(setUsers).catch(fail);
-    api<ApiRole[]>('/admin/roles').then(setRoles).catch(fail);
+    api<ApiRole[]>('/admin/roles').then(rList => {
+      setRoles(rList);
+      setRoleName(current => {
+        const target = rList.find(r => r.name === current) ?? rList.find(r => r.name === 'Manager') ?? rList[0];
+        if (target) {
+          setRoleDraft(parseRoleToDraft(target));
+          return target.name;
+        }
+        return current;
+      });
+    }).catch(fail);
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
 
-  // ---- users ----
+  // ---- Users ----
+  const handleUserFieldChange = <K extends keyof UserForm>(k: K, v: UserForm[K]) => {
+    if (!userForm) return;
+    setUserForm({ ...userForm, [k]: v });
+    if (userFormErrors[k as string]) {
+      setUserFormErrors(prev => {
+        const next = { ...prev };
+        delete next[k as string];
+        return next;
+      });
+    }
+  };
+
+  const focusUserField = (k: string) => {
+    const map: Record<string, string> = { user: 'am-user', password: 'am-pwd', role: 'am-role' };
+    const el = document.getElementById(map[k] || k);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+  };
+
   const saveUser = () => {
     if (!userForm) return;
     const { user, password, role, active, isNew } = userForm;
-    if (!user.trim() || !role) return setToast({ kind: 'error', text: 'User name and role are required.' });
-    if (isNew && password.length < 4) return setToast({ kind: 'error', text: 'Password must be at least 4 characters.' });
+    const errors: Record<string, string> = {};
+
+    if (!user.trim()) errors.user = 'Enter the user name';
+    if (!role) errors.role = 'Select a role';
+    if (isNew && password.length < 4) errors.password = 'Password must be at least 4 characters';
+
+    if (Object.keys(errors).length > 0) {
+      setUserFormErrors(errors);
+      focusUserField(Object.keys(errors)[0]);
+      return;
+    }
+    setUserFormErrors({});
+
     const body = { user: user.trim().toUpperCase(), password: password || null, role, active };
     const request = isNew
       ? api('/admin/users', { method: 'POST', body })
@@ -53,190 +108,380 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     }).catch(fail);
   };
 
-  const deleteUser = (name: string) => {
-    if (!window.confirm(`Delete user ${name}?`)) return;
+  const deleteUser = async (name: string) => {
+    if (!(await confirm(`Delete user ${name}? They will no longer be able to sign in.`))) return;
     api(`/admin/users/${encodeURIComponent(name)}`, { method: 'DELETE' })
       .then(() => { setToast({ kind: 'ok', text: `User ${name} deleted.` }); reload(); })
       .catch(fail);
   };
 
-  // ---- roles ----
-  const editRole = (r: ApiRole) => { setRoleName(r.name); setRoleDraft({ name: r.name, modules: new Set(r.modules) }); };
-
-  const toggle = (modules: string[], on: boolean) => {
+  // ---- Matrix Toggle Logic ----
+  const toggleOpen = (screenId: string) => {
     if (!roleDraft) return;
-    const next = new Set(roleDraft.modules);
-    modules.forEach(m => (on ? next.add(m) : next.delete(m)));
-    setRoleDraft({ ...roleDraft, modules: next });
+    const nextMods = new Set(roleDraft.modules);
+    const nextActs = new Set(roleDraft.actions);
+
+    if (nextMods.has(screenId)) {
+      nextMods.delete(screenId);
+      // Unticking open also removes button rights
+      nextActs.delete(`${screenId}:add`);
+      nextActs.delete(`${screenId}:edit`);
+      nextActs.delete(`${screenId}:delete`);
+    } else {
+      nextMods.add(screenId);
+      // Ticking open gives default actions
+      const s = MATRIX_SCREENS.find(x => x.id === screenId);
+      if (s) {
+        if (s.hasAdd) nextActs.add(`${screenId}:add`);
+        if (s.hasEdit) nextActs.add(`${screenId}:edit`);
+        if (s.hasDelete && roleDraft.name !== 'Cashier') nextActs.add(`${screenId}:delete`);
+      }
+    }
+    setRoleDraft({ ...roleDraft, modules: nextMods, actions: nextActs });
+  };
+
+  const toggleAction = (screenId: string, actionType: 'add' | 'edit' | 'delete') => {
+    if (!roleDraft) return;
+    const key = `${screenId}:${actionType}`;
+    const nextActs = new Set(roleDraft.actions);
+    const nextMods = new Set(roleDraft.modules);
+
+    if (nextActs.has(key)) {
+      nextActs.delete(key);
+    } else {
+      nextActs.add(key);
+      nextMods.add(screenId); // ensure open is ticked if an action is ticked
+    }
+    setRoleDraft({ ...roleDraft, modules: nextMods, actions: nextActs });
+  };
+
+  const toggleGroup = (group: string, col: 'open' | 'add' | 'edit' | 'delete') => {
+    if (!roleDraft) return;
+    const groupScreens = MATRIX_SCREENS.filter(s => s.group === group);
+    const nextMods = new Set(roleDraft.modules);
+    const nextActs = new Set(roleDraft.actions);
+
+    if (col === 'open') {
+      const allOpen = groupScreens.every(s => nextMods.has(s.id));
+      groupScreens.forEach(s => {
+        if (allOpen) {
+          nextMods.delete(s.id);
+          nextActs.delete(`${s.id}:add`);
+          nextActs.delete(`${s.id}:edit`);
+          nextActs.delete(`${s.id}:delete`);
+        } else {
+          nextMods.add(s.id);
+          if (s.hasAdd) nextActs.add(`${s.id}:add`);
+          if (s.hasEdit) nextActs.add(`${s.id}:edit`);
+          if (s.hasDelete && roleDraft.name !== 'Cashier') nextActs.add(`${s.id}:delete`);
+        }
+      });
+    } else {
+      const applicable = groupScreens.filter(s => (col === 'add' ? s.hasAdd : col === 'edit' ? s.hasEdit : s.hasDelete));
+      const allActive = applicable.every(s => nextActs.has(`${s.id}:${col}`));
+      applicable.forEach(s => {
+        const key = `${s.id}:${col}`;
+        if (allActive) {
+          nextActs.delete(key);
+        } else {
+          nextActs.add(key);
+          nextMods.add(s.id);
+        }
+      });
+    }
+    setRoleDraft({ ...roleDraft, modules: nextMods, actions: nextActs });
   };
 
   const saveRole = () => {
     if (!roleDraft) return;
     const name = roleDraft.name.trim();
-    if (name.length < 2) return setToast({ kind: 'error', text: 'Enter a role name.' });
-    if (!roleDraft.modules.size) return setToast({ kind: 'error', text: 'Give the role at least one module.' });
-    api(`/admin/roles/${encodeURIComponent(roleName || name)}`, { method: 'PUT', body: { name, modules: [...roleDraft.modules] } })
+    const errors: Record<string, string> = {};
+
+    if (name.length < 2) errors.name = 'Enter a role name';
+    if (!roleDraft.modules.size) errors.modules = 'Give the role at least one screen';
+
+    if (Object.keys(errors).length > 0) {
+      setRoleFormErrors(errors);
+      return;
+    }
+    setRoleFormErrors({});
+
+    const body = { name, modules: [...roleDraft.modules] };
+    api(`/admin/roles/${encodeURIComponent(roleName || name)}`, { method: 'PUT', body })
       .then(() => {
         setToast({ kind: 'ok', text: `Rights for ${name} saved. Users see the change at their next login.` });
-        setRoleDraft(null);
         reload();
       })
       .catch(fail);
   };
 
-  const deleteRole = (name: string) => {
-    if (!window.confirm(`Delete role ${name}?`)) return;
-    api(`/admin/roles/${encodeURIComponent(name)}`, { method: 'DELETE' })
-      .then(() => { setToast({ kind: 'ok', text: `Role ${name} deleted.` }); setRoleDraft(null); reload(); })
+  const deleteRole = async () => {
+    if (!roleName) return;
+    if (!(await confirm(`Delete role ${roleName}?`))) return;
+    api(`/admin/roles/${encodeURIComponent(roleName)}`, { method: 'DELETE' })
+      .then(() => {
+        setToast({ kind: 'ok', text: `Role ${roleName} deleted.` });
+        const remaining = roles.filter(r => r.name !== roleName);
+        if (remaining[0]) loadRoleIntoDraft(remaining[0]);
+        reload();
+      })
       .catch(fail);
   };
 
+  // Keyboard navigation on ticks: arrow keys move, Space toggles, Enter saves, Esc cancels
+  const handleTickKeyDown = (e: React.KeyboardEvent, rowIdx: number, colIdx: number, screenId: string, colType: 'open' | 'add' | 'edit' | 'delete') => {
+    if (e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      if (colType === 'open') toggleOpen(screenId);
+      else toggleAction(screenId, colType);
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveRole();
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      const original = roles.find(r => r.name === roleName);
+      if (original) loadRoleIntoDraft(original);
+      return;
+    }
+
+    let nextRow = rowIdx;
+    let nextCol = colIdx;
+
+    if (e.key === 'ArrowRight') nextCol = Math.min(3, colIdx + 1);
+    else if (e.key === 'ArrowLeft') nextCol = Math.max(0, colIdx - 1);
+    else if (e.key === 'ArrowDown') nextRow = Math.min(MATRIX_SCREENS.length - 1, rowIdx + 1);
+    else if (e.key === 'ArrowUp') nextRow = Math.max(0, rowIdx - 1);
+    else return;
+
+    e.preventDefault();
+    const key = `${nextRow}-${nextCol}`;
+    const el = gridRefs.current.get(key);
+    if (el) el.focus();
+  };
+
+  // Derived counts
+  const openCount = MATRIX_SCREENS.filter(s => roleDraft.modules.has(s.id)).length;
+  // Total buttons allowed = number of checked actions + checked screens
+  const buttonActionsCount = roleDraft.actions.size;
+  const totalButtonsAllowed = openCount + buttonActionsCount;
+
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
+    <div className="mx-auto flex max-w-6xl flex-col gap-5">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
-      <div className={`${panel} flex flex-wrap items-center justify-between gap-3 px-5 py-3`}>
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-[#e8702a]/10 p-2.5 text-[#b84716] dark:text-[#ffb07e]"><ShieldCheck size={20} /></div>
-          <div>
-            <h2 className={pageTitle}>Admin Master</h2>
-            <p className={pageSub}>Users, roles and which modules each role can open. Administrators only.</p>
+      {dialog}
+
+      <div className={pageHeader}>
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className={pageTitle}>Admin Master</h1>
+            <span className={badge('neutral')}>Administrators only</span>
           </div>
-        </div>
-        <div className="flex gap-1 rounded-xl bg-[#f1e3d8] p-1 dark:bg-[#20253a]">
-          <button onClick={() => setTab('users')} className={tabButton(tab === 'users')}><Users size={14} />Users</button>
-          <button onClick={() => setTab('roles')} className={tabButton(tab === 'roles')}><KeyRound size={14} />Roles &amp; Rights</button>
+          <p className={pageSub}>Users, roles, structured item permissions and operational hierarchy.</p>
         </div>
       </div>
 
-      {tab === 'users' && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-          <div className={`${panel} overflow-hidden`}>
-            <div className="flex items-center justify-between border-b border-[#e1c9b6] px-3 py-2 dark:border-[#343b59]">
-              <span className="text-xs font-bold text-stone-600 dark:text-stone-300">{users.length} users</span>
-              <button onClick={() => setUserForm({ user: '', password: '', role: roles.find(r => r.name !== ADMIN_ROLE)?.name ?? ADMIN_ROLE, active: true, isNew: true })} className={primaryButton}><FilePlus size={14} />New User</button>
-            </div>
-            <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] text-xs">
-              <thead className={tableHead}>
-                <tr><th className="px-3 py-2">User</th><th className="px-3 py-2">Role</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" /></tr>
-              </thead>
-              <tbody className={tableBody}>
-                {users.map(u => (
-                  <tr key={u.user} className="hover:bg-stone-50 dark:hover:bg-[#1b2033]">
-                    <td className="px-3 py-2 font-mono font-bold text-stone-900 dark:text-stone-100">{u.user}{u.user === currentUser && <span className="ml-2 font-sans text-[10px] font-normal text-stone-400">(you)</span>}</td>
-                    <td className="px-3 py-2">{u.role}</td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${u.active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-400'}`}>{u.active ? 'Active' : 'Inactive'}</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end gap-1.5">
-                        <button onClick={() => setUserForm({ user: u.user, password: '', role: u.role, active: u.active, isNew: false })} className={`${secondaryButton} py-1`}>Edit</button>
-                        <button onClick={() => deleteUser(u.user)} disabled={u.user === currentUser} className={`${dangerButton} py-1`} aria-label={`Delete ${u.user}`}><Trash2 size={12} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </div>
+      <div role="tablist" aria-label="Admin sections" className="flex gap-1 border-b border-line">
+        <button role="tab" aria-selected={tab === 'users'} onClick={() => setTab('users')} className={tabButton(tab === 'users')}>
+          <Users size={14} />Users
+        </button>
+        <button role="tab" aria-selected={tab === 'roles'} onClick={() => setTab('roles')} className={tabButton(tab === 'roles')}>
+          <KeyRound size={14} />Roles &amp; rights
+        </button>
+      </div>
 
-          <div className={`${panel} space-y-3 p-5`}>
-            {!userForm && <p className="py-10 text-center text-xs text-stone-400">Pick a user to edit, or press New User.</p>}
-            {userForm && (<>
-              <div className="text-xs font-bold uppercase tracking-wider text-stone-500">{userForm.isNew ? 'New user' : `Editing ${userForm.user}`}</div>
-              <div>
-                <label htmlFor="am-user" className={`${label} !text-red-600 dark:!text-red-400`}>User Name</label>
-                <input id="am-user" value={userForm.user} readOnly={!userForm.isNew} onChange={e => setUserForm({ ...userForm, user: e.target.value.toUpperCase() })} className={`${field} w-full font-mono uppercase ${userForm.isNew ? '' : 'bg-stone-100 dark:bg-[#1b2033]'}`} />
-              </div>
-              <div>
-                <label htmlFor="am-pwd" className={`${label} ${userForm.isNew ? '!text-red-600 dark:!text-red-400' : ''}`}>{userForm.isNew ? 'Password' : 'New Password (leave empty to keep)'}</label>
-                <input id="am-pwd" type="password" value={userForm.password} onChange={e => setUserForm({ ...userForm, password: e.target.value })} className={`${field} w-full`} autoComplete="new-password" />
-              </div>
-              <div>
-                <label htmlFor="am-role" className={`${label} !text-red-600 dark:!text-red-400`}>Role</label>
-                <select id="am-role" value={userForm.role} onChange={e => setUserForm({ ...userForm, role: e.target.value })} className={`${field} w-full`}>
-                  {roles.map(r => <option key={r.name}>{r.name}</option>)}
-                </select>
-              </div>
-              <label className="flex items-center gap-2 text-xs font-semibold text-stone-700 dark:text-stone-200">
-                <input type="checkbox" checked={userForm.active} onChange={e => setUserForm({ ...userForm, active: e.target.checked })} className="accent-[#e8702a]" />
-                Active (inactive users cannot log in)
-              </label>
-              <div className="flex gap-2 pt-1">
-                <button onClick={saveUser} className={primaryButton}><Save size={14} />Save User</button>
-                <button onClick={() => setUserForm(null)} className={secondaryButton}><X size={14} />Cancel</button>
-              </div>
-            </>)}
-          </div>
-        </div>
-      )}
+      {tab === 'users' && <AdminUsersTab
+        users={users}
+        roles={roles}
+        currentUser={currentUser}
+        userForm={userForm}
+        errors={userFormErrors}
+        onNew={() => {
+          setUserFormErrors({});
+          setUserForm({ user: '', password: '', role: roles.find(r => r.name !== ADMIN_ROLE)?.name ?? ADMIN_ROLE, active: true, isNew: true });
+        }}
+        onEdit={user => {
+          setUserFormErrors({});
+          setUserForm({ user: user.user, password: '', role: user.role, active: user.active, isNew: false });
+        }}
+        onDelete={deleteUser}
+        onChange={handleUserFieldChange}
+        onFocusField={focusUserField}
+        onCancel={() => { setUserForm(null); setUserFormErrors({}); }}
+        onSave={saveUser}
+      />}
 
+      {/* ── TAB 2 & TAB 3: PERMISSION MATRIX HIERARCHY (Matches Image Exactly) ── */}
       {tab === 'roles' && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
-          <div className={`${panel} overflow-hidden`}>
-            <div className="flex items-center justify-between border-b border-[#e1c9b6] px-3 py-2 dark:border-[#343b59]">
-              <span className="text-xs font-bold text-stone-600 dark:text-stone-300">Roles</span>
-              <button onClick={() => { setRoleName(''); setRoleDraft({ name: '', modules: new Set(['Dashboard']) }); }} className={primaryButton}><FilePlus size={14} />New Role</button>
-            </div>
-            <ul className="divide-y divide-[#f1e3d8] text-xs dark:divide-[#343b59]">
-              {roles.map(r => (
-                <li key={r.name}>
+        <div className="space-y-4 animate-slideUp">
+          {/* Quick Role Switcher Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-semibold text-[#70675F] dark:text-stone-400">Select Role:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {roles.map(r => (
                   <button
-                    onClick={() => r.name !== ADMIN_ROLE && editRole(r)}
-                    className={`flex w-full items-center justify-between px-3 py-2.5 text-left ${roleDraft && roleName === r.name ? 'bg-[#e8702a]/10' : 'hover:bg-stone-50 dark:hover:bg-[#1b2033]'} ${r.name === ADMIN_ROLE ? 'cursor-default' : ''}`}
+                    key={r.name}
+                    onClick={() => loadRoleIntoDraft(r)}
+                    className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all active:scale-[0.98] ${
+                      roleDraft.name === r.name
+                        ? 'bg-[#64283A] text-white shadow-sm dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F5D88A] dark:to-[#C8952E] dark:text-[#180E09] dark:font-extrabold'
+                        : 'bg-transparent border border-[#E3D9CD] text-[#70675F] hover:bg-[#F3EEE6] dark:border-[#2A2A2A] dark:text-stone-300 dark:hover:bg-[#1C1C1C]'
+                    }`}
                   >
-                    <span>
-                      <span className="block font-bold text-stone-900 dark:text-stone-100">{r.name}</span>
-                      <span className="text-[10px] text-stone-500">{r.modules.includes('*') ? 'All modules (fixed)' : `${r.modules.length} modules`} • {r.users} users</span>
-                    </span>
+                    {r.name}
                   </button>
-                </li>
-              ))}
-            </ul>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setRoleName('New Role');
+                setRoleDraft({
+                  name: 'New Role',
+                  modules: new Set(['Dashboard']),
+                  actions: new Set(['Dashboard:open']),
+                });
+                setRoleFormErrors({});
+              }}
+              className={secondaryButton}
+            >
+              <FilePlus size={14} />Create new role
+            </button>
           </div>
 
-          <div className={`${panel} p-5`}>
-            {!roleDraft && <p className="py-10 text-center text-xs text-stone-400">Pick a role to assign rights, or press New Role. The Administrator role always has every module.</p>}
-            {roleDraft && (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-end gap-3">
-                  <div>
-                    <label htmlFor="am-rname" className={`${label} !text-red-600 dark:!text-red-400`}>Role Name</label>
-                    <input id="am-rname" value={roleDraft.name} onChange={e => setRoleDraft({ ...roleDraft, name: e.target.value })} className={`${field} w-56`} />
-                  </div>
-                  <span className="text-xs text-stone-500">{roleDraft.modules.size} modules selected</span>
-                  <div className="ml-auto flex gap-2">
-                    <button onClick={saveRole} className={primaryButton}><Save size={14} />Save Rights</button>
-                    {roleName && <button onClick={() => deleteRole(roleName)} className={dangerButton}><Trash2 size={14} />Delete Role</button>}
-                    <button onClick={() => setRoleDraft(null)} className={secondaryButton}><X size={14} />Cancel</button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {MODULE_GROUPS.map(g => {
-                    const all = g.modules.every(m => roleDraft.modules.has(m));
-                    return (
-                      <fieldset key={g.group} className="rounded-xl border border-[#e1c9b6] p-3 dark:border-[#343b59]">
-                        <legend className="px-1 text-[10px] font-bold uppercase tracking-wider text-stone-500">{g.group}</legend>
-                        <label className="mb-2 flex items-center gap-2 border-b border-[#f1e3d8] pb-2 text-xs font-bold text-[#b84716] dark:border-[#343b59] dark:text-[#ffb07e]">
-                          <input type="checkbox" checked={all} onChange={e => toggle(g.modules, e.target.checked)} className="accent-[#e8702a]" />
-                          All {g.group}
-                        </label>
-                        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                          {g.modules.map(m => (
-                            <label key={m} className="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-200">
-                              <input type="checkbox" checked={roleDraft.modules.has(m)} onChange={e => toggle([m], e.target.checked)} className="accent-[#e8702a]" />
-                              {m}
-                            </label>
-                          ))}
-                        </div>
-                      </fieldset>
-                    );
-                  })}
-                </div>
+          {/* Form Error Banner if any */}
+          <FormErrorSummary errors={roleFormErrors} onFocusField={() => document.getElementById('role-name-input')?.focus()} />
+
+          {/* ══ TOP ROW: Role Name + Count + Action Buttons ══ */}
+          <div className="flex flex-wrap items-end justify-between gap-4 pt-1">
+            <div>
+              <label htmlFor="role-name-input" className={label}>
+                Role Name
+              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  id="role-name-input"
+                  value={roleDraft.name}
+                  onChange={e => {
+                    setRoleDraft({ ...roleDraft, name: e.target.value });
+                    if (roleFormErrors.name) setRoleFormErrors({});
+                  }}
+                  className={`w-64 rounded-xl border border-[#DCD1C5] bg-[#FFFCF7] px-3 py-2 text-xs font-semibold text-[#29231F] shadow-xs outline-none transition-all placeholder:text-[#A69D94] hover:border-[#CBBEAF] focus:border-[#64283A] focus:ring-[3px] focus:ring-[#64283A]/10 dark:border-[#2A2A2A] dark:bg-[#1A1A1A] dark:text-stone-50 dark:focus:border-[#D4A847] dark:focus:ring-[#D4A847]/20 ${
+                    roleFormErrors.name ? '!border-red-500 !ring-2 !ring-red-500/20' : ''
+                  }`}
+                />
+                <span className="text-xs font-medium text-[#70675F] dark:text-stone-400 tabular-nums">
+                  {openCount} screens open • {totalButtonsAllowed} buttons allowed
+                </span>
               </div>
-            )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={saveRole}
+                className={primaryButton}
+              >
+                <Save size={14} />
+                <span>Save Rights</span>
+              </button>
+
+              {roleName && roleName !== ADMIN_ROLE && (
+                <button
+                  type="button"
+                  onClick={deleteRole}
+                  className={dangerButton}
+                >
+                  <Trash2 size={14} />
+                  <span>Delete Role</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const r = roles.find(x => x.name === roleName);
+                  if (r) loadRoleIntoDraft(r);
+                }}
+                className={secondaryButton}
+              >
+                <X size={14} />
+                <span>Cancel</span>
+              </button>
+            </div>
           </div>
+
+          {/* ══ 4 SUMMARY CARDS: Open · Add / Save · Edit · Delete / Cancel ══ */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-1">
+            {/* Card 1: Open */}
+            <div className="rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+              <div className="flex items-center gap-1.5 font-bold text-[#64283A] dark:text-[#D4A847]">
+                <Eye size={15} />
+                <span>Open</span>
+              </div>
+              <p className="mt-1 text-[11px] text-[#70675F] dark:text-stone-400">
+                See the screen in the sidebar and look at its data
+              </p>
+            </div>
+
+            {/* Card 2: Add / Save */}
+            <div className="rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+              <div className="flex items-center gap-1.5 font-bold text-[#64283A] dark:text-[#D4A847]">
+                <FilePlus size={15} />
+                <span>Add / Save</span>
+              </div>
+              <p className="mt-1 text-[11px] text-[#70675F] dark:text-stone-400">
+                Create new records or save bills and entries
+              </p>
+            </div>
+
+            {/* Card 3: Edit */}
+            <div className="rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+              <div className="flex items-center gap-1.5 font-bold text-[#64283A] dark:text-[#D4A847]">
+                <Edit3 size={15} />
+                <span>Edit</span>
+              </div>
+              <p className="mt-1 text-[11px] text-[#70675F] dark:text-stone-400">
+                Change existing records
+              </p>
+            </div>
+
+            {/* Card 4: Delete / Cancel */}
+            <div className="rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+              <div className="flex items-center gap-1.5 font-bold text-[#9A4B45] dark:text-red-400">
+                <Trash2 size={15} />
+                <span>Delete / Cancel</span>
+              </div>
+              <p className="mt-1 text-[11px] text-[#70675F] dark:text-stone-400">
+                Remove records or cancel saved bills
+              </p>
+            </div>
+          </div>
+
+          {/* Keyboard tip instruction line */}
+          <div className="text-xs text-stone-600 dark:text-stone-400 pt-1">
+            Keyboard: click any tick, then use the <span className="font-bold text-stone-800 dark:text-stone-200">arrow keys</span> to move,{' '}
+            <span className="font-bold text-stone-800 dark:text-stone-200">Space</span> to tick or untick,{' '}
+            <span className="font-bold text-stone-800 dark:text-stone-200">Enter</span> to save and{' '}
+            <span className="font-bold text-stone-800 dark:text-stone-200">Esc</span> to cancel.
+          </div>
+
+          <PermissionMatrixTable
+            roleDraft={roleDraft}
+            onToggleOpen={toggleOpen}
+            onToggleAction={toggleAction}
+            onToggleGroup={toggleGroup}
+            onTickKeyDown={handleTickKeyDown}
+            registerCell={(key, element) => {
+              if (element) gridRefs.current.set(key, element);
+              else gridRefs.current.delete(key);
+            }}
+          />
         </div>
       )}
     </div>

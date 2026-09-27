@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useConfirm } from './ConfirmDialog';
 import { Download, Edit3, Eye, FileSpreadsheet, ImagePlus, Save, Trash2, Upload } from 'lucide-react';
 import Modal from './Modal';
 import Toast from './Toast';
 import { api, errorText } from './api';
 import { downloadText, toCsv } from './csv';
-import { field, label, primaryButton, secondaryButton, tableBody, tableHead } from './ui';
+import {  field, label, primaryButton, secondaryButton, tableBody, tableHead , exportButton } from './ui';
 
 // Company Master → Images / Documents, stored by the backend under backend/uploads/company.
 export type CompanyFile = {
@@ -33,6 +34,7 @@ type Draft = { file?: File; preview?: string; editing?: CompanyFile; title: stri
 function useCompanyFiles(kind: 'image' | 'document') {
   const [files, setFiles] = useState<CompanyFile[] | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   useEffect(() => {
     if (!toast) return;
@@ -58,14 +60,14 @@ function useCompanyFiles(kind: 'image' | 'document') {
     reload();
   };
 
-  const remove = (f: CompanyFile) => {
-    if (!window.confirm(`Delete ${f.file_name}? This cannot be undone.`)) return;
+  const remove = async (f: CompanyFile) => {
+    if (!(await confirm(`Delete ${f.file_name}? This cannot be undone.`))) return;
     api(`/company/files/${f.id}`, { method: 'DELETE' })
       .then(() => { setToast({ kind: 'ok', text: `${f.file_name} deleted.` }); reload(); })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
-  return { files, toast, setToast, save, remove };
+  return { files, toast, setToast, save, remove, dialog };
 }
 
 // Upload / edit dialog shared by both tabs.
@@ -86,7 +88,7 @@ function FileDialog({ kind, draft, setDraft, onSave, onClose }: {
       </>}
     >
       <div className="space-y-3">
-        {draft.preview && <img src={draft.preview} alt="" className="max-h-48 w-full rounded-lg object-contain bg-stone-100 dark:bg-[#20253a]" />}
+        {draft.preview && <img src={draft.preview} alt="" className="max-h-48 w-full rounded-lg object-contain bg-stone-100" />}
         {draft.file && <p className="font-mono text-stone-500">{draft.file.name} • {sizeText(draft.file.size)}</p>}
         <div>
           <label htmlFor="cf-title" className={label}>{kind === 'image' ? 'Title' : 'Display name'}</label>
@@ -105,7 +107,7 @@ function FileDialog({ kind, draft, setDraft, onSave, onClose }: {
         </div>
         {kind === 'image' && !isNew && (
           <label className="flex items-center gap-2 font-semibold text-stone-700 dark:text-stone-200">
-            <input type="checkbox" checked={draft.show_on_pos} onChange={e => setDraft({ ...draft, show_on_pos: e.target.checked })} className="accent-[#e8702a]" />
+            <input type="checkbox" checked={draft.show_on_pos} onChange={e => setDraft({ ...draft, show_on_pos: e.target.checked })} className="accent-accent" />
             Show on POS screen
           </label>
         )}
@@ -137,12 +139,13 @@ function useDraft(kind: 'image' | 'document', save: (d: Draft) => Promise<void>,
 }
 
 export function CompanyImages({ canEdit }: { canEdit: boolean }) {
-  const { files, toast, setToast, save, remove } = useCompanyFiles('image');
+  const { files, toast, setToast, save, remove, dialog } = useCompanyFiles('image');
   const d = useDraft('image', save, text => setToast({ kind: 'error', text }));
 
   return (
     <div className="space-y-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
+      {dialog}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Store Showcase &amp; Beverage Visuals</h4>
         {canEdit && <button onClick={d.openPicker} className={primaryButton}><ImagePlus size={14} />Upload Image</button>}
@@ -150,13 +153,13 @@ export function CompanyImages({ canEdit }: { canEdit: boolean }) {
       </div>
       {files === null && <p className="py-10 text-center text-xs text-stone-400">Loading…</p>}
       {files?.length === 0 && (
-        <div className="rounded-xl border border-dashed border-[#e1c9b6] py-12 text-center text-xs text-stone-400 dark:border-[#343b59]">
+        <div className="rounded-xl border border-dashed border-line py-12 text-center text-xs text-stone-400">
           No images yet.{canEdit ? ' Upload the shop front, brand wall or licence display (JPG, PNG, WebP, GIF, up to 8 MB).' : ''}
         </div>
       )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {files?.map(f => (
-          <figure key={f.id} className="group relative h-52 overflow-hidden rounded-xl bg-stone-200 shadow-lg dark:bg-[#20253a]">
+          <figure key={f.id} className="group relative h-52 overflow-hidden rounded-xl bg-stone-200 shadow-lg">
             <img src={contentUrl(f)} alt={f.title} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
             <div className="absolute inset-0 bg-linear-to-t from-black/75 via-black/10 to-transparent" />
             <figcaption className="absolute inset-x-0 bottom-0 p-4 text-white">
@@ -178,7 +181,7 @@ export function CompanyImages({ canEdit }: { canEdit: boolean }) {
 }
 
 export function CompanyDocuments({ canEdit }: { canEdit: boolean }) {
-  const { files, toast, setToast, save, remove } = useCompanyFiles('document');
+  const { files, toast, setToast, save, remove, dialog } = useCompanyFiles('document');
   const d = useDraft('document', save, text => setToast({ kind: 'error', text }));
 
   const exportList = () => {
@@ -192,6 +195,7 @@ export function CompanyDocuments({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="space-y-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
+      {dialog}
       {d.fileInput}
       <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
         <table className="w-full min-w-[640px] text-left text-xs">
@@ -217,7 +221,7 @@ export function CompanyDocuments({ canEdit }: { canEdit: boolean }) {
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
                     <a href={contentUrl(f, true)} className="rounded p-1 text-slate-500 hover:text-emerald-600" aria-label={`Download ${f.file_name}`}><Download size={14} /></a>
-                    {canEdit && <button onClick={() => d.edit(f)} className="rounded p-1 text-slate-500 hover:text-[#b84716]" aria-label={`Edit ${f.file_name}`}><Edit3 size={14} /></button>}
+                    {canEdit && <button onClick={() => d.edit(f)} className="rounded p-1 text-slate-500 hover:text-accent-ink" aria-label={`Edit ${f.file_name}`}><Edit3 size={14} /></button>}
                     {canEdit && <button onClick={() => remove(f)} className="rounded p-1 text-slate-500 hover:text-red-600" aria-label={`Delete ${f.file_name}`}><Trash2 size={14} /></button>}
                   </div>
                 </td>
@@ -228,7 +232,7 @@ export function CompanyDocuments({ canEdit }: { canEdit: boolean }) {
       </div>
       <div className="flex flex-wrap justify-end gap-2 pt-2">
         {canEdit && <button onClick={d.openPicker} className={secondaryButton}><Upload size={14} />Add Document</button>}
-        <button onClick={exportList} disabled={!files?.length} className={primaryButton}><FileSpreadsheet size={14} />Export List (CSV)</button>
+        <button onClick={exportList} disabled={!files?.length} className={exportButton}><FileSpreadsheet size={14} />Export List (CSV)</button>
       </div>
       {!canEdit && <p className="text-right text-[11px] text-stone-400">Only an Administrator can add, edit or delete company files.</p>}
       {d.draft && <FileDialog kind="document" draft={d.draft} setDraft={d.setDraft} onSave={d.submit} onClose={d.close} />}

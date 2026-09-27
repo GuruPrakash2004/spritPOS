@@ -1,11 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Edit3, FilePlus, Save, Search, Trash2, X } from 'lucide-react';
+import { useConfirm } from './ConfirmDialog';
 import Toast from './Toast';
-import { api, errorText } from './api';
-import { field, label as labelClass, pageSub, pageTitle, panel, primaryButton, secondaryButton, dangerButton, tableBody, tableHead } from './ui';
+import { FormErrorSummary, InlineError } from './FormErrorSummary';
+import { api, errorText, getAuthRole } from './api';
+import { badge, field, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from './ui';
 
-// One screen for every simple master, the web twin of the legacy frmMstGeneral engine
-// and of the backend's crud() factory (/masters/<path>).
 export type MasterField = {
   key: string;
   label: string;
@@ -31,16 +31,16 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
   const [rows, setRows] = useState<Row[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [form, setForm] = useState<Row>(() => blank(fields));
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<Mode>('View');
   const [filter, setFilter] = useState('');
   const [options, setOptions] = useState<Record<string, string[]>>({});
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const { confirm, dialog } = useConfirm();
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2500);
-    return () => clearTimeout(timer);
-  }, [toast]);
+  const currentRole = getAuthRole();
+  // Role permission hierarchy: Cashier can add and edit items on arrival, but cannot delete!
+  const canDelete = path !== 'items' || (currentRole !== 'Cashier');
 
   useEffect(() => {
     api<Row[]>(`/masters/${path}`)
@@ -57,11 +57,84 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
   const listFields = fields.filter(f => f.showInList !== false).slice(0, 4);
   const visible = rows.filter(r => `${r.code} ${r.name ?? ''}`.toLowerCase().includes(filter.toLowerCase()));
 
-  const select = (row: Row) => { setSelected(String(row.code)); setForm(row); setMode('View'); };
+  const select = (row: Row) => {
+    setSelected(String(row.code));
+    setForm(row);
+    setFormErrors({});
+    setMode('View');
+  };
+
+  const handleFieldChange = (key: string, value: string | number | boolean) => {
+    let duplicateAlert: string | null = null;
+    setForm(prev => ({ ...prev, [key]: value }));
+
+    // When creating a new item: if entered code or short name already exists in master, show duplicate alert!
+    if (mode === 'New' && (key === 'code' || key === 'short_name')) {
+      const query = String(value).trim().toLowerCase();
+      if (query.length > 0) {
+        const match = rows.find(r => {
+          const rCode = String(r.code ?? '').trim().toLowerCase();
+          const rShort = String(r.short_name ?? '').trim().toLowerCase();
+          return (key === 'code' && rCode === query) || (key === 'short_name' && rShort === query);
+        });
+        if (match) {
+          duplicateAlert = `Item Master '${match.code}' already exists`;
+        }
+      }
+    }
+
+    if (duplicateAlert) {
+      setFormErrors(prev => ({ ...prev, [key]: duplicateAlert! }));
+      setToast({ kind: 'error', text: duplicateAlert });
+    } else if (formErrors[key]) {
+      setFormErrors(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  const focusField = (key: string) => {
+    const el = document.getElementById(`mc-${path}-${key}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.focus();
+    }
+  };
 
   const save = () => {
-    const missing = fields.find(f => f.required && String(form[f.key] ?? '').trim() === '');
-    if (missing) return setToast({ kind: 'error', text: `${missing.label} is required.` });
+    // Amazon-style validation: collect all missing required fields
+    const newErrors: Record<string, string> = {};
+    for (const f of fields) {
+      if (f.required) {
+        const val = String(form[f.key] ?? '').trim();
+        if (val === '') {
+          newErrors[f.key] = `Enter the ${f.label}`;
+        }
+      }
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      // Auto-jump cursor into the first invalid box
+      const firstInvalidKey = fields.find(f => newErrors[f.key])?.key;
+      if (firstInvalidKey) {
+        setTimeout(() => {
+          const el = document.getElementById(`mc-${path}-${firstInvalidKey}`);
+          if (el) {
+            el.focus();
+            if ('select' in el && typeof (el as HTMLInputElement).select === 'function') {
+              (el as HTMLInputElement).select();
+            }
+          }
+        }, 50);
+      }
+      return;
+    }
+
+    setFormErrors({});
+
     const body = Object.fromEntries(fields.map(f => [f.key, f.type === 'number' ? Number(form[f.key]) || 0 : form[f.key]]));
     const request = mode === 'New'
       ? api<Row>(`/masters/${path}`, { method: 'POST', body })
@@ -70,11 +143,18 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
       setRows(mode === 'New' ? [...rows, saved] : rows.map(r => (String(r.code) === selected ? saved : r)));
       select(saved);
       setToast({ kind: 'ok', text: `${title.replace(' Master', '')} "${saved.code}" saved.` });
-    }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
+    }).catch(e => {
+      // Server errors stay until closed in the Walmart-style snackbar
+      setToast({ kind: 'error', text: errorText(e) });
+    });
   };
 
-  const remove = () => {
-    if (!selected || !window.confirm(`Delete "${selected}"?`)) return;
+  const remove = async () => {
+    if (!canDelete) {
+      setToast({ kind: 'error', text: 'Cashiers cannot delete items. Requires Manager or Administrator role.' });
+      return;
+    }
+    if (!selected || !(await confirm(`Delete "${selected}"? This can't be undone.`))) return;
     api(`/masters/${path}/${encodeURIComponent(selected)}`, { method: 'DELETE' })
       .then(() => {
         const next = rows.filter(r => String(r.code) !== selected);
@@ -86,102 +166,280 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
   };
 
   const cancel = () => {
+    setFormErrors({});
     const current = rows.find(r => String(r.code) === selected);
     if (current) select(current); else { setForm(blank(fields)); setMode('View'); }
   };
 
+  // Keyboard navigation for Mac & Windows
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (document.querySelector('[role="dialog"]')) return;
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+      // Enter to save when editing/adding in form
+      if (e.key === 'Enter' && !readOnly) {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'TEXTAREA' && target.tagName !== 'BUTTON') {
+          e.preventDefault();
+          save();
+          return;
+        }
+      }
+
+      // Escape to cancel
+      if (e.key === 'Escape' && !readOnly) {
+        e.preventDefault();
+        cancel();
+        return;
+      }
+
+      // Cmd+S or Ctrl+S to save
+      if (modKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (!readOnly) save();
+        return;
+      }
+
+      // Cmd+N, Ctrl+N or Alt+N for New
+      if ((modKey && e.key.toLowerCase() === 'n') || (e.altKey && e.key.toLowerCase() === 'n')) {
+        e.preventDefault();
+        setForm(blank(fields));
+        setFormErrors({});
+        setMode('New');
+        setTimeout(() => {
+          const first = fields[0]?.key;
+          if (first) document.getElementById(`mc-${path}-${first}`)?.focus();
+        }, 50);
+        return;
+      }
+
+      // Cmd+E, Ctrl+E or Alt+E for Edit
+      if (readOnly && selected && ((modKey && e.key.toLowerCase() === 'e') || (e.altKey && e.key.toLowerCase() === 'e'))) {
+        e.preventDefault();
+        setFormErrors({});
+        setMode('Edit');
+        return;
+      }
+
+      // Arrow navigation between form inputs
+      if (!readOnly) {
+        const target = e.target as HTMLElement;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT')) {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            const formInputs = Array.from(document.querySelectorAll<HTMLElement>(`[id^="mc-${path}-"]`));
+            const currentIndex = formInputs.indexOf(target);
+            if (currentIndex !== -1) {
+              if (e.key === 'ArrowDown' && currentIndex < formInputs.length - 1) {
+                e.preventDefault();
+                formInputs[currentIndex + 1].focus();
+              } else if (e.key === 'ArrowUp' && currentIndex > 0) {
+                e.preventDefault();
+                formInputs[currentIndex - 1].focus();
+              }
+            }
+          }
+        }
+      }
+
+      // Table row selection with Arrow keys in View mode
+      if (readOnly && visible.length > 0) {
+        const target = e.target as HTMLElement;
+        const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA');
+        if (!isTyping) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const currIdx = visible.findIndex(r => String(r.code) === selected);
+            const nextIdx = Math.min(visible.length - 1, currIdx + 1);
+            if (nextIdx !== currIdx && visible[nextIdx]) {
+              select(visible[nextIdx]);
+            }
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const currIdx = visible.findIndex(r => String(r.code) === selected);
+            const prevIdx = Math.max(0, currIdx - 1);
+            if (prevIdx !== currIdx && visible[prevIdx]) {
+              select(visible[prevIdx]);
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
+    <div className="mx-auto max-w-7xl">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
-      <div className={`${panel} flex flex-wrap items-center justify-between gap-3 px-5 py-3`}>
+      {dialog}
+      <div className={`${pageHeader} mb-5`}>
         <div>
-          <h2 className={pageTitle}>{title}</h2>
+          <h1 className={pageTitle}>{title}</h1>
           <p className={pageSub}>{subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {readOnly && toolbar}
           {readOnly ? (
             <>
-              <button onClick={() => { setForm(blank(fields)); setMode('New'); }} className={primaryButton}><FilePlus size={14} />New</button>
-              <button onClick={() => setMode('Edit')} disabled={!selected} className={secondaryButton}><Edit3 size={14} />Edit</button>
-              <button onClick={remove} disabled={!selected} className={dangerButton}><Trash2 size={14} />Delete</button>
+              {toolbar}
+              <button
+                onClick={remove}
+                disabled={!selected || !canDelete}
+                title={!canDelete ? "Cashiers cannot delete items (Manager/Admin role required)" : undefined}
+                className={`${ghostButton} ${!canDelete ? 'opacity-40 cursor-not-allowed hover:!text-stone-400' : 'hover:!text-red-600 dark:hover:!text-red-400'}`}
+              >
+                <Trash2 size={14} />Delete
+              </button>
+              <button onClick={() => { setFormErrors({}); setMode('Edit'); }} disabled={!selected} className={secondaryButton}><Edit3 size={14} />Edit</button>
+              <button onClick={() => { setForm(blank(fields)); setFormErrors({}); setMode('New'); }} className={primaryButton}><FilePlus size={14} />New</button>
             </>
           ) : (
             <>
-              <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
               <button onClick={cancel} className={secondaryButton}><X size={14} />Cancel</button>
+              <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
             </>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <div className={`${panel} flex max-h-[520px] flex-col overflow-hidden`}>
-          <div className="relative border-b border-[#e1c9b6] p-2 dark:border-[#343b59]">
-            <Search size={12} className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
-            <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Search code or name…" className={`${field} w-full pl-7`} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <section aria-label={`${title} list`} className={`${panel} flex max-h-[600px] min-h-[320px] flex-col overflow-hidden`}>
+          <div className="flex items-center gap-3 border-b border-line p-3">
+            <div className="relative flex-1">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Search code or name…" aria-label="Search records" className={`${field} pl-8`} />
+            </div>
+            <span className="shrink-0 text-xs tabular-nums text-stone-500">{visible.length} of {rows.length}</span>
           </div>
           <div className="flex-1 overflow-auto">
             <table className="w-full text-xs">
               <thead className={tableHead}>
-                <tr>{listFields.map(f => <th key={f.key} className="px-3 py-2">{f.label}</th>)}</tr>
+                <tr>{listFields.map((f, i) => <th key={f.key} className={`px-4 py-2.5 ${f.type === 'number' ? 'text-right' : ''} ${i > 1 ? 'hidden sm:table-cell' : ''}`}>{f.label}</th>)}</tr>
               </thead>
               <tbody className={tableBody}>
-                {visible.map(r => (
-                  <tr key={String(r.code)} onClick={() => mode === 'View' && select(r)} className={`cursor-pointer ${String(r.code) === selected ? 'bg-[#e8702a]/10' : 'hover:bg-stone-50 dark:hover:bg-[#1b2033]'}`}>
-                    {listFields.map(f => (
-                      <td key={f.key} className="px-3 py-2 text-stone-800 dark:text-stone-200">
-                        {f.type === 'bool' ? (r[f.key] ? 'Yes' : 'No') : String(r[f.key] ?? '')}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-                {!visible.length && <tr><td colSpan={listFields.length} className="px-3 py-8 text-center text-stone-400">No records.</td></tr>}
+                {visible.map(r => {
+                  const isSel = String(r.code) === selected;
+                  return (
+                    <tr
+                      key={String(r.code)}
+                      onClick={() => mode === 'View' && select(r)}
+                      onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && mode === 'View') { e.preventDefault(); select(r); } }}
+                      tabIndex={mode === 'View' ? 0 : -1}
+                      aria-selected={isSel}
+                      className={`cursor-pointer outline-none transition-colors focus-visible:bg-subtle ${isSel ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}
+                    >
+                      {listFields.map((f, i) => (
+                        <td key={f.key} className={`px-4 py-2.5 ${i > 1 ? 'hidden sm:table-cell' : ''} ${i === 0 ? `font-medium ${isSel ? 'text-accent-ink' : 'text-stone-900 dark:text-stone-50'}` : 'text-stone-600 dark:text-stone-300'} ${f.type === 'number' ? 'text-right tabular-nums' : ''}`}>
+                          {f.type === 'bool' ? <span className={badge(r[f.key] ? 'success' : 'neutral')}>{r[f.key] ? 'Yes' : 'No'}</span> : String(r[f.key] ?? '')}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+                {!visible.length && <tr><td colSpan={listFields.length} className="px-4 py-12 text-center text-stone-500">{filter ? `No records match “${filter}”.` : 'No records yet. Click New to add one.'}</td></tr>}
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
 
-        <div className={`${panel} grid content-start gap-3 p-5 ${fields.length > 8 ? 'sm:grid-cols-2' : ''}`}>
-          <div className="flex items-center justify-between sm:col-span-full">
-            <span className="text-xs font-bold uppercase tracking-wider text-stone-500">{mode === 'New' ? 'New record' : mode === 'Edit' ? 'Editing' : 'Details'}</span>
-            <span className="text-[10px] text-stone-400"><span className="text-red-600 dark:text-red-400">Red</span> = required</span>
+        <section aria-label="Record details" className={`${panel} self-start`}>
+          <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+            <h2 className={sectionTitle}>{mode === 'New' ? 'New record' : mode === 'Edit' ? `Editing ${selected}` : selected ?? 'Details'}</h2>
+            {readOnly
+              ? <span className={badge('neutral')}>View</span>
+              : <span className="text-[11px] text-stone-500"><span className="text-red-600">*</span> required</span>}
           </div>
-          {fields.map(f => {
-            // The code is the key, so it can only be typed when creating a record.
-            const locked = readOnly || (f.key === 'code' && mode === 'Edit');
-            const value = form[f.key];
-            const opts = f.options ?? options[f.key] ?? [];
-            return (
-              <div key={f.key}>
-                {f.type === 'bool' ? (
-                  <label className="flex items-center gap-2 text-xs font-semibold text-stone-700 dark:text-stone-200">
-                    <input type="checkbox" disabled={locked} checked={Boolean(value)} onChange={e => setForm({ ...form, [f.key]: e.target.checked })} className="accent-[#e8702a]" />
-                    {f.label}
-                  </label>
-                ) : (
-                  <>
-                    <label className={`${labelClass} ${f.required ? '!text-red-600 dark:!text-red-400' : ''}`}>{f.label}</label>
-                    {f.type === 'select' || f.optionsFrom ? (
-                      <select disabled={locked} value={String(value ?? '')} onChange={e => setForm({ ...form, [f.key]: e.target.value })} className={`${field} w-full`}>
-                        <option value="">— select —</option>
-                        {opts.map(o => <option key={o}>{o}</option>)}
-                      </select>
+
+          <div className="p-5">
+            {/* Amazon-style "There was a problem" alert summary box */}
+            {!readOnly && <FormErrorSummary errors={formErrors} onFocusField={focusField} />}
+
+            <div className={`grid gap-4 ${fields.length > 8 ? 'sm:grid-cols-2' : ''}`}>
+              {fields.map(f => {
+                const locked = readOnly || (f.key === 'code' && mode === 'Edit');
+                const value = form[f.key];
+                const opts = f.options ?? options[f.key] ?? [];
+                const id = `mc-${path}-${f.key}`;
+                const hasError = !readOnly && !!formErrors[f.key];
+
+                return (
+                  <div key={f.key}>
+                    {readOnly ? (
+                      <>
+                        <div className="mb-1 text-xs font-medium text-stone-500 dark:text-stone-400">{f.label}</div>
+                        <div className={`min-h-5 text-sm text-stone-900 dark:text-stone-50 ${f.type === 'number' ? 'tabular-nums' : ''}`}>
+                          {f.type === 'bool'
+                            ? <span className={badge(value ? 'success' : 'neutral')}>{value ? 'Yes' : 'No'}</span>
+                            : String(value ?? '') === '' ? <span className="text-stone-400">—</span> : String(value)}
+                        </div>
+                      </>
+                    ) : f.type === 'bool' ? (
+                      <label htmlFor={id} className="flex items-center gap-2 pt-1 text-xs font-medium text-stone-700 dark:text-stone-200">
+                        <input id={id} type="checkbox" checked={Boolean(value)} onChange={e => handleFieldChange(f.key, e.target.checked)} className="h-4 w-4 accent-accent" />
+                        {f.label}
+                      </label>
                     ) : (
-                      <input
-                        type={f.type === 'number' ? 'number' : 'text'}
-                        readOnly={locked}
-                        value={String(value ?? '')}
-                        onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                        className={`${field} w-full ${locked ? 'bg-stone-100 dark:bg-[#1b2033]' : ''}`}
-                      />
+                      <>
+                        <label htmlFor={id} className={labelClass}>{f.label}{f.required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
+                        {f.type === 'select' || f.optionsFrom ? (
+                          <select
+                            id={id}
+                            required={f.required}
+                            value={String(value ?? '')}
+                            onChange={e => handleFieldChange(f.key, e.target.value)}
+                            aria-invalid={hasError}
+                            aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
+                            className={`${field} ${hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`}
+                          >
+                            <option value="">Select…</option>
+                            {opts.map(o => <option key={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <>
+                            <input
+                              id={id}
+                              type={f.type === 'number' ? 'number' : 'text'}
+                              readOnly={locked}
+                              disabled={locked}
+                              required={f.required}
+                              value={String(value ?? '')}
+                              list={path === 'items' && f.key === 'code' ? 'mc-items-code-list' : path === 'items' && f.key === 'short_name' ? 'mc-items-shortname-list' : undefined}
+                              onChange={e => handleFieldChange(f.key, e.target.value)}
+                              aria-invalid={hasError}
+                              aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
+                              className={`${field} ${f.type === 'number' ? 'text-right tabular-nums' : ''} ${hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`}
+                            />
+                            {path === 'items' && f.key === 'code' && (
+                              <datalist id="mc-items-code-list">
+                                {rows.map(r => (
+                                  <option key={String(r.code)} value={String(r.code)}>
+                                    {String(r.name || '')}
+                                  </option>
+                                ))}
+                              </datalist>
+                            )}
+                            {path === 'items' && f.key === 'short_name' && (
+                              <datalist id="mc-items-shortname-list">
+                                {rows.filter(r => r.short_name).map(r => (
+                                  <option key={String(r.short_name)} value={String(r.short_name)}>
+                                    {String(r.name || '')}
+                                  </option>
+                                ))}
+                              </datalist>
+                            )}
+                          </>
+                        )}
+                        <InlineError message={formErrors[f.key]} id={`err-${path}-${f.key}`} />
+                      </>
                     )}
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

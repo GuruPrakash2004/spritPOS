@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronsDown, ChevronsUp, Copy, FileInput,
-  Info, Paperclip, PlusCircle, RefreshCw, Save, Search, Settings2, UserPlus, XCircle,
+  Info, Paperclip, PlusCircle, RefreshCw, Save, Search, Settings2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
+import { useConfirm } from '../ConfirmDialog';
+import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, secondaryButton, sectionTitle, tableHead } from '../ui';
 import Toast from '../Toast';
 import { api, errorText, type ApiDoc, type ApiIndent, type ApiSupplier } from '../api';
 import { SAMPLE_STOCK_DATA } from '../stockData';
@@ -38,6 +40,7 @@ export default function PurchaseBill() {
   const [tcsPct, setTcsPct] = useState('1');
   const [remarks, setRemarks] = useState('');
   const [notesOpen, setNotesOpen] = useState(true);
+  const { confirm, dialog } = useConfirm();
   const [totalsOpen, setTotalsOpen] = useState(true);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -229,147 +232,186 @@ export default function PurchaseBill() {
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
-  const cancelBill = () => {
-    if (window.confirm('Cancel this purchase bill? Unsaved entries will be cleared.')) resetBill();
+  const cancelBill = async () => {
+    if (await confirm('Cancel this purchase bill? Unsaved entries will be cleared.')) resetBill();
   };
 
   const totalRows: [string, number][] = [
-    ['Total Basic Amount', totals.basic], ['TCS', totals.tcs], ['Total CGST Amount', totals.cgst], ['Total SGST Amount', totals.sgst],
-    ['Total Cess Amount', totals.cess], ['Total Comp.Cess', totals.compCess], ['Round Off', totals.roundOff],
+    ['Basic amount', totals.basic], ['TCS', totals.tcs], ['CGST', totals.cgst], ['SGST', totals.sgst],
+    ['Cess', totals.cess], ['Comp. cess', totals.compCess], ['Round off', totals.roundOff],
   ];
 
-  return (
-    <div className="mx-auto flex max-w-[1600px] flex-col gap-3">
-      {toast && <Toast kind={toast.kind} text={toast.text} />}
+  const sep = <span className="mx-1 h-5 w-px bg-line" aria-hidden="true" />;
 
-      <div className="flex items-center justify-between rounded-xl bg-stone-800 px-4 py-2.5 text-white shadow-sm dark:bg-[#20253a]">
-        <h2 className="text-lg font-bold">New - Purchase Bill</h2>
-        <button onClick={() => setHeaderOpen(!headerOpen)} className="rounded-lg p-1 hover:bg-white/10" aria-label={headerOpen ? 'Collapse header' : 'Expand header'}>
-          {headerOpen ? <ChevronsUp size={18} /> : <ChevronsDown size={18} />}
-        </button>
+  return (
+    <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
+      {toast && <Toast kind={toast.kind} text={toast.text} />}
+      {dialog}
+
+      {/* Document header */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className={pageTitle}>Purchase bill</h1>
+            <span className={badge('accent')}>New</span>
+          </div>
+          <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">PB <span className="font-mono font-medium text-stone-800 dark:text-stone-200">{pbDisplay}</span> · {totals.items} items · {totals.qty} bottles</p>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={() => setHeaderOpen(!headerOpen)} className={ghostButton} aria-expanded={headerOpen}>
+            {headerOpen ? <ChevronsUp size={14} /> : <ChevronsDown size={14} />}{headerOpen ? 'Hide details' : 'Show details'}
+          </button>
+          <button onClick={cancelBill} className={secondaryButton}><XCircle size={14} />Cancel</button>
+          <button onClick={saveBill} className={primaryButton}><Save size={14} />Save bill</button>
+        </div>
       </div>
 
       {headerOpen && (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr]">
-          {/* PB number, supplier, billing address, PB value */}
-          <div className={`${panel} grid grid-cols-1 gap-4 p-4 md:grid-cols-[1fr_220px]`}>
-            <div className="space-y-3 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="w-24 font-bold text-[#b84716] dark:text-[#ffb07e]">PB No.</span>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+          {/* PB number, supplier, billing address */}
+          <section aria-label="Bill details" className={`${panel} grid gap-4 p-5 sm:grid-cols-2`}>
+            <div>
+              <span className={labelClass} id="pb-no-label">PB no.</span>
+              <div className="flex gap-2" role="group" aria-labelledby="pb-no-label">
                 <select value={pbSeries} onChange={e => setPbSeries(e.target.value)} className={`${field} w-20`} aria-label="PB series">
                   {PB_SERIES.map(s => <option key={s} value={s}>{s || '—'}</option>)}
                 </select>
-                <input type="number" min={1} value={pbNo} onChange={e => setPbNo(Math.max(1, Math.floor(Number(e.target.value)) || 1))} className={`${field} w-20 text-center font-mono font-bold`} aria-label="PB number" />
-                <label className="ml-2 font-bold text-[#b84716] dark:text-[#ffb07e]" htmlFor="pb-date">Date</label>
-                <input id="pb-date" type="date" value={pbDate} onChange={e => setPbDate(e.target.value)} className={`${field} font-mono`} />
-                <span className="ml-auto font-mono font-bold text-stone-600 dark:text-stone-300">{pbDisplay}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <label htmlFor="pb-supplier" className="w-24 font-semibold text-red-700 dark:text-red-400">Supplier</label>
-                <button onClick={() => setSupplierOpen(true)} className="rounded-lg border border-[#e1c9b6] bg-[#fffaf5] p-1.5 text-sky-700 hover:border-[#e8702a] dark:border-[#414a6e] dark:bg-[#20253a] dark:text-sky-400" title="Add new supplier" aria-label="Add new supplier"><UserPlus size={14} /></button>
-                <input id="pb-supplier" list="pb-suppliers" value={supplier} onChange={e => selectSupplier(e.target.value)} placeholder="Select or type supplier" className={`${field} flex-1`} />
-                <datalist id="pb-suppliers">{suppliers.map(s => <option key={s.name} value={s.name} />)}</datalist>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="w-24 font-bold italic text-stone-700 dark:text-stone-200">Billing Address</span>
-                <div className="flex-1">
-                  {editingAddress
-                    ? <textarea value={billingAddress} onChange={e => setBillingAddress(e.target.value)} rows={2} className={`${field} w-full`} aria-label="Billing address" />
-                    : <p className="text-stone-600 dark:text-stone-400">{billingAddress || <span className="text-stone-400">—</span>}</p>}
-                  <button onClick={() => setEditingAddress(!editingAddress)} className="mt-1 text-sky-700 italic underline dark:text-sky-400">{editingAddress ? 'Done' : 'Change'}</button>
-                </div>
+                <input type="number" min={1} value={pbNo} onChange={e => setPbNo(Math.max(1, Math.floor(Number(e.target.value)) || 1))} className={`${field} text-right font-mono`} aria-label="PB number" />
               </div>
             </div>
-            <div className="flex flex-col overflow-hidden rounded-xl border border-[#e1c9b6] dark:border-[#414a6e]">
-              <div className="bg-stone-600 px-2 py-1.5 text-center text-white">
-                <div className="text-sm font-bold">PB Value</div>
-                <div className="text-[10px]">[Balance to Enter]</div>
-              </div>
-              <div className={`flex flex-1 flex-col items-center justify-center p-3 ${balanced ? 'bg-emerald-500 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'}`}>
-                <span className="font-mono text-xl font-bold">₹ {money(totals.net)}</span>
-                <span className="text-[11px] font-semibold">{balanced ? 'Matches Inv Value' : `Balance ₹ ${money(balance)}`}</span>
-              </div>
+            <div>
+              <label className={labelClass} htmlFor="pb-date">Bill date</label>
+              <input id="pb-date" type="date" value={pbDate} onChange={e => setPbDate(e.target.value)} className={`${field} tabular-nums`} />
             </div>
-          </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="pb-supplier" className={labelClass}>Supplier<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
+              <div className="flex gap-2">
+                <input id="pb-supplier" list="pb-suppliers" value={supplier} onChange={e => selectSupplier(e.target.value)} placeholder="Select or type supplier" className={field} />
+                <button onClick={() => setSupplierOpen(true)} className={secondaryButton} title="Add new supplier"><UserPlus size={14} /><span className="hidden sm:inline">New</span></button>
+              </div>
+              <datalist id="pb-suppliers">{suppliers.map(s => <option key={s.name} value={s.name} />)}</datalist>
+            </div>
+            <div className="sm:col-span-2">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className={`${labelClass} mb-0`}>Billing address</span>
+                <button onClick={() => setEditingAddress(!editingAddress)} className="text-xs font-medium text-accent-ink hover:underline">{editingAddress ? 'Done' : 'Change'}</button>
+              </div>
+              {editingAddress
+                ? <textarea value={billingAddress} onChange={e => setBillingAddress(e.target.value)} rows={2} className={field} aria-label="Billing address" />
+                : <p className="text-xs leading-relaxed text-stone-700 dark:text-stone-300">{billingAddress || <span className="text-stone-400">—</span>}</p>}
+            </div>
+          </section>
 
-          {/* Supplier invoice details */}
-          <div className={`${panel} flex flex-col gap-3 p-4`}>
-            <table className="w-full border border-[#e1c9b6] text-xs dark:border-[#414a6e]">
-              <tbody className="divide-y divide-[#e1c9b6] dark:divide-[#414a6e]">
-                <tr>
-                  <th className="w-32 bg-[#f1e3d8] px-3 py-1.5 text-left font-medium dark:bg-[#20253a]">Inv No</th>
-                  <td className="p-1"><input value={invNo} onChange={e => setInvNo(e.target.value)} className={`${field} w-full font-mono`} aria-label="Inv No" /></td>
-                </tr>
-                <tr>
-                  <th className="bg-[#f1e3d8] px-3 py-1.5 text-left font-medium dark:bg-[#20253a]">Inv Date</th>
-                  <td className="p-1"><input type="date" value={invDate} onChange={e => setInvDate(e.target.value)} className={`${field} w-full font-mono`} aria-label="Inv Date" /></td>
-                </tr>
-                <tr>
-                  <th className="bg-[#f1e3d8] px-3 py-1.5 text-left font-medium dark:bg-[#20253a]">Inv Value</th>
-                  <td className="p-1"><input type="number" min={0} step="0.01" value={invValue} onChange={e => setInvValue(e.target.value)} className={`${field} w-full font-mono`} aria-label="Inv Value" /></td>
-                </tr>
-                <tr>
-                  <th className="bg-[#f1e3d8] px-3 py-1.5 text-left font-medium dark:bg-[#20253a]">Purchase Type</th>
-                  <td className="p-1">
-                    <select value={purchaseType} onChange={e => setPurchaseType(e.target.value)} className={`${field} w-full`} aria-label="Purchase Type">
-                      {PURCHASE_TYPES.map(t => <option key={t}>{t}</option>)}
-                    </select>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div className={infoBar}>
-              <Info size={16} className="shrink-0 text-amber-500" />
-              {balanced
-                ? `Supplier invoice ${invNo || ''} matches the bill total.`
-                : 'Enter the supplier invoice value; PB Value must match it before saving.'}
+          {/* Supplier invoice + match status */}
+          <section aria-label="Supplier invoice" className={`${panel} flex flex-col gap-4 p-5`}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="pb-inv-no" className={labelClass}>Supplier invoice no.</label>
+                <input id="pb-inv-no" value={invNo} onChange={e => setInvNo(e.target.value)} className={`${field} font-mono`} />
+              </div>
+              <div>
+                <label htmlFor="pb-inv-date" className={labelClass}>Invoice date</label>
+                <input id="pb-inv-date" type="date" value={invDate} onChange={e => setInvDate(e.target.value)} className={`${field} tabular-nums`} />
+              </div>
+              <div>
+                <label htmlFor="pb-inv-val" className={labelClass}>Invoice value (₹)</label>
+                <input id="pb-inv-val" type="number" min={0} step="0.01" value={invValue} onChange={e => setInvValue(e.target.value)} className={`${field} text-right tabular-nums`} />
+              </div>
+              <div>
+                <label htmlFor="pb-type" className={labelClass}>Purchase type</label>
+                <select id="pb-type" value={purchaseType} onChange={e => setPurchaseType(e.target.value)} className={field}>
+                  {PURCHASE_TYPES.map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
             </div>
-          </div>
+            <div role="status" className={`mt-auto flex items-center gap-3 rounded-lg px-4 py-3 ${balanced ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300' : 'bg-amber-500/12 text-amber-800 dark:text-amber-300'}`}>
+              {balanced ? <CheckCircle2 size={18} className="shrink-0" /> : <AlertTriangle size={18} className="shrink-0" />}
+              <div className="min-w-0 flex-1 text-xs">
+                <div className="font-semibold">{balanced ? 'Matches supplier invoice' : `₹ ${money(balance)} left to enter`}</div>
+                <div className="opacity-80">{balanced ? `Invoice ${invNo || ''} agrees with the bill total.` : 'PB value must match the invoice value before saving.'}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[11px] opacity-80">PB value</div>
+                <div className="text-lg font-semibold tabular-nums">₹ {money(totals.net)}</div>
+              </div>
+            </div>
+          </section>
         </div>
       )}
 
-      {/* Item grid */}
-      <div className={`${panel} overflow-hidden`}>
-        <div className="min-h-[280px] overflow-x-auto">
+      {/* Line items */}
+      <section aria-label="Line items" className={`${panel} overflow-hidden`}>
+        <div className="flex flex-wrap items-center gap-1 border-b border-line px-3 py-2">
+          <button onClick={() => setLookupOpen(true)} className={`${primaryButton} mr-2`}><PlusCircle size={14} />Add item</button>
+          <div className="relative flex items-center">
+            <button onClick={() => addRows(1)} className={iconButton} title="Add blank row" aria-label="Add blank row"><PlusCircle size={16} /></button>
+            <button onClick={() => setAddMenuOpen(!addMenuOpen)} className={`${iconButton} w-6`} aria-label="More add options" aria-expanded={addMenuOpen}><ChevronDown size={14} /></button>
+            {addMenuOpen && (
+              <div className="absolute left-0 top-full z-10 mt-1 w-48 overflow-hidden rounded-xl border border-line bg-surface p-1 text-xs shadow-pop">
+                <button onClick={() => addRows(1)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-subtle">Add single item</button>
+                <button onClick={() => addRows(5)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-subtle">Add 5 blank rows</button>
+                <button onClick={() => { const kept = rows.filter(isFilled); setRows(kept.length ? kept : [blankRow()]); setAddMenuOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-subtle">Remove blank rows</button>
+              </div>
+            )}
+          </div>
+          <button onClick={copyRow} className={iconButton} title="Duplicate selected row" aria-label="Duplicate selected row"><Copy size={16} /></button>
+          <button onClick={deleteRow} className={`${iconButton} hover:!text-red-600`} title="Delete selected row" aria-label="Delete selected row"><XCircle size={16} /></button>
+          {sep}
+          <button onClick={() => moveRow(-1)} disabled={selectedIndex <= 0} className={iconButton} title="Move row up" aria-label="Move row up"><ArrowUpCircle size={16} /></button>
+          <button onClick={() => moveRow(1)} disabled={selectedIndex === -1 || selectedIndex >= rows.length - 1} className={iconButton} title="Move row down" aria-label="Move row down"><ArrowDownCircle size={16} /></button>
+          {sep}
+          <button onClick={() => setLookupOpen(true)} className={iconButton} title="Item lookup" aria-label="Item lookup"><Search size={16} /></button>
+          <button onClick={refreshQoh} className={iconButton} title="Refresh stock on hand" aria-label="Refresh stock on hand"><RefreshCw size={16} /></button>
+          <button onClick={() => setShowTaxColumns(!showTaxColumns)} className={`${iconButton} ${showTaxColumns ? '' : '!text-accent'}`} title={showTaxColumns ? 'Hide tax columns' : 'Show tax columns'} aria-label="Toggle tax columns" aria-pressed={!showTaxColumns}><Settings2 size={16} /></button>
+          <button onClick={() => fileInput.current?.click()} className={`${iconButton} relative`} title="Attach supplier invoice" aria-label="Attach supplier invoice">
+            <Paperclip size={16} />
+            {attachments.length > 0 && <span className="absolute -right-0.5 -top-0.5 rounded-full bg-accent px-1 text-[9px] font-semibold text-white">{attachments.length}</span>}
+          </button>
+          <input ref={fileInput} type="file" multiple hidden onChange={e => setAttachments([...attachments, ...Array.from(e.target.files ?? []).map(f => f.name)])} />
+          {sep}
+          <button onClick={() => { setCopyOpen(true); openCopyFrom(); }} className={ghostButton} title="Copy lines from a Purchase Indent"><FileInput size={14} />Copy from indent</button>
+          <span className="ml-auto pr-1 text-xs tabular-nums text-stone-500">{totals.items} items · {totals.qty} qty</span>
+        </div>
+        <div className="min-h-[260px] overflow-x-auto">
           <table className="w-full min-w-[1200px] text-xs">
-            <thead className="whitespace-nowrap bg-[#f1e3d8] text-stone-600 dark:bg-[#20253a] dark:text-stone-300">
+            <thead className={tableHead}>
               <tr>
-                <th className={`${headCell} w-12`}>Sl No</th>
-                <th className={`${headCell} w-28`}>Item Code</th>
-                <th className={`${headCell} min-w-72`}>Item Name</th>
-                <th className={`${headCell} w-16 text-right`}>QOH</th>
-                <th className={`${headCell} w-20 text-right text-[#b84716] dark:text-[#ffb07e]`}>PB Qty</th>
-                <th className={`${headCell} w-24 text-right text-[#b84716] dark:text-[#ffb07e]`}>PB Rate</th>
-                <th className={`${headCell} w-28 text-right`}>PB Amt</th>
+                <th className={`${headCell} w-12 pl-4`}>#</th>
+                <th className={`${headCell} w-28`}>Item code</th>
+                <th className={`${headCell} min-w-72`}>Item name</th>
+                <th className={`${headCell} w-16 text-right`}>In stock</th>
+                <th className={`${headCell} w-20 text-right`}>Qty</th>
+                <th className={`${headCell} w-24 text-right`}>Rate</th>
+                <th className={`${headCell} w-28 text-right`}>Amount</th>
                 {showTaxColumns && <>
                   <th className={`${headCell} w-16 text-right`}>CGST %</th>
-                  <th className={`${headCell} w-24 text-right`}>CGST Amt</th>
+                  <th className={`${headCell} w-24 text-right`}>CGST amt</th>
                   <th className={`${headCell} w-16 text-right`}>SGST %</th>
-                  <th className={`${headCell} w-24 text-right`}>SGST Amt</th>
-                  <th className={`${headCell} w-16 text-right`}>CESS %</th>
-                  <th className={`${headCell} w-24 text-right`}>Cess Amount</th>
-                  <th className={`${headCell} w-24 text-right`}>Comp.Cess</th>
+                  <th className={`${headCell} w-24 text-right`}>SGST amt</th>
+                  <th className={`${headCell} w-16 text-right`}>Cess %</th>
+                  <th className={`${headCell} w-24 text-right`}>Cess amt</th>
+                  <th className={`${headCell} w-24 pr-4 text-right`}>Comp. cess</th>
                 </>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#f1e3d8] dark:divide-[#343b59]">
+            <tbody className="divide-y divide-line-soft tabular-nums">
               {rows.map((row, i) => (
-                <tr key={row.uid} onClick={() => setSelectedUid(row.uid)} className={row.uid === selectedUid ? 'bg-[#e8702a]/20' : 'hover:bg-stone-50 dark:hover:bg-[#1b2033]'}>
-                  <td className="px-2 py-1 text-stone-500">{i + 1}</td>
-                  <td className="px-1 py-1"><input list="pb-codes" value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={cell} aria-label={`Item code row ${i + 1}`} /></td>
-                  <td className="px-1 py-1"><input list="pb-names" value={row.name} onChange={e => setItem(row.uid, 'name', e.target.value)} className={`${cell} font-sans`} aria-label={`Item name row ${i + 1}`} /></td>
-                  <td className="px-2 py-1 text-right font-mono text-stone-500">{isFilled(row) ? row.qoh : ''}</td>
-                  <td className="px-1 py-1">{numberCell(row, 'qty', 'PB Qty', 'font-bold')}</td>
+                <tr key={row.uid} onClick={() => setSelectedUid(row.uid)} aria-selected={row.uid === selectedUid} className={`transition-colors ${row.uid === selectedUid ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
+                  <td className="py-1 pl-4 pr-2 text-stone-400">{i + 1}</td>
+                  <td className="px-1 py-1"><input list="pb-codes" value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={`${cell} font-mono`} aria-label={`Item code row ${i + 1}`} /></td>
+                  <td className="px-1 py-1"><input list="pb-names" value={row.name} onChange={e => setItem(row.uid, 'name', e.target.value)} className={`${cell} font-medium text-stone-900 dark:text-stone-50`} aria-label={`Item name row ${i + 1}`} /></td>
+                  <td className="px-2 py-1 text-right text-stone-500">{isFilled(row) ? row.qoh : ''}</td>
+                  <td className="px-1 py-1">{numberCell(row, 'qty', 'PB Qty', 'font-semibold')}</td>
                   <td className="px-1 py-1">{numberCell(row, 'rate', 'PB Rate')}</td>
-                  <td className="px-2 py-1 text-right font-mono font-bold">{isFilled(row) ? money(amt(row)) : ''}</td>
+                  <td className="px-2 py-1 text-right font-semibold text-stone-900 dark:text-stone-50">{isFilled(row) ? money(amt(row)) : ''}</td>
                   {showTaxColumns && <>
                     <td className="px-1 py-1">{numberCell(row, 'cgstPct', 'CGST %')}</td>
-                    <td className="px-2 py-1 text-right font-mono">{isFilled(row) ? money(pctOf(row, row.cgstPct)) : ''}</td>
+                    <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.cgstPct)) : ''}</td>
                     <td className="px-1 py-1">{numberCell(row, 'sgstPct', 'SGST %')}</td>
-                    <td className="px-2 py-1 text-right font-mono">{isFilled(row) ? money(pctOf(row, row.sgstPct)) : ''}</td>
+                    <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.sgstPct)) : ''}</td>
                     <td className="px-1 py-1">{numberCell(row, 'cessPct', 'CESS %')}</td>
-                    <td className="px-2 py-1 text-right font-mono">{isFilled(row) ? money(pctOf(row, row.cessPct)) : ''}</td>
-                    <td className="px-1 py-1">{numberCell(row, 'compCess', 'Comp.Cess')}</td>
+                    <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.cessPct)) : ''}</td>
+                    <td className="py-1 pl-1 pr-3">{numberCell(row, 'compCess', 'Comp.Cess')}</td>
                   </>}
                 </tr>
               ))}
@@ -378,105 +420,60 @@ export default function PurchaseBill() {
           <datalist id="pb-codes">{ITEM_CODES.map((code, i) => <option key={code} value={code}>{SAMPLE_STOCK_DATA[i].name}</option>)}</datalist>
           <datalist id="pb-names">{SAMPLE_STOCK_DATA.map(item => <option key={item.ksbcl} value={`${item.name} ${item.pkg}`} />)}</datalist>
         </div>
-      </div>
-
-      {/* Grid toolbar */}
-      <div className="flex flex-wrap items-center gap-1">
-        <button onClick={deleteRow} className={iconButton} title="Delete selected row" aria-label="Delete selected row"><XCircle size={18} className="text-red-600" /></button>
-        <span className="mx-1 h-5 w-px bg-[#e1c9b6] dark:bg-[#414a6e]" />
-        <button onClick={() => moveRow(-1)} disabled={selectedIndex <= 0} className={iconButton} title="Move row up" aria-label="Move row up"><ArrowUpCircle size={18} /></button>
-        <button onClick={() => moveRow(1)} disabled={selectedIndex === -1 || selectedIndex >= rows.length - 1} className={iconButton} title="Move row down" aria-label="Move row down"><ArrowDownCircle size={18} /></button>
-        <span className="mx-1 h-5 w-px bg-[#e1c9b6] dark:bg-[#414a6e]" />
-        <button onClick={() => setLookupOpen(true)} className={iconButton} title="Item lookup" aria-label="Item lookup"><Search size={18} className="text-sky-600" /></button>
-        <button onClick={() => fileInput.current?.click()} className={iconButton} title="Attach supplier invoice" aria-label="Attach supplier invoice">
-          <Paperclip size={18} className="text-sky-600" />
-          {attachments.length > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-[#e8702a] px-1 text-[9px] font-bold text-white">{attachments.length}</span>}
-        </button>
-        <input ref={fileInput} type="file" multiple hidden onChange={e => setAttachments([...attachments, ...Array.from(e.target.files ?? []).map(f => f.name)])} />
-        <span className="mx-1 h-5 w-px bg-[#e1c9b6] dark:bg-[#414a6e]" />
-        <button onClick={refreshQoh} className={iconButton} title="Refresh QOH" aria-label="Refresh QOH"><RefreshCw size={18} className="text-amber-600" /></button>
-        <button onClick={() => setShowTaxColumns(!showTaxColumns)} className={iconButton} title={showTaxColumns ? 'Hide tax columns' : 'Show tax columns'} aria-label="Toggle tax columns"><Settings2 size={18} /></button>
-        <span className="mx-1 h-5 w-px bg-[#e1c9b6] dark:bg-[#414a6e]" />
-        <button onClick={() => { setCopyOpen(true); openCopyFrom(); }} className={`${iconButton} flex items-center gap-1 text-xs font-semibold`} title="Copy lines from a Purchase Indent"><FileInput size={18} className="text-[#b84716]" />Copy From</button>
-        <span className="mx-1 h-5 w-px bg-[#e1c9b6] dark:bg-[#414a6e]" />
-        <button onClick={copyRow} className={iconButton} title="Duplicate selected row" aria-label="Duplicate selected row"><Copy size={18} className="text-[#b84716]" /></button>
-        <div className="relative flex items-center">
-          <button onClick={() => addRows(1)} className={iconButton} title="Add single item" aria-label="Add single item"><PlusCircle size={18} /></button>
-          <button onClick={() => setAddMenuOpen(!addMenuOpen)} className={`${iconButton} px-0.5`} aria-label="More add options"><ChevronDown size={14} /></button>
-          {addMenuOpen && (
-            <div className="absolute bottom-full left-0 z-10 mb-2 w-44 overflow-hidden rounded-xl border border-[#e1c9b6] bg-[#fffaf5] text-xs shadow-lg dark:border-[#414a6e] dark:bg-[#20253a]">
-              <button onClick={() => addRows(1)} className="block w-full px-3 py-2 text-left hover:bg-[#f6efe8] dark:hover:bg-[#343b59]">Add single item</button>
-              <button onClick={() => addRows(5)} className="block w-full px-3 py-2 text-left hover:bg-[#f6efe8] dark:hover:bg-[#343b59]">Add 5 blank rows</button>
-              <button onClick={() => { const kept = rows.filter(isFilled); setRows(kept.length ? kept : [blankRow()]); setAddMenuOpen(false); }} className="block w-full px-3 py-2 text-left hover:bg-[#f6efe8] dark:hover:bg-[#343b59]">Remove blank rows</button>
-            </div>
-          )}
+        <div className={`${infoBar} rounded-none border-t border-line`}>
+          <Info size={14} className="shrink-0 text-stone-400" />
+          {selectedRow && isFilled(selectedRow)
+            ? `Row ${selectedIndex + 1}: ${selectedRow.name} · stock ${selectedRow.qoh} → ${selectedRow.qoh + selectedRow.qty} after this bill`
+            : `Selected row is empty. Pick an item code or name.${attachments.length ? ` Attached: ${attachments.join(', ')}` : ''}`}
         </div>
-        <button onClick={() => setLookupOpen(true)} className="ml-4 flex items-center gap-1.5 rounded-lg bg-[#e8702a] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-[#b84716]"><PlusCircle size={14} />Add Item</button>
-        <span className="ml-auto text-xs text-stone-500">{totals.items} items • Qty {totals.qty}</span>
-      </div>
+      </section>
 
-      {/* Footer: words / remarks and totals */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_380px]">
-        <div className={`${panel} flex flex-col gap-2 p-3`}>
+      {/* Remarks + totals */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <section aria-label="Remarks" className={`${panel} p-5`}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className={sectionTitle}>Notes</h2>
+            <button onClick={() => setNotesOpen(!notesOpen)} className={iconButton} aria-expanded={notesOpen} aria-label={notesOpen ? 'Collapse notes' : 'Expand notes'}>{notesOpen ? <ChevronsUp size={16} /> : <ChevronsDown size={16} />}</button>
+          </div>
           {notesOpen && (
-            <table className="w-full border border-[#e1c9b6] text-xs dark:border-[#414a6e]">
-              <tbody className="divide-y divide-[#e1c9b6] dark:divide-[#414a6e]">
-                <tr>
-                  <th className="w-36 bg-[#f1e3d8] px-3 py-1.5 text-left font-medium text-sky-700 dark:bg-[#20253a] dark:text-sky-400">Amount In Words</th>
-                  <td className="px-3 py-1.5 font-semibold text-emerald-700 dark:text-emerald-400">{numberToWords(totals.net)}</td>
-                </tr>
-                <tr>
-                  <th className="bg-[#f1e3d8] px-3 py-1.5 text-left align-top font-medium dark:bg-[#20253a]">Remarks</th>
-                  <td className="p-1"><textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} placeholder="Notes for this purchase bill" className={`${field} w-full`} aria-label="Remarks" /></td>
-                </tr>
-              </tbody>
-            </table>
-          )}
-          <div className="flex items-center gap-2">
-            <div className={`${infoBar} flex-1`}>
-              <Info size={16} className="shrink-0 text-amber-500" />
-              {selectedRow && isFilled(selectedRow)
-                ? `Row ${selectedIndex + 1}: ${selectedRow.name} • QOH ${selectedRow.qoh} → ${selectedRow.qoh + selectedRow.qty} after this bill`
-                : `Selected row is empty — pick an item code or name.${attachments.length ? ` Attached: ${attachments.join(', ')}` : ''}`}
+            <div className="space-y-4">
+              <div>
+                <div className={labelClass}>Amount in words</div>
+                <p className="text-xs italic text-stone-700 dark:text-stone-300">{numberToWords(totals.net)}</p>
+              </div>
+              <div>
+                <label htmlFor="pb-remarks" className={labelClass}>Remarks</label>
+                <textarea id="pb-remarks" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} placeholder="Notes for this purchase bill" className={field} />
+              </div>
             </div>
-            <button onClick={() => setNotesOpen(!notesOpen)} className={iconButton} aria-label={notesOpen ? 'Collapse remarks' : 'Expand remarks'}>{notesOpen ? <ChevronsDown size={16} /> : <ChevronsUp size={16} />}</button>
-          </div>
-        </div>
+          )}
+        </section>
 
-        <div className={`${panel} flex flex-col gap-2 p-3`}>
+        <section aria-label="Totals" className={`${panel} p-5 text-xs`}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className={sectionTitle}>Totals</h2>
+            <button onClick={() => setTotalsOpen(!totalsOpen)} className={iconButton} aria-expanded={totalsOpen} aria-label={totalsOpen ? 'Collapse totals' : 'Expand totals'}>{totalsOpen ? <ChevronsUp size={16} /> : <ChevronsDown size={16} />}</button>
+          </div>
           {totalsOpen && (
-            <table className="w-full border border-[#e1c9b6] text-xs dark:border-[#414a6e]">
-              <tbody className="divide-y divide-[#e1c9b6] dark:divide-[#414a6e]">
-                {totalRows.map(([label, value]) => (
-                  <tr key={label}>
-                    <th className="bg-[#f1e3d8] px-3 py-1.5 text-left font-medium text-sky-700 dark:bg-[#20253a] dark:text-sky-400">
-                      {label === 'TCS'
-                        ? <span className="flex items-center gap-1 text-stone-700 dark:text-stone-200">TCS @ <input type="number" min={0} step="0.1" value={tcsPct} onChange={e => setTcsPct(e.target.value)} className={`${field} w-14 px-1 py-0.5 text-right`} aria-label="TCS percent" /> %</span>
-                        : label}
-                    </th>
-                    <td className="px-3 py-1.5 text-right font-mono">{money(value)}</td>
-                  </tr>
-                ))}
-                <tr className="bg-[#e8702a]/10 font-bold">
-                  <th className="px-3 py-2 text-left text-[#b84716] dark:text-[#ffb07e]">Net Amount</th>
-                  <td className="px-3 py-2 text-right font-mono text-[#b84716] dark:text-[#ffb07e]">₹ {money(totals.net)}</td>
-                </tr>
-              </tbody>
-            </table>
+            <dl className="space-y-2 tabular-nums">
+              {totalRows.map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-3">
+                  <dt className="text-stone-500 dark:text-stone-400">
+                    {label === 'TCS'
+                      ? <span className="flex items-center gap-1.5">TCS @ <input type="number" min={0} step="0.1" value={tcsPct} onChange={e => setTcsPct(e.target.value)} className={`${field} w-16 px-2 py-1 text-right`} aria-label="TCS percent" /> %</span>
+                      : label}
+                  </dt>
+                  <dd className={value ? 'text-stone-800 dark:text-stone-200' : 'text-stone-400'}>{money(value)}</dd>
+                </div>
+              ))}
+            </dl>
           )}
-          <div className="flex items-center gap-2">
-            <div className={`${infoBar} flex-1`}>
-              <Info size={16} className="shrink-0 text-amber-500" />
-              TCS on liquor purchases u/s 206C(1).
-            </div>
-            <button onClick={() => setTotalsOpen(!totalsOpen)} className={iconButton} aria-label={totalsOpen ? 'Collapse totals' : 'Expand totals'}>{totalsOpen ? <ChevronsDown size={16} /> : <ChevronsUp size={16} />}</button>
+          <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-3">
+            <span className="text-sm font-medium text-stone-700 dark:text-stone-200">Net amount</span>
+            <span className="text-2xl font-semibold tracking-tight tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.net)}</span>
           </div>
-        </div>
-      </div>
-
-      <div className="flex justify-center gap-3">
-        <button onClick={saveBill} className="flex items-center gap-2 rounded-lg bg-[#e8702a] px-6 py-2 text-sm font-bold text-white shadow-sm hover:bg-[#b84716]"><Save size={16} />Save</button>
-        <button onClick={cancelBill} className="flex items-center gap-2 rounded-lg bg-red-600 px-6 py-2 text-sm font-bold text-white shadow-sm hover:bg-red-700"><XCircle size={16} />Cancel</button>
+          <p className="mt-2 text-[11px] text-stone-500">TCS on liquor purchases u/s 206C(1).</p>
+        </section>
       </div>
 
       {lookupOpen && (
