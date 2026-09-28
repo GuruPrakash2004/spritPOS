@@ -7,8 +7,9 @@ the in-memory store; without a connection it runs on the seed data in store.py.
 import asyncio
 import hashlib
 import logging
+from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,7 +17,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from . import db, db_store, persistence, store, writeback
 from .routers import auth, company_files, custom_reports, masters, reports, transactions
-from .schemas import SettingsIn
+from .schemas import SettingsIn, WritebackBackfillIn, WritebackRetryIn
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("vlqms.main")
@@ -39,7 +40,7 @@ _write_lock = asyncio.Lock()
 WRITE_METHODS = {"POST", "PUT", "DELETE"}
 IDEMPOTENT_KEEP = 500   # replies remembered for Idempotency-Key replays
 # POSTs that change no app data and may be slow (SMTP, SQL Server reconnect): they must not hold up bills.
-NOT_WRITES = {"/reports/custom/email", "/admin/writeback/flush"}
+NOT_WRITES = {"/reports/custom/email", "/admin/writeback/sync", "/admin/writeback/flush", "/admin/writeback/retry"}
 
 
 def _idempotency_key(request: Request) -> str | None:
@@ -172,16 +173,61 @@ def sales_persons():
     return store.SALES_PERSONS
 
 
+# ─── SQL Server write-back (app/writeback.py): Administrator only ───────────────
+
 @app.get("/admin/writeback", tags=["Admin Master"])
 def writeback_status(admin: dict = Depends(auth.require_admin)):
-    """SQL Server write-back: on/off, events waiting, last error and last successful sync."""
+    """On/off, SQL Server connection, outbox counts (pending, syncing, synced, failed), last error and sync."""
     return writeback.state()
 
 
-@app.post("/admin/writeback/flush", tags=["Admin Master"])
-def writeback_flush(admin: dict = Depends(auth.require_admin)):
-    """Send the queued writes now instead of waiting for the next retry."""
+def _require_writeback_on() -> None:
     if not writeback.ENABLED:
-        raise HTTPException(409, "Write-back is off (set DB_WRITE_ENABLED=true in backend/.env and restart)")
-    sent = writeback.flush()
-    return {"sent": sent, **writeback.state()}
+        raise HTTPException(409, "Write-back is off: set DB_WRITE_ENABLED=true in backend/.env and restart. "
+                                 "Until then transactions stay PENDING in SQLite.")
+
+
+@app.post("/admin/writeback/sync", tags=["Admin Master"])
+def writeback_sync(admin: dict = Depends(auth.require_admin)):
+    """Send the PENDING and FAILED transactions now instead of waiting for the next automatic try."""
+    _require_writeback_on()
+    return {**writeback.sync_pending_data(), "status": writeback.state()}
+
+
+@app.post("/admin/writeback/flush", tags=["Admin Master"], include_in_schema=False)
+def writeback_flush(admin: dict = Depends(auth.require_admin)):
+    """Older name of /admin/writeback/sync."""
+    return writeback_sync(admin)
+
+
+@app.post("/admin/writeback/retry", tags=["Admin Master"])
+def writeback_retry(body: WritebackRetryIn | None = None, admin: dict = Depends(auth.require_admin)):
+    """Put FAILED transactions (all, or the given ids) back to PENDING and sync. Safe to repeat."""
+    _require_writeback_on()
+    return {**writeback.retry(body.ids if body else None), "status": writeback.state()}
+
+
+@app.get("/admin/writeback/outbox", tags=["Admin Master"])
+def writeback_outbox(status: Literal["PENDING", "SYNCING", "SYNCED", "FAILED"] | None = None,
+                     limit: int = Query(50, ge=1, le=500), admin: dict = Depends(auth.require_admin)):
+    """Outbox rows, newest first (no payload): type, document number, status, attempts, last error."""
+    return persistence.outbox_rows(status, limit)
+
+
+@app.get("/admin/writeback/backfill", tags=["Admin Master"])
+def writeback_backfill_preview(admin: dict = Depends(auth.require_admin)):
+    """Dry run: web documents saved in SQLite before the outbox existed, not yet in SQL Server. Needs the
+    SQL Server connection. `blocked` says why a document must not be sent (seed data, unknown items)."""
+    try:
+        return writeback.backfill(user=admin["user"])
+    except writeback.BackfillRefused as exc:
+        raise HTTPException(409, str(exc))
+
+
+@app.post("/admin/writeback/backfill", tags=["Admin Master"])
+def writeback_backfill(body: WritebackBackfillIn, admin: dict = Depends(auth.require_admin)):
+    """Queue the chosen documents from the preview as PENDING. Refuses blocked ones and any not in the list."""
+    try:
+        return writeback.backfill(user=admin["user"], documents=[(d.kind, d.doc_no) for d in body.documents])
+    except writeback.BackfillRefused as exc:
+        raise HTTPException(409, str(exc))

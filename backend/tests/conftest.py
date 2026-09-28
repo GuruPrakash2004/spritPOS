@@ -27,7 +27,7 @@ import httpx  # noqa: E402
 import pytest  # noqa: E402
 import respx  # noqa: E402
 
-from app import store  # noqa: E402
+from app import persistence, store  # noqa: E402
 from app.main import app  # noqa: E402
 from app.routers import auth  # noqa: E402
 
@@ -49,7 +49,9 @@ def reset_store():
     """
     snapshot = copy.deepcopy(_store_tables())
     auth.reset_login_failures()
+    persistence.reset_memory_outbox()   # the write-back outbox (in memory while saving is off)
     yield
+    persistence.reset_memory_outbox()
     for name, saved in snapshot.items():
         current = getattr(store, name)
         if isinstance(current, dict):

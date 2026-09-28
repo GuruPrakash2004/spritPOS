@@ -329,3 +329,18 @@ class ReportEmailIn(BaseModel):
         if not out:
             raise ValueError("Enter at least one email address")
         return out
+
+
+class WritebackRetryIn(BaseModel):
+    """POST /admin/writeback/retry: which FAILED outbox rows to retry (none = all of them)."""
+    ids: list[str] | None = Field(None, max_length=1000)
+
+
+class BackfillDoc(BaseModel):
+    kind: str = Field(max_length=30)
+    doc_no: str = Field(max_length=60)
+
+
+class WritebackBackfillIn(BaseModel):
+    """POST /admin/writeback/backfill: the documents to queue, picked from the GET preview."""
+    documents: list[BackfillDoc] = Field(min_length=1, max_length=5000)

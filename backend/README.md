@@ -28,7 +28,7 @@ The web app's own changes (bills, stock movements, users and password hashes, ro
 ## Data
 
 - All data lives in memory in `app/store.py`, seeded with sample data. What the web app changes (bills, stock movements, masters, users, settings) is saved after every write to `data/vlqms_state.sqlite3` (`app/persistence.py`) and restored at startup. Uploaded company files are kept in `uploads/company/`.
-- **SQL Server write-back** is off unless `DB_WRITE_ENABLED=true`. When on, web documents and stock changes are copied into separate `Web_*` tables (never the legacy tables, so the desktop app doesn't see them). Create the tables with `tools/migrate.py`; see [`migrations/README.md`](migrations/README.md) for the full runbook and safety checklist.
+- **SQL Server write-back**: every web document and stock change gets a PENDING row in the SQLite outbox (`web_outbox`), saved with the bill. When `DB_WRITE_ENABLED=true`, they are copied into separate `Web_*` tables (never the legacy tables, so the desktop app doesn't see them) and marked SYNCED; with it off they wait in SQLite. Create the tables with `tools/migrate.py`; see [`migrations/README.md`](migrations/README.md) for the full runbook and safety checklist.
 - At startup `app/db.py` tries to connect to the legacy SQL Server database `vLQMSLHOUSE` (pyodbc with ODBC Driver 18/17, then pymssql; settings from `.env`). If it connects, `app/db_store.py` replaces the seed masters with live data (company, items, groups, brands, UOMs, customers, suppliers, users) and loads the latest 200 sales invoices and 100 purchase bills in the background.
 - The SQL Server is on the **office LAN**; put its host, port and credentials only in `.env` (gitignored), never in code or docs. Anywhere else the connection fails after its timeouts, and the API runs on the seed data. That's fine for development.
 - On macOS `pyodbc` is not installed (see `requirements.txt`), so only pymssql is tried.
@@ -41,7 +41,7 @@ The web app's own changes (bills, stock movements, users and password hashes, ro
 | `app/store.py` | In-memory tables, `ROLES`, `DOCS`, `MOVEMENTS`, `move_stock()`, `next_doc_no()`, `find()` |
 | `app/db.py`, `app/db_store.py` | SQL Server connection (`db.transaction()` for multi-statement writes) and the DB → store loaders |
 | `app/persistence.py` | Saves and restores the web app's own data (local SQLite) |
-| `app/writeback.py` | Queues web documents and sends them to the `Web_*` tables; `GET /admin/writeback`, `POST /admin/writeback/flush` |
+| `app/writeback.py` | Queues web documents in the SQLite outbox and syncs them to the `Web_*` tables (`sync_pending_data`); `/admin/writeback` status, `/sync`, `/retry`, `/outbox`, `/backfill` |
 | `app/mailer.py` | SMTP email with an .xls attachment (Customised Reports → Email) |
 | `migrations/`, `tools/migrate.py` | Versioned SQL Server schema for the write-back, with rollbacks |
 | `app/schemas.py` | Pydantic request/response models |

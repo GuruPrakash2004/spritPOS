@@ -36,3 +36,6 @@ SvtConn.ini
 
 # The web app's saved data (bills, password hashes): local only, never committed
 backend/data/
+
+# Understand-Anything knowledge graph (generated, local only)
+.ua/

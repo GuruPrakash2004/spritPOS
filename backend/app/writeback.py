@@ -1,22 +1,31 @@
 """Write-back of the web app's documents and stock changes to SQL Server, into separate Web_* tables.
 
-Off unless DB_WRITE_ENABLED=true in backend/.env. The legacy tables (TrnHdrSINV, TrnQOH, MstItem, ...)
-are never written: see migrations/001_web_tables.sql for the tables and tools/migrate.py to create them.
+The legacy tables (TrnHdrSINV, TrnDtlSINV, TrnQOH, MstItem, ...) are never written: see
+migrations/001_web_tables.sql for the Web_ tables and tools/migrate.py to create them.
 
 How a save reaches SQL Server:
 1. A transaction endpoint calls changed(kind, doc, action) after it has checked and saved the document
-   in the in-memory store (routers/transactions.py). Nothing is sent yet.
-2. When the request succeeds, the write middleware in main.py calls commit_request(): each change
-   becomes an event in store.OUTBOX with a unique id, the user, the time and the stock movements that
-   request made for that document. The outbox is saved in the local SQLite state with everything else
-   (app/persistence.py), so a queued write survives a restart. A failed request queues nothing.
-3. A background thread (start()) sends the outbox in order. Each event is ONE SQL transaction: header,
-   lines, stock moves, the stock balance (QtyChange = QtyChange + ?) and the Web_WriteLog row commit
-   together or roll back together. An event whose id is already in Web_WriteLog is skipped, so a retry
-   after a network drop never writes twice. On any error the event stays queued, the error is logged and
-   shown on GET /admin/writeback, and the thread retries later (reconnecting if the connection dropped).
+   in the in-memory store (routers/transactions.py, masters.py for opening stock). Nothing is queued yet.
+2. When the request succeeds, the write middleware in main.py calls commit_request(): each change becomes
+   an event (unique id, user, time, the document and the stock moves the request made for it) in the
+   store.OUTBOX buffer, and persistence.save() writes the app state AND those events into the SQLite
+   outbox table (web_outbox) in one SQLite transaction, as PENDING. This happens whether or not
+   DB_WRITE_ENABLED is on, so bills made with it off can be sent later. A failed request queues nothing.
+3. sync_pending_data() (background thread every RETRY_SECONDS when DB_WRITE_ENABLED is on, at startup,
+   and POST /admin/writeback/sync) sends PENDING/FAILED rows in order. Per row:
+   claim (PENDING/FAILED -> SYNCING, atomic) -> ONE SQL Server transaction (header, lines, stock moves,
+   Web_StockBalance QtyChange = QtyChange + ?, Web_WriteLog row) -> mark SYNCED only after the commit
+   returned. An event whose id is already in Web_WriteLog is not written again but marked SYNCED, which
+   covers a crash between the SQL commit and the SQLite update. On an error the SQL transaction rolls back,
+   the row becomes FAILED with the error, and sending stops (later documents may depend on it) until the
+   next try. Rows are never deleted.
 
-All SQL uses ? parameters (db.TxCursor), never string formatting.
+Not queued at all: bills made while the backend runs on seed data (masters_from_db False), and documents
+loaded from SQL Server (they carry "origin"). Documents saved before the outbox existed can be queued by an
+Administrator with backfill() (GET /admin/writeback/backfill previews, POST queues).
+
+All SQL uses ? parameters (db.TxCursor), never string formatting. Logs carry event ids, document numbers and
+users, never payloads, passwords, tokens or connection settings.
 """
 import json
 import logging
@@ -26,20 +35,21 @@ import time
 import uuid
 from datetime import datetime
 
-from . import db, store
+from . import db, persistence, store
 
 logger = logging.getLogger("vlqms.writeback")
 
 ENABLED = os.environ.get("DB_WRITE_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
 SCHEMA_VERSION = 1          # the migration this code needs (migrations/001_web_tables.sql)
 RETRY_SECONDS = 15
+STALE_SECONDS = 300         # a row SYNCING for this long was left by a crashed worker: send it again
 
 # Legacy table holding each document kind's numbers, to warn when a web number is already used there.
 LEGACY_NUMBERS = {"sales_invoice": ("TrnHdrSINV", "SINVNO")}
 
 _pending: list[dict] = []   # changes made by the request in progress (writes run one at a time)
 _wake = threading.Event()
-_flush_lock = threading.Lock()
+_flush_lock = threading.Lock()   # one sync run at a time in this process (claims guard across processes)
 _thread: threading.Thread | None = None
 # Set by main.py when the masters were loaded from SQL Server at startup. Without that the app runs on
 # seed data, whose sample items and bills must never reach the real database.
@@ -48,19 +58,20 @@ status = {"last_error": None, "last_error_at": None, "last_sync_at": None, "writ
 
 
 def changed(kind: str, doc: dict, action: str = "save", moves_ref: str | None = None, item: str | None = None) -> None:
-    """Note that `doc` was created or changed by this request. Sent only if the request succeeds.
+    """Note that `doc` was created or changed by this request. Queued only if the request succeeds.
     `moves_ref` is the doc_no this request's stock moves carry, when it differs from the document's
     (an item's opening stock is logged as "OPENING"); `item` keeps only that item's moves.
 
-    Not queued:
+    Queued whether or not DB_WRITE_ENABLED is on. Not queued:
     - while the backend runs on seed data: those bills use sample items and numbers and must never reach
       the real database, even after a later restart that connects;
     - for bills loaded from SQL Server (they carry "origin"), e.g. a desktop bill cancelled on the web:
       the Web_ tables hold web documents only, and the legacy bill itself is not changed."""
-    if not (ENABLED and masters_from_db):
+    if not masters_from_db:
+        doc["seed_mode"] = True   # made on sample data: backfill will never queue it
         return
     if "origin" in doc:
-        logger.warning("Not written to SQL Server: %s %s was loaded from the desktop database (%s)",
+        logger.warning("Not queued for SQL Server: %s %s was loaded from the desktop database (%s)",
                        kind, doc.get("doc_no"), action)
         return
     doc_no = doc.get("doc_no") or doc.get("date")
@@ -74,29 +85,33 @@ def begin_request() -> int:
     return len(store.MOVEMENTS)
 
 
+def _event(kind: str, doc_no: str, action: str, user: str | None, doc: dict, moves: list[dict]) -> dict:
+    return {"id": uuid.uuid4().hex, "kind": kind, "doc_no": doc_no, "action": action, "user": user,
+            "at": datetime.now().isoformat(timespec="seconds"), "doc": json.loads(json.dumps(doc, default=str)),
+            "moves": [dict(m) for m in moves]}
+
+
 def commit_request(moves_from: int, user: str | None) -> None:
-    """The request succeeded: queue its changes, each with the stock moves it made for that document."""
+    """The request succeeded: buffer its changes, each with the stock moves it made for that document.
+    persistence.save(), called next by the middleware, writes them to the outbox table with the state."""
     if not _pending:
         return
     moves = store.MOVEMENTS[moves_from:]
-    now = datetime.now().isoformat(timespec="seconds")
     for p in _pending:
-        store.OUTBOX.append({
-            "id": uuid.uuid4().hex, "kind": p["kind"], "doc_no": p["doc_no"], "action": p["action"],
-            "user": user, "at": now, "doc": json.loads(json.dumps(p["doc"], default=str)),
-            "moves": [dict(m) for m in moves
-                      if m["doc_no"] == p["moves_ref"] and (p["item"] is None or m["item"] == p["item"])],
-        })
+        store.OUTBOX.append(_event(p["kind"], p["doc_no"], p["action"], user, p["doc"],
+                                   [m for m in moves if m["doc_no"] == p["moves_ref"]
+                                    and (p["item"] is None or m["item"] == p["item"])]))
         logger.info("Queued %s %s %s by %s", p["action"], p["kind"], p["doc_no"], user or "?")
     _pending.clear()
-    _wake.set()
+    if ENABLED:
+        _wake.set()
 
 
 def discard_request() -> None:
     _pending.clear()
 
 
-# ─── Sending ────────────────────────────────────────────────────────────────
+# ─── Writing one event to SQL Server ─────────────────────────────────────────
 
 def _num(v):
     return None if v is None else round(float(v), 3)
@@ -120,7 +135,8 @@ def _legacy_clash(cur, event: dict) -> bool:
 
 
 def apply_event(cur, event: dict) -> bool:
-    """Write one event inside an open transaction. Returns False if it was already written."""
+    """Write one event inside an open transaction. Returns False if it was already written (its EventId is
+    in Web_WriteLog, the idempotency key), in which case nothing is written."""
     cur.execute("SELECT 1 FROM dbo.Web_WriteLog WHERE EventId = ?", (event["id"],))
     if cur.fetchone() is not None:
         return False
@@ -168,34 +184,16 @@ def _check_schema() -> None:
         raise RuntimeError(f"The Web_ tables are missing or old: run tools/migrate.py up (needs version {SCHEMA_VERSION})")
 
 
-def flush() -> int:
-    """Send queued events in order until the queue is empty or one fails. Returns how many were sent."""
-    sent = 0
-    with _flush_lock:
-        if not store.OUTBOX:
-            return 0
-        try:
-            if not masters_from_db:
-                raise RuntimeError("The backend started without SQL Server (seed data): restart it while connected")
-            if not db.is_db_available() and not db.reconnect():
-                raise RuntimeError("SQL Server is not reachable")
-            _check_schema()
-            while store.OUTBOX:
-                event = store.OUTBOX[0]
-                with db.transaction() as cur:
-                    written = apply_event(cur, event)
-                store.OUTBOX.pop(0)
-                sent += 1
-                status["written"] += 1
-                logger.info("%s %s %s %s by %s", "Wrote" if written else "Already written:", event["action"],
-                            event["kind"], event["doc_no"], event["user"] or "?")
-            status.update(last_error=None, last_error_at=None, last_sync_at=datetime.now().isoformat(timespec="seconds"))
-        except Exception as exc:   # keep the event queued; never lose it
-            status.update(last_error=str(exc)[:300], last_error_at=datetime.now().isoformat(timespec="seconds"))
-            logger.error("Write-back paused, %d event(s) queued: %s", len(store.OUTBOX), exc)
-            if db.is_db_available() and _looks_disconnected(exc):
-                db.reconnect()
-    return sent
+# ─── Sync ─────────────────────────────────────────────────────────────────────
+
+def _safe_error(exc: Exception) -> str:
+    """Error text for the outbox, status and logs. Driver messages don't carry the connection settings
+    (they live only in db.py), and the payload is never included."""
+    return f"{type(exc).__name__}: {str(exc)[:200]}"
+
+
+def _record_error(exc: Exception) -> None:
+    status.update(last_error=_safe_error(exc), last_error_at=datetime.now().isoformat(timespec="seconds"))
 
 
 def _looks_disconnected(exc: Exception) -> bool:
@@ -203,22 +201,181 @@ def _looks_disconnected(exc: Exception) -> bool:
     return any(w in text for w in ("connection", "network", "timeout", "timed out", "broken pipe", "20047", "08s01"))
 
 
+def sync_pending_data(include_failed: bool = True) -> dict:
+    """Send PENDING (and FAILED) outbox rows to SQL Server, oldest first. A row is marked SYNCED only after
+    SQL Server committed it or already had it. Returns what happened in this run."""
+    result = {"sent": 0, "already_there": 0, "failed": 0, "busy": False, "skipped": None}
+    if not ENABLED:
+        result["skipped"] = "Write-back is off (DB_WRITE_ENABLED=false): transactions stay PENDING in SQLite"
+        return result
+    if not _flush_lock.acquire(blocking=False):
+        result["busy"] = True   # another sync is running in this process
+        return result
+    try:
+        try:
+            if not masters_from_db:
+                raise RuntimeError("The backend started without SQL Server (seed data): restart it while connected")
+            if not db.is_db_available() and not db.reconnect():
+                raise RuntimeError("SQL Server is not reachable")
+            _check_schema()
+        except Exception as exc:   # nothing claimed: rows stay PENDING/FAILED
+            _record_error(exc)
+            result["skipped"] = status["last_error"]
+            logger.error("Write-back sync not started: %s", status["last_error"])
+            return result
+
+        persistence.reset_stale(STALE_SECONDS)
+        try:
+            for row in persistence.pending_rows(include_failed):
+                if not persistence.claim(row["id"]):
+                    continue   # another worker has it
+                event, attempt, started = row["event"], row["attempts"] + 1, time.monotonic()
+                try:
+                    with db.transaction() as cur:
+                        written = apply_event(cur, event)
+                except Exception as exc:   # rolled back in SQL Server; keep the row for a retry
+                    persistence.mark_failed(row["id"], _safe_error(exc))
+                    result["failed"] += 1
+                    _record_error(exc)
+                    logger.error("Sync FAILED %s %s %s (event %s, attempt %d, %.0f ms): %s", event["action"],
+                                 event["kind"], event["doc_no"], event["id"], attempt,
+                                 (time.monotonic() - started) * 1000, status["last_error"])
+                    if db.is_db_available() and _looks_disconnected(exc):
+                        db.reconnect()
+                    break   # keep the order: later documents may depend on this one
+                persistence.mark_synced(row["id"])   # only now: SQL Server has committed (or already had) it
+                result["sent" if written else "already_there"] += 1
+                status["written"] += 1
+                logger.info("Synced %s %s %s (event %s, attempt %d, %.0f ms)%s", event["action"], event["kind"],
+                            event["doc_no"], event["id"], attempt, (time.monotonic() - started) * 1000,
+                            "" if written else ": already in SQL Server")
+            else:
+                status.update(last_error=None, last_error_at=None)
+        except Exception as exc:   # e.g. the SQLite update failed after a commit: the row stays SYNCING
+            _record_error(exc)       # and is picked up again later, when SQL Server reports it as written
+            logger.error("Write-back sync stopped: %s", status["last_error"])
+        status["last_sync_at"] = datetime.now().isoformat(timespec="seconds")
+        return result
+    finally:
+        _flush_lock.release()
+
+
+def flush() -> int:
+    """Older name: run a sync and return how many rows became SYNCED."""
+    r = sync_pending_data()
+    return r["sent"] + r["already_there"]
+
+
+def retry(ids: list[str] | None = None) -> dict:
+    """FAILED -> PENDING (all, or the given ids), then sync. Safe to repeat: written events are skipped."""
+    reset = persistence.retry_failed(ids)
+    return {"reset": reset, **sync_pending_data()}
+
+
+# ─── Backfill (documents saved before the outbox existed) ─────────────────────
+
+class BackfillRefused(Exception):
+    """Backfill can't run now; the message says why (shown to the Administrator as 409)."""
+
+
+def _written_documents() -> set[tuple[str, str]]:
+    """(DocKind, DocNo) already in SQL Server's Web_WriteLog. Needs the connection: documents the previous
+    version sent left no outbox row, and sending them again under a new event id would count their stock twice."""
+    if not db.is_db_available():
+        raise BackfillRefused("Connect to SQL Server first: backfill must skip documents already written there")
+    if not db.fetchone("SELECT 1 AS x FROM sys.tables WHERE name = 'Web_WriteLog'"):
+        return set()   # tables not created yet: nothing can have been written
+    return {(r["DocKind"], r["DocNo"]) for r in db.fetchall("SELECT DISTINCT DocKind, DocNo FROM dbo.Web_WriteLog")}
+
+
+def backfill_candidates() -> list[dict]:
+    """Web documents in SQLite with no outbox row and not already in SQL Server: bills, returns, expenses,
+    closing stock, cash counts and opening stock made in the app. Each as the event that would be queued,
+    oldest first, with a `blocked` reason when it must not be sent (made on seed data, unknown items)."""
+    if not masters_from_db:
+        raise BackfillRefused("The backend started without SQL Server (seed data): backfill needs the real masters")
+    queued = persistence.queued_documents() | _written_documents()
+    app_moves = store.MOVEMENTS[store.APP_MOVEMENTS_FROM:]
+    found: list[tuple[str, str, dict, list[dict]]] = []
+    for kind, docs in store.DOCS.items():
+        for no, doc in list(docs.items()):
+            if "origin" in doc or doc.get("status") == "HOLD" or (kind, no) in queued:
+                continue
+            found.append((kind, no, doc, [m for m in app_moves if m["doc_no"] == no]))
+    for day, doc in store.DENOMINATIONS.items():
+        if ("denomination", day) not in queued:
+            found.append(("denomination", day, doc, []))
+    for m in app_moves:
+        no = f"OPENING/{m['item']}"
+        if m["kind"] == "opening" and ("opening_stock", no) not in queued:
+            found.append(("opening_stock", no, {"doc_no": no, "date": m["date"],
+                                                "lines": [{"item_code": m["item"], "qty": m["qty"], "rate": m.get("rate")}]},
+                          [m]))
+    found.sort(key=lambda f: (str(f[2].get("date", "")), str(f[2].get("time", "")), f[1]))
+    out = []
+    for kind, no, doc, moves in found:
+        unknown = sorted({l["item_code"] for l in doc.get("lines") or []
+                          if l.get("item_code") and l["item_code"] not in store.ITEMS})
+        blocked = ("made while the backend ran on seed data" if doc.get("seed_mode")
+                   else f"items not in the loaded masters: {', '.join(unknown)}" if unknown else None)
+        out.append({"kind": kind, "doc_no": no, "doc": doc, "moves": moves, "blocked": blocked})
+    return out
+
+
+def backfill(user: str, documents: list[tuple[str, str]] | None = None) -> dict:
+    """Without `documents`: a preview of what could be queued. With them ((kind, doc_no) pairs picked from the
+    preview): queue exactly those as PENDING. A blocked document (seed data, unknown items) is refused."""
+    candidates = backfill_candidates()
+    preview = [{"kind": c["kind"], "doc_no": c["doc_no"], "date": c["doc"].get("date"),
+                "status": c["doc"].get("status"), "moves": len(c["moves"]), "blocked": c["blocked"]}
+               for c in candidates]
+    queued = 0
+    if documents is not None:
+        by_key = {(c["kind"], c["doc_no"]): c for c in candidates}
+        missing = [f"{k} {n}" for k, n in documents if (k, n) not in by_key]
+        if missing:
+            raise BackfillRefused(f"Not in the backfill list (already queued or written?): {', '.join(missing)}")
+        blocked = [f"{k} {n} ({by_key[(k, n)]['blocked']})" for k, n in documents if by_key[(k, n)]["blocked"]]
+        if blocked:
+            raise BackfillRefused(f"These must not be sent to SQL Server: {'; '.join(blocked)}")
+        picked = [by_key[key] for key in dict.fromkeys(documents)]
+        queued = persistence.add_events([_event(c["kind"], c["doc_no"], "backfill", user, c["doc"], c["moves"])
+                                         for c in picked])
+        logger.info("Backfill by %s: queued %d document(s) as PENDING", user, queued)
+        if ENABLED:
+            _wake.set()
+    return {"documents": preview, "count": len(preview), "queued": queued}
+
+
+# ─── Background sender and status ─────────────────────────────────────────────
+
 def _run() -> None:
     while True:
-        _wake.wait(RETRY_SECONDS)
-        _wake.clear()
         try:
-            flush()
+            sync_pending_data()
         except Exception:
             logger.exception("Write-back thread error")
+        _wake.wait(RETRY_SECONDS)
+        _wake.clear()
         time.sleep(0.2)
 
 
 def start() -> None:
-    """Start the background sender (main.py startup). Does nothing when the flag is off."""
+    """At startup (main.py, after persistence.load()): put back rows a crash left SYNCING, then, when
+    DB_WRITE_ENABLED is on, start the background sender, which syncs straight away and then every
+    RETRY_SECONDS or whenever a write is queued."""
     global _thread
+    try:
+        stale = persistence.reset_stale()
+        if stale:
+            logger.warning("%d outbox row(s) were left SYNCING by a previous run: back to PENDING", stale)
+        counts = persistence.outbox_counts()
+    except Exception:
+        logger.exception("Could not read the outbox")
+        counts = {"pending": 0, "failed": 0}
     if not ENABLED:
-        logger.info("SQL Server write-back is off (DB_WRITE_ENABLED)")
+        logger.info("SQL Server write-back is off (DB_WRITE_ENABLED): %d transaction(s) PENDING in SQLite",
+                    counts["pending"] + counts["failed"])
         return
     if not masters_from_db:
         status["last_error"] = "Not writing: the backend started without SQL Server (seed data). Restart it while connected."
@@ -226,10 +383,9 @@ def start() -> None:
     if _thread is None:
         _thread = threading.Thread(target=_run, name="writeback", daemon=True)
         _thread.start()
-        logger.info("SQL Server write-back is ON: %d event(s) queued", len(store.OUTBOX))
-        _wake.set()
+        logger.info("SQL Server write-back is ON: %d transaction(s) to send", counts["pending"] + counts["failed"])
 
 
 def state() -> dict:
-    return {"enabled": ENABLED, "db_connected": db.is_db_available(), "queued": len(store.OUTBOX),
-            "oldest_queued_at": store.OUTBOX[0]["at"] if store.OUTBOX else None, **status}
+    return {"enabled": ENABLED, "db_connected": db.is_db_available(), "masters_from_db": masters_from_db,
+            **persistence.outbox_counts(), **status}

@@ -7,8 +7,10 @@ It refuses to run when TEST_DB_NAME is the live database named by DB_NAME in bac
     TEST_DB_HOST=... TEST_DB_NAME=vLQMSLHOUSE_TEST TEST_DB_USER=... TEST_DB_PASSWORD=... \\
         .venv/bin/python -m pytest tests/test_writeback_sqlserver.py -v
 
-It applies migrations/001 (twice, to prove it is safe to repeat), writes sales through the API, checks the
-Web_ tables, retries, then runs the rollback script, leaving the test database as it found it.
+It applies migrations/001 (twice, to prove it is safe to repeat), then: a bill with the flag off stays PENDING
+in SQLite; turning the flag on syncs it; a second sync writes nothing; a crash between the SQL commit and the
+SQLite update is detected on the next run without a duplicate. Finally it runs the rollback script, leaving
+the test database as it found it.
 """
 import os
 from datetime import date
@@ -16,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from app import db, store, writeback
+from app import db, persistence, writeback
 
 HERE = Path(__file__).resolve().parents[1]
 NEEDED = ("TEST_DB_HOST", "TEST_DB_NAME", "TEST_DB_USER", "TEST_DB_PASSWORD")
@@ -56,10 +58,10 @@ def test_db():
 
 
 @pytest.fixture
-def enabled(test_db, monkeypatch):
-    monkeypatch.setattr(writeback, "ENABLED", True)
+def connected(test_db, monkeypatch):
+    """Masters 'from the DB', write-back OFF: bills are queued PENDING and not sent."""
+    monkeypatch.setattr(writeback, "ENABLED", False)
     monkeypatch.setattr(writeback, "masters_from_db", True)
-
 
 
 def _one(sql: str, params: tuple = ()):
@@ -68,21 +70,45 @@ def _one(sql: str, params: tuple = ()):
         return cur.fetchone()
 
 
-async def test_sale_cancel_and_retry_on_sql_server(client, enabled):
-    before = _one("SELECT ISNULL(SUM(QtyChange), 0) FROM dbo.Web_StockBalance WHERE ItemCode = ?", ("VIN-750",))[0]
-    sale = (await client.post("/transactions/sales-invoice", json={
-        "date": date.today().isoformat(), "counter": "counter10", "salesperson": "GURU",
-        "lines": [{"item_code": "VIN-750", "bottles": 2}]})).json()
-    event = dict(store.OUTBOX[0])
+def _statuses() -> list[str]:
+    return [r["sync_status"] for r in reversed(persistence.outbox_rows(limit=500))]
 
-    assert writeback.flush() == 1, writeback.state()
-    store.OUTBOX.append(event)
-    assert writeback.flush() == 1                   # already written: skipped
+
+def _sale(bottles: int) -> dict:
+    return {"date": date.today().isoformat(), "counter": "counter10", "salesperson": "GURU",
+            "lines": [{"item_code": "VIN-750", "bottles": bottles}]}
+
+
+async def test_pending_then_sync_retry_crash_and_cancel_on_sql_server(client, connected, monkeypatch):
+    before = _one("SELECT ISNULL(SUM(QtyChange), 0) FROM dbo.Web_StockBalance WHERE ItemCode = ?", ("VIN-750",))[0]
+
+    # 1. Flag off: saved in SQLite as PENDING, nothing in SQL Server.
+    sale = (await client.post("/transactions/sales-invoice", json=_sale(2))).json()
+    assert _statuses() == ["PENDING"]
+    assert _one("SELECT COUNT(*) FROM dbo.Web_DocHeader WHERE DocNo = ?", (sale["doc_no"],))[0] == 0
+
+    # 2. Flag on: sync sends it and marks it SYNCED.
+    monkeypatch.setattr(writeback, "ENABLED", True)
+    assert writeback.sync_pending_data()["sent"] == 1, writeback.state()
+    assert _statuses() == ["SYNCED"]
+
+    # 4. Syncing again writes nothing.
+    assert writeback.sync_pending_data()["sent"] == 0
+
+    # 5. Crash after the SQL commit, before SQLite was updated: detected, not duplicated.
     await client.post(f"/transactions/sales-invoice/{sale['doc_no']}/cancel", json={"remarks": "test"})
-    assert writeback.flush() == 1
+    real_mark = persistence.mark_synced
+    monkeypatch.setattr(persistence, "mark_synced", lambda event_id: (_ for _ in ()).throw(OSError("crash")))
+    writeback.sync_pending_data()
+    monkeypatch.setattr(persistence, "mark_synced", real_mark)
+    assert _statuses() == ["SYNCED", "SYNCING"]
+    persistence.reset_stale()
+    assert writeback.sync_pending_data()["already_there"] == 1
+    assert _statuses() == ["SYNCED", "SYNCED"]
 
     assert _one("SELECT Status FROM dbo.Web_DocHeader WHERE DocKind = ? AND DocNo = ?",
                 ("sales_invoice", sale["doc_no"]))[0] == "CANCELLED"
+    assert _one("SELECT COUNT(*) FROM dbo.Web_WriteLog WHERE DocNo = ?", (sale["doc_no"],))[0] == 2
+    assert _one("SELECT COUNT(*) FROM dbo.Web_StockMove WHERE DocNo = ?", (sale["doc_no"],))[0] == 2
     after = _one("SELECT ISNULL(SUM(QtyChange), 0) FROM dbo.Web_StockBalance WHERE ItemCode = ?", ("VIN-750",))[0]
     assert float(after) == float(before)            # -2 then +2
-    assert _one("SELECT COUNT(*) FROM dbo.Web_StockMove WHERE DocNo = ?", (sale["doc_no"],))[0] == 2
