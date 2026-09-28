@@ -14,13 +14,8 @@ import Toast from '../common/Toast';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { api, errorText, type ApiCompany } from '../../lib/api';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
-import { badge, field, ghostButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
+import { badge, field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
 
-interface FinYear {
-  from: string;
-  to: string;
-  active: boolean;
-}
 
 const TABS = [
   { id: 'Company Info', icon: Building2 },
@@ -42,18 +37,17 @@ const EXTRA_FIELDS: { id: string; label: string; key: keyof Pick<ApiCompany, 'ph
   { id: 'co-ksbcl', label: 'KSBCL retailer code', key: 'ksbcl_code', mono: true },
 ];
 
-const INITIAL_FIN_YEARS: FinYear[] = [
-  { from: '01/04/2021', to: '31/03/2022', active: false },
-  { from: '01/04/2022', to: '31/03/2023', active: false },
-  { from: '01/04/2023', to: '31/03/2024', active: false },
-  { from: '01/04/2024', to: '31/03/2025', active: false },
-  { from: '01/04/2025', to: '31/03/2026', active: false },
-  { from: '01/04/2026', to: '31/03/2027', active: true },
-];
+// "2026-04-01" → "01/04/2026" for the financial-year table.
+const dmy = (iso?: string) => (iso ? iso.split('-').reverse().join('/') : '—');
+
+// Features the legacy desktop app has that the web app can't do yet: say so instead of faking success.
+const NOT_YET = {
+  backup: 'Database backup isn\'t available in the web app yet. Take the backup on the office SQL Server.',
+  newYear: 'Creating a new financial year isn\'t available in the web app yet. Use the desktop app (Create Financial Year).',
+};
 
 const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
   const [tab, setTab] = useState<string>('Company Info');
-  const [finYears, setFinYears] = useState<FinYear[]>(INITIAL_FIN_YEARS);
   const [companyProfile, setCompanyProfile] = useState<ApiCompany | null>(null);
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
@@ -110,14 +104,7 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
     }
   };
 
-  const handleBackup = () => {
-    setToast({ kind: 'ok', text: 'Database backup initiated successfully. Backup archive generated.' });
-  };
-
-  const handleSetActiveFY = (index: number) => {
-    setFinYears(finYears.map((fy, i) => ({ ...fy, active: i === index })));
-    setToast({ kind: 'ok', text: `Financial year ${finYears[index].from} - ${finYears[index].to} set as active.` });
-  };
+  const handleBackup = () => setToast({ kind: 'error', text: NOT_YET.backup });
 
   // Keyboard shortcut for Cmd/Ctrl+S
   useEffect(() => {
@@ -244,7 +231,7 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-stone-500 dark:text-stone-400">The active period determines all billing ledgers.</p>
-              <button onClick={() => setToast({ kind: 'ok', text: 'New financial year initialized.' })} className={secondaryButton}><Plus size={14} />New financial year</button>
+              <button onClick={() => setToast({ kind: 'error', text: NOT_YET.newYear })} className={secondaryButton}><Plus size={14} />New financial year</button>
             </div>
             <div className="overflow-x-auto rounded-lg border border-line">
               <table className="w-full text-left text-xs">
@@ -257,22 +244,15 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
                   </tr>
                 </thead>
                 <tbody className={tableBody}>
-                  {finYears.map((fy, i) => (
-                    <tr key={i} className={tableRow}>
-                      <td className="px-4 py-2.5 tabular-nums text-stone-900 dark:text-stone-50">{fy.from}</td>
-                      <td className="px-4 py-2.5 tabular-nums text-stone-900 dark:text-stone-50">{fy.to}</td>
-                      <td className="px-4 py-2.5">
-                        {fy.active
-                          ? <span className={badge('success')}><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active</span>
-                          : <span className={badge('neutral')}>Inactive</span>}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {fy.active
-                          ? <span className="text-xs text-stone-500">Current</span>
-                          : <button onClick={() => handleSetActiveFY(i)} className={`${ghostButton} py-1`}>Set active</button>}
-                      </td>
-                    </tr>
-                  ))}
+                  {/* The company's financial year from Company Master (MstComp when the DB is connected). */}
+                  <tr className={tableRow}>
+                    <td className="px-4 py-2.5 tabular-nums text-stone-900 dark:text-stone-50">{dmy(companyProfile?.fy_start)}</td>
+                    <td className="px-4 py-2.5 tabular-nums text-stone-900 dark:text-stone-50">{dmy(companyProfile?.fy_end)}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={badge('success')}><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active</span>
+                    </td>
+                    <td className="px-4 py-2 text-right"><span className="text-xs text-stone-500">Current</span></td>
+                  </tr>
                 </tbody>
               </table>
             </div>

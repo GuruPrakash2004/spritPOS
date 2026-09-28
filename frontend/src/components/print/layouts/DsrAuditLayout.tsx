@@ -7,7 +7,7 @@ import { SAMPLE_DSR_DATA } from '../samplePrintData';
 
 interface DsrAuditLayoutProps {
   modelId: string;
-  data: any;
+  data: unknown;
   company: ApiCompany | null;
   watermark?: string;
   isPrintPreview?: boolean;
@@ -25,7 +25,8 @@ export const DsrAuditLayout: React.FC<DsrAuditLayoutProps> = ({
   const storeLicence = company?.licence_type ? `${company.licence_type}` : 'CL-2 Retail Vend of Liquor';
   const storeGstin = company?.gstin || '29AAAAA0000A1Z5';
 
-  const dsr: ApiFullDsr = (data && (data.sales_incl_gst || data.total_bills)) ? data : SAMPLE_DSR_DATA;
+  const given = data as Partial<ApiFullDsr> | null;
+  const dsr: ApiFullDsr = (given && (given.sales_incl_gst || given.total_bills)) ? given as ApiFullDsr : SAMPLE_DSR_DATA;
   const isDmp = modelId === 'RptDSR_8.5';
 
   return (

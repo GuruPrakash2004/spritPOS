@@ -1,15 +1,18 @@
 // Customised Reports (module key "Reports Dashboard"): the list of legacy report names, with
-// Generate & View, Export XLS and Print. Data comes from GET /reports/custom
-// (backend/app/routers/custom_reports.py).
+// Generate & View, Export XLS, Email and Print. Data comes from GET /reports/custom
+// (backend/app/routers/custom_reports.py); Email asks the backend to build and send the .xls
+// (ReportEmailDialog). Period mistakes show inline under the dates; server results as popups.
 
 import { useEffect, useState } from 'react';
 import { Mail, Download, Eye, Plus, X, Loader2, Printer } from 'lucide-react';
-import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
-import Toast from '../common/Toast';
-import { api, errorText } from '../../lib/api';
+import { badge, field, fieldError, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
+import { toast } from '../common/toastStore';
+import { InlineError } from '../common/FormErrorSummary';
+import { api, errorText, todayIso } from '../../lib/api';
 import { downloadXls, type ReportColumn, type ReportRow } from '../../lib/xlsExport';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import ReportEmailDialog, { type ReportEmailRequest } from './ReportEmailDialog';
 
 const toDmy = (iso: string) => iso.split('-').reverse().join('/');
 
@@ -36,11 +39,10 @@ const ReportsDashboard = () => {
   const { company } = useCompanyProfile();
   const [selectedReport, setSelectedReport] = useState<string>('Expense Ledger Report');
   const [filterOn, setFilterOn] = useState<string>('Exp Date');
-  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([
-    { on: 'Date Range', val: '01/09/2026 to 21/09/2026' }
-  ]);
-
-  const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
+  // Inline mistakes: the period (under From/To) and the Filter On value / Add filter row.
+  const [dateError, setDateError] = useState('');
+  const [filterError, setFilterError] = useState('');
   const [filterValue, setFilterValue] = useState('');
   const [masters, setMasters] = useState<Record<string, Master[]>>({});
 
@@ -50,20 +52,16 @@ const ReportsDashboard = () => {
     if (!mf || masters[filterOn]) return;
     api<Master[]>(mf.path)
       .then(list => setMasters(m => ({ ...m, [filterOn]: list })))
-      .catch(e => setToast({ kind: 'error', text: errorText(e) }));
+      .catch(e => toast.error(errorText(e)));
   }, [filterOn, masters]);
 
-  const [fromDate, setFromDate] = useState('2026-09-01');
-  const [toDate, setToDate] = useState('2026-09-21');
+  // Default period: this month so far.
+  const [fromDate, setFromDate] = useState(() => `${todayIso().slice(0, 8)}01`);
+  const [toDate, setToDate] = useState(todayIso);
   const [result, setResult] = useState<ReportResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2500);
-    return () => clearTimeout(timer);
-  }, [toast]);
+  const [emailRequest, setEmailRequest] = useState<ReportEmailRequest | null>(null);
 
   const reportCategories = [
     {
@@ -110,24 +108,39 @@ const ReportsDashboard = () => {
     }
   ];
 
+  // The period's mistake, shown under From/To (and the cursor goes to the faulty date).
+  const checkPeriod = () => {
+    const problem = !fromDate || !toDate ? 'Pick both From and To dates' : fromDate > toDate ? 'From Date cannot be after To Date' : '';
+    setDateError(problem);
+    if (problem) document.getElementById(!fromDate || fromDate > toDate ? 'cr-from' : 'cr-to')?.focus();
+    return !problem;
+  };
+
   const addFilter = () => {
-    if (!fromDate || !toDate) return setToast({ kind: 'error', text: 'Pick both From and To dates.' });
-    if (fromDate > toDate) return setToast({ kind: 'error', text: 'From Date cannot be after To Date.' });
+    if (!checkPeriod()) return;
     const mf = masterFilter(filterOn);
-    if (mf && !filterValue) return setToast({ kind: 'error', text: `Pick a ${filterOn} to filter on.` });
+    if (mf && !filterValue) {
+      setFilterError(`Pick a ${filterOn} to filter on`);
+      return document.getElementById('cr-val')?.focus();
+    }
     const val = mf
       ? masters[filterOn]?.find(m => m.code === filterValue)?.name ?? filterValue
       : `${toDmy(fromDate)} to ${toDmy(toDate)}`;
-    if (activeFilters.some(f => f.on === filterOn && f.val === val)) return setToast({ kind: 'error', text: 'That filter is already applied.' });
+    if (activeFilters.some(f => f.on === filterOn && f.val === val)) return setFilterError('That filter is already applied');
+    setFilterError('');
     setActiveFilters([...activeFilters, mf ? { on: filterOn, val, param: mf.param, code: filterValue } : { on: filterOn, val }]);
   };
 
-  // Email is still a stub: there is no mail server configured.
-  const emailStub = () => setToast({ kind: 'ok', text: `${selectedReport} emailed` });
+  const filterCodes = (param: MasterParam) => activeFilters.filter(f => f.param === param && f.code).map(f => f.code as string);
+
+  const openEmail = () => {
+    if (!checkPeriod()) return;
+    setEmailRequest({ name: selectedReport, from_date: fromDate, to_date: toDate,
+      ledger: filterCodes('ledger'), supplier: filterCodes('supplier'), group: filterCodes('group') });
+  };
 
   const fetchReport = async (): Promise<ReportResult | null> => {
-    if (!fromDate || !toDate) { setToast({ kind: 'error', text: 'Pick both From and To dates.' }); return null; }
-    if (fromDate > toDate) { setToast({ kind: 'error', text: 'From Date cannot be after To Date.' }); return null; }
+    if (!checkPeriod()) return null;
     // Reuse what is on screen when nothing has changed since Generate.
     const params = new URLSearchParams({ name: selectedReport, from_date: fromDate, to_date: toDate });
     activeFilters.forEach(f => { if (f.param && f.code) params.append(f.param, f.code); });
@@ -139,7 +152,7 @@ const ReportsDashboard = () => {
       setResult(res);
       return res;
     } catch (e) {
-      setToast({ kind: 'error', text: errorText(e) });
+      toast.error(errorText(e));
       return null;
     } finally {
       setBusy(false);
@@ -148,16 +161,16 @@ const ReportsDashboard = () => {
 
   const generate = async () => {
     const res = await fetchReport();
-    if (res) setToast({ kind: 'ok', text: `${res.rows.length} row${res.rows.length === 1 ? '' : 's'} found` });
+    if (res) toast.ok(`${res.rows.length} row${res.rows.length === 1 ? '' : 's'} found`);
   };
 
   const exportXls = async () => {
     const res = await fetchReport();
     if (!res) return;
-    if (!res.rows.length) return setToast({ kind: 'error', text: 'Nothing to export for this period.' });
+    if (!res.rows.length) return toast.error('Nothing to export for this period.');
     downloadXls(`${res.name} ${res.from_date} to ${res.to_date}`, `${company?.name || 'Company'} - ${res.name}`,
       `Period: ${toDmy(res.from_date)} to ${toDmy(res.to_date)}`, res.columns, res.rows);
-    setToast({ kind: 'ok', text: `${res.name} exported to XLS` });
+    toast.ok(`${res.name} exported to XLS`);
   };
 
   const removeFilter = (idx: number) => {
@@ -166,14 +179,13 @@ const ReportsDashboard = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
-      {toast && <Toast kind={toast.kind} text={toast.text} />}
       <div className={pageHeader}>
         <div>
           <h1 className={pageTitle}>Customised Reports</h1>
           <p className={pageSub}>Audit and MIS reporting across purchase, sales, stock and expenses.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={emailStub} className={secondaryButton}><Mail size={14} />Email</button>
+          <button onClick={openEmail} className={secondaryButton}><Mail size={14} />Email</button>
           <button onClick={exportXls} disabled={busy} className={secondaryButton}><Download size={14} />Export XLS</button>
         </div>
       </div>
@@ -224,19 +236,24 @@ const ReportsDashboard = () => {
               {masterFilter(filterOn) && (
                 <div>
                   <label htmlFor="cr-val" className={label}>{filterOn}</label>
-                  <select id="cr-val" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className={field}>
+                  <select id="cr-val" value={filterValue} onChange={(e) => { setFilterValue(e.target.value); setFilterError(''); }}
+                    className={`${field} ${filterError && !filterValue ? fieldError : ''}`}>
                     <option value="">{masters[filterOn] ? `Select ${filterOn}…` : 'Loading…'}</option>
                     {masters[filterOn]?.map(m => <option key={m.code} value={m.code}>{m.name}</option>)}
                   </select>
+                  {!filterValue && <InlineError message={filterError} />}
                 </div>
               )}
               <div>
                 <label htmlFor="cr-from" className={label}>From</label>
-                <input id="cr-from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={`${field} tabular-nums`} />
+                <input id="cr-from" type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setDateError(''); }}
+                  aria-invalid={!!dateError} className={`${field} tabular-nums ${dateError ? fieldError : ''}`} />
               </div>
               <div>
                 <label htmlFor="cr-to" className={label}>To</label>
-                <input id="cr-to" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={`${field} tabular-nums`} />
+                <input id="cr-to" type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setDateError(''); }}
+                  aria-invalid={!!dateError} className={`${field} tabular-nums ${dateError ? fieldError : ''}`} />
+                <InlineError message={dateError} />
               </div>
             </div>
 
@@ -249,6 +266,7 @@ const ReportsDashboard = () => {
                   <button onClick={() => removeFilter(i)} className="ml-0.5 rounded p-0.5 text-stone-500 hover:bg-surface hover:text-red-600" aria-label={`Remove filter ${f.on}`}><X size={12} /></button>
                 </span>
               ))}
+              {filterError && (filterValue || !masterFilter(filterOn)) && <InlineError message={filterError} />}
               {activeFilters.length === 0 && <span className="text-xs text-stone-500">No filters. The whole period is shown.</span>}
               {activeFilters.length > 0 && (
                 <button onClick={() => setActiveFilters([])} className={`${ghostButton} ml-auto hover:!text-red-600`}>Clear all</button>
@@ -304,6 +322,10 @@ const ReportsDashboard = () => {
             </table>
           </div>
         </section>
+      )}
+
+      {emailRequest && (
+        <ReportEmailDialog request={emailRequest} defaultTo={company?.email ?? ''} onClose={() => setEmailRequest(null)} />
       )}
 
       {showPrintModal && result && (

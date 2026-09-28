@@ -1,7 +1,7 @@
-// Purchase Bill row type, empty-row factory and cell/amount helpers, plus prototype constants
-// (supplier list, item codes) used until those lookups come fully from the API.
+// Purchase Bill row type, empty-row factory and cell/amount helpers. Items come from the live
+// catalogue in data/stockData.ts (a row's `stock` is its STOCK_ITEMS index).
 
-import { SAMPLE_STOCK_DATA } from '../../../data/stockData';
+import { STOCK_ITEMS } from '../../../data/stockData';
 
 export type Row = {
   uid: number; stock: number | null; code: string; name: string; qoh: number;
@@ -12,12 +12,6 @@ export type Supplier = { name: string; address: string };
 export const FY_PREFIX = '26';
 export const PB_SERIES = ['', 'A', 'B'];
 export const PURCHASE_TYPES = ['Purchase', 'Purchase Return', 'Stock Transfer In'];
-export const ITEM_CODES = SAMPLE_STOCK_DATA.map(item => item.code);
-export const INITIAL_SUPPLIERS: Supplier[] = [
-  { name: 'R&D DISTRIBUTORS', address: 'No. 14, KSBCL Depot Road, Peenya Industrial Area, Bengaluru - 560058' },
-  { name: 'KSBCL DEPOT - BANGALORE NORTH', address: 'KSBCL Depot, Yeshwanthpur, Bengaluru - 560022' },
-  { name: 'UNITED SPIRITS LTD', address: 'UB Tower, Vittal Mallya Road, Bengaluru - 560001' },
-];
 
 export const today = () => new Date().toISOString().slice(0, 10);
 export const money = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -25,8 +19,11 @@ export const money = (n: number) => n.toLocaleString('en-IN', { minimumFractionD
 let nextUid = 1;
 export const blankRow = (): Row => ({ uid: nextUid++, stock: null, code: '', name: '', qoh: 0, qty: 0, rate: 0, cgstPct: 0, sgstPct: 0, cessPct: 0, compCess: 0 });
 export const stockRow = (stock: number, qty: number): Row => {
-  const item = SAMPLE_STOCK_DATA[stock];
-  return { ...blankRow(), stock, code: ITEM_CODES[stock], name: `${item.name} ${item.pkg}`, qoh: item.clQty, qty, rate: item.purchaseRate };
+  const item = STOCK_ITEMS[stock];
+  return {
+    ...blankRow(), stock, code: item.code, name: `${item.name} ${item.pkg}`, qoh: item.clQty, qty, rate: item.purchaseRate,
+    cgstPct: item.cgstPct, sgstPct: item.sgstPct,
+  };
 };
 
 export const amt = (r: Row) => r.qty * r.rate;

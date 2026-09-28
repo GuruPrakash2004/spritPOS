@@ -58,10 +58,14 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
     setToast({ kind: 'ok', text: `${records.length} counter records exported to CSV.` });
   };
 
+  // No change history is recorded yet, so report what is known rather than inventing an audit trail.
   const handleAuditTrail = () => {
     setOptionsOpen(false);
-    const active = records[index] || form;
-    setToast({ kind: 'ok', text: `Audit Trail: Counter ${active.code} (${active.name}) is configured and active.` });
+    const current = records[index] || form;
+    setToast({
+      kind: 'error',
+      text: `Counter ${current.code} is ${current.inactive ? 'inactive' : 'active'}. Change history (audit trail) isn't recorded in the web app yet.`,
+    });
   };
 
   useEffect(() => {
@@ -104,15 +108,23 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
   const handleEdit = () => { setMode('Edit'); setError(''); };
   const handleClose = () => goTo(index);
 
+  // Remove the counter from the list only once the server has deleted it (it refuses counters with bills).
   const handleDelete = async () => {
-    if (!(await confirm(`Delete sales counter "${form.code}"?`))) return;
-    api(`/masters/sales-counters/${encodeURIComponent(form.code)}`, { method: 'DELETE' }).catch(e => setError(errorText(e)));
-    const next = records.filter((_, i) => i !== index);
+    const code = form.code;
+    if (!(await confirm(`Delete sales counter "${code}"?`))) return;
+    try {
+      await api(`/masters/sales-counters/${encodeURIComponent(code)}`, { method: 'DELETE' });
+    } catch (e) {
+      setToast({ kind: 'error', text: errorText(e) });
+      return;
+    }
+    const next = records.filter(r => r.code !== code);
     setRecords(next);
-    const newIndex = Math.min(index, next.length - 1);
-    setIndex(Math.max(newIndex, 0));
+    const newIndex = Math.max(0, Math.min(index, next.length - 1));
+    setIndex(newIndex);
     setForm(next[newIndex] ?? EMPTY_COUNTER);
     setMode('View');
+    setToast({ kind: 'ok', text: `Sales Counter "${code}" deleted.` });
   };
 
   const handleSearch = () => {

@@ -8,11 +8,16 @@ these dicts, so they are lost when the server restarts.
 Key rules:
 - Change stock only through move_stock(): it updates ITEMS[code]["qoh"] and logs a
   MOVEMENTS row, which the Stock Ledger, Stock Balance and DSR reports read.
-- Documents live in DOCS[kind][doc_no]; numbers come from next_doc_no().
+- Documents live in DOCS[kind][doc_no]; numbers come from next_doc_no(). Seed and DB-loaded documents
+  carry "origin" ("seed" / "db"); documents made through the app have none, and are the ones
+  app/persistence.py saves.
+- Call touch(TABLE, key) after changing a master row, user or role, so the change is saved.
 - ROLES maps a role to the module names it may open (the React sidebar names; "*" = all).
 """
+import copy
 from datetime import date
-from itertools import count
+
+from .passwords import hash_password
 
 COMPANY = {
     "name": "THE LIQUOR HOUSE",
@@ -109,13 +114,21 @@ COUNTERS = {
 
 SALES_PERSONS = ["GURU", "PRADEEP", "RAVI", "ADMIN"]
 
-# Demo logins only: the prototype has no real security (plaintext demo passwords, user name as token).
-USERS = {
-    "ADMIN": {"user": "ADMIN", "password": "admin", "role": "Administrator", "active": True},
-    "GURU": {"user": "GURU", "password": "guru", "role": "Manager", "active": True},
-    "PRADEEP": {"user": "PRADEEP", "password": "pradeep", "role": "Cashier", "active": True},
-    "RAVI": {"user": "RAVI", "password": "ravi", "role": "Cashier", "active": True},
-}
+# App users. Passwords are kept only as salted PBKDF2 hashes (app/passwords.py), never in plain text.
+# "pwv" (password version) goes up on every password change, which invalidates older login tokens.
+# The demo logins (ADMIN/admin, GURU/guru, PRADEEP/pradeep, RAVI/ravi) are for development:
+# change them in Admin Master before real use.
+def _user(name: str, password: str, role: str) -> dict:
+    return {"user": name, "password_hash": hash_password(password), "role": role, "active": True, "pwv": 1}
+
+
+SEED_USERS = {u["user"]: u for u in [
+    _user("ADMIN", "admin", "Administrator"),
+    _user("GURU", "guru", "Manager"),
+    _user("PRADEEP", "pradeep", "Cashier"),
+    _user("RAVI", "ravi", "Cashier"),
+]}
+USERS = copy.deepcopy(SEED_USERS)
 
 # Role → module names it may open (the React sidebar names). "*" means every module.
 # Legacy equivalent: frmMstRole + frmUtlAssignRights.
@@ -156,12 +169,52 @@ DOCS: dict[str, dict[str, dict]] = {k: {} for k in [
 MOVEMENTS: list[dict] = []
 # Index into MOVEMENTS where in-app activity starts once live DB data is loaded (set by db_store).
 DB_BASE_MOVEMENTS = 0
+# Index into MOVEMENTS where movements made through this app start (after the seed history and the DB
+# load). app/persistence.py saves MOVEMENTS[APP_MOVEMENTS_FROM:] and replays them after a restart.
+APP_MOVEMENTS_FROM = 0
+
+# Master rows changed through the app, per table name ("ITEMS", "USERS", "ROLES", "COMPANY", ...).
+# app/persistence.py saves these rows (or their deletion) and lays them back over the seed/DB data on start.
+EDITS: dict[str, set[str]] = {}
+
+# Writes queued for SQL Server (app/writeback.py, only with DB_WRITE_ENABLED). Saved with the rest of the
+# app state (app/persistence.py) so nothing queued is lost on a restart.
+OUTBOX: list[dict] = []
+
+# Replies to recent bill saves, per (user, path, Idempotency-Key header): a double-click or a retry of
+# the same save gets the first reply back instead of creating a second bill (main.py).
+IDEMPOTENT: dict[str, dict] = {}
+
+
+# Add/Edit/Delete rights per role and module: ROLE_RIGHTS[role][module] = {"add", "edit", "delete"}.
+# A module missing here means full rights on it (the role's module list still decides access).
+ROLE_RIGHTS: dict[str, dict[str, dict[str, bool]]] = {
+    "Cashier": {"Item Master": {"add": True, "edit": True, "delete": False}},
+}
+
+
+def touch(table: str, key: str) -> None:
+    """Mark a row as changed by the app so it is saved (see app/persistence.py)."""
+    EDITS.setdefault(table, set()).add(key)
+
+
+class Seq:
+    """A document number series: next(seq) gives the next number. Unlike itertools.count its current
+    value can be read and restored, so numbering continues after a restart."""
+    def __init__(self, start: int) -> None:
+        self.value = start
+
+    def __next__(self) -> int:
+        n = self.value
+        self.value += 1
+        return n
+
 
 FY_PREFIX = "26"
-_seq = {k: count(1) for k in DOCS}
-_seq["sales_invoice"] = count(83718)
+_seq = {k: Seq(1) for k in DOCS}
+_seq["sales_invoice"] = Seq(83718)
 # Held bills get their own series so parking a bill never leaves a gap in the invoice numbers.
-_seq["hold"] = count(1)
+_seq["hold"] = Seq(1)
 
 
 def find(table: dict, key: str) -> dict | None:
@@ -180,7 +233,7 @@ def next_doc_no(kind: str, prefix: str) -> str:
 def move_stock(item_code: str, qty: float, kind: str, doc_no: str, on: date, rate: float) -> None:
     """Add (+qty) or remove (-qty) stock and log the movement for the reports.
 
-    kind is "purchase", "sale", "sale-cancel", "sales-return" or "deduction".
+    kind is "opening", "purchase", "sale", "sale-cancel", "sales-return" or "deduction".
     """
     ITEMS[item_code]["qoh"] += qty
     if kind == "purchase" and qty > 0:
@@ -235,6 +288,7 @@ def _seed_sales_history():
             pb_tot_qty += qty
             pb_tot_basic += amt
         DOCS["purchase_bill"][pb_no] = {
+            "origin": "seed",
             "doc_no": pb_no,
             "date": p_date.isoformat(),
             "supplier": "KSBCL-BN",
@@ -302,6 +356,7 @@ def _seed_sales_history():
             s = (bill_idx * 13) % 60
 
             DOCS["sales_invoice"][doc_no] = {
+                "origin": "seed",
                 "doc_no": doc_no,
                 "date": d_str,
                 "time": f"{h:02d}:{m:02d}:{s:02d}",
@@ -328,3 +383,4 @@ def _seed_sales_history():
 
 
 _seed_sales_history()
+APP_MOVEMENTS_FROM = len(MOVEMENTS)

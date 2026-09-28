@@ -1,16 +1,23 @@
 """Customised Reports Explorer: the legacy report list, built from the in-memory documents.
 Each report returns {columns, rows} so the React side can render and export any of them the same way."""
+import logging
+import time
 from collections import defaultdict
 from contextvars import ContextVar
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 
-from .. import store
+from .. import mailer, store
+from ..schemas import ReportEmailIn
+from .auth import get_current_user, require_module
 
-router = APIRouter(prefix="/reports/custom", tags=["Customised Reports"])
+router = APIRouter(prefix="/reports/custom", tags=["Customised Reports"],
+                   dependencies=[Depends(require_module("Reports Dashboard"))])
 
 L, R = "left", "right"
+logger = logging.getLogger("vlqms.reports")
 
 # Filter On values for the current request (ledger / supplier / group codes). A ContextVar keeps the
 # report functions' (from, to) signature while still letting _docs narrow every report the same way.
@@ -96,8 +103,10 @@ def expense_summary(f, t):
 
 # ---------- Purchase ----------
 def grn_wise(f, t):
-    rows = [{"date": d["date"], "doc_no": d["doc_no"], "supplier": d["supplier"], "inv_no": d["supplier_inv_no"],
-             "type": d["purchase_type"], "qty": d["totals"]["qty"], "litres": d["totals"]["litres"], "amount": d["totals"]["net"]}
+    rows = [{"date": d["date"], "doc_no": d["doc_no"], "supplier": d["supplier"], "inv_no": d.get("supplier_inv_no", ""),
+             "type": d.get("purchase_type", "Purchase"), "qty": d["totals"]["qty"],
+             "litres": d["totals"].get("litres", round(sum(l.get("litres", 0) for l in d["lines"]), 3)),
+             "amount": d["totals"]["net"]}
             for d in _docs("purchase_bill", f, t)]
     return [_col("date", "Date"), _col("doc_no", "GRN No"), _col("supplier", "Supplier"), _col("inv_no", "Supplier Inv No"),
             _col("type", "Type"), *QTY[:2], _col("amount", "Net Amount", R)], rows
@@ -109,7 +118,7 @@ def purchase_day_group(f, t):
 
 
 def supplier_bill_wise(f, t):
-    rows = [{"supplier": d["supplier"], "inv_no": d["supplier_inv_no"], "inv_date": d["supplier_inv_date"], "doc_no": d["doc_no"],
+    rows = [{"supplier": d["supplier"], "inv_no": d.get("supplier_inv_no", ""), "inv_date": d.get("supplier_inv_date", ""), "doc_no": d["doc_no"],
              "inv_value": d.get("supplier_inv_value", 0), "amount": d["totals"]["net"]} for d in _docs("purchase_bill", f, t)]
     rows.sort(key=lambda r: r["supplier"])
     return [_col("supplier", "Supplier"), _col("inv_no", "Inv No"), _col("inv_date", "Inv Date"), _col("doc_no", "GRN No"),
@@ -257,6 +266,8 @@ def run_report(name: str, from_date: date, to_date: date, ledger: list[str] = Qu
                supplier: list[str] = Query([]), group: list[str] = Query([])):
     if from_date > to_date:
         raise HTTPException(422, "From Date cannot be after To Date")
+    if (to_date - from_date).days > 3660:
+        raise HTTPException(422, "Choose a period of ten years or less")
     fn = REPORTS.get(name)
     if not fn:
         raise HTTPException(404, f"'{name}' is not available yet")
@@ -266,3 +277,44 @@ def run_report(name: str, from_date: date, to_date: date, ledger: list[str] = Qu
     finally:
         _filters.reset(token)
     return {"name": name, "from_date": from_date, "to_date": to_date, "columns": columns, "rows": rows}
+
+
+@router.post("/email")
+async def email_report(body: ReportEmailIn, current_user: dict = Depends(get_current_user)):
+    """Build the report on the server (same data as Generate) and email it as an .xls attachment.
+    The attachment is never taken from the browser, so this can't be used to send arbitrary files."""
+    if not mailer.configured():
+        raise HTTPException(503, "Email isn't set up: add the SMTP settings to backend/.env (see .env.example). "
+                                 "Meanwhile use Export XLS and attach the file to your email.")
+    _check_email_rate(current_user["user"])
+    report = await run_in_threadpool(run_report, body.name, body.from_date, body.to_date, body.ledger, body.supplier,
+                                     body.group)
+    if not report["rows"]:
+        raise HTTPException(422, "Nothing to email for this period")
+    company = store.COMPANY.get("name") or "Company"
+    period = f"{body.from_date:%d/%m/%Y} to {body.to_date:%d/%m/%Y}"
+    file_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in f"{body.name} {body.from_date} to {body.to_date}") + ".xls"
+    attachment = mailer.xls(f"{company} - {body.name}", f"Period: {period}", report["columns"], report["rows"])
+    text = (body.message.strip() + "\n\n" if body.message.strip() else "") + \
+        f"{body.name} for {period} is attached.\n\nSent by {current_user['user']} from vLQMS."
+    try:
+        # From: the Company Master email (Company Master → Email), under the company name.
+        await run_in_threadpool(mailer.send, body.to, f"{company}: {body.name} ({period})", text, file_name, attachment,
+                                store.COMPANY.get("email", ""), company)
+    except Exception as exc:
+        raise HTTPException(502, f"The mail server did not accept the message ({type(exc).__name__}). Check the SMTP settings.")
+    _email_log[current_user["user"]].append(time.monotonic())
+    logger.info("%s emailed '%s' (%s) to %s", current_user["user"], body.name, period, ", ".join(body.to))
+    return {"sent_to": body.to, "file_name": file_name, "rows": len(report["rows"])}
+
+
+# Company data leaving by email: at most EMAIL_LIMIT sent reports per user per hour.
+EMAIL_LIMIT, EMAIL_WINDOW = 10, 3600
+_email_log: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_email_rate(user: str) -> None:
+    now = time.monotonic()
+    _email_log[user] = [t for t in _email_log[user] if now - t < EMAIL_WINDOW]
+    if len(_email_log[user]) >= EMAIL_LIMIT:
+        raise HTTPException(429, f"You can email at most {EMAIL_LIMIT} reports an hour. Try again later, or use Export XLS.")

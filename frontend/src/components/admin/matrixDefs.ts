@@ -1,6 +1,8 @@
 // Screens shown in the Admin Master rights grid, with which actions each supports, and helpers that
 // convert a backend role ({name, modules}) into the grid's draft state. Add an entry here when you add a module.
 
+import type { ApiRights } from '../../lib/api';
+
 export interface MatrixScreen {
   id: string;
   name: string;
@@ -66,32 +68,35 @@ export interface RoleDraft {
   actions: Set<string>;
 }
 
-export function parseRoleToDraft(r: { name: string; modules: string[] }): RoleDraft {
+export function parseRoleToDraft(r: { name: string; modules: string[]; rights?: ApiRights }): RoleDraft {
   const isAll = r.modules.includes('*');
-  const isCashier = r.name === 'Cashier';
-
+  const rights = r.rights ?? {};
   const nextMods = new Set<string>();
   const nextActs = new Set<string>();
 
+  // A screen's Add/Edit/Delete tick is on unless the role's saved rights switch it off.
   MATRIX_SCREENS.forEach(s => {
-    if (isAll || r.modules.includes(s.id)) {
-      nextMods.add(s.id);
-      if (isCashier) {
-        if (s.id === 'Item Master') {
-          nextActs.add(`${s.id}:add`);
-          nextActs.add(`${s.id}:edit`);
-          // NO delete for cashier!
-        } else {
-          if (s.hasAdd) nextActs.add(`${s.id}:add`);
-          if (s.hasEdit) nextActs.add(`${s.id}:edit`);
-        }
-      } else {
-        if (s.hasAdd) nextActs.add(`${s.id}:add`);
-        if (s.hasEdit) nextActs.add(`${s.id}:edit`);
-        if (s.hasDelete) nextActs.add(`${s.id}:delete`);
-      }
-    }
+    if (!(isAll || r.modules.includes(s.id))) return;
+    nextMods.add(s.id);
+    if (s.hasAdd && rights[s.id]?.add !== false) nextActs.add(`${s.id}:add`);
+    if (s.hasEdit && rights[s.id]?.edit !== false) nextActs.add(`${s.id}:edit`);
+    if (s.hasDelete && rights[s.id]?.delete !== false) nextActs.add(`${s.id}:delete`);
   });
 
   return { name: r.name, modules: nextMods, actions: nextActs };
+}
+
+// The draft's ticks as the backend's `rights` (only for opened screens; actions a screen doesn't
+// have count as allowed).
+export function draftRights(draft: RoleDraft): ApiRights {
+  const out: ApiRights = {};
+  MATRIX_SCREENS.forEach(s => {
+    if (!draft.modules.has(s.id)) return;
+    out[s.id] = {
+      add: !s.hasAdd || draft.actions.has(`${s.id}:add`),
+      edit: !s.hasEdit || draft.actions.has(`${s.id}:edit`),
+      delete: !s.hasDelete || draft.actions.has(`${s.id}:delete`),
+    };
+  });
+  return out;
 }

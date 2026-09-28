@@ -58,12 +58,14 @@ export const ITEM_FIELDS: MasterField[] = [
   { key: 'package', label: 'Package', optionsFrom: 'packages', required: true, showInList: false },
   { key: 'bottles_per_case', label: 'Bottles per Case (≥ 1)', type: 'number', required: true, showInList: false, default: 12 },
   { key: 'mrp', label: 'MRP', type: 'number', required: true },
-  { key: 'purchase_rate', label: 'Purchase Rate', type: 'number', required: true },
+  { key: 'purchase_rate', label: 'Purchase Rate', type: 'number', required: true, costField: true },
   { key: 'cgst_per', label: 'CGST % (non-liquor only)', type: 'number', showInList: false },
   { key: 'sgst_per', label: 'SGST % (non-liquor only)', type: 'number', showInList: false },
   { key: 'rol', label: 'ROL (reorder level)', type: 'number', showInList: false },
   { key: 'roq', label: 'ROQ (reorder qty)', type: 'number', showInList: false },
-  { key: 'qoh', label: 'QOH', type: 'number', showInList: false },
+  // Opening stock: used only when the item is created. After that, stock changes through transactions
+  // (the backend ignores QOH on edits so the stock ledger stays complete).
+  { key: 'qoh', label: 'Opening stock (new items only)', type: 'number', showInList: false, newOnly: true },
   { key: 'active', label: 'Active', type: 'bool', showInList: false, default: true },
 ];
 

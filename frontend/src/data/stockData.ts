@@ -1,16 +1,72 @@
-// Hard-coded sample stock rows from the prototype, plus litresPerBottle(). Still used by the
-// Sales Invoice bill templates and the Purchase Bill item lookup; the other screens read stock from the API.
+// Live item catalogue for the billing screens (Sales Invoice, Purchase Bill), loaded from /masters/items.
+//
+// Those screens refer to an item by its position in STOCK_ITEMS (a bill line stores that index), so
+// the array is only ever updated in place: a reload updates existing items where they are and appends
+// new ones, and never removes or reorders, so indexes held by an open bill stay valid.
+// Components call useStockItems() to load it and re-render when it changes; call loadStockItems()
+// after a save to pick up the new stock (QOH). Inactive items stay in the array but are hidden from
+// pickers (see sellable()).
 
-export const SAMPLE_STOCK_DATA = [
-  { code: 'VIN-750', group: 'WHISKY', brand: 'ABD', name: 'VIN GREEN LABEL BARREL SPECIAL CLASIC WHISKY', pkg: '750ml', opQty: 48, recQty: 24, issQty: 16, clQty: 56, rate: 835.00, purchaseRate: 759.29, cat: 'IML', ksbcl: 'KSBCL-102948' },
-  { code: 'RC-750', group: 'WHISKY', brand: 'Royal Challenge', name: 'ROYAL CHALLENGE SELECT PREMIUM WHISKY', pkg: '750ml', opQty: 60, recQty: 36, issQty: 28, clQty: 68, rate: 950.00, purchaseRate: 860.00, cat: 'IML', ksbcl: 'KSBCL-104412' },
-  { code: 'MCD1-180', group: 'WHISKY', brand: 'McDowells No.1', name: 'MCDOWELLS NO.1 LUXURY PREMIUM WHISKY', pkg: '180ml', opQty: 120, recQty: 96, issQty: 84, clQty: 132, rate: 220.00, purchaseRate: 198.50, cat: 'IML', ksbcl: 'KSBCL-108821' },
-  { code: 'KF-650', group: 'BEER', brand: 'Kingfisher', name: 'KINGFISHER PREMIUM LAGER BEER', pkg: '650ml', opQty: 144, recQty: 120, issQty: 96, clQty: 168, rate: 180.00, purchaseRate: 155.00, cat: 'BEER', ksbcl: 'KSBCL-201103' },
-  { code: 'KFU-650', group: 'BEER', brand: 'Kingfisher', name: 'KINGFISHER ULTRA MAX STRONG BEER', pkg: '650ml', opQty: 48, recQty: 48, issQty: 32, clQty: 64, rate: 230.00, purchaseRate: 198.00, cat: 'BEER', ksbcl: 'KSBCL-201994' },
-  { code: 'OM-750', group: 'RUM', brand: 'Old Monk', name: 'OLD MONK THE LEGEND XXX RUM', pkg: '750ml', opQty: 36, recQty: 24, issQty: 18, clQty: 42, rate: 850.00, purchaseRate: 770.00, cat: 'IML', ksbcl: 'KSBCL-301140' },
-  { code: 'MM-750', group: 'VODKA', brand: 'Magic Moments', name: 'MAGIC MOMENTS REMIX GRAIN VODKA', pkg: '750ml', opQty: 24, recQty: 12, issQty: 11, clQty: 25, rate: 750.00, purchaseRate: 678.00, cat: 'IML', ksbcl: 'KSBCL-400192' },
-  { code: 'JWB-750', group: 'SCOTCH', brand: 'Johnnie Walker', name: 'JOHNNIE WALKER BLACK LABEL 12 YO', pkg: '750ml', opQty: 18, recQty: 12, issQty: 6, clQty: 24, rate: 3850.00, purchaseRate: 3450.00, cat: 'IMPORTED', ksbcl: 'KSBCL-508891' },
-] as const;
+import { useEffect, useSyncExternalStore } from 'react';
+import { api, type ApiItemFull } from '../lib/api';
 
-// Litres in one bottle, from the package size ("750ml" → 0.75). Mirrors Package Master's litres per bottle.
-export const litresPerBottle = (pkg: string) => (Number.parseFloat(pkg) || 0) / 1000;
+export type StockItem = {
+  code: string; name: string; group: string; brand: string; pkg: string; cat: string;
+  clQty: number; rate: number; purchaseRate: number; cgstPct: number; sgstPct: number; active: boolean;
+};
+
+export const STOCK_ITEMS: StockItem[] = [];
+
+let version = 0;
+const listeners = new Set<() => void>();
+let inFlight: Promise<StockItem[]> | null = null;
+
+const toStockItem = (i: ApiItemFull): StockItem => ({
+  code: i.code, name: i.name, group: i.group, brand: i.brand, pkg: i.package, cat: i.liqtype,
+  clQty: i.qoh, rate: i.mrp, purchaseRate: i.purchase_rate ?? 0, cgstPct: i.cgst_per ?? 0, sgstPct: i.sgst_per ?? 0,
+  active: i.active ?? true,
+});
+
+// Merge a fresh item list into STOCK_ITEMS without moving existing entries.
+export function mergeStockItems(rows: ApiItemFull[]): void {
+  const at = new Map(STOCK_ITEMS.map((item, i) => [item.code, i]));
+  for (const row of rows) {
+    const next = toStockItem(row);
+    const i = at.get(row.code);
+    if (i === undefined) STOCK_ITEMS.push(next);
+    else Object.assign(STOCK_ITEMS[i], next);
+  }
+  version++;
+  listeners.forEach(l => l());
+}
+
+export function loadStockItems(): Promise<StockItem[]> {
+  inFlight ??= api<ApiItemFull[]>('/masters/items')
+    .then(rows => { mergeStockItems(rows); return STOCK_ITEMS; })
+    .finally(() => { inFlight = null; });
+  return inFlight;
+}
+
+// Index of the item with this code, or -1.
+export const stockIndex = (code: string) => STOCK_ITEMS.findIndex(i => i.code === code);
+
+// Items a picker should offer, with their STOCK_ITEMS index.
+export const sellable = () => STOCK_ITEMS.map((item, stock) => ({ ...item, stock })).filter(i => i.active);
+
+export function useStockItems(): StockItem[] {
+  useSyncExternalStore(
+    cb => { listeners.add(cb); return () => listeners.delete(cb); },
+    () => version,
+  );
+  useEffect(() => { loadStockItems().catch(() => undefined); }, []);
+  return STOCK_ITEMS;
+}
+
+// Litres in one bottle, from the package code: "750ml" → 0.75, "2 LTR" / "1L" → 2 / 1, a bare "650" → 0.65.
+// Display only; the backend works litres out from Package Master when a bill is saved.
+export const litresPerBottle = (pkg: string) => {
+  const n = Number.parseFloat(pkg) || 0;
+  if (/ml/i.test(pkg)) return n / 1000;
+  if (/l/i.test(pkg)) return n;
+  return n >= 50 ? n / 1000 : n;
+};

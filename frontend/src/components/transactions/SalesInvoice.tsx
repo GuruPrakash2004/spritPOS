@@ -3,34 +3,34 @@
 // Barcode/item entry, qty +/-, collected amount → payback/shortage, loyalty points, total litres,
 // Hold / New Bill / Cancel / Re-Print. Saves with POST /transactions/sales-invoice, which reduces
 // stock on the backend (store.move_stock). Held bills get their own HOLD- series.
+// Items come from the live catalogue (data/stockData.ts; a line's `id` is its STOCK_ITEMS index), and
+// the bill total is rounded to the rupee exactly as the backend rounds it.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileStack, PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine, ChevronDown } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
 import Toast from '../common/Toast';
-import { api, errorText, todayIso, type ApiCustomer, type ApiDoc, type ApiInvoice } from '../../lib/api';
+import { api, errorText, newIdempotencyKey, todayIso, type ApiCustomer, type ApiInvoice } from '../../lib/api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
-import { SAMPLE_STOCK_DATA, litresPerBottle } from '../../data/stockData';
+import { STOCK_ITEMS, litresPerBottle, loadStockItems, sellable, stockIndex, useStockItems } from '../../data/stockData';
 import { numberToWords } from '../../lib/formatters';
 import { PARTIES, PAYMENT_TYPES, SALES_PERSONS, type InvoiceSetup, type PaymentType } from '../../data/salesCounters';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
 type Line = { id: number; name: string; qoh: number; qty: number; rate: number; discPct: number };
 
-// Templates reference SAMPLE_STOCK_DATA by index.
-const TEMPLATES: { name: string; items: { stock: number; qty: number }[] }[] = [
-  { name: 'Weekend Party Pack', items: [{ stock: 3, qty: 12 }, { stock: 1, qty: 2 }, { stock: 6, qty: 1 }] },
-  { name: 'Beer Crate (12)', items: [{ stock: 3, qty: 12 }] },
-  { name: 'Premium Gift Box', items: [{ stock: 7, qty: 1 }, { stock: 5, qty: 1 }] },
+// Quick bill templates, by item code. A template is offered only when all its items exist.
+const TEMPLATES: { name: string; items: { code: string; qty: number }[] }[] = [
+  { name: 'Weekend Party Pack', items: [{ code: 'KF-650', qty: 12 }, { code: 'RC-750', qty: 2 }, { code: 'MM-750', qty: 1 }] },
+  { name: 'Beer Crate (12)', items: [{ code: 'KF-650', qty: 12 }] },
+  { name: 'Premium Gift Box', items: [{ code: 'JWB-750', qty: 1 }, { code: 'OM-750', qty: 1 }] },
 ];
 
 const toLine = (stock: number, qty: number, discPct = 0): Line => {
-  const item = SAMPLE_STOCK_DATA[stock];
+  const item = STOCK_ITEMS[stock];
   return { id: stock, name: `${item.name} ${item.pkg}`, qoh: item.clQty, qty, rate: item.rate, discPct };
 };
-// Sample items so the bill opens with data to work with; later bills start empty.
-const DEMO_LINES: Line[] = [toLine(0, 2), toLine(3, 6, 5), toLine(2, 4), toLine(5, 1, 2.5), toLine(7, 1)];
 
 const money = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const gross = (l: Line) => l.qty * l.rate;
@@ -51,8 +51,10 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   const [seq, setSeq] = useState(numbering.seq);
   const [prevBill, setPrevBill] = useState<{ no: string; time: string; amount: number } | null>(null);
   const [party, setParty] = useState(setup.customer);
-  const [salesPerson, setSalesPerson] = useState(SALES_PERSONS[0]);
-  const [lines, setLines] = useState<Line[]>(DEMO_LINES);
+  useStockItems();
+  const [salesPersons, setSalesPersons] = useState<string[]>([...SALES_PERSONS]);
+  const [salesPerson, setSalesPerson] = useState<string>(SALES_PERSONS[0]);
+  const [lines, setLines] = useState<Line[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [barcode, setBarcode] = useState('');
   const [scanQty, setScanQty] = useState('1');
@@ -70,6 +72,8 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [printInvoiceData, setPrintInvoiceData] = useState<ApiInvoice | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
+  // One key per bill: pressing Save twice (or a retry) can't make two bills. Renewed for each new bill.
+  const saveKey = useRef(newIdempotencyKey());
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -77,9 +81,12 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     return () => clearInterval(timer);
   }, []);
 
-  // Customers come from Customer Master so loyalty points are current.
+  // Customers come from Customer Master so loyalty points are current; salespeople from the backend.
   useEffect(() => {
     api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(() => undefined);
+    api<string[]>('/sales-persons')
+      .then(list => { if (list.length) { setSalesPersons(list); setSalesPerson(p => (list.includes(p) ? p : list[0])); } })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -97,12 +104,13 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     const cgst = 0, sgst = 0, cess = 0, compCess = 0;
     const total = basic - disc + cgst + sgst + cess + compCess;
     const points = Math.max(0, Number(redeem) || 0);
-    const invoice = Math.max(0, total - (Number(writeOff) || 0) - points);
+    // Rounded to the rupee, as the backend rounds the saved bill.
+    const invoice = Math.max(0, Math.round(total - (Number(writeOff) || 0) - points));
     const card = paymentType === 'CARD' ? invoice : paymentType === 'SPLIT' ? Number(cardInput) || 0 : 0;
     const other = paymentType === 'UPI' ? invoice : paymentType === 'SPLIT' ? Number(otherPay) || 0 : 0;
     const cash = Math.max(0, invoice - card - other);
     const qty = lines.reduce((acc, l) => acc + l.qty, 0);
-    const litres = lines.reduce((acc, l) => acc + l.qty * litresPerBottle(SAMPLE_STOCK_DATA[l.id].pkg), 0);
+    const litres = lines.reduce((acc, l) => acc + l.qty * litresPerBottle(STOCK_ITEMS[l.id].pkg), 0);
     return { basic, disc, cgst, sgst, cess, compCess, total, points, invoice, card, other, cash, qty, litres };
   }, [lines, writeOff, redeem, paymentType, cardInput, otherPay]);
 
@@ -110,12 +118,11 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
 
   const change = collected === '' ? 0 : (Number(collected) || 0) - totals.cash;
 
-  const quickItems = SAMPLE_STOCK_DATA
-    .map((item, stock) => ({ ...item, stock }))
-    .filter(item => `${item.brand} ${item.name} ${item.ksbcl}`.toLowerCase().includes(quickFilter.toLowerCase()));
+  const quickItems = sellable()
+    .filter(item => `${item.brand} ${item.name} ${item.code}`.toLowerCase().includes(quickFilter.toLowerCase()));
 
   const addItem = (stock: number, qty: number, current = lines) => {
-    const item = SAMPLE_STOCK_DATA[stock];
+    const item = STOCK_ITEMS[stock];
     const existing = current.find(l => l.id === stock);
     const nextQty = (existing?.qty ?? 0) + qty;
     if (nextQty > item.clQty) {
@@ -135,7 +142,9 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     const qty = Math.floor(Number(scanQty));
     if (!term) return;
     if (!qty || qty < 1) return setToast({ kind: 'error', text: 'Enter a quantity of at least 1.' });
-    const stock = SAMPLE_STOCK_DATA.findIndex(i => i.ksbcl.toLowerCase() === term || `${i.brand} ${i.name}`.toLowerCase().includes(term));
+    // Exact item code first (barcode scanners send the code), then a brand/name match.
+    const exact = STOCK_ITEMS.findIndex(i => i.active && i.code.toLowerCase() === term);
+    const stock = exact !== -1 ? exact : STOCK_ITEMS.findIndex(i => i.active && `${i.brand} ${i.name}`.toLowerCase().includes(term));
     if (stock === -1) return setToast({ kind: 'error', text: `No item found for "${barcode}".` });
     addItem(stock, qty);
     setBarcode('');
@@ -153,6 +162,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   }));
 
   const resetBill = () => {
+    saveKey.current = newIdempotencyKey();
     setLines([]);
     setSelectedId(null);
     setParty(setup.customer);
@@ -174,16 +184,17 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     setSelectedId(null);
   };
 
-  const loadTemplate = (index: number) => {
+  const templates = TEMPLATES.filter(t => t.items.every(i => stockIndex(i.code) !== -1));
+  const loadTemplate = (name: string) => {
     let next = lines;
-    TEMPLATES[index].items.forEach(({ stock, qty }) => { next = addItem(stock, qty, next); });
+    templates.find(t => t.name === name)?.items.forEach(({ code, qty }) => { next = addItem(stockIndex(code), qty, next); });
     setTemplatesOpen(false);
   };
 
   const billBody = (hold: boolean) => ({
     date: todayIso(), counter: setup.counter.code, customer: party || 'CASH', salesperson: salesPerson,
     payment_type: paymentType,
-    lines: lines.map(l => ({ item_code: SAMPLE_STOCK_DATA[l.id].code, bottles: l.qty, rate: l.rate })),
+    lines: lines.map(l => ({ item_code: STOCK_ITEMS[l.id].code, bottles: l.qty, rate: l.rate })),
     discount: totals.disc + (Number(writeOff) || 0),
     redeem_points: totals.points,
     payment: { cash: totals.cash, card: totals.card, upi: totals.other, credit: 0 },
@@ -193,7 +204,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   // Held bills are parked on the backend so any counter session can recall them.
   const holdOrNew = () => {
     if (!lines.length) return resetBill();
-    api<ApiDoc>('/transactions/sales-invoice', { method: 'POST', body: billBody(true) })
+    api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body: billBody(true), idempotencyKey: saveKey.current })
       .then(doc => {
         setToast({ kind: 'ok', text: `Bill held as ${doc.doc_no} (${lines.length} items). Starting a new bill.` });
         resetBill();
@@ -202,14 +213,16 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   };
 
   const recall = (inv: ApiInvoice) => {
-    const recalled = inv.lines
-      .map(l => ({ stock: SAMPLE_STOCK_DATA.findIndex(i => i.code === l.item_code), qty: l.qty, rate: l.rate }))
-      .filter(l => l.stock !== -1)
-      .map(l => ({ ...toLine(l.stock, l.qty), rate: l.rate }));
+    const found = inv.lines.map(l => ({ stock: stockIndex(l.item_code), qty: l.qty, rate: l.rate }));
+    const missing = found.filter(l => l.stock === -1).length;
+    const recalled = found.filter(l => l.stock !== -1).map(l => ({ ...toLine(l.stock, l.qty), rate: l.rate }));
+    saveKey.current = newIdempotencyKey();   // a recalled bill is a different bill
     setLines(recalled);
     setParty(customers.find(c => c.code === inv.customer)?.name ?? inv.customer);
     setDialog(null);
-    setToast({ kind: 'ok', text: `Recalled held bill ${inv.doc_no}.` });
+    setToast(missing
+      ? { kind: 'error', text: `Recalled ${inv.doc_no}, but ${missing} item${missing > 1 ? 's are' : ' is'} no longer in Item Master and was left out.` }
+      : { kind: 'ok', text: `Recalled held bill ${inv.doc_no}.` });
   };
 
   const cancelBill = async () => {
@@ -226,14 +239,14 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     salesperson: salesPerson,
     status: 'SAVED',
     lines: lines.map(l => ({
-      item_code: SAMPLE_STOCK_DATA[l.id]?.code || `ITM${l.id}`,
-      item_name: SAMPLE_STOCK_DATA[l.id]?.name || l.name,
+      item_code: STOCK_ITEMS[l.id]?.code || `ITM${l.id}`,
+      item_name: STOCK_ITEMS[l.id]?.name || l.name,
       cases: 0,
       bottles: l.qty,
       qty: l.qty,
       rate: l.rate,
       amount: l.qty * l.rate,
-      litres: l.qty * (SAMPLE_STOCK_DATA[l.id] ? litresPerBottle(SAMPLE_STOCK_DATA[l.id].pkg) : 0.75),
+      litres: l.qty * (STOCK_ITEMS[l.id] ? litresPerBottle(STOCK_ITEMS[l.id].pkg) : 0),
     })),
     totals: {
       qty: totals.qty,
@@ -261,14 +274,14 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     if (collected !== '' && change < 0) return setToast({ kind: 'error', text: `Collected amount is ₹ ${money(-change)} short of the cash amount.` });
     if (totals.points > (customer?.points ?? 0)) return setToast({ kind: 'error', text: `Only ${customer?.points ?? 0} points available to redeem.` });
     // The backend numbers the bill and moves stock; show its doc no rather than the local preview.
-    api<ApiDoc>('/transactions/sales-invoice', { method: 'POST', body: billBody(false) }).then(doc => {
-      // Refresh points so the next bill sees what this one earned or redeemed.
+    api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body: billBody(false), idempotencyKey: saveKey.current }).then(doc => {
+      // Refresh points and stock so the next bill sees what this one earned, redeemed and sold.
       api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(() => undefined);
+      loadStockItems().catch(() => undefined);
       setPrevBill({ no: doc.doc_no, time: now.toLocaleTimeString('en-IN'), amount: doc.totals.net });
       setToast({ kind: 'ok', text: `Bill ${doc.doc_no} saved — ₹ ${money(doc.totals.net)}.` });
-      if (andPrint) {
-        setPrintInvoiceData(buildCurrentInvoice(doc.doc_no));
-      }
+      // Print the bill exactly as the server saved it (number, totals, points).
+      if (andPrint) setPrintInvoiceData(doc);
       setSeq(seq + 1);
       resetBill();
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
@@ -318,7 +331,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
                 <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input id="si-barcode" ref={barcodeRef} autoFocus list="si-items" value={barcode} onChange={e => setBarcode(e.target.value)} onKeyDown={e => e.key === 'Enter' && scan()} className={`${field} h-10 pl-9 font-mono text-sm`} placeholder="KSBCL code or item name, then Enter" />
               </div>
-              <datalist id="si-items">{SAMPLE_STOCK_DATA.map(i => <option key={i.ksbcl} value={i.ksbcl}>{i.brand} {i.pkg}</option>)}</datalist>
+              <datalist id="si-items">{sellable().map(i => <option key={i.code} value={i.code}>{i.brand} {i.name} {i.pkg}</option>)}</datalist>
             </div>
             <div className="w-20">
               <label htmlFor="si-qty" className={labelClass}>Qty</label>
@@ -348,7 +361,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
                 </div>
                 <ul className="flex-1 overflow-auto p-1 text-xs">
                   {quickItems.map(item => (
-                    <li key={item.ksbcl}>
+                    <li key={item.code}>
                       <button onClick={() => addItem(item.stock, 1)} className="w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-subtle">
                         <span className="block truncate font-medium text-stone-900 dark:text-stone-50">{item.brand}</span>
                         <span className="mt-0.5 flex justify-between text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
@@ -418,8 +431,9 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
                     <button onClick={() => setTemplatesOpen(!templatesOpen)} aria-expanded={templatesOpen} className={ghostButton}><FileStack size={14} />Template<ChevronDown size={12} /></button>
                     {templatesOpen && (
                       <div className="absolute bottom-full right-0 z-10 mb-1 w-52 overflow-hidden rounded-xl border border-line bg-surface p-1 text-xs shadow-pop">
-                        {TEMPLATES.map((t, i) => (
-                          <button key={t.name} onClick={() => loadTemplate(i)} className="block w-full rounded-lg px-3 py-2 text-left text-stone-700 hover:bg-subtle dark:text-stone-200">{t.name}</button>
+                        {!templates.length && <p className="px-3 py-2 text-stone-500">No templates match your items.</p>}
+                        {templates.map(t => (
+                          <button key={t.name} onClick={() => loadTemplate(t.name)} className="block w-full rounded-lg px-3 py-2 text-left text-stone-700 hover:bg-subtle dark:text-stone-200">{t.name}</button>
                         ))}
                       </div>
                     )}
@@ -450,7 +464,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
             <div className="col-span-2 sm:col-span-1">
               <label htmlFor="si-salesperson" className={labelClass}>Sales person</label>
               <select id="si-salesperson" value={salesPerson} onChange={e => setSalesPerson(e.target.value)} className={field}>
-                {SALES_PERSONS.map(p => <option key={p}>{p}</option>)}
+                {salesPersons.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
           </div>

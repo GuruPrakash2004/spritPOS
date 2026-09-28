@@ -65,7 +65,8 @@ export function Pattern({
       <CardContent className="flex flex-col flex-1 pb-4 pt-1">
         <ChartContainer
           config={activeConfig}
-          className="mx-auto aspect-square max-h-[220px] w-full"
+          // Slice separators match the card so they read as gaps: cream in light mode, #141414 in dark mode.
+          className="mx-auto aspect-square max-h-[220px] w-full [&_.recharts-pie-sector_path]:stroke-[#FFFCF7] dark:[&_.recharts-pie-sector_path]:stroke-[#141414]"
         >
           <PieChart>
             <defs>
@@ -152,7 +153,7 @@ export function Pattern({
               outerRadius={75}
               cornerRadius={5}
               paddingAngle={3}
-              stroke="var(--background, #FFFCF7)"
+              stroke="#FFFCF7"
               strokeWidth={2}
             >
               {activeData.map((entry, index) => {

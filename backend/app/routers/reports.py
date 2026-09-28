@@ -15,16 +15,37 @@ from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import db_store, store
+from .auth import get_current_user, hides_cost, require_module
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 RPTS_DIR = Path(__file__).resolve().parent.parent.parent / "Rpts"
 
 
+MAX_RANGE_DAYS = 3660   # ten years; longer ranges are refused so one request can't tie the server up
+
+
+def _item(code: str) -> dict:
+    """The item, or a placeholder when a bill refers to an item that is no longer in Item Master."""
+    return store.ITEMS.get(code) or {"code": code, "name": code, "group": "", "brand": "", "package": "",
+                                     "liqtype": "", "purchase_rate": 0, "qoh": 0}
+
+
+def _is_liquor(item: dict) -> bool:
+    return store.ITEM_GROUPS.get(item.get("group"), {}).get("liquor", True)
+
+
+def _check_range(from_date: date, to_date: date) -> None:
+    if to_date < from_date:
+        raise HTTPException(422, "The To date is before the From date")
+    if (to_date - from_date).days > MAX_RANGE_DAYS:
+        raise HTTPException(422, "Choose a period of ten years or less")
+
+
 def _litres(code: str, qty: float) -> float:
-    return round(qty * store.PACKAGES.get(store.ITEMS[code]["package"], {}).get("litres_per_bottle", 0), 3)
+    return round(qty * store.PACKAGES.get(_item(code)["package"], {}).get("litres_per_bottle", 0), 3)
 
 
 def _moves(from_date: date, to_date: date, code: str | None = None):
@@ -33,8 +54,9 @@ def _moves(from_date: date, to_date: date, code: str | None = None):
 
 
 @router.get("/stock-balance")
-def stock_balance(from_date: date, to_date: date, group: str | None = None):
+def stock_balance(from_date: date, to_date: date, group: str | None = None, current_user: dict = Depends(get_current_user)):
     """Opening / receipt / issue / closing per item, with litre qty and value at purchase rate."""
+    _check_range(from_date, to_date)
     rows = []
     for it in store.ITEMS.values():
         if group and it["group"] != group:
@@ -48,6 +70,9 @@ def stock_balance(from_date: date, to_date: date, group: str | None = None):
         rows.append({"item_code": it["code"], "item_name": it["name"], "group": it["group"], "package": it["package"],
                      "op_qty": it["qoh"] - after_from, "rec_qty": rec, "iss_qty": iss, "cl_qty": closing,
                      "cl_litres": _litres(it["code"], closing), "cl_value": round(closing * it["purchase_rate"], 2)})
+    if hides_cost(current_user):
+        for r in rows:
+            r["cl_value"] = None
     return rows
 
 
@@ -55,6 +80,7 @@ def stock_balance(from_date: date, to_date: date, group: str | None = None):
 def stock_ledger(item_code: str, from_date: date, to_date: date):
     if item_code not in store.ITEMS:
         raise HTTPException(404, "Item not found")
+    _check_range(from_date, to_date)
     bal = store.ITEMS[item_code]["qoh"] - sum(
         m["qty"] for m in store.MOVEMENTS if m["item"] == item_code and m["date"] >= from_date.isoformat())
     rows = [{"date": from_date.isoformat(), "particulars": "Opening", "in": 0, "out": 0, "balance": bal}]
@@ -65,8 +91,9 @@ def stock_ledger(item_code: str, from_date: date, to_date: date):
     return rows
 
 
-@router.get("/profit-margin")
+@router.get("/profit-margin", dependencies=[Depends(require_module("Profit Margin"))])
 def profit_margin(from_date: date, to_date: date):
+    _check_range(from_date, to_date)
     agg = defaultdict(lambda: {"qty": 0, "sales_value": 0.0})
     for m in _moves(from_date, to_date):
         if m["kind"] in ("sale", "sale-cancel"):
@@ -74,7 +101,7 @@ def profit_margin(from_date: date, to_date: date):
             agg[m["item"]]["sales_value"] -= m["qty"] * m["rate"]
     rows = []
     for code, a in agg.items():
-        it = store.ITEMS[code]
+        it = _item(code)
         pv = a["qty"] * it["purchase_rate"]
         rows.append({"item_code": code, "item_name": it["name"], "sales_qty": a["qty"], "purchase_rate": it["purchase_rate"],
                      "purchase_value": round(pv, 2), "sales_value": round(a["sales_value"], 2),
@@ -190,7 +217,7 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
 
 
 @router.get("/dsr")
-def daily_summary_report(on: date):
+def daily_summary_report(on: date, current_user: dict = Depends(get_current_user)):
     d = on.isoformat()
     invs = [i for i in store.DOCS["sales_invoice"].values() if i["date"] == d]
     saved = [i for i in invs if i["status"] == "SAVED"]
@@ -203,8 +230,8 @@ def daily_summary_report(on: date):
         for k, v in inv["payment"].items():
             pay[k] += v
         for l in inv["lines"]:
-            it = store.ITEMS[l["item_code"]]
-            if store.ITEM_GROUPS[it["group"]]["liquor"]:
+            it = _item(l["item_code"])
+            if _is_liquor(it):
                 liquor_basic += l["amount"]
             else:
                 non_liquor_basic += l["amount"]
@@ -218,7 +245,7 @@ def daily_summary_report(on: date):
         for l in e["lines"]:
             exp_by_ledger[l["ledger"]] += l["amount"]
     bal = stock_balance(on, on)
-    return {
+    result = {
         "date": d,
         "total_bills": len(saved),
         "sales_incl_gst": round(sum(i["totals"]["net"] for i in saved), 2),
@@ -226,7 +253,7 @@ def daily_summary_report(on: date):
         "non_liquor_basic": round(non_liquor_basic, 2),
         "profit_of_the_day": round(profit, 2),
         "opening_stock": {"qty": sum(r["op_qty"] for r in bal),
-                          "value": round(sum(r["op_qty"] * store.ITEMS[r["item_code"]]["purchase_rate"] for r in bal), 2)},
+                          "value": round(sum(r["op_qty"] * _item(r["item_code"])["purchase_rate"] for r in bal), 2)},
         "closing_stock": {"qty": sum(r["cl_qty"] for r in bal), "value": round(sum(r["cl_value"] for r in bal), 2),
                           "litres": round(sum(r["cl_litres"] for r in bal), 3)},
         "payment_modes": {k: round(v, 2) for k, v in pay.items()},
@@ -242,10 +269,16 @@ def daily_summary_report(on: date):
         "expense_ledger_wise": dict(exp_by_ledger),
         "cancelled_invoices": [i["doc_no"] for i in invs if i["status"] == "CANCELLED"],
     }
+    if hides_cost(current_user):   # profit and stock/purchase value at cost
+        result["profit_of_the_day"] = None
+        result["opening_stock"]["value"] = None
+        result["closing_stock"]["value"] = None
+        result["purchase"] = {"basic": None, "incl_gst": None}
+    return result
 
 
 @router.get("/stock-ageing")
-def stock_ageing(as_on: date, months: int = 6):
+def stock_ageing(as_on: date, months: int = Query(6, ge=1, le=120), current_user: dict = Depends(get_current_user)):
     """Closing stock bucketed by months since the item was last received (legacy frmRptStockAgeing)."""
     rows = []
     for it in store.ITEMS.values():
@@ -254,7 +287,7 @@ def stock_ageing(as_on: date, months: int = 6):
         bucket = min(max(age_days, 0) // 30, months)
         rows.append({"item_code": it["code"], "item_name": it["name"], "qoh": it["qoh"], "last_purchase": last.isoformat(),
                      "age_days": age_days, "bucket": f"{months}+ months" if bucket >= months else f"{bucket}-{bucket + 1} months",
-                     "value": round(it["qoh"] * it["purchase_rate"], 2)})
+                     "value": None if hides_cost(current_user) else round(it["qoh"] * it["purchase_rate"], 2)})
     return sorted(rows, key=lambda r: -r["age_days"])
 
 
@@ -276,6 +309,7 @@ def hourly_sales(on: date):
 
 @router.get("/sales/daily")
 def daily_sales(from_date: date, to_date: date):
+    _check_range(from_date, to_date)
     days = defaultdict(lambda: {"bills": 0, "qty": 0, "litres": 0.0, "amount": 0.0})
     for inv in _saved_invoices(from_date, to_date):
         d = days[inv["date"]]
@@ -326,10 +360,11 @@ def stock_movement(on: date | None = None):
 
 @router.get("/sales/brand-wise")
 def brand_wise_sales(from_date: date, to_date: date):
+    _check_range(from_date, to_date)
     brands = defaultdict(lambda: {"qty": 0, "litres": 0.0, "amount": 0.0})
     for inv in _saved_invoices(from_date, to_date):
         for l in inv["lines"]:
-            b = brands[store.ITEMS[l["item_code"]]["brand"]]
+            b = brands[_item(l["item_code"])["brand"]]
             b["qty"] += l["qty"]
             b["litres"] = round(b["litres"] + l["litres"], 3)
             b["amount"] = round(b["amount"] + l["amount"], 2)
@@ -339,10 +374,11 @@ def brand_wise_sales(from_date: date, to_date: date):
 @router.get("/litres/day")
 def litres_sold_per_day(from_date: date, to_date: date):
     """Litres sold per day split by LIQTYPE (legacy frmRptDayLtr)."""
+    _check_range(from_date, to_date)
     days = defaultdict(lambda: defaultdict(float))
     for inv in _saved_invoices(from_date, to_date):
         for l in inv["lines"]:
-            days[inv["date"]][store.ITEMS[l["item_code"]]["liqtype"]] += l["litres"]
+            days[inv["date"]][_item(l["item_code"])["liqtype"] or "Other"] += l["litres"]
     return [{"date": d, **{k: round(v, 3) for k, v in t.items()}, "total": round(sum(t.values()), 3)}
             for d, t in sorted(days.items())]
 
@@ -351,7 +387,7 @@ def litres_sold_per_day(from_date: date, to_date: date):
 def stock_in_litres(on: date):
     """Closing stock in litres by item (legacy frmRptStkLtr)."""
     return [{"item_code": r["item_code"], "item_name": r["item_name"], "package": r["package"],
-             "liqtype": store.ITEMS[r["item_code"]]["liqtype"], "cl_qty": r["cl_qty"], "cl_litres": r["cl_litres"]}
+             "liqtype": _item(r["item_code"])["liqtype"], "cl_qty": r["cl_qty"], "cl_litres": r["cl_litres"]}
             for r in stock_balance(on, on)]
 
 

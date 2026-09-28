@@ -27,7 +27,7 @@ export default function CashDenomination() {
     api<ApiDenomination | null>(`/transactions/denomination${qs({ on })}`)
       .then(d => setCounts(d ? Object.fromEntries(Object.entries(d.counts).map(([k, v]) => [k, String(v)])) : {}))
       .catch(() => setCounts({}));
-    api<ApiFullDsr>(`/reports/dsr${qs({ on })}`).then(d => setExpected(d.cash_balance)).catch(() => setExpected(null));
+    api<ApiFullDsr>(`/reports/dsr${qs({ on })}`).then(d => setExpected(typeof d?.cash_balance === "number" ? d.cash_balance : null)).catch(() => setExpected(null));
   }, [on]);
 
   const n = (key: string) => Math.max(0, Math.floor(Number(counts[key]) || 0));

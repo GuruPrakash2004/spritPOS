@@ -8,6 +8,8 @@ const btn = 'inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-
 
 export const panel = 'rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] shadow-[0_8px_30px_rgba(72,53,38,0.06)] dark:border-[#2A2A2A] dark:bg-[#141414] dark:shadow-card';
 export const field = 'w-full rounded-xl border border-[#DCD1C5] bg-[#FFFCF7] px-3 py-2 text-xs text-[#29231F] outline-none transition-all placeholder:text-[#A69D94] hover:border-[#CBBEAF] focus:border-[#64283A] focus:ring-[3px] focus:ring-[#64283A]/10 disabled:cursor-not-allowed disabled:bg-[#F3EEE6] disabled:opacity-70 dark:border-[#2A2A2A] dark:bg-[#1A1A1A] dark:text-stone-50 dark:placeholder:text-stone-600 dark:hover:border-[#3A3A3A] dark:focus:border-[#D4A847] dark:focus:ring-[#D4A847]/20';
+// Added to a field's classes while it holds a mistake (red border + shake; .claude/rules/popups-and-errors.md).
+export const fieldError = '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake';
 export const label = 'mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-[#70675F] dark:text-stone-400';
 export const primaryButton = `${btn} bg-[#64283A] text-white shadow-[0_4px_12px_rgba(100,40,58,0.18)] hover:bg-[#542030] dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F5D88A] dark:to-[#C8952E] dark:text-[#180E09] dark:font-extrabold dark:shadow-[0_0_18px_rgba(212,168,71,0.4)] dark:hover:brightness-110`;
 export const secondaryButton = `${btn} border border-[#B08A45] bg-transparent text-[#64283A] hover:bg-[#B08A45]/8 dark:border-[#D4A847]/40 dark:text-[#D4A847] dark:hover:bg-[#D4A847]/10`;
@@ -35,4 +37,6 @@ const TONES: Record<Tone, string> = {
 };
 export const badge = (tone: Tone = 'neutral') => `inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ${TONES[tone]}`;
 
-export const money = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Indian-format rupee amount; "—" for a value the server hid from this role (null) or doesn't have.
+export const money = (n: number | null | undefined) =>
+  typeof n === 'number' && Number.isFinite(n) ? n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';

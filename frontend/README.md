@@ -9,6 +9,7 @@ npm install
 npm run dev      # http://localhost:5173, proxies /api/* to the backend on :8001
 npm run build    # type-check (tsc -b) and production build into dist/
 npm run lint     # eslint
+npm test         # Vitest + React Testing Library (watch); npm run test:run runs once
 ```
 
 Start the backend first (see `../backend/README.md`). Without it the screens show "API: offline" and API calls fail. Log in as `ADMIN` / `admin` to see every module. `GURU`/`guru` is a Manager, and `PRADEEP`/`pradeep` and `RAVI`/`ravi` are Cashiers.

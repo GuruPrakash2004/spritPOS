@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -80,8 +80,7 @@ def list_files(kind: Literal["image", "document"] | None = None):
 
 
 @router.post("", status_code=201)
-def upload_file(body: FileIn, x_user: str | None = Header(None)):
-    require_admin(x_user)
+def upload_file(body: FileIn, admin: dict = Depends(require_admin)):
     ext = Path(body.file_name).suffix.lower()
     allowed = IMAGE_TYPES if body.kind == "image" else DOC_TYPES
     if ext not in allowed:
@@ -105,7 +104,7 @@ def upload_file(body: FileIn, x_user: str | None = Header(None)):
         "type_label": "Image" if ext in IMAGE_TYPES else TYPE_LABELS.get(ext, ext.upper()),
         "title": body.title or Path(safe_name).stem, "group": body.group, "remarks": body.remarks,
         "show_on_pos": body.kind == "image",
-        "uploaded_by": (x_user or "").upper(), "uploaded_at": datetime.now().isoformat(timespec="seconds"),
+        "uploaded_by": admin["user"], "uploaded_at": datetime.now().isoformat(timespec="seconds"),
     }
     rows = _load()
     rows.append(row)
@@ -114,8 +113,7 @@ def upload_file(body: FileIn, x_user: str | None = Header(None)):
 
 
 @router.put("/{file_id}")
-def update_file(file_id: str, body: FileUpdate, x_user: str | None = Header(None)):
-    require_admin(x_user)
+def update_file(file_id: str, body: FileUpdate, admin: dict = Depends(require_admin)):
     rows = _load()
     row = _find(rows, file_id)
     row.update(title=body.title or row["title"], group=body.group, remarks=body.remarks, show_on_pos=body.show_on_pos)
@@ -124,8 +122,7 @@ def update_file(file_id: str, body: FileUpdate, x_user: str | None = Header(None
 
 
 @router.delete("/{file_id}", status_code=204)
-def delete_file(file_id: str, x_user: str | None = Header(None)):
-    require_admin(x_user)
+def delete_file(file_id: str, admin: dict = Depends(require_admin)):
     rows = _load()
     row = _find(rows, file_id)
     (STORE / f"{row['id']}{row['ext']}").unlink(missing_ok=True)

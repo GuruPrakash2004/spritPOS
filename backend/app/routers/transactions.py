@@ -1,16 +1,30 @@
 """Transaction screens (legacy frmTrnVch engine). Each posts a document and,
-where the legacy transaction 'affects stock', moves item QOH."""
+where the legacy transaction 'affects stock', moves item QOH.
+
+Every POST needs the matching module in the caller's role plus its Add tick, and cancelling a bill its
+Delete tick (require_right). Anything that takes
+stock out (sale, held-bill release, stock deduction, purchase return) first checks the total
+quantity per item across all lines, so stock can't go below zero.
+
+Each saved or changed document is passed to writeback.changed(); with DB_WRITE_ENABLED it is copied to
+SQL Server's Web_ tables once the request succeeds (app/writeback.py). Held bills are not posted, so they
+are not sent until released."""
+from collections import defaultdict
 from datetime import date, datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from .. import store
+from .. import store, writeback
 from ..schemas import (
     CancelIn, ClosingStockIn, DenominationIn, ExpenseIn, GenerateInvoiceIn, Line, PurchaseBillIn, PurchaseIndentIn, SalesInvoiceIn,
     SalesReturnIn, StockDeductionIn,
 )
+from .auth import get_current_user, hides_cost, require_right
 
 router = APIRouter(prefix="/transactions")
+
+SALES = Depends(require_right("add", "Sales Invoice"))
+SALES_CANCEL = Depends(require_right("delete", "Sales Invoice"))
 
 
 def _item(code: str) -> dict:
@@ -42,6 +56,21 @@ def _price_lines(lines: list[Line], rate_field: str, with_gst: bool) -> tuple[li
     return out, tot
 
 
+def _check_stock(lines: list[dict]) -> None:
+    """422 if taking these lines out would leave any item below zero (same item on several lines adds up)."""
+    need: dict[str, float] = defaultdict(float)
+    for l in lines:
+        need[l["item_code"]] += l["qty"]
+    for code, qty in need.items():
+        qoh = store.ITEMS[code]["qoh"]
+        if qty > qoh:
+            raise HTTPException(422, f"Insufficient stock for {code}: {qoh:g} in stock, {qty:g} needed")
+
+
+def _is_liquor(item: dict) -> bool:
+    return store.ITEM_GROUPS.get(item.get("group"), {}).get("liquor", True)
+
+
 def _get(kind: str, doc_no: str) -> dict:
     doc = store.DOCS[kind].get(doc_no)
     if not doc:
@@ -49,30 +78,55 @@ def _get(kind: str, doc_no: str) -> dict:
     return doc
 
 
+# Documents priced at purchase cost: their money figures are hidden from roles without cost access
+# (quantities stay, e.g. the Dashboard counts indent bottles).
+COST_DOCS = {"purchase_indent", "purchase_bill", "stock_deduction"}
+LINE_MONEY = ("rate", "amount", "cgst", "sgst")
+TOTAL_MONEY = ("basic", "cgst", "sgst", "net", "tcs", "cess", "balance_vs_supplier_value")
+
+
+def _shown(kind: str, doc: dict, user: dict) -> dict:
+    if kind not in COST_DOCS or not hides_cost(user):
+        return doc
+    return {
+        **doc,
+        "supplier_inv_value": None if "supplier_inv_value" in doc else doc.get("supplier_inv_value"),
+        "lines": [{**l, **{k: None for k in LINE_MONEY if k in l}} for l in doc.get("lines", [])],
+        "totals": {**doc.get("totals", {}), **{k: None for k in TOTAL_MONEY if k in doc.get("totals", {})}},
+    }
+
+
 def _listing(kind: str, tag: str):
     @router.get(f"/{kind.replace('_', '-')}", tags=[tag], name=f"List {tag}")
-    def list_docs(from_date: date | None = None, to_date: date | None = None, status: str | None = None):
-        return [d for d in store.DOCS[kind].values()
+    def list_docs(from_date: date | None = None, to_date: date | None = None, status: str | None = None,
+                  current_user: dict = Depends(get_current_user)):
+        return [_shown(kind, d, current_user) for d in store.DOCS[kind].values()
                 if (not from_date or d["date"] >= from_date.isoformat()) and (not to_date or d["date"] <= to_date.isoformat())
                 and (not status or d.get("status") == status)]
 
     @router.get(f"/{kind.replace('_', '-')}/{{doc_no:path}}", tags=[tag], name=f"Get {tag}")
-    def get_doc(doc_no: str):
-        return _get(kind, doc_no)
+    def get_doc(doc_no: str, current_user: dict = Depends(get_current_user)):
+        return _shown(kind, _get(kind, doc_no), current_user)
 
 
 # ---------- Purchase Indent (does not affect stock) ----------
-@router.post("/purchase-indent", status_code=201, tags=["Purchase Indent"])
+@router.post("/purchase-indent", status_code=201, tags=["Purchase Indent"],
+             dependencies=[Depends(require_right("add", "Purchase Indent", "Purchase Bill"))])
 def create_indent(body: PurchaseIndentIn):
+    sup = store.find(store.SUPPLIERS, body.supplier)
+    if not sup:
+        raise HTTPException(422, f"Unknown supplier '{body.supplier}'")
+    body.supplier = sup["code"]
     lines, tot = _price_lines(body.lines, "purchase_rate", with_gst=False)
     doc_no = store.next_doc_no("purchase_indent", "PI")
     store.DOCS["purchase_indent"][doc_no] = {"doc_no": doc_no, "date": body.date.isoformat(), "supplier": body.supplier,
                                              "lines": lines, "totals": tot, "remarks": body.remarks}
+    writeback.changed("purchase_indent", store.DOCS["purchase_indent"][doc_no])
     return store.DOCS["purchase_indent"][doc_no]
 
 
 # ---------- Purchase Bill (adds stock) ----------
-@router.post("/purchase-bill", status_code=201, tags=["Purchase Bill"])
+@router.post("/purchase-bill", status_code=201, tags=["Purchase Bill"], dependencies=[Depends(require_right("add", "Purchase Bill"))])
 def create_purchase_bill(body: PurchaseBillIn):
     src = body.lines
     if not src and body.copy_from_indent:
@@ -90,15 +144,33 @@ def create_purchase_bill(body: PurchaseBillIn):
     tot["balance_vs_supplier_value"] = round(body.supplier_inv_value - tot["net"], 2)
     doc_no = store.next_doc_no("purchase_bill", "PB")
     sign = -1 if body.purchase_type == "Purchase Return" else 1
+    if sign < 0:
+        _check_stock(lines)
     for l in lines:
         store.move_stock(l["item_code"], sign * l["qty"], "purchase", doc_no, body.date, l["rate"])
     doc = body.model_dump(mode="json", exclude={"lines"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
     store.DOCS["purchase_bill"][doc_no] = doc
+    writeback.changed("purchase_bill", doc)
     return doc
 
 
 # ---------- Sales Invoice (reduces stock) ----------
-@router.post("/sales-invoice", status_code=201, tags=["Sales Invoice"])
+def _post_sale(doc: dict, cust: dict) -> None:
+    """Take a saved bill's stock out and settle its loyalty points (the bill must already be checked)."""
+    on = date.fromisoformat(doc["date"])
+    for l in doc["lines"]:
+        store.move_stock(l["item_code"], -l["qty"], "sale", doc["doc_no"], on, l["rate"])
+    tot = doc["totals"]
+    loy = store.SETTINGS["loyalty"]
+    earned = 0.0
+    if doc["customer"] != "CASH" and tot["net"] > loy["min_bill_amount"]:
+        earned = round(tot["net"] * loy["points_per_rupee"], 2)
+    tot["points_earned"] = earned
+    cust["points"] = round(cust["points"] - tot["points_redeemed"] + earned, 2)
+    store.touch("CUSTOMERS", cust["code"])
+
+
+@router.post("/sales-invoice", status_code=201, tags=["Sales Invoice"], dependencies=[SALES])
 def create_sales_invoice(body: SalesInvoiceIn):
     counter = store.COUNTERS.get(body.counter)
     if not counter or counter["inactive"]:
@@ -110,57 +182,68 @@ def create_sales_invoice(body: SalesInvoiceIn):
         raise HTTPException(422, f"Unknown customer '{body.customer}'")
     body.customer = cust["code"]
     lines, tot = _price_lines(body.lines, "mrp", with_gst=True)
-    for l in lines:
-        if not body.hold and store.ITEMS[l["item_code"]]["qoh"] < l["qty"]:
-            raise HTTPException(422, f"Insufficient stock for {l['item_code']} (QOH {store.ITEMS[l['item_code']]['qoh']})")
+    if not body.hold:
+        _check_stock(lines)
     if body.redeem_points > cust["points"]:
         raise HTTPException(422, f"Customer has only {cust['points']} points")
+    if body.redeem_points and cust["code"] == "CASH":
+        raise HTTPException(422, "Points can only be redeemed on a customer's bill")
+    if body.discount + body.redeem_points > tot["net"]:
+        raise HTTPException(422, "Discount and redeemed points can't be more than the bill amount")
     tot["discount"] = body.discount
     tot["points_redeemed"] = body.redeem_points
     tot["net"] = round(tot["net"] - body.discount - body.redeem_points)  # bills are rounded to the rupee
     if body.collected is not None:
         diff = round(body.collected - tot["net"], 2)
         tot["collected"], tot["payback"], tot["shortage"] = body.collected, max(diff, 0), max(-diff, 0)
-    status = "HOLD" if body.hold else "SAVED"
+    if body.payment:
+        payment = body.payment.model_dump()
+        paid = round(sum(payment.values()), 2)
+        # The screen shows paise; the bill is rounded to the rupee, so allow up to ₹1 of rounding.
+        if abs(paid - tot["net"]) > 1:
+            raise HTTPException(422, f"Payment total ₹{paid:,.2f} does not match the bill amount ₹{tot['net']:,.2f}")
+        biggest = max(payment, key=lambda k: payment[k])
+        payment[biggest] = round(payment[biggest] + tot["net"] - paid, 2)
+    else:
+        payment = {"cash": 0, "card": 0, "upi": 0, "credit": 0}
+        payment[{"CASH": "cash", "CARD": "card", "UPI": "upi", "CREDIT": "credit", "SPLIT": "cash"}[body.payment_type]] = tot["net"]
+    tot["points_earned"] = 0.0
     doc_no = f"HOLD-{next(store._seq['hold']):04d}" if body.hold else store.next_doc_no("sales_invoice", counter["prefix"])
-    points_earned = 0.0
-    if not body.hold:
-        for l in lines:
-            store.move_stock(l["item_code"], -l["qty"], "sale", doc_no, body.date, l["rate"])
-        loy = store.SETTINGS["loyalty"]
-        if body.customer != "CASH" and tot["net"] > loy["min_bill_amount"]:
-            points_earned = round(tot["net"] * loy["points_per_rupee"], 2)
-        cust["points"] = round(cust["points"] - body.redeem_points + points_earned, 2)
-    tot["points_earned"] = points_earned
-    payment = body.payment.model_dump() if body.payment else {
-        "cash": 0, "card": 0, "upi": 0, "credit": 0,
-        {"CASH": "cash", "CARD": "card", "UPI": "upi", "CREDIT": "credit", "SPLIT": "cash"}[body.payment_type]: tot["net"],
-    }
     doc = body.model_dump(mode="json", exclude={"lines", "payment"}) | {
-        "doc_no": doc_no, "status": status, "lines": lines, "totals": tot, "payment": payment,
+        "doc_no": doc_no, "status": "HOLD" if body.hold else "SAVED", "lines": lines, "totals": tot, "payment": payment,
         "time": datetime.now().strftime("%H:%M:%S"),
     }
+    if not body.hold:
+        _post_sale(doc, cust)
+        writeback.changed("sales_invoice", doc)
     store.DOCS["sales_invoice"][doc_no] = doc
     return doc
 
 
-@router.post("/sales-invoice/{doc_no:path}/release", tags=["Sales Invoice"])
+@router.post("/sales-invoice/{doc_no:path}/release", tags=["Sales Invoice"], dependencies=[SALES])
 def release_held_bill(doc_no: str):
-    """Recall a held bill and post it (moves stock)."""
+    """Recall a held bill and post it: checks stock and points again, moves stock, earns points."""
     doc = _get("sales_invoice", doc_no)
     if doc["status"] != "HOLD":
         raise HTTPException(409, "Only held bills can be released")
+    counter = store.COUNTERS.get(doc["counter"])
+    if not counter or counter["inactive"]:
+        raise HTTPException(422, "The bill's Sales Counter is missing or inactive")
+    _check_stock(doc["lines"])
+    cust = store.CUSTOMERS.get(doc["customer"]) or store.CUSTOMERS["CASH"]
+    if doc["totals"]["points_redeemed"] > cust["points"]:
+        raise HTTPException(422, f"Customer has only {cust['points']} points")
     # Releasing turns the parked bill into a real invoice with the next number in its counter's series.
-    new_no = store.next_doc_no("sales_invoice", store.COUNTERS[doc["counter"]]["prefix"])
-    for l in doc["lines"]:
-        store.move_stock(l["item_code"], -l["qty"], "sale", new_no, date.fromisoformat(doc["date"]), l["rate"])
+    new_no = store.next_doc_no("sales_invoice", counter["prefix"])
     del store.DOCS["sales_invoice"][doc_no]
     doc.update(doc_no=new_no, status="SAVED")
+    _post_sale(doc, cust)
     store.DOCS["sales_invoice"][new_no] = doc
+    writeback.changed("sales_invoice", doc, "release")
     return doc
 
 
-@router.delete("/sales-invoice/{doc_no:path}", status_code=204, tags=["Sales Invoice"])
+@router.delete("/sales-invoice/{doc_no:path}", status_code=204, tags=["Sales Invoice"], dependencies=[SALES])
 def discard_held_bill(doc_no: str):
     """Remove a held bill once it has been recalled onto the counter (held bills never moved stock)."""
     if _get("sales_invoice", doc_no)["status"] != "HOLD":
@@ -168,22 +251,37 @@ def discard_held_bill(doc_no: str):
     del store.DOCS["sales_invoice"][doc_no]
 
 
-@router.post("/sales-invoice/{doc_no:path}/cancel", tags=["Sales Invoice"])
+@router.post("/sales-invoice/{doc_no:path}/cancel", tags=["Sales Invoice"], dependencies=[SALES_CANCEL])
 def cancel_invoice(doc_no: str, body: CancelIn):
     """Cancel a saved bill with a mandatory remark and put its stock back. Cancelled bills show in the DSR."""
     doc = _get("sales_invoice", doc_no)
     if doc["status"] == "CANCELLED":
         raise HTTPException(409, "Already cancelled")
-    if doc["status"] == "SAVED":
-        for l in doc["lines"]:
-            store.move_stock(l["item_code"], l["qty"], "sale-cancel", doc_no, date.fromisoformat(doc["date"]), l["rate"])
-        # Give back redeemed points and take back the ones this bill earned.
-        cust = store.CUSTOMERS.get(doc["customer"])
-        if cust:
-            cust["points"] = round(cust["points"] + doc["totals"]["points_redeemed"] - doc["totals"]["points_earned"], 2)
+    if doc["status"] == "HOLD":
+        raise HTTPException(409, "Held bills are not posted yet: recall and discard them instead of cancelling")
+    if _returned_qty(doc_no):
+        raise HTTPException(409, "Goods from this bill were already returned (Sales Return); it can't be cancelled")
+    for l in doc["lines"]:
+        store.move_stock(l["item_code"], l["qty"], "sale-cancel", doc_no, date.fromisoformat(doc["date"]), l["rate"])
+    # Give back redeemed points and take back the ones this bill earned.
+    cust = store.CUSTOMERS.get(doc["customer"])
+    if cust:
+        cust["points"] = round(cust["points"] + doc["totals"]["points_redeemed"] - doc["totals"]["points_earned"], 2)
+        store.touch("CUSTOMERS", cust["code"])
     doc["status"] = "CANCELLED"
     doc["cancel_remarks"] = body.remarks
+    writeback.changed("sales_invoice", doc, "cancel")
     return doc
+
+
+def _returned_qty(invoice_no: str) -> dict[str, float]:
+    """Quantity per item already returned against an invoice."""
+    done: dict[str, float] = defaultdict(float)
+    for r in store.DOCS["sales_return"].values():
+        if r.get("against_invoice") == invoice_no:
+            for l in r["lines"]:
+                done[l["item_code"]] += l["qty"]
+    return done
 
 
 @router.get("/sales-invoice/{doc_no:path}/reprint", tags=["Sales Invoice"])
@@ -194,21 +292,36 @@ def reprint_invoice(doc_no: str):
 
 
 # ---------- Sales Return (adds stock) ----------
-@router.post("/sales-return", status_code=201, tags=["Sales Return"])
+@router.post("/sales-return", status_code=201, tags=["Sales Return"], dependencies=[Depends(require_right("add", "Sales Return"))])
 def create_sales_return(body: SalesReturnIn):
-    if body.against_invoice:
-        _get("sales_invoice", body.against_invoice)
     lines, tot = _price_lines(body.lines, "mrp", with_gst=True)
+    if body.against_invoice:
+        inv = _get("sales_invoice", body.against_invoice)
+        if inv["status"] != "SAVED":
+            raise HTTPException(422, f"Invoice {body.against_invoice} is {inv['status'].lower()}; only saved bills can be returned")
+        sold: dict[str, float] = defaultdict(float)
+        for l in inv["lines"]:
+            sold[l["item_code"]] += l["qty"]
+        done = _returned_qty(body.against_invoice)
+        asked: dict[str, float] = defaultdict(float)
+        for l in lines:
+            asked[l["item_code"]] += l["qty"]
+        for code, qty in asked.items():
+            left = sold.get(code, 0) - done.get(code, 0)
+            if qty > left:
+                raise HTTPException(422, f"Only {left:g} of {code} can be returned against {body.against_invoice}")
+        body.customer = inv["customer"]
     doc_no = store.next_doc_no("sales_return", "SR")
     for l in lines:
         store.move_stock(l["item_code"], l["qty"], "sales-return", doc_no, body.date, l["rate"])
     doc = body.model_dump(mode="json", exclude={"lines"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
     store.DOCS["sales_return"][doc_no] = doc
+    writeback.changed("sales_return", doc)
     return doc
 
 
 # ---------- Expense Entry ----------
-@router.post("/expense", status_code=201, tags=["Expense Entry"])
+@router.post("/expense", status_code=201, tags=["Expense Entry"], dependencies=[Depends(require_right("add", "Expense Entry"))])
 def create_expense(body: ExpenseIn):
     for l in body.lines:
         if l.ledger not in store.LEDGERS:
@@ -216,18 +329,21 @@ def create_expense(body: ExpenseIn):
     doc_no = store.next_doc_no("expense", "EXP")
     doc = body.model_dump(mode="json") | {"doc_no": doc_no, "total": round(sum(l.amount for l in body.lines), 2)}
     store.DOCS["expense"][doc_no] = doc
+    writeback.changed("expense", doc)
     return doc
 
 
 # ---------- Stock Deduction (reduces stock) ----------
-@router.post("/stock-deduction", status_code=201, tags=["Stock Deduction"])
+@router.post("/stock-deduction", status_code=201, tags=["Stock Deduction"], dependencies=[Depends(require_right("add", "Stock Deduction"))])
 def create_stock_deduction(body: StockDeductionIn):
     lines, tot = _price_lines(body.lines, "purchase_rate", with_gst=False)
+    _check_stock(lines)
     doc_no = store.next_doc_no("stock_deduction", "SD")
     for l in lines:
         store.move_stock(l["item_code"], -l["qty"], "deduction", doc_no, body.date, l["rate"])
     doc = body.model_dump(mode="json", exclude={"lines"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
     store.DOCS["stock_deduction"][doc_no] = doc
+    writeback.changed("stock_deduction", doc)
     return doc
 
 
@@ -236,13 +352,18 @@ def create_stock_deduction(body: StockDeductionIn):
 def load_closing_stock(as_on: date):
     """Pick As-on Date → liquor items with their opening balance (current QOH)."""
     return [{"item_code": i["code"], "item_name": i["name"], "package": i["package"], "op_qty": i["qoh"], "mrp": i["mrp"]}
-            for i in store.ITEMS.values() if store.ITEM_GROUPS[i["group"]]["liquor"] and i["active"]]
+            for i in store.ITEMS.values() if _is_liquor(i) and i["active"]]
 
 
-@router.post("/closing-stock", status_code=201, tags=["Closing Stock Entry"])
+CLOSING = Depends(require_right("add", "Closing Stock Entry"))
+
+
+@router.post("/closing-stock", status_code=201, tags=["Closing Stock Entry"], dependencies=[CLOSING])
 def create_closing_stock(body: ClosingStockIn):
     """Physical closing stock per item; Sales Qty = OP − Closing."""
     lines = []
+    if len({l.item_code for l in body.lines}) < len(body.lines):
+        raise HTTPException(422, "Each item can appear only once in a closing stock entry")
     for l in body.lines:
         it = _item(l.item_code)
         sales = it["qoh"] - l.closing_qty
@@ -254,10 +375,11 @@ def create_closing_stock(body: ClosingStockIn):
     doc = {"doc_no": doc_no, "date": body.as_on.isoformat(), "lines": lines, "invoice_no": None,
            "total_amount": round(sum(l["amount"] for l in lines), 2)}
     store.DOCS["closing_stock"][doc_no] = doc
+    writeback.changed("closing_stock", doc)
     return doc
 
 
-@router.post("/closing-stock/{doc_no:path}/generate-invoice", status_code=201, tags=["Closing Stock Entry"])
+@router.post("/closing-stock/{doc_no:path}/generate-invoice", status_code=201, tags=["Closing Stock Entry"], dependencies=[CLOSING])
 def generate_invoice_from_cse(doc_no: str, body: GenerateInvoiceIn):
     """Generate Sales Invoice from the computed sales quantities."""
     cse = _get("closing_stock", doc_no)
@@ -269,6 +391,7 @@ def generate_invoice_from_cse(doc_no: str, body: GenerateInvoiceIn):
     inv = create_sales_invoice(SalesInvoiceIn(date=date.fromisoformat(cse["date"]), counter=body.counter,
                                               salesperson=body.salesperson, lines=lines))
     cse["invoice_no"] = inv["doc_no"]
+    writeback.changed("closing_stock", cse, "invoiced")
     return inv
 
 
@@ -278,16 +401,15 @@ def get_denomination(on: date):
     return store.DENOMINATIONS.get(on.isoformat())
 
 
-@router.post("/denomination", status_code=201, tags=["Cash Denomination"])
+@router.post("/denomination", status_code=201, tags=["Cash Denomination"], dependencies=[Depends(require_right("add", "Cash Denomination"))])
 def save_denomination(body: DenominationIn):
     total = 0.0
     for key, n in body.counts.items():
-        if n < 0:
-            raise HTTPException(422, "Counts cannot be negative")
         # "coins" is entered as a rupee amount rather than a count.
         total += n if key == "coins" else float(key) * n
     doc = {"date": body.date.isoformat(), "counts": body.counts, "total": round(total, 2)}
     store.DENOMINATIONS[doc["date"]] = doc
+    writeback.changed("denomination", doc)
     return doc
 
 

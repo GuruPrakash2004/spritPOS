@@ -11,7 +11,7 @@ import { Edit3, FilePlus, Save, Search, Trash2, X } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
-import { api, errorText, getAuthRole } from '../../lib/api';
+import { api, canDo, canSeeCost, errorText } from '../../lib/api';
 import { badge, field, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
 
 export type MasterField = {
@@ -23,6 +23,8 @@ export type MasterField = {
   required?: boolean;
   showInList?: boolean;
   default?: string | number | boolean; // value for a New record
+  costField?: boolean; // purchase cost: hidden (and not sent) for roles without cost access
+  newOnly?: boolean; // editable only when creating (e.g. an item's opening stock); read-only in Edit
 };
 
 type Row = Record<string, string | number | boolean>;
@@ -31,11 +33,13 @@ type Mode = 'View' | 'New' | 'Edit';
 const blank = (fields: MasterField[]): Row =>
   Object.fromEntries(fields.map(f => [f.key, f.default ?? (f.type === 'bool' ? false : f.type === 'number' ? 0 : '')]));
 
-export default function MasterCrud({ title, subtitle, path, fields, toolbar, reloadKey = 0 }: {
+export default function MasterCrud({ title, subtitle, path, fields: allFields, toolbar, reloadKey = 0 }: {
   title: string; subtitle: string; path: string; fields: MasterField[];
   toolbar?: ReactNode; // extra buttons, e.g. Item Master's import
   reloadKey?: number; // bump to re-fetch the list after an outside change
 }) {
+  // Cost fields are left out entirely for roles that can't see costs; the backend keeps their values.
+  const fields = allFields.filter(f => !f.costField || canSeeCost());
   const [rows, setRows] = useState<Row[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [form, setForm] = useState<Row>(() => blank(fields));
@@ -46,9 +50,10 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const { confirm, dialog } = useConfirm();
 
-  const currentRole = getAuthRole();
-  // Role permission hierarchy: Cashier can add and edit items on arrival, but cannot delete!
-  const canDelete = path !== 'items' || (currentRole !== 'Cashier');
+  // The role's Add/Edit/Delete ticks for this screen (Admin Master); the server checks them too.
+  const canAdd = canDo(title, 'add');
+  const canEdit = canDo(title, 'edit');
+  const canDelete = canDo(title, 'delete');
 
   useEffect(() => {
     api<Row[]>(`/masters/${path}`)
@@ -159,7 +164,7 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
 
   const remove = async () => {
     if (!canDelete) {
-      setToast({ kind: 'error', text: 'Cashiers cannot delete items. Requires Manager or Administrator role.' });
+      setToast({ kind: 'error', text: `Your role is not allowed to delete in ${title}.` });
       return;
     }
     if (!selected || !(await confirm(`Delete "${selected}"? This can't be undone.`))) return;
@@ -211,7 +216,7 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
       }
 
       // Cmd+N, Ctrl+N or Alt+N for New
-      if ((modKey && e.key.toLowerCase() === 'n') || (e.altKey && e.key.toLowerCase() === 'n')) {
+      if (canAdd && ((modKey && e.key.toLowerCase() === 'n') || (e.altKey && e.key.toLowerCase() === 'n'))) {
         e.preventDefault();
         setForm(blank(fields));
         setFormErrors({});
@@ -224,7 +229,7 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
       }
 
       // Cmd+E, Ctrl+E or Alt+E for Edit
-      if (readOnly && selected && ((modKey && e.key.toLowerCase() === 'e') || (e.altKey && e.key.toLowerCase() === 'e'))) {
+      if (canEdit && readOnly && selected && ((modKey && e.key.toLowerCase() === 'e') || (e.altKey && e.key.toLowerCase() === 'e'))) {
         e.preventDefault();
         setFormErrors({});
         setMode('Edit');
@@ -295,13 +300,13 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
               <button
                 onClick={remove}
                 disabled={!selected || !canDelete}
-                title={!canDelete ? "Cashiers cannot delete items (Manager/Admin role required)" : undefined}
+                title={!canDelete ? 'Your role is not allowed to delete here' : undefined}
                 className={`${ghostButton} ${!canDelete ? 'opacity-40 cursor-not-allowed hover:!text-stone-400' : 'hover:!text-red-600 dark:hover:!text-red-400'}`}
               >
                 <Trash2 size={14} />Delete
               </button>
-              <button onClick={() => { setFormErrors({}); setMode('Edit'); }} disabled={!selected} className={secondaryButton}><Edit3 size={14} />Edit</button>
-              <button onClick={() => { setForm(blank(fields)); setFormErrors({}); setMode('New'); }} className={primaryButton}><FilePlus size={14} />New</button>
+              {canEdit && <button onClick={() => { setFormErrors({}); setMode('Edit'); }} disabled={!selected} className={secondaryButton}><Edit3 size={14} />Edit</button>}
+              {canAdd && <button onClick={() => { setForm(blank(fields)); setFormErrors({}); setMode('New'); }} className={primaryButton}><FilePlus size={14} />New</button>}
             </>
           ) : (
             <>
@@ -366,7 +371,7 @@ export default function MasterCrud({ title, subtitle, path, fields, toolbar, rel
 
             <div className={`grid gap-4 ${fields.length > 8 ? 'sm:grid-cols-2' : ''}`}>
               {fields.map(f => {
-                const locked = readOnly || (f.key === 'code' && mode === 'Edit');
+                const locked = readOnly || ((f.key === 'code' || f.newOnly) && mode === 'Edit');
                 const value = form[f.key];
                 const opts = f.options ?? options[f.key] ?? [];
                 const id = `mc-${path}-${f.key}`;

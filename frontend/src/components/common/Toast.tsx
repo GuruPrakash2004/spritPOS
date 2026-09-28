@@ -47,7 +47,7 @@ export function SnackbarContainer() {
             role={isError || isDelete ? 'alert' : 'status'}
             onMouseEnter={() => toastStore.setPaused(item.id, true)}
             onMouseLeave={() => toastStore.setPaused(item.id, false)}
-            className={`group relative flex w-full flex-col overflow-hidden rounded-2xl border shadow-2xl p-3.5 text-xs pointer-events-auto transition-all duration-200 animate-slideUp ${
+            className={`toast-card ${item.leaving ? 'toast-leaving' : 'toast-enter'} group relative flex w-full flex-col overflow-hidden rounded-2xl border shadow-2xl p-3.5 text-xs pointer-events-auto transition-colors duration-200 ${
               isDelete || isError
                 ? 'border-red-500/40 bg-[#FFF8F7] text-red-950 dark:border-red-500/50 dark:bg-[#1A0E0E] dark:text-red-100 shadow-[0_12px_32px_-4px_rgba(220,38,38,0.28)]'
                 : isRefresh
@@ -133,6 +133,8 @@ export function SnackbarContainer() {
   );
 }
 
+// Renders nothing itself: App.tsx already mounts the one <SnackbarContainer />. (Rendering a second
+// container here drew every popup twice while a screen's message was showing.)
 export default function Toast({ kind = 'ok', text }: { kind?: ToastKind; text: string }) {
   useEffect(() => {
     if (text) {
@@ -140,5 +142,5 @@ export default function Toast({ kind = 'ok', text }: { kind?: ToastKind; text: s
     }
   }, [kind, text]);
 
-  return <SnackbarContainer />;
+  return null;
 }

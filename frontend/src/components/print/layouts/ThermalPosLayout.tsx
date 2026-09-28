@@ -8,7 +8,7 @@ import { SAMPLE_INVOICE_DATA } from '../samplePrintData';
 
 interface ThermalPosLayoutProps {
   modelId: string;
-  data: any;
+  data: unknown;
   company: ApiCompany | null;
   watermark?: string;
   isPrintPreview?: boolean;
@@ -27,11 +27,14 @@ export const ThermalPosLayout: React.FC<ThermalPosLayoutProps> = ({
   const storeLicence = company?.licence_type ? `${company.licence_type} (Retail)` : 'CL-2 (Retail Vend of Liquor)';
   const storeGstin = company?.gstin || '29AAAAA0000A1Z5';
 
+  // The same slip prints an invoice or a DSR, depending on the data it is given.
+  const given = (data && typeof data === 'object' ? data : null) as (Partial<ApiInvoice> & Partial<ApiFullDsr>) | null;
+
   // Render Sales Invoice Thermal Slip
-  if (!data || !('sales_incl_gst' in data)) {
-    const inv: ApiInvoice = (data && data.lines && data.lines.length > 0)
-      ? data
-      : (data && 'doc_no' in data ? { ...SAMPLE_INVOICE_DATA, ...data, lines: SAMPLE_INVOICE_DATA.lines } : SAMPLE_INVOICE_DATA);
+  if (!given || !('sales_incl_gst' in given)) {
+    const inv: ApiInvoice = given?.lines?.length
+      ? given as ApiInvoice
+      : (given && 'doc_no' in given ? { ...SAMPLE_INVOICE_DATA, ...given, lines: SAMPLE_INVOICE_DATA.lines } : SAMPLE_INVOICE_DATA);
     const isGstModel = modelId === 'fmtSPInvPrint_GST';
     const taxableBasic = inv.totals?.basic ?? 0;
     const cgstAmt = Math.round(taxableBasic * 0.09 * 100) / 100;
@@ -185,8 +188,8 @@ export const ThermalPosLayout: React.FC<ThermalPosLayoutProps> = ({
   }
 
   // Render DSR Compact Thermal Slip (RptDSR_S / RptDropsDSR)
-  if (data && 'sales_incl_gst' in data) {
-    const dsr = data as ApiFullDsr;
+  if (given && 'sales_incl_gst' in given) {
+    const dsr = given as ApiFullDsr;
     return (
       <div
         className={`rpt-print-container rpt-thermal-80 font-mono text-[12px] leading-tight text-black bg-white select-none ${

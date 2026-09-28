@@ -745,6 +745,48 @@ input[type='date']::-webkit-date-and-time-value { text-align: left; }
   animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Popups (common/Toast.tsx). Only transform and opacity animate, so the GPU does the work.
+   Large screens: quick. Below lg (1024 px): a longer, softer glide in and out.
+   The exit times match TOAST_EXIT_MS / TOAST_EXIT_SMALL_MS in toastStore.ts. */
+@keyframes toastEnter {
+  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.96); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes toastEnterSoft {
+  0%   { opacity: 0; transform: translate3d(0, 28px, 0) scale(0.94); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes toastExit {
+  from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  to   { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.97); }
+}
+.toast-card {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+.toast-enter {
+  animation: toastEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.toast-card.animate-shake {
+  animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+.toast-card.toast-leaving {
+  animation: toastExit 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+  pointer-events: none;
+}
+@media (max-width: 1023.98px) {
+  .toast-enter {
+    animation: toastEnterSoft 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .toast-card.toast-leaving {
+    animation: toastExit 0.38s cubic-bezier(0.55, 0, 0.45, 1) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter, .toast-card.toast-leaving, .toast-card.animate-shake { animation: none; }
+}
+
 /* ═══════════════════════════════════════════════════
    MODERN WEB & LEGACY RPT PRINT ENGINE
    ═══════════════════════════════════════════════════ */

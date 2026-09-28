@@ -8,6 +8,7 @@ The store is the single source of truth for the running process.
 For writes (create/update/delete) that need to persist, each router
 should call db.execute() in addition to updating the store dict.
 """
+import copy
 import logging
 import threading
 import time
@@ -223,35 +224,39 @@ def load_users() -> None:
         FROM MstUser
         WHERE UserID > 0
     """)
-    # Start with standard fallback users
-    standard_users = {
-        "ADMIN": {"user": "ADMIN", "password": "admin", "role": "Administrator", "active": True},
-        "GURU": {"user": "GURU", "password": "guru", "role": "Manager", "active": True},
-        "PRADEEP": {"user": "PRADEEP", "password": "pradeep", "role": "Cashier", "active": True},
-        "RAVI": {"user": "RAVI", "password": "ravi", "role": "Cashier", "active": True},
-    }
+    # Start with the standard users (already hashed in store.SEED_USERS).
     store.USERS.clear()
-    store.USERS.update(standard_users)
+    store.USERS.update(copy.deepcopy(store.SEED_USERS))
 
     for r in rows:
         uname = _s(r.get("UserCode")).upper()
         if not uname:
             continue
         pwd_raw = _s(r.get("LoginPwd"))
-        # If user already in store (like ADMIN), keep it as Administrator and record both DB password and default
+        # MstUser.LoginPwd is the legacy app's reversible (base64) password. It is kept only until the
+        # user's first successful login, which replaces it with a PBKDF2 hash (auth._verify_password).
+        # Hashing every DB user here would slow startup by ~0.2 s per user.
         if uname in store.USERS:
-            store.USERS[uname]["db_password"] = pwd_raw
+            store.USERS[uname]["legacy_password"] = pwd_raw
             store.USERS[uname]["active"] = _s(r.get("Inactive")) != "Y"
         else:
             store.USERS[uname] = {
                 "user": uname,
-                "password": uname.lower(),  # default easy password for DB users (e.g. sales/sales, office/office)
-                "db_password": pwd_raw,
+                "password_hash": None,
+                "default_password": True,   # until changed: the lowercase user code (e.g. office/office)
+                "legacy_password": pwd_raw,
                 "role": "Manager" if uname in ("OFFICE", "MANAGER") else "Cashier",
                 "active": _s(r.get("Inactive")) != "Y",
-                "_db_auth": True,
+                "pwv": 1,
             }
     logger.info("Loaded %d users into store", len(store.USERS))
+
+
+def _drop_loaded(docs: dict) -> None:
+    """Remove seed and previously loaded DB documents before a (re)load, keeping bills made in the app.
+    (This used to clear everything, which silently deleted bills saved while the DB was loading.)"""
+    for no in [no for no, d in docs.items() if d.get("origin") in ("seed", "db")]:
+        del docs[no]
 
 
 def load_sales_invoices(limit: int = 200) -> None:
@@ -285,7 +290,7 @@ def load_sales_invoices(limit: int = 200) -> None:
         item_by_id[item.get("_itemid", "")] = code
 
     docs = store.DOCS["sales_invoice"]
-    docs.clear()
+    _drop_loaded(docs)
 
     bills: dict = {}
     for r in rows:
@@ -348,6 +353,8 @@ def load_sales_invoices(limit: int = 200) -> None:
             bills[sinv_no]["totals"]["litres"] + line["litres"], 3
         )
 
+    for b in bills.values():
+        b["origin"] = "db"
     docs.update(bills)
     logger.info("Loaded %d sales invoices from DB", len(docs))
 
@@ -373,7 +380,7 @@ def load_purchase_bills(limit: int = 100) -> None:
         item_by_id[item.get("_itemid", "")] = code
 
     docs = store.DOCS["purchase_bill"]
-    docs.clear()
+    _drop_loaded(docs)
     bills: dict = {}
     for r in rows:
         pb_no = _s(r.get("PBNO"))
@@ -406,6 +413,8 @@ def load_purchase_bills(limit: int = 100) -> None:
         bills[pb_no]["totals"]["basic"] = round(bills[pb_no]["totals"]["basic"] + amt, 2)
         bills[pb_no]["totals"]["net"] = bills[pb_no]["totals"]["basic"]
 
+    for b in bills.values():
+        b["origin"] = "db"
     docs.update(bills)
     logger.info("Loaded %d purchase bills from DB", len(docs))
 
@@ -481,6 +490,7 @@ def load_masters() -> None:
     logger.info("Master data loaded: %d items, %d users, %d suppliers", len(store.ITEMS), len(store.USERS), len(store.SUPPLIERS))
     # Movements before this index are the seeded demo history; later ones are bills made in this app.
     store.DB_BASE_MOVEMENTS = len(store.MOVEMENTS)
+    store.APP_MOVEMENTS_FROM = len(store.MOVEMENTS)
 
 
 def load_transactions() -> None:

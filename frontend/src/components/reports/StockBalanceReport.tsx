@@ -7,7 +7,7 @@ import { api, errorText, todayIso, type ApiItem, type ApiStockRow } from '../../
 import { badge, money, pageHeader, pageSub, pageTitle, panel, tableBody, tableHead, tableRow, printButton } from '../../lib/styles';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
-type StockRow = { group: string; brand: string; name: string; pkg: string; opQty: number; recQty: number; issQty: number; clQty: number; rate: number; value: number };
+type StockRow = { group: string; brand: string; name: string; pkg: string; opQty: number; recQty: number; issQty: number; clQty: number; rate: number; value: number | null };
 
 export default function StockBalanceReport() {
   const [rows, setRows] = useState<StockRow[] | null>(null);

@@ -1,0 +1,7 @@
+# Test tools (on top of the app's requirements). Install: .venv/bin/pip install -r requirements-dev.txt
+-r requirements.txt
+pytest>=8.3
+pytest-asyncio>=0.25
+httpx>=0.28
+respx>=0.22
+olefile>=0.47           # tools/rpt_inspect.py (reads legacy Crystal .rpt files)

@@ -107,7 +107,7 @@ export default function PriceListMaintenance() {
             {!items && <tr><td colSpan={6} className="px-3 py-10 text-center font-sans text-stone-400">Choose a group and press Load.</td></tr>}
             {items?.map(i => {
               const on = picked.has(i.code);
-              const current = i[column];
+              const current = i[column] ?? 0;
               return (
                 <tr key={i.code} className={on ? '' : 'opacity-50'}>
                   <td className="px-3 py-1.5"><input type="checkbox" checked={on} onChange={() => toggle(i.code)} className="accent-accent" aria-label={`Select ${i.name}`} /></td>

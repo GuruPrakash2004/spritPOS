@@ -1,32 +1,47 @@
-// Supplier Master form (legacy layout).
-// Note: this screen is not wired to the API yet. Save only updates local state and shows a toast;
-// nothing is sent to /masters/suppliers. Use MasterCrud or add the api() calls to make it persist.
+// Supplier Master form (legacy layout), saved through /masters/suppliers.
+// Pick a supplier to edit it (PUT /masters/suppliers/{code}) or "New supplier" to add one (POST).
+// Suppliers live in the backend's in-memory store, so, like every master, edits are lost when the
+// backend restarts (see the root CLAUDE.md: writes never reach SQL Server).
 
-import { useState, useEffect } from 'react';
-import { Save } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Plus, Save } from 'lucide-react';
 import { TextField } from '../common/FormField';
-import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, sectionTitle } from '../../lib/styles';
-import Toast from '../common/Toast';
+import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from '../../lib/styles';
+import { toast } from '../common/toastStore';
 import { FormErrorSummary } from '../common/FormErrorSummary';
+import { api, errorText, type ApiSupplier } from '../../lib/api';
+
+const BLANK: ApiSupplier = {
+  code: '', name: '', alias: '', address: '', city: '', pin: '', state: 'Karnataka', country: 'INDIA',
+  phone: '', gstin: '', currency: 'Rupees', active: true,
+};
 
 const SupplierMaster = () => {
-  const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
-  const [form, setForm] = useState({
-    code: 'R&D DISTRIBUTORS',
-    name: 'R&D DISTRIBUTORS',
-    alias: 'R&D DISTRIBUTOR',
-    address: '460, 1ST MAIN ROAD, ALLASANDRA, YELAHANKA',
-    city: 'Bangalore',
-    pin: '560064',
-    state: 'Karnataka',
-    country: 'INDIA',
-    phone: '9900196257',
-    gst: '29AABCR1234F1Z1',
-    currency: 'Rupees',
-  });
+  const [suppliers, setSuppliers] = useState<ApiSupplier[]>([]);
+  // Code of the supplier being edited; '' while entering a new one.
+  const [editing, setEditing] = useState('');
+  const [form, setForm] = useState<ApiSupplier>(BLANK);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
 
-  const handleFieldChange = (key: string, value: string) => {
+  const load = useCallback((selectCode?: string) => api<ApiSupplier[]>('/masters/suppliers')
+    .then(rows => {
+      setSuppliers(rows);
+      const pick = rows.find(r => r.code === selectCode) ?? (selectCode === undefined ? rows[0] : undefined);
+      if (pick) { setEditing(pick.code); setForm(pick); }
+    })
+    .catch(e => toast.error(errorText(e))), []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const choose = (code: string) => {
+    setErrors({});
+    const row = suppliers.find(r => r.code === code);
+    setEditing(row ? row.code : '');
+    setForm(row ?? BLANK);
+  };
+
+  const handleFieldChange = (key: keyof ApiSupplier, value: string | boolean) => {
     setForm(prev => ({ ...prev, [key]: value }));
     if (errors[key]) {
       setErrors(prev => {
@@ -47,8 +62,11 @@ const SupplierMaster = () => {
   };
 
   const handleSave = () => {
+    if (saving) return;
     const errs: Record<string, string> = {};
-    if (!form.code.trim()) errs.code = 'Enter the Supplier code';
+    const code = form.code.trim();
+    if (!code) errs.code = 'Enter the Supplier code';
+    else if (code !== editing && suppliers.some(r => r.code.toLowerCase() === code.toLowerCase())) errs.code = 'This supplier code is already used';
     if (!form.name.trim()) errs.name = 'Enter the Supplier name';
 
     if (Object.keys(errs).length > 0) {
@@ -59,7 +77,15 @@ const SupplierMaster = () => {
     }
 
     setErrors({});
-    setToast({ kind: 'ok', text: `Supplier "${form.code}" saved successfully!` });
+    setSaving(true);
+    const body = { ...form, code, name: form.name.trim() };
+    const request = editing
+      ? api<ApiSupplier>(`/masters/suppliers/${encodeURIComponent(editing)}`, { method: 'PUT', body })
+      : api<ApiSupplier>('/masters/suppliers', { method: 'POST', body });
+    request
+      .then(saved => { toast.ok(`Supplier "${saved.code}" saved`); return load(saved.code); })
+      .catch(e => toast.error(errorText(e)))
+      .finally(() => setSaving(false));
   };
 
   // ERP Keyboard shortcuts
@@ -84,14 +110,22 @@ const SupplierMaster = () => {
 
   return (
     <div className="mx-auto max-w-5xl">
-      {toast && <Toast kind={toast.kind} text={toast.text} />}
-
       <div className={`${pageHeader} mb-5`}>
         <div>
           <h1 className={pageTitle}>Supplier Master</h1>
           <p className={pageSub}>Distributor accounts, excise warehouse mappings and GST details.</p>
         </div>
-        <button onClick={handleSave} className={primaryButton}><Save size={14} />Save supplier</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="sup-pick" className="sr-only">Supplier to edit</label>
+          <div className="w-56">
+            <select id="sup-pick" value={editing} onChange={e => choose(e.target.value)} className={field}>
+              {!editing && <option value="">New supplier</option>}
+              {suppliers.map(r => <option key={r.code} value={r.code}>{r.name} ({r.code})</option>)}
+            </select>
+          </div>
+          <button type="button" onClick={() => choose('')} className={secondaryButton}><Plus size={14} />New</button>
+          <button onClick={handleSave} disabled={saving} className={primaryButton}><Save size={14} />{saving ? 'Saving…' : 'Save supplier'}</button>
+        </div>
       </div>
 
       <div className={`${panel} divide-y divide-line p-6`}>
@@ -163,8 +197,12 @@ const SupplierMaster = () => {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField id="sup-phone" label="Phone no." value={form.phone} onChange={e => handleFieldChange('phone', e.target.value)} className="tabular-nums" />
-            <TextField id="sup-gst" label="GSTIN" value={form.gst} onChange={e => handleFieldChange('gst', e.target.value)} className="font-mono" />
+            <TextField id="sup-gst" label="GSTIN" value={form.gstin} onChange={e => handleFieldChange('gstin', e.target.value)} className="font-mono" />
             <TextField id="sup-currency" label="Currency" value={form.currency} onChange={e => handleFieldChange('currency', e.target.value)} />
+            <label className="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-300">
+              <input type="checkbox" checked={form.active} onChange={e => handleFieldChange('active', e.target.checked)} />
+              Active (shown in Purchase Bill and Purchase Indent)
+            </label>
           </div>
         </section>
       </div>

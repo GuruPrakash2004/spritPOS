@@ -8,7 +8,7 @@ import { SAMPLE_INVOICE_DATA } from '../samplePrintData';
 
 interface A5SlipLayoutProps {
   modelId: string;
-  data: any;
+  data: unknown;
   company: ApiCompany | null;
   watermark?: string;
   isPrintPreview?: boolean;
@@ -26,7 +26,8 @@ export const A5SlipLayout: React.FC<A5SlipLayoutProps> = ({
   const storeLicence = company?.licence_type ? `${company.licence_type}` : 'CL-2 Retail';
   const storeGstin = company?.gstin || '29AAAAA0000A1Z5';
 
-  const inv: ApiInvoice = (data && data.lines && data.lines.length > 0) ? data : SAMPLE_INVOICE_DATA;
+  const given = data as Partial<ApiInvoice> | null;
+  const inv: ApiInvoice = given?.lines?.length ? given as ApiInvoice : SAMPLE_INVOICE_DATA;
 
   return (
     <div

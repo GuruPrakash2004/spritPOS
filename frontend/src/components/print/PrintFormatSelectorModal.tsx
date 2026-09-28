@@ -10,6 +10,7 @@ import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import { printButton, secondaryButton } from '../../lib/styles';
 import {
 	type DocumentCategory,
+	type PrinterStructure,
 	type RptModelDef,
 	RPT_MODELS,
 	getModelsForCategory,
@@ -75,7 +76,7 @@ export default function PrintFormatSelectorModal({
 							rptFileName: item.rptFileName || `${item.id}.rpt`,
 							name: local?.name || item.name,
 							category: (local?.category || item.category) as DocumentCategory,
-							printer: (local?.printer || item.printer) as any,
+							printer: (local?.printer || item.printer) as PrinterStructure,
 							paperName: local?.paperName || item.paperName,
 							badge: local?.badge || item.badge,
 							description: local?.description || item.description,

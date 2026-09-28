@@ -2,7 +2,8 @@
 //
 // Supplier invoice no/date/value, cases/bottles grid, GST/Cess/TCS, amount in words, Copy From a
 // Purchase Indent, and Add Supplier. Saves with POST /transactions/purchase-bill, which adds stock on
-// the backend (store.move_stock).
+// the backend (store.move_stock). Items come from the live catalogue (data/stockData.ts); CGST/SGST
+// are the Item Master rates (the backend applies those), so they are shown read-only.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -13,12 +14,12 @@ import { useConfirm } from '../../common/ConfirmDialog';
 import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, secondaryButton, sectionTitle, tableHead } from '../../../lib/styles';
 import Toast from '../../common/Toast';
 import DropdownMenu, { menuItem } from '../../common/DropdownMenu';
-import { api, errorText, type ApiDoc, type ApiIndent, type ApiSupplier } from '../../../lib/api';
-import { SAMPLE_STOCK_DATA } from '../../../data/stockData';
+import { api, errorText, newIdempotencyKey, type ApiDoc, type ApiIndent, type ApiSupplier } from '../../../lib/api';
+import { loadStockItems, sellable, STOCK_ITEMS, useStockItems } from '../../../data/stockData';
 import { numberToWords } from '../../../lib/formatters';
 import {
-  amt, blankRow, cell, cloneRow, field, FY_PREFIX, headCell, iconButton, infoBar, INITIAL_SUPPLIERS, isFilled,
-  ITEM_CODES, money, panel, PB_SERIES, pctOf, PURCHASE_TYPES, stockRow, today, type Row, type Supplier,
+  amt, blankRow, cell, cloneRow, field, FY_PREFIX, headCell, iconButton, infoBar, isFilled,
+  money, panel, PB_SERIES, pctOf, PURCHASE_TYPES, stockRow, today, type Row, type Supplier,
 } from './purchaseBillData';
 import { AddSupplierModal, CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
 
@@ -26,16 +27,17 @@ export default function PurchaseBill() {
   const [pbSeries, setPbSeries] = useState('');
   const [pbNo, setPbNo] = useState(201);
   const [pbDate, setPbDate] = useState(today);
-  const [suppliers, setSuppliers] = useState<Supplier[]>(INITIAL_SUPPLIERS);
-  const [supplier, setSupplier] = useState(INITIAL_SUPPLIERS[0].name);
-  const [billingAddress, setBillingAddress] = useState(INITIAL_SUPPLIERS[0].address);
+  useStockItems();
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplier, setSupplier] = useState('');
+  const [billingAddress, setBillingAddress] = useState('');
   const [editingAddress, setEditingAddress] = useState(false);
-  const [invNo, setInvNo] = useState('RD/2026/4471');
-  const [invDate, setInvDate] = useState('2026-09-21');
-  const [invValue, setInvValue] = useState('25920.00');
+  const [invNo, setInvNo] = useState('');
+  const [invDate, setInvDate] = useState(today);
+  const [invValue, setInvValue] = useState('');
   const [purchaseType, setPurchaseType] = useState(PURCHASE_TYPES[0]);
   const [headerOpen, setHeaderOpen] = useState(true);
-  const [rows, setRows] = useState<Row[]>(() => [stockRow(0, 24), stockRow(3, 48), blankRow()]);
+  const [rows, setRows] = useState<Row[]>(() => [blankRow()]);
   const [selectedUid, setSelectedUid] = useState<number>(() => rows[rows.length - 1].uid);
   const [showTaxColumns, setShowTaxColumns] = useState(true);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -53,6 +55,8 @@ export default function PurchaseBill() {
   const [totalsOpen, setTotalsOpen] = useState(true);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // One key per bill, so a double-click on Save can't add the stock twice. Renewed for each new bill.
+  const saveKey = useRef(newIdempotencyKey());
 
   useEffect(() => {
     if (!toast) return;
@@ -88,21 +92,23 @@ export default function PurchaseBill() {
     if (match) { setBillingAddress(match.address); setEditingAddress(false); }
   };
 
-  // Suppliers come from Supplier Master; the sample addresses stay as a fallback when the API is down.
+  // Suppliers come from Supplier Master (address, else city).
   useEffect(() => {
     api<ApiSupplier[]>('/masters/suppliers')
       .then(list => setSuppliers(list.filter(x => x.active).map(x => ({
-        name: x.name, address: INITIAL_SUPPLIERS.find(i => i.name === x.name)?.address ?? x.city,
+        name: x.name, address: [x.address, x.city].filter(Boolean).join(', '),
       }))))
-      .catch(() => undefined);
+      .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   }, []);
 
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [supplierSaving, setSupplierSaving] = useState(false);
   const addSupplier = (name: string, address: string) => {
-    const code = name.replace(/[^A-Z0-9]+/g, '-').slice(0, 20);
+    // Codes can't hold / ? # % (they go in URLs); upper-case first so lower-case names aren't lost.
+    const code = name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20);
+    if (!code) return setToast({ kind: 'error', text: 'Supplier name needs at least one letter or number.' });
     setSupplierSaving(true);
-    api('/masters/suppliers', { method: 'POST', body: { code, name, city: address } })
+    api('/masters/suppliers', { method: 'POST', body: { code, name, address } })
       .then(() => {
         setSuppliers([...suppliers, { name, address }]);
         setSupplier(name);
@@ -118,11 +124,14 @@ export default function PurchaseBill() {
   // Typing an item code or name that matches stock fills in the rest of the row.
   const setItem = (uid: number, key: 'code' | 'name', value: string) => {
     const term = value.trim().toLowerCase();
-    const stock = SAMPLE_STOCK_DATA.findIndex((item, i) => (key === 'code' ? ITEM_CODES[i].toLowerCase() === term : `${item.name} ${item.pkg}`.toLowerCase() === term));
+    const stock = STOCK_ITEMS.findIndex(item => item.active && (key === 'code' ? item.code.toLowerCase() === term : `${item.name} ${item.pkg}`.toLowerCase() === term));
     if (stock === -1) return updateRow(uid, { [key]: value, stock: null });
     const filled = stockRow(stock, 0);
     const current = rows.find(r => r.uid === uid);
-    updateRow(uid, { stock, code: filled.code, name: filled.name, qoh: filled.qoh, rate: filled.rate, qty: current?.qty || 1 });
+    updateRow(uid, {
+      stock, code: filled.code, name: filled.name, qoh: filled.qoh, rate: filled.rate, cgstPct: filled.cgstPct, sgstPct: filled.sgstPct,
+      qty: current?.qty || 1,
+    });
   };
 
   const numberCell = (row: Row, key: 'qty' | 'rate' | 'cgstPct' | 'sgstPct' | 'cessPct' | 'compCess', label: string, extra = '') => (
@@ -166,9 +175,16 @@ export default function PurchaseBill() {
     setSelectedUid(copy.uid);
   };
 
+  // Reload stock from the server, then copy each row's current QOH (and Item Master GST) into the grid.
   const refreshQoh = () => {
-    setRows(rows.map(r => (r.stock === null ? r : { ...r, qoh: SAMPLE_STOCK_DATA[r.stock].clQty })));
-    setToast({ kind: 'ok', text: 'QOH refreshed from current stock.' });
+    loadStockItems()
+      .then(items => {
+        setRows(current => current.map(r => (r.stock === null ? r : {
+          ...r, qoh: items[r.stock].clQty, cgstPct: items[r.stock].cgstPct, sgstPct: items[r.stock].sgstPct,
+        })));
+        setToast({ kind: 'ok', text: 'QOH refreshed from current stock.' });
+      })
+      .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
   // Copy From: list saved Purchase Indents and load one's lines into this bill.
@@ -182,7 +198,7 @@ export default function PurchaseBill() {
   const copyFromIndent = (indent: ApiIndent) => {
     const kept = rows.filter(isFilled);
     const added = indent.lines
-      .map(l => ({ stock: SAMPLE_STOCK_DATA.findIndex(i => i.code === l.item_code), qty: l.qty, rate: l.rate }))
+      .map(l => ({ stock: STOCK_ITEMS.findIndex(i => i.code === l.item_code), qty: l.qty, rate: l.rate }))
       .filter(l => l.stock !== -1)
       .map(l => ({ ...stockRow(l.stock, l.qty), rate: l.rate }));
     if (!added.length) return setToast({ kind: 'error', text: `Indent ${indent.doc_no} has no items to copy.` });
@@ -205,6 +221,7 @@ export default function PurchaseBill() {
   };
 
   const resetBill = () => {
+    saveKey.current = newIdempotencyKey();
     const fresh = blankRow();
     setSupplier('');
     setBillingAddress('');
@@ -229,13 +246,16 @@ export default function PurchaseBill() {
     if (filled.some(r => r.stock === null)) return setToast({ kind: 'error', text: 'Pick every item with Add Item so it has an item code.' });
     api<ApiDoc>('/transactions/purchase-bill', {
       method: 'POST',
+      idempotencyKey: saveKey.current,
       body: {
         date: pbDate, supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: Number(invValue) || 0,
         purchase_type: purchaseType, remarks, tcs: totals.tcs, cess: totals.cess + totals.compCess,
         lines: filled.map(r => ({ item_code: r.code, bottles: r.qty, rate: r.rate })),
       },
     }).then(doc => {
-      setToast({ kind: 'ok', text: `Purchase Bill ${doc.doc_no} saved — ${doc.totals.qty} bottles added to stock.` });
+      const moved = purchaseType === 'Purchase Return' ? 'returned to the supplier' : 'added to stock';
+      setToast({ kind: 'ok', text: `Purchase Bill ${doc.doc_no} saved — ${doc.totals.qty} bottles ${moved}.` });
+      loadStockItems().catch(() => undefined);
       setPbNo(pbNo + 1);
       resetBill();
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
@@ -412,9 +432,9 @@ export default function PurchaseBill() {
                   <td className="px-1 py-1">{numberCell(row, 'rate', 'PB Rate')}</td>
                   <td className="px-2 py-1 text-right font-semibold text-stone-900 dark:text-stone-50">{isFilled(row) ? money(amt(row)) : ''}</td>
                   {showTaxColumns && <>
-                    <td className="px-1 py-1">{numberCell(row, 'cgstPct', 'CGST %')}</td>
+                    <td className="px-2 py-1 text-right tabular-nums text-stone-600 dark:text-stone-300" title="From Item Master">{isFilled(row) ? row.cgstPct : ''}</td>
                     <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.cgstPct)) : ''}</td>
-                    <td className="px-1 py-1">{numberCell(row, 'sgstPct', 'SGST %')}</td>
+                    <td className="px-2 py-1 text-right tabular-nums text-stone-600 dark:text-stone-300" title="From Item Master">{isFilled(row) ? row.sgstPct : ''}</td>
                     <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.sgstPct)) : ''}</td>
                     <td className="px-1 py-1">{numberCell(row, 'cessPct', 'CESS %')}</td>
                     <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.cessPct)) : ''}</td>
@@ -424,8 +444,8 @@ export default function PurchaseBill() {
               ))}
             </tbody>
           </table>
-          <datalist id="pb-codes">{ITEM_CODES.map((code, i) => <option key={code} value={code}>{SAMPLE_STOCK_DATA[i].name}</option>)}</datalist>
-          <datalist id="pb-names">{SAMPLE_STOCK_DATA.map(item => <option key={item.ksbcl} value={`${item.name} ${item.pkg}`} />)}</datalist>
+          <datalist id="pb-codes">{sellable().map(item => <option key={item.code} value={item.code}>{item.name}</option>)}</datalist>
+          <datalist id="pb-names">{sellable().map(item => <option key={item.code} value={`${item.name} ${item.pkg}`} />)}</datalist>
         </div>
         <div className={`${infoBar} rounded-none border-t border-line`}>
           <Info size={14} className="shrink-0 text-stone-400" />

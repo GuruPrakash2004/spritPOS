@@ -16,8 +16,9 @@ import { FormErrorSummary } from '../common/FormErrorSummary';
 import { api, errorText, type ApiAdminUser, type ApiRole } from '../../lib/api';
 import { ADMIN_ROLE } from '../../lib/modules';
 import { badge, label, pageHeader, pageSub, pageTitle, primaryButton, secondaryButton, dangerButton } from '../../lib/styles';
-import { MATRIX_SCREENS, type RoleDraft, parseRoleToDraft } from './matrixDefs';
+import { MATRIX_SCREENS, type RoleDraft, draftRights, parseRoleToDraft } from './matrixDefs';
 import AdminUsersTab, { type UserForm } from './AdminUsersTab';
+import { passwordProblem } from '../../lib/passwords';
 import PermissionMatrixTable from './PermissionMatrixTable';
 
 const tabButton = (on: boolean) => `-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-xs font-semibold transition-colors ${on
@@ -95,7 +96,9 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
 
     if (!user.trim()) errors.user = 'Enter the user name';
     if (!role) errors.role = 'Select a role';
-    if (isNew && password.length < 4) errors.password = 'Password must be at least 4 characters';
+    const pwProblem = passwordProblem(password, user);
+    if (isNew && !password) errors.password = 'Enter a password for the new user';
+    else if (password && pwProblem) errors.password = pwProblem;
 
     if (Object.keys(errors).length > 0) {
       setUserFormErrors(errors);
@@ -213,10 +216,10 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     }
     setRoleFormErrors({});
 
-    const body = { name, modules: [...roleDraft.modules] };
+    const body = { name, modules: [...roleDraft.modules], rights: draftRights(roleDraft) };
     api(`/admin/roles/${encodeURIComponent(roleName || name)}`, { method: 'PUT', body })
       .then(() => {
-        setToast({ kind: 'ok', text: `Rights for ${name} saved. Users see the change at their next login.` });
+        setToast({ kind: 'ok', text: `Rights for ${name} saved, including Add/Edit/Delete. Signed-in users get the change within a minute.` });
         reload();
       })
       .catch(fail);

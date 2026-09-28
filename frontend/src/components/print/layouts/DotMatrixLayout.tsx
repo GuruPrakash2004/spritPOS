@@ -8,7 +8,7 @@ import { SAMPLE_INVOICE_DATA } from '../samplePrintData';
 
 interface DotMatrixLayoutProps {
   modelId: string;
-  data: any;
+  data: unknown;
   company: ApiCompany | null;
   watermark?: string;
   isPrintPreview?: boolean;
@@ -25,7 +25,8 @@ export const DotMatrixLayout: React.FC<DotMatrixLayoutProps> = ({
   const storeAddress = company?.address || 'Brigade Road, Bangalore';
   const storeLicence = company?.licence_type || 'CL-2 Retail';
 
-  const inv: ApiInvoice = (data && data.lines && data.lines.length > 0) ? data : SAMPLE_INVOICE_DATA;
+  const given = data as Partial<ApiInvoice> | null;
+  const inv: ApiInvoice = given?.lines?.length ? given as ApiInvoice : SAMPLE_INVOICE_DATA;
 
   return (
     <div

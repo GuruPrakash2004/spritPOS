@@ -4,14 +4,13 @@
 import { useState } from 'react';
 import Modal from '../../common/Modal';
 import type { ApiIndent } from '../../../lib/api';
-import { SAMPLE_STOCK_DATA } from '../../../data/stockData';
-import { field, headCell, ITEM_CODES, money } from './purchaseBillData';
+import { sellable } from '../../../data/stockData';
+import { field, headCell, money } from './purchaseBillData';
 
 export function ItemLookupModal({ filter, onFilter, onPick, onClose }: {
   filter: string; onFilter: (v: string) => void; onPick: (stock: number) => void; onClose: () => void;
 }) {
-  const lookupItems = SAMPLE_STOCK_DATA
-    .map((item, stock) => ({ ...item, stock, code: ITEM_CODES[stock] }))
+  const lookupItems = sellable()
     .filter(item => `${item.code} ${item.brand} ${item.name}`.toLowerCase().includes(filter.toLowerCase()));
   return (
     <Modal title="Add Item" onClose={onClose} wide>
@@ -22,7 +21,7 @@ export function ItemLookupModal({ filter, onFilter, onPick, onClose }: {
         </thead>
         <tbody className="divide-y divide-line-soft">
           {lookupItems.map(item => (
-            <tr key={item.ksbcl} onClick={() => onPick(item.stock)} className="cursor-pointer hover:bg-accent/10">
+            <tr key={item.code} onClick={() => onPick(item.stock)} className="cursor-pointer hover:bg-accent/10">
               <td className="px-2 py-2 font-mono">{item.code}</td>
               <td className="px-2 py-2">{item.name} <span className="text-stone-400">{item.pkg}</span></td>
               <td className="px-2 py-2 text-right tabular-nums">{item.clQty}</td>

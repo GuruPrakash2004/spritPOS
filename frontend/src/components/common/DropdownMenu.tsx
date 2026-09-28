@@ -34,9 +34,10 @@ export default function DropdownMenu({ anchorRef, open, onClose, children, align
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  // Measure after render (the menu's height is only known once it is in the DOM).
+  // Measure after render (the menu's height is only known once it is in the DOM). A position left over
+  // from the last time the menu was open is replaced here before the browser paints.
   useLayoutEffect(() => {
-    if (!open) { setPos(null); return; }
+    if (!open) return;
     const place = () => {
       const anchor = anchorRef.current;
       if (!anchor) return;

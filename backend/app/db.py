@@ -7,8 +7,8 @@ runs during development without a live SQL Server.
 import os
 import logging
 import threading
-from functools import lru_cache
-from typing import Any
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 logger = logging.getLogger("vlqms.db")
 
@@ -59,7 +59,6 @@ def _try_pyodbc() -> Any | None:
     """Attempt connection via pyodbc (requires ODBC Driver 17/18)."""
     try:
         import importlib
-# updated 
         pyodbc = importlib.import_module("pyodbc")
     except ModuleNotFoundError:
         return None
@@ -213,3 +212,59 @@ def executemany(sql: str, rows: list[tuple]) -> int:
             raise
         finally:
             cur.close()
+
+
+# ─── Transactions (write-back, app/writeback.py) ─────────────────────────────
+
+class TxCursor:
+    """A cursor inside db.transaction(). SQL uses ? placeholders for both drivers (pymssql wants %s),
+    and values always go in `params`, never into the SQL text."""
+
+    def __init__(self, cur, pymssql: bool):
+        self._cur = cur
+        self._pymssql = pymssql
+
+    def execute(self, sql: str, params: tuple = ()) -> int:
+        self._cur.execute(sql.replace("?", "%s") if self._pymssql else sql, params)
+        return self._cur.rowcount
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+
+@contextmanager
+def transaction() -> Iterator[TxCursor]:
+    """Run several statements as one unit: all commit together, or all roll back if any fails.
+    Holds _db_lock throughout, so nothing else uses the shared connection in the middle."""
+    conn = get_conn()
+    if conn is None:
+        raise RuntimeError("No database connection")
+    with _db_lock:
+        cur = conn.cursor()
+        try:
+            yield TxCursor(cur, _driver_used.startswith("pymssql"))
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:   # the connection itself may be gone; the server rolls back on disconnect
+                logger.warning("Rollback failed (connection lost?)")
+            raise
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+
+
+def reconnect() -> bool:
+    """Drop the shared connection and connect again (after a network drop)."""
+    global _conn, _db_available
+    with _db_lock:   # swap the old connection out; don't hold the lock through the login timeout
+        old, _conn, _db_available = _conn, None, False
+    if old is not None:
+        try:
+            old.close()
+        except Exception:
+            pass
+    return init_db()

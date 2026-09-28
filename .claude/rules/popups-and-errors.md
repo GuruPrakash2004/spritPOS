@@ -6,7 +6,8 @@ This repository follows standard UX patterns for notifications, form mistakes, a
 - **Positioning**: Fixed at bottom centre (`fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000]`), sliding up without blocking the search bar or header buttons.
 - **Card Aesthetics**: Calm surface card (`bg-surface dark:bg-[#141414] border border-line shadow-2xl rounded-xl`) with a 1.5px coloured left stripe (green for success, red for errors).
 - **Dismissal & Timing**:
-  - Every popup (success and error) auto-dismisses after **3 seconds** (`TOAST_DURATION_MS` in `toastStore.ts`) with a thin bottom countdown bar. Hovering pauses it (`onMouseEnter`) so the user can read a long message, and `onMouseLeave` resumes it. The `✕` button closes it early.
+  - Every popup (success and error) auto-dismisses after **1.5 seconds on large screens (1024 px wide and up, Tailwind `lg`) and 3 seconds on smaller ones** (`toastDuration()` in `toastStore.ts`, decided when the popup opens) with a thin bottom countdown bar. Hovering pauses it (`onMouseEnter`) so the user can read a long message, and `onMouseLeave` resumes it. The `✕` button closes it early.
+- **Motion**: the countdown bar runs on `requestAnimationFrame` (every frame). Cards slide in and fade out (`toast-enter` / `toast-leaving` in `index.css`; `toastStore.remove()` waits for the exit): 0.25 s in and 0.22 s out on large screens, and a softer 0.48 s in and 0.38 s out below `lg`. With reduced motion turned on, cards appear and close without animating.
 - **De-duplication**: Repeated triggers of the exact same message shake the existing card, display a multiplier (`×2`, `×3`), and restart the timer rather than spawning duplicates.
 - **Stacking**: Maximum 3 cards stacked vertically.
 - **Dark Mode**: Both snackbars and modals follow the active dark mode theme classes (`dark:bg-[#141414] dark:border-[#2A2A2A]`).

@@ -3,3 +3,4 @@ uvicorn[standard]>=0.30
 pymssql>=2.4
 pyjwt>=2.8.0
 pyodbc>=5.0; sys_platform != "darwin"
+certifi>=2024.2.2   # CA certificates for SMTP TLS (app/mailer.py)

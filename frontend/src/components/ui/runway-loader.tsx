@@ -300,7 +300,7 @@ export default function RunwayLoader({
 
           {/* Dynamic Green (Save) / Red (Delete) Progress Fill */}
           <div
-            className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-75 ease-linear"
+            className="absolute inset-y-0 left-0 rounded-full will-change-[width]"
             style={{
               width: `${progress}%`,
               background: fillGradient,
@@ -311,7 +311,7 @@ export default function RunwayLoader({
 
         {/* Softvent Commercial Delivery Truck Moving Along Highway */}
         <div
-          className="pointer-events-none absolute bottom-[5px] z-10 transition-[left] duration-75 ease-linear"
+          className="pointer-events-none absolute bottom-[5px] z-10 will-change-[left,transform]"
           style={{
             left: `${progress}%`,
             transform: `translateX(-${progress}%)`,

@@ -7,7 +7,7 @@ import { numberToWords } from '../../../lib/formatters';
 
 interface A4GstTaxInvoiceLayoutProps {
   modelId: string;
-  data: any;
+  data: unknown;
   company: ApiCompany | null;
   watermark?: string;
   isPrintPreview?: boolean;

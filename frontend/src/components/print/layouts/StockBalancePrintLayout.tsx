@@ -15,12 +15,12 @@ interface StockRow {
   issQty: number;
   clQty: number;
   rate: number;
-  value: number;
+  value: number | null;   // null when the server hides cost from this role
 }
 
 interface StockBalancePrintLayoutProps {
   modelId: string;
-  data: any;
+  data: unknown;
   company: ApiCompany | null;
   watermark?: string;
   isPrintPreview?: boolean;
@@ -36,7 +36,7 @@ export const StockBalancePrintLayout: React.FC<StockBalancePrintLayoutProps> = (
   const storeName = company?.name || 'THE LIQUOR HOUSE';
   const storeLicence = company?.licence_type ? `${company.licence_type}` : 'CL-2 Retail Vend of Liquor';
 
-  const rows: StockRow[] = (Array.isArray(data) && data.length > 0) ? data : SAMPLE_STOCK_BALANCE_DATA;
+  const rows: StockRow[] = (Array.isArray(data) && data.length > 0) ? data as StockRow[] : SAMPLE_STOCK_BALANCE_DATA;
   const isNoValuation = modelId === 'RptStkBal_Without_CLvalue';
 
   // Compute totals
@@ -44,7 +44,8 @@ export const StockBalancePrintLayout: React.FC<StockBalancePrintLayoutProps> = (
   const totalRec = rows.reduce((acc, r) => acc + (r.recQty || 0), 0);
   const totalIss = rows.reduce((acc, r) => acc + (r.issQty || 0), 0);
   const totalCl = rows.reduce((acc, r) => acc + (r.clQty || 0), 0);
-  const totalVal = rows.reduce((acc, r) => acc + (r.value || 0), 0);
+  // No total when values are hidden: a ₹0.00 total would be wrong, not hidden.
+  const totalVal = rows.some(r => r.value === null) ? null : rows.reduce((acc, r) => acc + (r.value || 0), 0);
 
   return (
     <div

@@ -10,10 +10,11 @@
 
 import { SnackbarContainer } from './components/common/Toast';
 import { useEffect, useState } from 'react';
-import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard } from 'lucide-react';
+import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard, KeyRound } from 'lucide-react';
+import ChangePasswordDialog from './components/auth/ChangePasswordDialog';
 import KeyboardShortcutsModal from './components/common/KeyboardShortcutsModal';
 import AdminMaster from './components/admin/AdminMaster';
-import { api, setAuthUser, todayIso, type ApiDsr, type ApiUser } from './lib/api';
+import { api, getAuthToken, setAuthRights, setAuthUser, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
 import { ADMIN_MASTER, ADMIN_PATH, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
 import { iconButton, primaryButton } from './lib/styles';
 import CashDenomination from './components/transactions/CashDenomination';
@@ -43,6 +44,14 @@ import { Dashboard } from './components/dashboard/Dashboard';
 import StockBalanceReport from './components/reports/StockBalanceReport';
 import { useCompanyProfile } from './hooks/useCompanyProfile';
 
+// Per-tab memory for a page refresh (sessionStorage; cleared when the tab closes).
+const FY_KEY = 'vlqms_fin_year';
+const TAB_KEY = 'vlqms_active_tab';
+const DEFAULT_FIN_YEAR = '01/04/2026 - 31/03/2027';
+const SESSION_CHECK_MS = 60_000;
+const readSaved = (key: string) => { try { return sessionStorage.getItem(key) || ''; } catch { return ''; } };
+const writeSaved = (key: string, value: string) => { try { sessionStorage.setItem(key, value); } catch { /* storage blocked */ } };
+
 export default function App() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('Dashboard');
@@ -52,14 +61,71 @@ export default function App() {
   });
   const [billOpen, setBillOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [dsr, setDsr] = useState<ApiDsr | null>(null);
   const [session, setSession] = useState<{ user: ApiUser; finYear: string } | null>(null);
   const { company } = useCompanyProfile();
+  // Why the last session ended (shown on the sign-in page), e.g. "Your session has expired".
+  const [sessionNotice, setSessionNotice] = useState('');
 
-  // Refresh the footer's bill count / today's sales from the backend DSR whenever the screen changes.
+  // Any 401 from the backend ends the session: forget the token and go back to the sign-in page.
   useEffect(() => {
+    setSessionEndedHandler(reason => {
+      setAuthUser('', '', '');
+      setSession(null);
+      setBillOpen(false);
+      setSessionNotice(reason);
+    });
+    return () => setSessionEndedHandler(null);
+  }, []);
+
+  // After a page refresh the tab still holds the login token: check it with the server and restore
+  // the session (and the screen the user was on) instead of showing the sign-in page again.
+  const [restoring, setRestoring] = useState(() => !!getAuthToken());
+  useEffect(() => {
+    if (!getAuthToken()) return;
+    api<ApiUser>('/auth/me')
+      .then(me => {
+        setAuthUser(me.user, me.role);
+        setAuthRights(me.modules, me.rights);
+        setSession({ user: me, finYear: readSaved(FY_KEY) || DEFAULT_FIN_YEAR });
+        const tab = readSaved(TAB_KEY);
+        if (tab && (tab === 'Dashboard' || canOpen(me.modules, me.role, tab))) setActiveTab(tab);
+      })
+      .catch(() => undefined)   // a 401 already sent us to the sign-in page with the reason
+      .finally(() => setRestoring(false));
+  }, []);
+
+  // Session check every minute and when the window regains focus: an expired token, a password change
+  // or a deactivated user ends the session within a minute (the 401 handler above shows the reason),
+  // and role changes made in Admin Master reach the sidebar and buttons without logging out.
+  useEffect(() => {
+    if (!session) return;
+    const check = () => {
+      api<ApiUser>('/auth/me')
+        .then(me => {
+          setAuthRights(me.modules, me.rights);
+          setSession(s => (s && (s.user.role !== me.role || s.user.modules.join() !== me.modules.join()
+            || JSON.stringify(s.user.rights ?? {}) !== JSON.stringify(me.rights ?? {}))
+            ? { ...s, user: { ...s.user, role: me.role, modules: me.modules, rights: me.rights } } : s));
+        })
+        .catch(() => undefined);   // offline: try again next time; a 401 is handled by the session handler
+    };
+    const timer = setInterval(check, SESSION_CHECK_MS);
+    const onFocus = () => check();
+    window.addEventListener('focus', onFocus);
+    return () => { clearInterval(timer); window.removeEventListener('focus', onFocus); };
+  }, [session]);
+
+  // Remember the open screen for the next refresh.
+  useEffect(() => { if (session) writeSaved(TAB_KEY, activeTab); }, [session, activeTab]);
+
+  // Refresh the footer's bill count / today's sales from the backend DSR after login and whenever the
+  // screen changes. The DSR needs a login token, so nothing is fetched on the sign-in page.
+  useEffect(() => {
+    if (!session) return;
     api<ApiDsr>(`/reports/dsr?on=${todayIso()}`).then(setDsr).catch(() => setDsr(null));
-  }, [activeTab, billOpen]);
+  }, [session, activeTab, billOpen]);
 
   // Dialogs and toasts are portalled to <body>, so the theme class lives on <html> as well.
   useEffect(() => {
@@ -138,8 +204,14 @@ export default function App() {
   };
 
   // After login, always start on Dashboard first and reset path to /
-  if (!session) return <Login onLogin={(user, finYear) => {
+  if (restoring) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#FFFCF7] text-sm text-stone-500 dark:bg-[#0B0B0B] dark:text-stone-400">Signing you back in…</div>;
+  }
+  if (!session) return <Login notice={sessionNotice} onLogin={(user, finYear) => {
+    writeSaved(FY_KEY, finYear);
+    setSessionNotice('');
     setAuthUser(user.user, user.role, user.access_token || user.token);
+    setAuthRights(user.modules, user.rights);
     setSession({ user, finYear });
     if (window.location.pathname === ADMIN_PATH) {
       window.history.replaceState(null, '', '/');
@@ -203,7 +275,8 @@ export default function App() {
                 <div className="text-xs font-medium text-[#29231F] dark:text-stone-50">{user.user}</div>
                 <div className="text-[11px] text-[#70675F] dark:text-stone-400">{user.role}</div>
               </div>
-              <button onClick={() => { setSession(null); setAuthUser('', '', ''); setBillOpen(false); setActiveTab('Dashboard'); }} className={`${iconButton} hover:text-[#9A4B45] print:hidden dark:hover:text-red-400`} title="Log out" aria-label="Log out"><LogOut size={16} /></button>
+              <button onClick={() => setChangingPassword(true)} className={`${iconButton} print:hidden`} title="Change my password" aria-label="Change my password"><KeyRound size={16} /></button>
+              <button onClick={() => { setSession(null); setAuthUser('', '', ''); setBillOpen(false); setActiveTab('Dashboard'); writeSaved(TAB_KEY, ''); }} className={`${iconButton} hover:text-[#9A4B45] print:hidden dark:hover:text-red-400`} title="Log out" aria-label="Log out"><LogOut size={16} /></button>
             </div>
           </div>
         </header>
@@ -230,6 +303,7 @@ export default function App() {
         </footer>
       </div>
       <SnackbarContainer />
+      {changingPassword && <ChangePasswordDialog user={user.user} onClose={() => setChangingPassword(false)} />}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );

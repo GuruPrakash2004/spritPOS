@@ -174,12 +174,13 @@ const LiquidDropletWaterfall = () => {
   );
 };
 
-export default function Login({ onLogin }: { onLogin: (user: ApiUser, finYear: string) => void }) {
+export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUser, finYear: string) => void; notice?: string }) {
   const { company } = useCompanyProfile();
   const [user, setUser] = useState('ADMIN');
   const [password, setPassword] = useState('');
   const [finYear, setFinYear] = useState(FIN_YEARS[0]);
-  const [error, setError] = useState('');
+  // Starts with the reason the last session ended, if any (see App.tsx).
+  const [error, setError] = useState(notice);
   const [busy, setBusy] = useState(false);
 
   // Theme toggle state

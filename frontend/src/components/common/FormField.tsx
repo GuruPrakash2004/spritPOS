@@ -2,7 +2,7 @@
 // when `error` is set. Part of the form-validation pattern in .claude/rules/popups-and-errors.md.
 
 import type { ChangeEvent } from 'react';
-import { field, label } from '../../lib/styles';
+import { field, fieldError, label } from '../../lib/styles';
 import { InlineError } from './FormErrorSummary';
 
 // Labelled input supporting Amazon-style error highlight and inline errors.
@@ -52,9 +52,7 @@ export function TextField({
         readOnly={readOnly}
         aria-invalid={hasError}
         aria-errormessage={hasError && errorMessage ? `${id}-err` : undefined}
-        className={`${field} ${className} ${
-          hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''
-        }`}
+        className={`${field} ${className} ${hasError ? fieldError : ''}`}
       />
       <InlineError message={errorMessage} id={`${id}-err`} />
     </div>
