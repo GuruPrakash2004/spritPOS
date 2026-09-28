@@ -1,7 +1,7 @@
 // Company Master: the store's profile (name, address, GSTIN, licence, FY) plus Images and Documents tabs.
 // Loads GET /masters/company and saves with PUT (Administrator only). After a save it calls
 // notifyCompanyProfileUpdated() so the header, login page and prints refresh.
-// Known backend bug: PUT /masters/company currently returns 500 (see .claude/CLAUDE.md).
+// Backup database (Administrator only) downloads the web app's SQLite state file from GET /admin/backup.
 
 import { useState, useEffect } from 'react';
 import { 
@@ -11,8 +11,9 @@ import {
 import { CompanyDocuments, CompanyImages } from './CompanyFiles';
 import { TextField } from '../common/FormField';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
-import { api, errorText, type ApiCompany } from '../../lib/api';
+import { api, apiDownload, errorText, type ApiCompany } from '../../lib/api';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
 import { badge, field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
 
@@ -42,7 +43,6 @@ const dmy = (iso?: string) => (iso ? iso.split('-').reverse().join('/') : '—')
 
 // Features the legacy desktop app has that the web app can't do yet: say so instead of faking success.
 const NOT_YET = {
-  backup: 'Database backup isn\'t available in the web app yet. Take the backup on the office SQL Server.',
   newYear: 'Creating a new financial year isn\'t available in the web app yet. Use the desktop app (Create Financial Year).',
 };
 
@@ -104,7 +104,24 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
     }
   };
 
-  const handleBackup = () => setToast({ kind: 'error', text: NOT_YET.backup });
+  // Downloads the web app's own data (SQLite). The SQL Server database is still backed up on the server.
+  // The popup waits first: the download starts only when it closes, and Cancel stops it.
+  const [backingUp, setBackingUp] = useState(false);
+  const handleBackup = async () => {
+    setBackingUp(true);
+    try {
+      if (!(await toastStore.defer('backup', 'Database backup will download when this closes.'))) {
+        toastStore.add('backup', 'Backup cancelled.');
+        return;
+      }
+      const name = await apiDownload('/admin/backup', 'vlqms_backup.sqlite3');
+      setToast({ kind: 'ok', text: `Database backup downloaded: ${name}` });
+    } catch (error) {
+      setToast({ kind: 'error', text: errorText(error) });
+    } finally {
+      setBackingUp(false);
+    }
+  };
 
   // Keyboard shortcut for Cmd/Ctrl+S
   useEffect(() => {
@@ -133,7 +150,11 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
           <p className={pageSub}>Firm credentials, excise licences, retailer IDs and financial periods.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleBackup} className={secondaryButton}><DatabaseBackup size={14} />Backup database</button>
+          {canEditFiles && (
+            <button onClick={handleBackup} disabled={backingUp} className={secondaryButton} title="Download a copy of the web app's data (SQLite file)">
+              <DatabaseBackup size={14} />{backingUp ? 'Backing up…' : 'Backup database'}
+            </button>
+          )}
           {canEditFiles && <button onClick={handleSave} className={primaryButton}><Save size={14} />Save Master</button>}
         </div>
       </div>

@@ -86,14 +86,39 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
   }
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    // FastAPI sends { detail: string } for HTTPException and { detail: [{ msg }] } for validation errors.
-    const detail = data?.detail;
-    const message = Array.isArray(detail) ? detail.map((d: { msg: string }) => d.msg).join('; ') : detail;
-    if (res.status === 401 && path !== '/auth/login' && authToken) onSessionEnded?.(message || 'Please log in again.');
-    throw new ApiError(message || `Request failed (${res.status})`);
-  }
+  if (!res.ok) failed(res, path, data);
   return data as T;
+}
+
+// Throw the server's message as ApiError (and end the session on a 401).
+function failed(res: Response, path: string, data: { detail?: unknown } | null): never {
+  // FastAPI sends { detail: string } for HTTPException and { detail: [{ msg }] } for validation errors.
+  const detail = data?.detail;
+  const message = Array.isArray(detail) ? detail.map((d: { msg: string }) => d.msg).join('; ') : detail as string | undefined;
+  if (res.status === 401 && path !== '/auth/login' && authToken) onSessionEnded?.(message || 'Please log in again.');
+  throw new ApiError(message || `Request failed (${res.status})`);
+}
+
+// Download a file the backend builds (e.g. '/admin/backup'): fetched with the login token, then handed
+// to the browser's download under the server's file name. Returns that name.
+export async function apiDownload(path: string, fallbackName: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} });
+  } catch {
+    throw new ApiError('Backend is not reachable. Start it with: cd backend && .venv/bin/uvicorn app.main:app --reload --port 8001');
+  }
+  if (!res.ok) failed(res, path, await res.json().catch(() => null));
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);   // revoking at once can cancel the download in Safari
+  return name;
 }
 
 // A fresh key for one draft document (see api's idempotencyKey).

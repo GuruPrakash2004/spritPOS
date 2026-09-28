@@ -87,3 +87,40 @@ def test_loader_keeps_bills_made_in_the_app():
     _drop_loaded(docs)
 
     assert list(docs) == ["C"]
+
+
+async def test_backup_downloads_a_working_copy_of_the_state_file(client, state_file, tmp_path):
+    import sqlite3
+    sale = (await client.post("/transactions/sales-invoice", json={
+        "date": TODAY, "counter": "counter10", "salesperson": "GURU", "lines": [{"item_code": "VIN-750", "bottles": 1}]})).json()
+
+    r = await client.get("/admin/backup")
+
+    assert r.status_code == 200
+    assert r.headers["content-disposition"].startswith('attachment; filename="vlqms_backup_')
+    copy_path = tmp_path / "copy.sqlite3"
+    copy_path.write_bytes(r.content)
+    with sqlite3.connect(copy_path) as conn:
+        assert sale["doc_no"] in conn.execute("SELECT data FROM state WHERE id = 1").fetchone()[0]
+        conn.execute("SELECT COUNT(*) FROM web_outbox").fetchone()
+
+
+async def test_backup_is_administrator_only(manager_client, cashier_client, state_file):
+    assert (await manager_client.get("/admin/backup")).status_code == 403
+    assert (await cashier_client.get("/admin/backup")).status_code == 403
+
+
+async def test_backup_says_so_when_nothing_is_saved(client, state_file):
+    r = await client.get("/admin/backup")
+
+    assert r.status_code == 404
+    assert "Nothing to back up" in r.json()["detail"]
+
+
+async def test_backup_refused_when_saving_is_off(client, monkeypatch):
+    monkeypatch.setattr(persistence, "PATH", "")
+
+    r = await client.get("/admin/backup")
+
+    assert r.status_code == 409
+    assert "turned off" in r.json()["detail"]

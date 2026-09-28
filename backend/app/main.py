@@ -7,6 +7,7 @@ the in-memory store; without a connection it runs on the seed data in store.py.
 import asyncio
 import hashlib
 import logging
+from datetime import datetime
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -171,6 +172,21 @@ def update_settings(body: SettingsIn, admin: dict = Depends(auth.require_admin))
 @app.get("/sales-persons", tags=["Sales Invoice"])
 def sales_persons():
     return store.SALES_PERSONS
+
+
+@app.get("/admin/backup", tags=["Company Master"])
+def download_backup(admin: dict = Depends(auth.require_admin)):
+    """Company Master → Backup database: download a copy of the web app's SQLite state file (bills, stock
+    moves, master/user edits, settings, write-back outbox). Administrator only: it holds password hashes.
+    It does not back up the SQL Server database."""
+    if not persistence.enabled():
+        raise HTTPException(409, "Saving to disk is turned off on this server (VLQMS_STATE_DB is empty), so there is nothing to back up.")
+    data = persistence.backup_bytes()
+    if data is None:
+        raise HTTPException(404, "Nothing to back up yet: the web app hasn't saved any data on this server.")
+    name = f"vlqms_backup_{datetime.now():%Y%m%d_%H%M%S}.sqlite3"
+    return Response(data, media_type="application/vnd.sqlite3",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
 
 
 # ─── SQL Server write-back (app/writeback.py): Administrator only ───────────────

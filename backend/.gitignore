@@ -4,7 +4,30 @@ uploads/
 .env
 *.env
 
+# Rpts/ holds only the legacy .rpt print formats the app uses (plus the layout audit). They are committed so
+# they ship with the backend when it is hosted; anything else dropped in here stays local.
 Rpts/*
+!Rpts/RPT_LAYOUT_AUDIT.md
+!Rpts/RptDSR.rpt
+!Rpts/RptDSR_S.rpt
+!Rpts/RptDropsDSR.rpt
+!Rpts/RptItemSalesDay.rpt
+!Rpts/RptStkBal.rpt
+!Rpts/RptStkBal_Biggsize.rpt
+!Rpts/RptStkBal_Without CLvalue.rpt
+!Rpts/RptStkBal_with Mrp and inv rate.rpt
+!Rpts/fmtExp.rpt
+!Rpts/fmtPB.rpt
+!Rpts/fmtPB_A4.rpt
+!Rpts/fmtPSE.rpt
+!Rpts/fmtSInv.rpt
+!Rpts/fmtSPInvPrint_GST.rpt
+!Rpts/fmtSPInvPrint_watermark.rpt
+!Rpts/fmtSTKDED.rpt
+!Rpts/fmtSTKDED_A4.rpt
+# Also used, but they embed the desktop app's SQL Server connection (server name, database, user sa),
+# so they stay local and are copied to the host by hand: fmtPI, fmtQTN, fmtSInv_GST, fmtSPInvPrint,
+# fmtSR, RptDSR_8.5, UDRSalesItemwise.
 
 
 

@@ -52,7 +52,7 @@ The web app's own changes (bills, stock movements, users and password hashes, ro
 | `app/routers/custom_reports.py` | `GET /reports/custom`, the Customised Reports list; `POST /reports/custom/email` |
 | `app/routers/company_files.py` | `/company/files`: company images and documents (8 MB limit) |
 
-`Rpts/` (gitignored) is a copy of the legacy report folder, and `/reports/rpt-files` lists its `.rpt` files. `app/random.py` only holds a comment with a one-liner for generating a `JWT_SECRET`.
+`Rpts/` holds the 24 legacy `.rpt` print formats the app uses (and `RPT_LAYOUT_AUDIT.md`), and `/reports/rpt-files` lists them. They are committed through the allow-list in `.gitignore`. Seven used formats embed the desktop app's SQL Server connection (server, database, user), so they are not committed: copy `fmtPI`, `fmtQTN`, `fmtSInv_GST`, `fmtSPInvPrint`, `fmtSR`, `RptDSR_8.5` and `UDRSalesItemwise` `.rpt` into `Rpts/` on the host by hand. `app/random.py` only holds a comment with a one-liner for generating a `JWT_SECRET`.
 
 ## Auth
 

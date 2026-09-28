@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import sqlite3
+import tempfile
 import threading
 from contextlib import closing, contextmanager
 from datetime import datetime, timedelta
@@ -142,6 +143,19 @@ def save() -> None:
                 conn.execute("INSERT OR REPLACE INTO state (id, saved_at, data) VALUES (1, ?, ?)", (_now(), data))
             _insert_events(conn, store.OUTBOX)
         store.OUTBOX.clear()   # only after the commit: if it failed, they go with the next successful save
+
+
+def backup_bytes() -> bytes | None:
+    """A consistent copy of the state file (state + outbox) as bytes, for the Company Master backup download.
+    Taken with SQLite's online backup under the lock, so a save in progress can't leave it half-written.
+    None when saving is off or nothing has been saved yet."""
+    if not enabled() or not Path(PATH).exists():
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "backup.sqlite3"
+        with _lock, closing(sqlite3.connect(PATH, timeout=10)) as src, closing(sqlite3.connect(target)) as copy:
+            src.backup(copy)
+        return target.read_bytes()
 
 
 def load() -> bool:

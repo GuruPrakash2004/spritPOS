@@ -2,16 +2,20 @@
 //
 // Call showToast(kind, text) or toast.ok/error(...) from anywhere; <SnackbarContainer /> in App.tsx
 // renders them. Rules (see .claude/rules/popups-and-errors.md):
-// - every popup closes after toastDuration(): 1.5 s on large screens (lg, 1024 px wide and up), 3 s on
+// - every popup closes after toastDuration(): 2.5 s on large screens (lg, 1024 px wide and up), 3.2 s on
 //   smaller ones; hovering pauses the countdown;
 // - the same message again shakes the existing card and shows ×2, ×3 instead of stacking;
 // - at most 3 cards are shown.
 // Use popups for server results only; form mistakes are shown inline (FormField / InlineError).
+//
+// Waiting popups (toastStore.defer / toast.later): the action waits for the popup. It shows a Cancel
+// button and stays the same toastDuration() as any popup (hover pauses it) so the user has time to decide; the promise
+// resolves true when the popup closes (countdown ends or ✕), false if Cancel was pressed.
 
 export type ToastKind = 'ok' | 'error' | 'delete' | 'refresh' | 'backup';
 
-export const TOAST_DURATION_MS = 3000;          // phones, tablets and smaller laptops
-export const TOAST_DURATION_LARGE_MS = 1500;    // large screens
+export const TOAST_DURATION_MS = 3200;          // phones, tablets and smaller laptops
+export const TOAST_DURATION_LARGE_MS = 2500;    // large screens
 export const LARGE_SCREEN_QUERY = '(min-width: 1024px)';   // Tailwind's lg breakpoint
 
 // How long a new popup stays, by the screen width when it opens.
@@ -31,10 +35,11 @@ export interface ToastItem {
   text: string;
   count: number;
   shakeKey: number;
-  duration: number; // toastDuration(): 1500 on large screens, 3000 below
+  duration: number; // toastDuration(): 2500 on large screens, 3200 below
   remaining: number;
   paused: boolean;
   leaving: boolean; // playing its exit animation; removed when it ends
+  pending?: boolean; // a waiting popup (defer): shows Cancel; its action runs when it closes
 }
 
 // The countdown runs on the browser's frame clock (requestAnimationFrame), so the bar moves every frame
@@ -49,6 +54,7 @@ class ToastStore {
   private listeners = new Set<() => void>();
   private frameId: number | null = null;
   private lastTick = Date.now();
+  private waiting = new Map<string, (go: boolean) => void>();   // defer() promises by toast id
 
   private emit() {
     this.listeners.forEach(fn => fn());
@@ -145,14 +151,54 @@ class ToastStore {
       leaving: false,
     };
 
-    // Keep max 3 stacked
-    let nextList = [...this.items, newItem];
+    this.push(newItem);
+  }
+
+  // Keep max 3 stacked. A waiting popup pushed out of the stack counts as closed: its action runs.
+  private push(item: ToastItem) {
+    let nextList = [...this.items, item];
     if (nextList.length > 3) {
+      nextList.slice(0, nextList.length - 3).forEach(old => this.settle(old.id, true));
       nextList = nextList.slice(nextList.length - 3);
     }
     this.items = nextList;
     this.emit();
     this.startTimer();
+  }
+
+  // A waiting popup: resolves true when it closes (countdown or ✕), false on Cancel. The same
+  // message while one is already waiting just shakes it and resolves false, so a double-click runs once.
+  defer(kind: ToastKind, text: string): Promise<boolean> {
+    const cleanText = text.trim();
+    const existing = this.items.find(i => i.pending && i.text === cleanText && !i.leaving);
+    if (existing) {
+      this.items = this.items.map(i => (i.id === existing.id ? { ...i, shakeKey: i.shakeKey + 1 } : i));
+      this.emit();
+      return Promise.resolve(false);
+    }
+    const duration = toastDuration();
+    const item: ToastItem = {
+      id: `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind, text: cleanText, count: 1, shakeKey: 0,
+      duration, remaining: duration,
+      paused: false, leaving: false, pending: true,
+    };
+    const result = new Promise<boolean>(resolve => this.waiting.set(item.id, resolve));
+    this.push(item);
+    return result;
+  }
+
+  // Cancel a waiting popup: its action does not run.
+  cancel(id: string) {
+    this.settle(id, false);
+    this.remove(id);
+  }
+
+  private settle(id: string, go: boolean) {
+    const resolve = this.waiting.get(id);
+    if (!resolve) return;
+    this.waiting.delete(id);
+    resolve(go);
   }
 
   // Close a card: it plays its exit animation first, then leaves the list.
@@ -167,6 +213,7 @@ class ToastStore {
   }
 
   private drop(id: string) {
+    this.settle(id, true);   // a waiting popup that closed without Cancel: go ahead
     this.items = this.items.filter(i => i.id !== id);
     this.emit();
     if (!this.items.some(i => i.duration > 0 && !i.paused && !i.leaving)) {
@@ -202,4 +249,6 @@ export const toast = {
   delete: (text: string) => toastStore.add('delete', text),
   refresh: (text: string) => toastStore.add('refresh', text),
   backup: (text: string) => toastStore.add('backup', text),
+  // `if (await toast.later('backup', 'Backup starts when this closes')) { ... }`: see defer().
+  later: (kind: ToastKind, text: string) => toastStore.defer(kind, text),
 };

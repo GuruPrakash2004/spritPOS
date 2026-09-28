@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Printer, RefreshCw } from 'lucide-react';
-import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { api, errorText, qs, todayIso, type ApiFullDsr } from '../../lib/api';
 import {  field, money, pageSub, pageTitle, panel, secondaryButton, pageHeader , printButton } from '../../lib/styles';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
@@ -13,33 +13,27 @@ import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 export default function DailySummaryReport() {
   const [on, setOn] = useState(todayIso());
   const [dsr, setDsr] = useState<ApiFullDsr | null>(null);
-  const [error, setError] = useState('');
-  const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
 
   const load = useCallback(() => {
-    api<ApiFullDsr>(`/reports/dsr${qs({ on })}`)
-      .then(d => { setDsr(d); setError(''); })
-      .catch(e => setError(errorText(e)));
+    return api<ApiFullDsr>(`/reports/dsr${qs({ on })}`)
+      .then(d => { setDsr(d); setLoadedAt(new Date()); return true; })
+      .catch(e => { toastStore.add('error', errorText(e)); return false; });
   }, [on]);
 
   useEffect(() => { load(); }, [load]);
 
-  const handleRefresh = () => {
+  // Every press fetches the report again and says so. The popup goes to toastStore directly: a <Toast>
+  // with the same text as last time would not show again, so a second Refresh looked like it did nothing.
+  const handleRefresh = async () => {
     setRefreshing(true);
-    api<ApiFullDsr>(`/reports/dsr${qs({ on })}`)
-      .then(d => {
-        setDsr(d);
-        setError('');
-        setToast({ kind: 'ok', text: `Daily Summary Report for ${on} refreshed.` });
-      })
-      .catch(e => {
-        const msg = errorText(e);
-        setError(msg);
-        setToast({ kind: 'error', text: msg });
-      })
-      .finally(() => setRefreshing(false));
+    try {
+      if (await load()) toastStore.add('refresh', `Daily Summary Report for ${on} refreshed.`);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const kpis: [string, string][] = dsr ? [
@@ -67,12 +61,13 @@ export default function DailySummaryReport() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-4">
-      {error && <Toast kind="error" text={error} />}
-      {toast && <Toast kind={toast.kind} text={toast.text} />}
       <div className={pageHeader}>
         <div>
           <h1 className={pageTitle}>Daily Summary Report</h1>
-          <p className={pageSub}>Sales, stock, payments, purchases and cash for one day.</p>
+          <p className={pageSub}>
+            Sales, stock, payments, purchases and cash for one day.
+            {loadedAt && <span className="tabular-nums"> · Updated {loadedAt.toLocaleTimeString()}</span>}
+          </p>
         </div>
         <div className="flex items-end gap-2 print:hidden">
           <input type="date" value={on} onChange={e => setOn(e.target.value)} className={`${field} tabular-nums`} aria-label="Report date" />

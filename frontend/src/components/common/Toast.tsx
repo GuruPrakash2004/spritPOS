@@ -95,6 +95,17 @@ export function SnackbarContainer() {
                 {item.text}
               </div>
 
+              {/* Waiting popup: the action runs when it closes unless Cancel is pressed */}
+              {item.pending && !item.leaving && (
+                <button
+                  type="button"
+                  onClick={() => toastStore.cancel(item.id)}
+                  className="shrink-0 rounded-md border border-current/30 px-2 py-0.5 text-[11px] font-semibold hover:bg-black/5 dark:hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+              )}
+
               {/* Close Button */}
               <button
                 type="button"
