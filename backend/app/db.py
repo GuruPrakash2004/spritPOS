@@ -6,6 +6,7 @@ runs during development without a live SQL Server.
 """
 import os
 import logging
+import threading
 from functools import lru_cache
 from typing import Any
 
@@ -46,7 +47,10 @@ DB_DRIVER_OVERRIDE = _env("DB_DRIVER")
 
 # ─── Connection ──────────────────────────────────────────────────────────────
 
-_conn = None          # shared synchronous connection (thread-safe via lock)
+_conn = None          # shared synchronous connection; every query goes through _db_lock
+# pymssql/pyodbc connections can't run two queries at once, and requests (thread pool) plus the
+# background loader share this one connection, so all cursor use is serialised.
+_db_lock = threading.RLock()
 _db_available = False
 _driver_used: str = ""
 
@@ -160,13 +164,14 @@ def fetchall(sql: str, params: tuple = ()) -> list[dict]:
     conn = get_conn()
     if conn is None:
         return []
-    cur = conn.cursor()
-    try:
-        cur.execute(sql, params)
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
-    finally:
-        cur.close()
+    with _db_lock:
+        cur = conn.cursor()
+        try:
+            cur.execute(sql, params)
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+        finally:
+            cur.close()
 
 
 def fetchone(sql: str, params: tuple = ()) -> dict | None:
@@ -179,16 +184,17 @@ def execute(sql: str, params: tuple = ()) -> int:
     conn = get_conn()
     if conn is None:
         raise RuntimeError("No database connection")
-    cur = conn.cursor()
-    try:
-        cur.execute(sql, params)
-        conn.commit()
-        return cur.rowcount
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cur.close()
+    with _db_lock:
+        cur = conn.cursor()
+        try:
+            cur.execute(sql, params)
+            conn.commit()
+            return cur.rowcount
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
 
 
 def executemany(sql: str, rows: list[tuple]) -> int:
@@ -196,13 +202,14 @@ def executemany(sql: str, rows: list[tuple]) -> int:
     conn = get_conn()
     if conn is None:
         raise RuntimeError("No database connection")
-    cur = conn.cursor()
-    try:
-        cur.executemany(sql, rows)
-        conn.commit()
-        return cur.rowcount
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cur.close()
+    with _db_lock:
+        cur = conn.cursor()
+        try:
+            cur.executemany(sql, rows)
+            conn.commit()
+            return cur.rowcount
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()

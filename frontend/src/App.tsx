@@ -173,7 +173,7 @@ export default function App() {
             <h2 className="truncate text-[15px] font-semibold leading-tight text-[#29231F] dark:text-stone-50">{moduleLabel}</h2>
           </div>
 
-          <div className="order-last w-full sm:order-none sm:ml-auto sm:w-auto sm:flex-1 sm:max-w-md flex items-center gap-2">
+          <div className="order-last w-full sm:order-0 sm:ml-auto sm:w-auto sm:flex-1 sm:max-w-md flex items-center gap-2">
             <div className="flex-1 min-w-0">
               <ModuleSearch canOpen={name => canOpen(user.modules, user.role, name)} onOpen={openModule} />
             </div>
@@ -198,7 +198,7 @@ export default function App() {
             <div className="ml-1 flex items-center gap-2 border-l pl-3 border-[#E3D9CD] dark:border-[#2A2A2A]">
               <div className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold
                               bg-[#64283A]/10 text-[#64283A]
-                              dark:bg-gradient-to-br dark:from-[#D4A847]/20 dark:to-[#C8952E]/10 dark:text-[#D4A847] dark:ring-1 dark:ring-[#D4A847]/20" aria-hidden="true">{user.user.slice(0, 2)}</div>
+                              dark:bg-linear-to-br dark:from-[#D4A847]/20 dark:to-[#C8952E]/10 dark:text-[#D4A847] dark:ring-1 dark:ring-[#D4A847]/20" aria-hidden="true">{user.user.slice(0, 2)}</div>
               <div className="hidden leading-tight sm:block">
                 <div className="text-xs font-medium text-[#29231F] dark:text-stone-50">{user.user}</div>
                 <div className="text-[11px] text-[#70675F] dark:text-stone-400">{user.role}</div>

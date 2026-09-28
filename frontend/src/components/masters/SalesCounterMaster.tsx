@@ -2,13 +2,14 @@
 // (/masters/sales-counters). The legacy app needs a counter before any Sales Invoice, so saving a
 // counter opens Sales Invoice setup (onSave).
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Edit3, FilePlus,
   MoreHorizontal, Paperclip, Plus, Save, Search, Trash2, X,
 } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
+import DropdownMenu, { menuItem } from '../common/DropdownMenu';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from '../../lib/styles';
 import { api, errorText, type ApiCounter } from '../../lib/api';
@@ -37,6 +38,8 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const optionsRef = useRef<HTMLButtonElement>(null);
+  const closeOptions = useCallback(() => setOptionsOpen(false), []);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const { confirm, dialog } = useConfirm();
@@ -172,16 +175,12 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
           <p className={pageSub}>Saving opens the Sales Invoice setup for this counter.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-                <button onClick={() => setOptionsOpen(!optionsOpen)} aria-expanded={optionsOpen} aria-label="More options" className={iconButton}><MoreHorizontal size={16} /></button>
-                {optionsOpen && (
-                  <div className="absolute right-0 top-full z-10 mt-1 w-44 overflow-hidden rounded-xl border border-line bg-surface p-1 text-xs shadow-pop">
-                    <button type="button" onClick={handlePrintList} className="block w-full rounded-lg px-3 py-2 text-left text-stone-700 hover:bg-subtle dark:text-stone-200">Print List</button>
-                    <button type="button" onClick={handleExportExcel} className="block w-full rounded-lg px-3 py-2 text-left text-stone-700 hover:bg-subtle dark:text-stone-200">Export to Excel</button>
-                    <button type="button" onClick={handleAuditTrail} className="block w-full rounded-lg px-3 py-2 text-left text-stone-700 hover:bg-subtle dark:text-stone-200">Audit Trail</button>
-                  </div>
-                )}
-              </div>
+          <button ref={optionsRef} onClick={() => setOptionsOpen(!optionsOpen)} aria-expanded={optionsOpen} aria-haspopup="menu" aria-label="More options" className={iconButton}><MoreHorizontal size={16} /></button>
+          <DropdownMenu anchorRef={optionsRef} open={optionsOpen} onClose={closeOptions}>
+            <button type="button" role="menuitem" onClick={handlePrintList} className={menuItem}>Print List</button>
+            <button type="button" role="menuitem" onClick={handleExportExcel} className={menuItem}>Export to Excel</button>
+            <button type="button" role="menuitem" onClick={handleAuditTrail} className={menuItem}>Audit Trail</button>
+          </DropdownMenu>
           {readOnly ? (
             <>
               <button onClick={handleDelete} disabled={!records.length} className={`${ghostButton} hover:!text-red-600 dark:hover:!text-red-400`}><Trash2 size={14} />Delete</button>

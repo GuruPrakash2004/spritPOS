@@ -4,7 +4,7 @@
 // Purchase Indent, and Add Supplier. Saves with POST /transactions/purchase-bill, which adds stock on
 // the backend (store.move_stock).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronsDown, ChevronsUp, Copy, FileInput,
   Info, Paperclip, PlusCircle, RefreshCw, Save, Search, Settings2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
@@ -12,6 +12,7 @@ import {
 import { useConfirm } from '../../common/ConfirmDialog';
 import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, secondaryButton, sectionTitle, tableHead } from '../../../lib/styles';
 import Toast from '../../common/Toast';
+import DropdownMenu, { menuItem } from '../../common/DropdownMenu';
 import { api, errorText, type ApiDoc, type ApiIndent, type ApiSupplier } from '../../../lib/api';
 import { SAMPLE_STOCK_DATA } from '../../../data/stockData';
 import { numberToWords } from '../../../lib/formatters';
@@ -38,6 +39,8 @@ export default function PurchaseBill() {
   const [selectedUid, setSelectedUid] = useState<number>(() => rows[rows.length - 1].uid);
   const [showTaxColumns, setShowTaxColumns] = useState(true);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuRef = useRef<HTMLButtonElement>(null);
+  const closeAddMenu = useCallback(() => setAddMenuOpen(false), []);
   const [lookupOpen, setLookupOpen] = useState(false);
   const [indents, setIndents] = useState<ApiIndent[] | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
@@ -351,14 +354,12 @@ export default function PurchaseBill() {
           <button onClick={() => setLookupOpen(true)} className={`${primaryButton} mr-2`}><PlusCircle size={14} />Add item</button>
           <div className="relative flex items-center">
             <button onClick={() => addRows(1)} className={iconButton} title="Add blank row" aria-label="Add blank row"><PlusCircle size={16} /></button>
-            <button onClick={() => setAddMenuOpen(!addMenuOpen)} className={`${iconButton} w-6`} aria-label="More add options" aria-expanded={addMenuOpen}><ChevronDown size={14} /></button>
-            {addMenuOpen && (
-              <div className="absolute left-0 top-full z-10 mt-1 w-48 overflow-hidden rounded-xl border border-line bg-surface p-1 text-xs shadow-pop">
-                <button onClick={() => addRows(1)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-subtle">Add single item</button>
-                <button onClick={() => addRows(5)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-subtle">Add 5 blank rows</button>
-                <button onClick={() => { const kept = rows.filter(isFilled); setRows(kept.length ? kept : [blankRow()]); setAddMenuOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-subtle">Remove blank rows</button>
-              </div>
-            )}
+            <button ref={addMenuRef} onClick={() => setAddMenuOpen(!addMenuOpen)} className={`${iconButton} w-6`} aria-label="More add options" aria-expanded={addMenuOpen} aria-haspopup="menu"><ChevronDown size={14} /></button>
+            <DropdownMenu anchorRef={addMenuRef} open={addMenuOpen} onClose={closeAddMenu} align="start" width={192}>
+              <button role="menuitem" onClick={() => addRows(1)} className={menuItem}>Add single item</button>
+              <button role="menuitem" onClick={() => addRows(5)} className={menuItem}>Add 5 blank rows</button>
+              <button role="menuitem" onClick={() => { const kept = rows.filter(isFilled); setRows(kept.length ? kept : [blankRow()]); setAddMenuOpen(false); }} className={menuItem}>Remove blank rows</button>
+            </DropdownMenu>
           </div>
           <button onClick={copyRow} className={iconButton} title="Duplicate selected row" aria-label="Duplicate selected row"><Copy size={16} /></button>
           <button onClick={deleteRow} className={`${iconButton} hover:!text-red-600`} title="Delete selected row" aria-label="Delete selected row"><XCircle size={16} /></button>

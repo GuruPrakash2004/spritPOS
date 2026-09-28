@@ -81,6 +81,6 @@ The legacy menu itself lives in the `MstMenu` SQL table of the office database, 
 | Cash Denomination (`frmUtlDenom`) | Built | Note/coin count vs DSR cash balance, saved per date. |
 | Hourly / Daily / Brand-wise Sales (`frmRptHourlySales`, `frmRptDailySales`, `frmRptBrandWise`) | Built | `reports/` with Print and Export CSV. |
 | Litre reports (`frmRptDayLtr`, `frmRptStkLtr`) | Built | Litres sold per day by LIQTYPE, stock in litres. |
-| Stock Level (`frmRptStkLevel`) | Built | Items at or below ROL with suggested ROQ. |
+| Stock Level (`frmRptStkLevel`) | Built | Items at or below ROL with suggested ROQ. The Dashboard's "Restock immediately" carousel goes further: `/reports/restock` ranks items by sales speed and days of stock left (fast sellers running out first) and suggests two weeks' cover. |
 | Cancel remarks (`frmUtlCancelInvRmks`), Hold Bill (`frmUtlHoldBill`) | Built | Part of Sales Invoice. |
 | Merge Items, Compare Stock, Delete Non-Liquor Items, Calculator, on-screen keyboard, Loyalty/SMS history reports | Missing | Not requested yet. |

@@ -154,6 +154,8 @@ DOCS: dict[str, dict[str, dict]] = {k: {} for k in [
 
 # Every stock-affecting line is logged here to drive Stock Ledger / Balance / DSR.
 MOVEMENTS: list[dict] = []
+# Index into MOVEMENTS where in-app activity starts once live DB data is loaded (set by db_store).
+DB_BASE_MOVEMENTS = 0
 
 FY_PREFIX = "26"
 _seq = {k: count(1) for k in DOCS}

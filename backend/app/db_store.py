@@ -9,7 +9,9 @@ For writes (create/update/delete) that need to persist, each router
 should call db.execute() in addition to updating the store dict.
 """
 import logging
-from datetime import date
+import threading
+import time
+from datetime import date, timedelta
 from decimal import Decimal
 
 from . import db, store
@@ -408,6 +410,67 @@ def load_purchase_bills(limit: int = 100) -> None:
     logger.info("Loaded %d purchase bills from DB", len(docs))
 
 
+# ─── Live sales and stock (read on demand, for the Dashboard restock panel) ──────────────────────
+
+LIVE_CACHE_SECONDS = 20          # how often the restock panel may re-query SQL Server
+_live_lock = threading.Lock()
+_live_cache: dict = {"at": 0.0, "key": None, "data": None}
+
+
+def live_sales_and_stock(start: date, end: date) -> dict | None:
+    """Current stock and sales per item straight from SQL Server, cached for LIVE_CACHE_SECONDS.
+
+    The masters and bills loaded at startup are a snapshot; the shop keeps billing after that. This
+    reads, read-only and WITH (NOLOCK):
+      - sales: non-cancelled TrnHdrSINV/TrnDtlSINV lines dated start..end, summed per item;
+      - stock: TrnQOH.CLBal for location 1 (the same column load_items() uses).
+    Returns {"sold": {code: qty}, "last_sold": {code: iso}, "first_sale": iso | None, "qoh": {code: qty}},
+    or None when the DB is unavailable or a query fails (the caller then falls back to memory).
+    Dates are inlined from date objects (server-generated, never user input).
+    """
+    if not db.is_db_available():
+        return None
+    key = (start.isoformat(), end.isoformat())
+    with _live_lock:
+        if _live_cache["key"] == key and time.monotonic() - _live_cache["at"] < LIVE_CACHE_SECONDS:
+            return _live_cache["data"]
+        try:
+            id_to_code = {str(it.get("_itemid")): code for code, it in store.ITEMS.items() if it.get("_itemid")}
+            sales = db.fetchall(f"""
+                SELECT d.ITEMID, SUM(d.SINVQty) AS QTY, MIN(h.SINVDate) AS FIRSTDATE, MAX(h.SINVDate) AS LASTDATE
+                FROM TrnHdrSINV h WITH (NOLOCK)
+                JOIN TrnDtlSINV d WITH (NOLOCK) ON d.SINVID = h.SINVID
+                WHERE h.Cancelled = 'N'
+                  AND h.SINVDate >= '{start.isoformat()}' AND h.SINVDate < '{(end + timedelta(days=1)).isoformat()}'
+                GROUP BY d.ITEMID
+            """)
+            stock = db.fetchall("SELECT ITEMID, CLBal FROM TrnQOH WITH (NOLOCK) WHERE LOCID = 1")
+        except Exception as e:  # keep the panel working on the in-memory data
+            logger.error("live_sales_and_stock failed: %s", e)
+            return None
+
+        sold: dict[str, float] = {}
+        last_sold: dict[str, str] = {}
+        first_sale = None
+        for r in sales:
+            code = id_to_code.get(str(r.get("ITEMID")))
+            if not code:
+                continue
+            sold[code] = sold.get(code, 0.0) + _f(r.get("QTY"))
+            last = str(r.get("LASTDATE") or "")[:10]
+            first = str(r.get("FIRSTDATE") or "")[:10]
+            if last:
+                last_sold[code] = max(last_sold.get(code, ""), last)
+            if first and (first_sale is None or first < first_sale):
+                first_sale = first
+        qoh = {id_to_code[str(r.get("ITEMID"))]: _f(r.get("CLBal"))
+               for r in stock if str(r.get("ITEMID")) in id_to_code}
+
+        data = {"sold": sold, "last_sold": last_sold, "first_sale": first_sale, "qoh": qoh}
+        _live_cache.update(at=time.monotonic(), key=key, data=data)
+        return data
+
+
 def load_masters() -> None:
     """Load all master tables from SQL Server (runs in < 0.2s)."""
     for fn in (load_company, load_item_groups, load_brands, load_uoms, load_items, load_customers, load_suppliers, load_users):
@@ -416,6 +479,8 @@ def load_masters() -> None:
         except Exception as e:
             logger.error("%s failed: %s", fn.__name__, e)
     logger.info("Master data loaded: %d items, %d users, %d suppliers", len(store.ITEMS), len(store.USERS), len(store.SUPPLIERS))
+    # Movements before this index are the seeded demo history; later ones are bills made in this app.
+    store.DB_BASE_MOVEMENTS = len(store.MOVEMENTS)
 
 
 def load_transactions() -> None:

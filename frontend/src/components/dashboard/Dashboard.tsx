@@ -3,6 +3,9 @@
 // Reads GET /reports/dsr (today), /reports/sales/daily (last 7 days), /reports/stock-movement,
 // /transactions/purchase-indent, /masters/items and the first company image. Each panel shows a
 // "Live" badge when its data came from the API and "Unavailable" when the call failed.
+// The "Restock immediately" carousel (RestockCarousel.tsx) shows up to 10 items from /reports/restock,
+// ranked by the backend so fast sellers that are out of stock or about to run out come first; it is
+// re-polled every 8 s with the items.
 
 import Pattern from '../ui/c-chart-21';
 import { useEffect, useState } from 'react';
@@ -10,10 +13,14 @@ import {
   ArrowUpRight, ArrowDownRight,
   Package, Receipt, TrendingUp, Truck, Wine,
 } from 'lucide-react';
-import { api, qs, todayIso, type ApiDailySale, type ApiFullDsr, type ApiIndent, type ApiItem, type ApiStockMovement } from '../../lib/api';
+import { api, qs, todayIso, type ApiDailySale, type ApiFullDsr, type ApiIndent, type ApiItemFull, type ApiRestockRow, type ApiStockMovement } from '../../lib/api';
 import { money, panel } from '../../lib/styles';
-import { IMAGES, productImage } from '../../constants/images';
+import { IMAGES } from '../../constants/images';
+import RestockCarousel from './RestockCarousel';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
+
+// Sales window (days) for the restock analysis.
+const RESTOCK_DAYS = 15;
 
 const LiveBadge = ({ live }: { live: boolean }) => (
   <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${live
@@ -32,7 +39,8 @@ export const Dashboard = () => {
   const [dailySales, setDailySales] = useState<ApiDailySale[] | null>(null);
   const [stockMovement, setStockMovement] = useState<ApiStockMovement | null>(null);
   const [indents, setIndents] = useState<ApiIndent[] | null>(null);
-  const [items, setItems] = useState<ApiItem[] | null>(null);
+  const [items, setItems] = useState<ApiItemFull[] | null>(null);
+  const [restockRows, setRestockRows] = useState<ApiRestockRow[] | null>(null);
   const [storeImage, setStoreImage] = useState<string>(IMAGES.dashboard.store);
 
   // Real-time store operational hours (CL-2 Retail License: 10:00 AM to 10:30 PM)
@@ -55,7 +63,12 @@ export const Dashboard = () => {
   useEffect(() => {
     const loadDsr = () => api<ApiFullDsr>(`/reports/dsr${qs({ on: todayIso() })}`).then(setDsr).catch(() => setDsr(null));
     const loadIndents = () => api<ApiIndent[]>('/transactions/purchase-indent').then(setIndents).catch(() => setIndents(null));
-    const loadItems = () => api<ApiItem[]>('/masters/items').then(setItems).catch(() => setItems(null));
+    const loadItems = () => {
+      api<ApiItemFull[]>('/masters/items').then(setItems).catch(() => setItems(null));
+      api<ApiRestockRow[]>(`/reports/restock${qs({ days: RESTOCK_DAYS, limit: 10 })}`)
+        .then(setRestockRows)
+        .catch(() => setRestockRows(null));
+    };
     const loadSales = () => {
       const now = new Date();
       const from = new Date(now);
@@ -117,7 +130,6 @@ export const Dashboard = () => {
     : null;
   const isPositiveGrowth = pctChange !== null && pctChange >= 0;
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const featured = (items ?? []).filter(i => (i.qoh ?? 0) > 0).slice(0, 4);
   const hasInventoryValue = items?.some(item => item.qoh > 0 && item.mrp > 0) ?? false;
 
   // Dynamic Inventory Mix calculation from real inventory stocks
@@ -233,54 +245,8 @@ export const Dashboard = () => {
         ))}
       </section>
 
-      {/* ═══ FEATURED PRODUCTS ═══ */}
-      {featured.length > 0 && (
-        <section className="animate-fadeInUp animate-fadeInUp-d2">
-          <div className="mb-4">
-            <p className="text-[10px] font-bold tracking-[0.25em] text-[#B08A45] dark:text-[#D4A847] uppercase">Inventory</p>
-            <h3 className="mt-1 text-lg font-bold text-[#29231F] dark:text-white">Featured products</h3>
-          </div>
-
-          <div className="stagger-enter grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            {featured.map(item => {
-              const isLow = item.qoh <= 12;
-              return (
-                <div key={item.code}
-                     className="group img-zoom card-3d overflow-hidden rounded-2xl border
-                                bg-[#FFFCF7] border-[#E3D9CD]
-                                dark:border-[#2A2A2A] dark:bg-[#141414]">
-                  <div className="relative h-36 sm:h-44 overflow-hidden bg-[#F0EBE3] dark:bg-[#1A1A1A]">
-                    <img src={productImage(item.name, item.group)} alt={item.name}
-                      className="h-full w-full object-cover
-                                 transition-transform duration-500 ease-out group-hover:scale-[1.035]"
-                      style={{ filter: 'saturate(0.95) contrast(1.0) brightness(1.0)' }}
-                      loading="lazy" />
-                    <span className={`absolute top-3 right-3 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider shadow-md tabular-nums
-                      ${isLow
-                        ? 'bg-[#F8EDDA] text-[#875D24] dark:bg-amber-500/90 dark:text-black'
-                        : 'bg-[#EAF1EA] text-[#426147] dark:bg-emerald-500/90 dark:text-white'}`}>
-                      {item.qoh > 0 ? `${item.qoh} in stock` : 'Out of Stock'}
-                    </span>
-                    <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#FFFCF7] dark:from-[#141414] to-transparent" />
-                  </div>
-                  <div className="p-4">
-                    <p className="text-[10px] font-bold tracking-[0.15em] text-[#B08A45] dark:text-[#D4A847] uppercase">
-                      {(item.group || '').replace(/^\d+[.\s_-]*/, '').trim() || 'LIQUOR'}
-                    </p>
-                    <h4 className="mt-1 text-sm font-semibold text-[#29231F] dark:text-white truncate" title={item.name}>
-                      {item.name.replace(/^\d+[.\s_-]*/, '').trim()}
-                    </h4>
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="text-base font-extrabold tabular-nums text-[#29231F] dark:text-white">₹{money(item.mrp)}</span>
-                      <span className="text-[10px] font-bold text-[#B08A45] dark:text-[#D4A847] uppercase tracking-wider">{item.brand || item.code}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
+      {/* ═══ RESTOCK IMMEDIATELY (fast sellers running out first, from /reports/restock) ═══ */}
+      <RestockCarousel rows={restockRows} days={RESTOCK_DAYS} badge={<LiveBadge live={restockRows !== null} />} />
 
       {/* ═══ FULL-SPAN WAREHOUSE BANNER ═══ */}
       <section className="animate-fadeInUp animate-fadeInUp-d3">

@@ -151,6 +151,18 @@ export type ApiClosingLoad = { item_code: string; item_name: string; package: st
 
 export type ApiDenomination = { date: string; counts: Record<string, number>; total: number };
 
+// GET /reports/restock: items ranked by restock priority (fast sellers that are running out first).
+export type ApiRestockStatus = 'OUT_OF_STOCK' | 'CRITICAL' | 'LOW' | 'OK';
+export type ApiRestockRow = {
+  item_code: string; item_name: string; group: string; brand: string; mrp: number;
+  qoh: number; rol: number; roq: number;
+  sold_qty: number; avg_daily: number; days_left: number | null; last_sold: string | null;
+  status: ApiRestockStatus; needs_restock: boolean; priority: number; suggested_qty: number;
+  // The sales window: the last N days up to today; window_days = days the shop has actually been selling.
+  sales_from: string; sales_to: string; window_days: number;
+  source: 'live' | 'memory'; // live = read from SQL Server just now; memory = in-app data
+};
+
 // Full Item Master row, as the backend's Item schema defines it.
 export type ApiItemFull = ApiItem & {
   short_name: string; cgst_per: number; sgst_per: number; rol: number; roq: number; active: boolean;

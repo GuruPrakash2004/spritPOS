@@ -2,20 +2,22 @@
 
 Stock Balance, Stock Ledger, Stock Ageing, Profit Margin, Reorder (Stock Level), the Daily
 Summary Report (field list from Docs/WebDash.xlsx), hourly/daily/brand-wise sales, litre
-reports, the Dashboard's stock-movement summary, and the list of legacy .rpt files in
+reports, the Dashboard's stock-movement summary and restock priority list (sales velocity from
+saved invoices), and the list of legacy .rpt files in
 backend/Rpts/. Stock figures are computed from store.MOVEMENTS, so they only include
 movements made through store.move_stock() (plus the seeded sales history).
 
 The frontend renders most of these through REPORTS in
 frontend/src/components/reports/reportDefs.ts.
 """
+import math
 from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
-from .. import store
+from .. import db_store, store
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 RPTS_DIR = Path(__file__).resolve().parent.parent.parent / "Rpts"
@@ -85,6 +87,106 @@ def reorder_list():
     """Items at or below their reorder level (ROL), with suggested reorder qty (ROQ)."""
     return [{"item_code": i["code"], "item_name": i["name"], "qoh": i["qoh"], "rol": i["rol"], "roq": i["roq"]}
             for i in store.ITEMS.values() if i["qoh"] <= i["rol"]]
+
+
+# Restock analysis thresholds (days of stock left at the current sales rate).
+RESTOCK_CRITICAL_DAYS = 3    # runs out within 3 days -> CRITICAL
+RESTOCK_LOW_DAYS = 7         # runs out within a week (or qoh <= ROL) -> LOW
+RESTOCK_COVER_DAYS = 14      # suggested order covers two weeks of sales
+_STATUS_ORDER = {"OUT_OF_STOCK": 0, "CRITICAL": 1, "LOW": 2, "OK": 3}
+
+
+@router.get("/restock")
+def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None, ge=1)):
+    """Items to restock, fast sellers that are running out first (feeds the Dashboard panel).
+
+    Real time: the window is always the last `days` days up to today.
+    - With SQL Server connected, sales and stock are read live from the DB (db_store.live_sales_and_stock,
+      cached 20 s) and bills made in this app since startup (store.MOVEMENTS after DB_BASE_MOVEMENTS)
+      are added on top, since the app's own writes don't reach the DB.
+    - Without a DB, the in-memory bills (DOCS) and stock (ITEMS qoh) are used.
+    Held and cancelled bills never count. priority = avg_daily / (days_left + 1): it grows with how fast
+    an item sells and how close it is to running out, and is 0 for items that didn't sell. Only items
+    that sell can need restock; those come first (out of stock, CRITICAL or LOW).
+    """
+    end = date.today()
+    start = end - timedelta(days=max(days, 1) - 1)
+    sold: dict[str, float] = defaultdict(float)
+    last_sold: dict[str, str] = {}
+    qoh_of: dict[str, float] = {code: it["qoh"] for code, it in store.ITEMS.items()}
+    first_sale: str | None = None
+
+    live = db_store.live_sales_and_stock(start, end)
+    if live is not None:
+        source = "live"
+        sold.update(live["sold"])
+        last_sold.update(live["last_sold"])
+        first_sale = live["first_sale"]
+        qoh_of.update(live["qoh"])
+        # Add this app's own activity since the DB snapshot (bills, returns, purchases made here).
+        for m in store.MOVEMENTS[store.DB_BASE_MOVEMENTS:]:
+            qoh_of[m["item"]] = qoh_of.get(m["item"], 0) + m["qty"]
+            if m["kind"] in ("sale", "sale-cancel") and start.isoformat() <= m["date"] <= end.isoformat():
+                sold[m["item"]] -= m["qty"]  # a sale is a negative movement; a cancel gives it back
+                if m["kind"] == "sale":
+                    last_sold[m["item"]] = max(last_sold.get(m["item"], ""), m["date"])
+                    first_sale = min(first_sale or m["date"], m["date"])
+    else:
+        source = "memory"
+        for inv in _saved_invoices(start, end):
+            for line in inv["lines"]:
+                code = line["item_code"]
+                sold[code] += line["qty"]
+                last_sold[code] = max(last_sold.get(code, ""), inv["date"])
+            first_sale = min(first_sale or inv["date"], inv["date"])
+
+    # A shop that started billing less than `days` days ago: divide by the days it has actually been
+    # selling, so the daily rate isn't underestimated.
+    window_days = max(1, min(max(days, 1), (end - date.fromisoformat(first_sale)).days + 1)) if first_sale else max(days, 1)
+
+    rows = []
+    for it in store.ITEMS.values():
+        if it.get("active") is False:
+            continue
+        qoh, rol, roq = qoh_of.get(it["code"], it["qoh"]), it.get("rol", 0), it.get("roq", 0)
+        avg_daily = round(sold.get(it["code"], 0) / window_days, 2)
+        if qoh <= 0:
+            days_left = 0.0
+        elif avg_daily > 0:
+            days_left = round(qoh / avg_daily, 1)
+        else:
+            days_left = None
+
+        if qoh <= 0:
+            status = "OUT_OF_STOCK"
+        elif days_left is not None and days_left <= RESTOCK_CRITICAL_DAYS:
+            status = "CRITICAL"
+        elif qoh <= rol or (days_left is not None and days_left <= RESTOCK_LOW_DAYS):
+            status = "LOW"
+        else:
+            status = "OK"
+
+        priority = round(avg_daily / (max(days_left, 0) + 1), 3) if avg_daily > 0 and days_left is not None else 0.0
+        rows.append({
+            "item_code": it["code"], "item_name": it["name"], "group": it.get("group", ""), "brand": it.get("brand", ""),
+            "mrp": it.get("mrp", 0), "qoh": qoh, "rol": rol, "roq": roq,
+            "sold_qty": sold.get(it["code"], 0), "avg_daily": avg_daily, "days_left": days_left,
+            "last_sold": last_sold.get(it["code"]), "status": status,
+            "needs_restock": status != "OK" and avg_daily > 0, "priority": priority,
+            "sales_from": start.isoformat(), "sales_to": end.isoformat(), "window_days": window_days, "source": source,
+            "suggested_qty": max(roq, math.ceil(avg_daily * RESTOCK_COVER_DAYS - max(qoh, 0))),
+        })
+
+    # Items that need restock: by priority (fast sellers running out first). The rest (for filling the
+    # Dashboard's top 10): fewest days of stock left first, items that didn't sell last.
+    def sort_key(r):
+        if r["needs_restock"]:
+            return (0, -r["priority"], -r["avg_daily"], _STATUS_ORDER[r["status"]], r["qoh"])
+        if r["avg_daily"] <= 0:
+            return (2, 0, 0, 0, r["qoh"])  # never sold in the window: last, even when out of stock
+        return (1, r["days_left"], -r["avg_daily"], 0, r["qoh"])
+    rows.sort(key=sort_key)
+    return rows[:limit] if limit else rows
 
 
 @router.get("/dsr")
