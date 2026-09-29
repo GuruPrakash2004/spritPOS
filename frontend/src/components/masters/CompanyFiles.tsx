@@ -7,6 +7,7 @@ import { useConfirm } from '../common/ConfirmDialog';
 import { Download, Edit3, Eye, FileSpreadsheet, ImagePlus, Save, Trash2, Upload } from 'lucide-react';
 import Modal from '../common/Modal';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { api, errorText } from '../../lib/api';
 import { downloadText, toCsv } from '../../lib/csv';
 import {  field, label, primaryButton, secondaryButton, tableBody, tableHead , exportButton } from '../../lib/styles';
@@ -53,6 +54,9 @@ function useCompanyFiles(kind: 'image' | 'document') {
   useEffect(() => { reload(); }, [reload]);
 
   const save = async (d: Draft) => {
+    if (d.file && !d.editing && d.file.size > MAX_MB * 1024 * 1024) throw new Error(`File is larger than ${MAX_MB} MB.`);
+    const what = d.editing ? `Details of ${d.editing.file_name} will be saved` : `${d.file?.name ?? 'The file'} will be uploaded`;
+    if (!(await toastStore.defer('ok', `${what} when this closes.`, d.editing ? 'Save cancelled. Nothing was changed.' : 'Upload cancelled.'))) return;
     if (d.editing) {
       await api(`/company/files/${d.editing.id}`, { method: 'PUT', body: { title: d.title, group: d.group, remarks: d.remarks, show_on_pos: d.show_on_pos } });
       setToast({ kind: 'ok', text: 'Details updated.' });
@@ -66,6 +70,7 @@ function useCompanyFiles(kind: 'image' | 'document') {
 
   const remove = async (f: CompanyFile) => {
     if (!(await confirm(`Delete ${f.file_name}? This cannot be undone.`))) return;
+    if (!(await toastStore.defer('delete', `${f.file_name} will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
     api(`/company/files/${f.id}`, { method: 'DELETE' })
       .then(() => { setToast({ kind: 'ok', text: `${f.file_name} deleted.` }); reload(); })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
@@ -188,8 +193,9 @@ export function CompanyDocuments({ canEdit }: { canEdit: boolean }) {
   const { files, toast, setToast, save, remove, dialog } = useCompanyFiles('document');
   const d = useDraft('document', save, text => setToast({ kind: 'error', text }));
 
-  const exportList = () => {
+  const exportList = async () => {
     if (!files?.length) return;
+    if (!(await toastStore.defer('ok', `${files.length} documents will be exported to CSV when this closes.`, 'Export cancelled.'))) return;
     downloadText('Company_Documents.csv', toCsv([
       ['Group', 'File Type', 'Name', 'File Name', 'Remarks', 'Size', 'Uploaded By', 'Uploaded At'],
       ...files.map(f => [f.group, f.type_label, f.title, f.file_name, f.remarks, sizeText(f.size), f.uploaded_by, f.uploaded_at]),

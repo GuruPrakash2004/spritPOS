@@ -11,6 +11,7 @@ import { FileStack, PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, D
 import { useConfirm } from '../common/ConfirmDialog';
 import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { api, errorText, newIdempotencyKey, todayIso, type ApiCustomer, type ApiInvoice } from '../../lib/api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
 import { STOCK_ITEMS, litresPerBottle, loadStockItems, sellable, stockIndex, useStockItems } from '../../data/stockData';
@@ -202,9 +203,13 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   });
 
   // Held bills are parked on the backend so any counter session can recall them.
-  const holdOrNew = () => {
+  const holdOrNew = async () => {
     if (!lines.length) return resetBill();
-    api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body: billBody(true), idempotencyKey: saveKey.current })
+    // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Hold was pressed.
+    const body = billBody(true);
+    const key = saveKey.current;
+    if (!(await toastStore.defer('ok', `Bill will be held (${lines.length} items) when this closes.`, 'Hold cancelled. The bill is still open.'))) return;
+    api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body, idempotencyKey: key })
       .then(doc => {
         setToast({ kind: 'ok', text: `Bill held as ${doc.doc_no} (${lines.length} items). Starting a new bill.` });
         resetBill();
@@ -267,14 +272,18 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     setPrintInvoiceData(buildCurrentInvoice(billNo));
   };
 
-  const saveBill = (andPrint = false) => {
+  const saveBill = async (andPrint = false) => {
     if (!lines.length) return setToast({ kind: 'error', text: 'Add at least one item before saving the bill.' });
     if (lines.some(l => !l.qty || !l.rate)) return setToast({ kind: 'error', text: 'Every item needs a quantity and a rate.' });
     if (totals.card + totals.other > totals.invoice) return setToast({ kind: 'error', text: 'Card + other payment exceeds the invoice value.' });
     if (collected !== '' && change < 0) return setToast({ kind: 'error', text: `Collected amount is ₹ ${money(-change)} short of the cash amount.` });
     if (totals.points > (customer?.points ?? 0)) return setToast({ kind: 'error', text: `Only ${customer?.points ?? 0} points available to redeem.` });
+    // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Save was pressed.
+    const body = billBody(false);
+    const key = saveKey.current;
+    if (!(await toastStore.defer('ok', `Bill of ₹ ${money(totals.invoice)} will be saved when this closes.`, 'Save cancelled. The bill is still open.'))) return;
     // The backend numbers the bill and moves stock; show its doc no rather than the local preview.
-    api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body: billBody(false), idempotencyKey: saveKey.current }).then(doc => {
+    api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body, idempotencyKey: key }).then(doc => {
       // Refresh points and stock so the next bill sees what this one earned, redeemed and sold.
       api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(() => undefined);
       loadStockItems().catch(() => undefined);

@@ -3,6 +3,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toastStore } from '../common/toastStore'
 import SalesInvoice from './SalesInvoice'
 import { STOCK_ITEMS } from '../../data/stockData'
 import { DEFAULT_COUNTER } from '../../data/salesCounters'
@@ -46,6 +47,10 @@ async function scan(user: ReturnType<typeof userEvent.setup>, code: string, qty 
   await user.type(qtyBox, qty)
   await user.type(screen.getByLabelText('Scan or search item'), `${code}{Enter}`)
 }
+
+// Actions wait for their popup (toastStore.defer); here it closes at once so the request goes out.
+beforeEach(() => { vi.spyOn(toastStore, 'defer').mockResolvedValue(true) })
+afterEach(() => vi.restoreAllMocks())
 
 describe('SalesInvoice', () => {
   it('opens with an empty bill (no demo items)', async () => {

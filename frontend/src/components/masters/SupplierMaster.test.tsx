@@ -2,6 +2,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toastStore } from '../common/toastStore'
 import SupplierMaster from './SupplierMaster'
 import type { ApiSupplier } from '../../lib/api'
 
@@ -28,7 +29,26 @@ afterEach(() => {
 
 const writes = () => fetchMock.mock.calls.filter(([, init]) => init?.method && init.method !== 'GET')
 
+// Actions wait for their popup (toastStore.defer); here it closes at once so the request goes out.
+beforeEach(() => { vi.spyOn(toastStore, 'defer').mockResolvedValue(true) })
+afterEach(() => vi.restoreAllMocks())
+
 describe('SupplierMaster', () => {
+  it('sends nothing when the waiting popup is cancelled', async () => {
+    vi.mocked(toastStore.defer).mockResolvedValue(false)
+    const user = userEvent.setup()
+    render(<SupplierMaster />)
+    const phone = await screen.findByDisplayValue('9900196257')
+
+    await user.clear(phone)
+    await user.type(phone, '9811111111')
+    await user.click(screen.getByRole('button', { name: /save supplier/i }))
+
+    await waitFor(() => expect(toastStore.defer).toHaveBeenCalledWith('ok', 'Supplier "RND" will be saved when this closes.', expect.any(String)))
+    expect(writes()).toHaveLength(0)
+    expect(screen.getByRole('button', { name: /save supplier/i })).toBeEnabled()
+  })
+
   it('loads the first supplier and saves an edit with PUT', async () => {
     const user = userEvent.setup()
     render(<SupplierMaster />)

@@ -88,6 +88,7 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
       return;
     }
     setErrors({});
+    if (!(await toastStore.defer('ok', 'Company profile will be saved when this closes.', 'Save cancelled. Nothing was changed.'))) return;
     try {
       const profile = await api<ApiCompany>('/masters/company', {
         method: 'PUT',
@@ -110,10 +111,7 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
   const handleBackup = async () => {
     setBackingUp(true);
     try {
-      if (!(await toastStore.defer('backup', 'Database backup will download when this closes.'))) {
-        toastStore.add('backup', 'Backup cancelled.');
-        return;
-      }
+      if (!(await toastStore.defer('backup', 'Database backup will download when this closes.', 'Backup cancelled.'))) return;
       const name = await apiDownload('/admin/backup', 'vlqms_backup.sqlite3');
       setToast({ kind: 'ok', text: `Database backup downloaded: ${name}` });
     } catch (error) {

@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { FileDown, FileUp, Upload } from 'lucide-react';
 import MasterCrud from './MasterCrud';
 import Modal from '../common/Modal';
+import { toastStore } from '../common/toastStore';
 import { api, errorText, type ApiItemFull } from '../../lib/api';
 import { downloadText, parseCsv, toCsv } from '../../lib/csv';
 import { ITEM_FIELDS, ITEM_IMPORT_COLUMNS, ITEM_IMPORT_NUMERIC } from './masterConfigs';
@@ -51,10 +52,11 @@ export default function ItemMaster() {
     }));
   };
 
-  const importRows = () => {
+  const importRows = async () => {
     const good = preview?.filter(p => !p.duplicate && !p.problem) ?? [];
     if (!good.length) return setMessage('Nothing to import: every row is a duplicate or has a problem.');
     const body = good.map(p => ({ ...p.row, short_name: p.row.short_name || p.row.code, qoh: 0, active: true }));
+    if (!(await toastStore.defer('ok', `${good.length} items will be imported when this closes.`, 'Import cancelled. No items were added.'))) return;
     api<{ added: string[]; duplicates: string[] }>('/masters/items/import', { method: 'POST', body })
       .then(r => {
         setPreview(null);

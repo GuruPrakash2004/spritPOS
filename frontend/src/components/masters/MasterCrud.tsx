@@ -10,6 +10,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Edit3, FilePlus, Save, Search, Trash2, X } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { api, canDo, canSeeCost, errorText } from '../../lib/api';
 import { badge, field, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
@@ -116,7 +117,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
     }
   };
 
-  const save = () => {
+  const save = async () => {
     // Amazon-style validation: collect all missing required fields
     const newErrors: Record<string, string> = {};
     for (const f of fields) {
@@ -149,6 +150,9 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
     setFormErrors({});
 
     const body = Object.fromEntries(fields.map(f => [f.key, f.type === 'number' ? Number(form[f.key]) || 0 : form[f.key]]));
+    const name = title.replace(' Master', '');
+    // The save waits for its popup (Cancel stops it): see .claude/rules/popups-and-errors.md.
+    if (!(await toastStore.defer('ok', `${name} "${String(form.code ?? '').trim() || 'new record'}" will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     const request = mode === 'New'
       ? api<Row>(`/masters/${path}`, { method: 'POST', body })
       : api<Row>(`/masters/${path}/${encodeURIComponent(selected ?? '')}`, { method: 'PUT', body });
@@ -168,6 +172,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
       return;
     }
     if (!selected || !(await confirm(`Delete "${selected}"? This can't be undone.`))) return;
+    if (!(await toastStore.defer('delete', `"${selected}" will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
     api(`/masters/${path}/${encodeURIComponent(selected)}`, { method: 'DELETE' })
       .then(() => {
         const next = rows.filter(r => String(r.code) !== selected);

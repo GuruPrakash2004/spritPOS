@@ -28,6 +28,8 @@ export default function DailySummaryReport() {
   // Every press fetches the report again and says so. The popup goes to toastStore directly: a <Toast>
   // with the same text as last time would not show again, so a second Refresh looked like it did nothing.
   const handleRefresh = async () => {
+    // The refresh waits for its popup; Cancel stops it.
+    if (!(await toastStore.defer('refresh', `Daily Summary Report for ${on} will refresh when this closes.`, 'Refresh cancelled.'))) return;
     setRefreshing(true);
     try {
       if (await load()) toastStore.add('refresh', `Daily Summary Report for ${on} refreshed.`);

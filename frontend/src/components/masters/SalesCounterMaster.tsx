@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import DropdownMenu, { menuItem } from '../common/DropdownMenu';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from '../../lib/styles';
@@ -49,9 +50,10 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
     setShowPrintModal(true);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     setOptionsOpen(false);
     if (!records.length) return setToast({ kind: 'error', text: 'No counter records to export.' });
+    if (!(await toastStore.defer('ok', `${records.length} counter records will be exported to CSV when this closes.`, 'Export cancelled.'))) return;
     const header = ['Counter Code', 'Counter Name', 'System Name', 'Bill Prefix', 'Status'];
     const rows = records.map(r => [r.code, r.name, r.systemName, r.prefix, r.inactive ? 'Inactive' : 'Active']);
     downloadText('Sales_Counters.csv', toCsv([header, ...rows]));
@@ -112,6 +114,7 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
   const handleDelete = async () => {
     const code = form.code;
     if (!(await confirm(`Delete sales counter "${code}"?`))) return;
+    if (!(await toastStore.defer('delete', `Sales Counter "${code}" will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
     try {
       await api(`/masters/sales-counters/${encodeURIComponent(code)}`, { method: 'DELETE' });
     } catch (e) {
@@ -134,7 +137,7 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
     else goTo(found);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const errs: Record<string, string> = {};
     if (!form.code.trim()) errs.code = 'Enter the SC code';
     if (!form.name.trim()) errs.name = 'Enter the SC name';
@@ -149,6 +152,7 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
     setFormErrors({});
 
     const saved = { ...form, code: form.code.trim(), name: form.name.trim(), prefix: form.prefix.trim() };
+    if (!(await toastStore.defer('ok', `Sales Counter "${saved.code}" will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     const path = mode === 'New' ? '/masters/sales-counters' : `/masters/sales-counters/${encodeURIComponent(records[index].code)}`;
     api(path, { method: mode === 'New' ? 'POST' : 'PUT', body: toApi(saved) })
       .then(() => {

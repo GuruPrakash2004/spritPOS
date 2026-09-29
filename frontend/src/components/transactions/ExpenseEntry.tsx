@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { PlusCircle, Save, Trash2 } from 'lucide-react';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { api, errorText, todayIso, type ApiLedger } from '../../lib/api';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
@@ -32,9 +33,10 @@ export default function ExpenseEntry() {
   const total = filled.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
   const update = (i: number, patch: Partial<Line>) => setLines(lines.map((l, x) => (x === i ? { ...l, ...patch } : l)));
 
-  const save = () => {
+  const save = async () => {
     if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one expense line.' });
     if (filled.some(l => !(Number(l.amount) > 0))) return setToast({ kind: 'error', text: 'Every line needs an amount above zero.' });
+    if (!(await toastStore.defer('ok', `Expense of ₹ ${money(total)} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     api<{ doc_no: string; total: number }>('/transactions/expense', {
       method: 'POST',
       body: { date, paid_from: paidFrom, lines: filled.map(l => ({ ledger: l.ledger, amount: Number(l.amount), narration: l.narration })) },

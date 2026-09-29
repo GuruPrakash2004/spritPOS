@@ -1,7 +1,8 @@
 // Tests for the Change password dialog: inline mistakes, and the new token replacing the old one.
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toastStore } from '../common/toastStore'
 import ChangePasswordDialog from './ChangePasswordDialog'
 import { getAuthToken, setAuthUser } from '../../lib/api'
 
@@ -17,6 +18,10 @@ async function fill(current: string, next: string, again: string) {
   if (again) await user.type(screen.getByLabelText(/new password again/i), again)
   await user.click(screen.getByRole('button', { name: 'Change password' }))
 }
+
+// Actions wait for their popup (toastStore.defer); here it closes at once so the request goes out.
+beforeEach(() => { vi.spyOn(toastStore, 'defer').mockResolvedValue(true) })
+afterEach(() => vi.restoreAllMocks())
 
 describe('ChangePasswordDialog', () => {
   it('shows mistakes under the fields and sends nothing', async () => {

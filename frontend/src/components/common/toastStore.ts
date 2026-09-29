@@ -8,9 +8,12 @@
 // - at most 3 cards are shown.
 // Use popups for server results only; form mistakes are shown inline (FormField / InlineError).
 //
-// Waiting popups (toastStore.defer / toast.later): the action waits for the popup. It shows a Cancel
-// button and stays the same toastDuration() as any popup (hover pauses it) so the user has time to decide; the promise
-// resolves true when the popup closes (countdown ends or ✕), false if Cancel was pressed.
+// Waiting popups (toastStore.defer / toast.later): every user action (save, delete, refresh, hold, upload,
+// export, email, backup, ...) waits for its popup. It shows a Cancel button and stays the same toastDuration()
+// as any popup (hover pauses it) so the user has time to decide; the promise resolves true when the popup
+// closes (countdown ends or ✕), false if Cancel was pressed. Pattern:
+//   if (!(await toast.later('ok', 'Bill will be saved when this closes.'))) return;
+//   ...then call the API.
 
 export type ToastKind = 'ok' | 'error' | 'delete' | 'refresh' | 'backup';
 
@@ -55,6 +58,7 @@ class ToastStore {
   private frameId: number | null = null;
   private lastTick = Date.now();
   private waiting = new Map<string, (go: boolean) => void>();   // defer() promises by toast id
+  private cancelled = new Map<string, string>();                // defer() popup id → "… cancelled." message
 
   private emit() {
     this.listeners.forEach(fn => fn());
@@ -166,9 +170,10 @@ class ToastStore {
     this.startTimer();
   }
 
-  // A waiting popup: resolves true when it closes (countdown or ✕), false on Cancel. The same
-  // message while one is already waiting just shakes it and resolves false, so a double-click runs once.
-  defer(kind: ToastKind, text: string): Promise<boolean> {
+  // A waiting popup: resolves true when it closes (countdown or ✕), false on Cancel (then `cancelledText`
+  // is shown). The same message while one is already waiting just shakes it and resolves false, so a
+  // double-click (or Ctrl+S twice) runs the action once.
+  defer(kind: ToastKind, text: string, cancelledText = 'Cancelled. Nothing was changed.'): Promise<boolean> {
     const cleanText = text.trim();
     const existing = this.items.find(i => i.pending && i.text === cleanText && !i.leaving);
     if (existing) {
@@ -184,18 +189,23 @@ class ToastStore {
       paused: false, leaving: false, pending: true,
     };
     const result = new Promise<boolean>(resolve => this.waiting.set(item.id, resolve));
+    this.cancelled.set(item.id, cancelledText);
     this.push(item);
     return result;
   }
 
   // Cancel a waiting popup: its action does not run.
   cancel(id: string) {
+    const text = this.cancelled.get(id);
+    const wasWaiting = this.waiting.has(id);
     this.settle(id, false);
     this.remove(id);
+    if (wasWaiting && text) this.add('refresh', text);
   }
 
   private settle(id: string, go: boolean) {
     const resolve = this.waiting.get(id);
+    this.cancelled.delete(id);
     if (!resolve) return;
     this.waiting.delete(id);
     resolve(go);
@@ -250,5 +260,5 @@ export const toast = {
   refresh: (text: string) => toastStore.add('refresh', text),
   backup: (text: string) => toastStore.add('backup', text),
   // `if (await toast.later('backup', 'Backup starts when this closes')) { ... }`: see defer().
-  later: (kind: ToastKind, text: string) => toastStore.defer(kind, text),
+  later: (kind: ToastKind, text: string, cancelledText?: string) => toastStore.defer(kind, text, cancelledText),
 };

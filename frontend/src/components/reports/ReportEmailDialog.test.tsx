@@ -17,6 +17,10 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+// Actions wait for their popup (toastStore.defer); here it closes at once so the request goes out.
+beforeEach(() => { vi.spyOn(toastStore, 'defer').mockResolvedValue(true) })
+afterEach(() => vi.restoreAllMocks())
+
 describe('ReportEmailDialog', () => {
   it('shows a bad address inline and sends nothing', async () => {
     const user = userEvent.setup()

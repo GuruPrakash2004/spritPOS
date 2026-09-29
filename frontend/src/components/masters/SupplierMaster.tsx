@@ -61,7 +61,7 @@ const SupplierMaster = () => {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (saving) return;
     const errs: Record<string, string> = {};
     const code = form.code.trim();
@@ -79,6 +79,11 @@ const SupplierMaster = () => {
     setErrors({});
     setSaving(true);
     const body = { ...form, code, name: form.name.trim() };
+    // The save waits for its popup; Cancel stops it.
+    if (!(await toast.later('ok', `Supplier "${code}" will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) {
+      setSaving(false);
+      return;
+    }
     const request = editing
       ? api<ApiSupplier>(`/masters/suppliers/${encodeURIComponent(editing)}`, { method: 'PUT', body })
       : api<ApiSupplier>('/masters/suppliers', { method: 'POST', body });

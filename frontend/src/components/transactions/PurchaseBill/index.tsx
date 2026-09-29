@@ -13,6 +13,7 @@ import {
 import { useConfirm } from '../../common/ConfirmDialog';
 import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, secondaryButton, sectionTitle, tableHead } from '../../../lib/styles';
 import Toast from '../../common/Toast';
+import { toastStore } from '../../common/toastStore';
 import DropdownMenu, { menuItem } from '../../common/DropdownMenu';
 import { api, errorText, newIdempotencyKey, type ApiDoc, type ApiIndent, type ApiSupplier } from '../../../lib/api';
 import { loadStockItems, sellable, STOCK_ITEMS, useStockItems } from '../../../data/stockData';
@@ -103,11 +104,15 @@ export default function PurchaseBill() {
 
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [supplierSaving, setSupplierSaving] = useState(false);
-  const addSupplier = (name: string, address: string) => {
+  const addSupplier = async (name: string, address: string) => {
     // Codes can't hold / ? # % (they go in URLs); upper-case first so lower-case names aren't lost.
     const code = name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20);
     if (!code) return setToast({ kind: 'error', text: 'Supplier name needs at least one letter or number.' });
     setSupplierSaving(true);
+    if (!(await toastStore.defer('ok', `Supplier "${name}" will be added when this closes.`, 'Supplier not added.'))) {
+      setSupplierSaving(false);
+      return;
+    }
     api('/masters/suppliers', { method: 'POST', body: { code, name, address } })
       .then(() => {
         setSuppliers([...suppliers, { name, address }]);
@@ -176,7 +181,8 @@ export default function PurchaseBill() {
   };
 
   // Reload stock from the server, then copy each row's current QOH (and Item Master GST) into the grid.
-  const refreshQoh = () => {
+  const refreshQoh = async () => {
+    if (!(await toastStore.defer('refresh', 'QOH will be refreshed from current stock when this closes.', 'Refresh cancelled.'))) return;
     loadStockItems()
       .then(items => {
         setRows(current => current.map(r => (r.stock === null ? r : {
@@ -236,7 +242,7 @@ export default function PurchaseBill() {
     setRemarks('');
   };
 
-  const saveBill = () => {
+  const saveBill = async () => {
     const filled = rows.filter(isFilled);
     if (!supplier.trim()) return setToast({ kind: 'error', text: 'Select a supplier.' });
     if (!invNo.trim() || !invDate) return setToast({ kind: 'error', text: 'Enter the supplier Inv No and Inv Date.' });
@@ -244,15 +250,15 @@ export default function PurchaseBill() {
     if (filled.some(r => !r.qty || !r.rate)) return setToast({ kind: 'error', text: 'Every item needs a PB Qty and PB Rate.' });
     if (!balanced) return setToast({ kind: 'error', text: `PB value differs from Inv Value by ₹ ${money(Math.abs(balance))}.` });
     if (filled.some(r => r.stock === null)) return setToast({ kind: 'error', text: 'Pick every item with Add Item so it has an item code.' });
-    api<ApiDoc>('/transactions/purchase-bill', {
-      method: 'POST',
-      idempotencyKey: saveKey.current,
-      body: {
-        date: pbDate, supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: Number(invValue) || 0,
-        purchase_type: purchaseType, remarks, tcs: totals.tcs, cess: totals.cess + totals.compCess,
-        lines: filled.map(r => ({ item_code: r.code, bottles: r.qty, rate: r.rate })),
-      },
-    }).then(doc => {
+    // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Save was pressed.
+    const key = saveKey.current;
+    const body = {
+      date: pbDate, supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: Number(invValue) || 0,
+      purchase_type: purchaseType, remarks, tcs: totals.tcs, cess: totals.cess + totals.compCess,
+      lines: filled.map(r => ({ item_code: r.code, bottles: r.qty, rate: r.rate })),
+    };
+    if (!(await toastStore.defer('ok', `Purchase Bill for ${supplier} (${filled.length} items) will be saved when this closes.`, 'Save cancelled. The bill is still open.'))) return;
+    api<ApiDoc>('/transactions/purchase-bill', { method: 'POST', idempotencyKey: key, body }).then(doc => {
       const moved = purchaseType === 'Purchase Return' ? 'returned to the supplier' : 'added to stock';
       setToast({ kind: 'ok', text: `Purchase Bill ${doc.doc_no} saved — ${doc.totals.qty} bottles ${moved}.` });
       loadStockItems().catch(() => undefined);

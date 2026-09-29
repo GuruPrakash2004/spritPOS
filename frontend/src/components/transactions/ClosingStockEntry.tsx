@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Download, FileOutput, Save } from 'lucide-react';
 import Modal from '../common/Modal';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { api, errorText, qs, todayIso, type ApiClosingLoad, type ApiCounter, type ApiDoc } from '../../lib/api';
 import { SALES_PERSONS } from '../../data/salesCounters';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
@@ -47,9 +48,10 @@ export default function ClosingStockEntry() {
   const invalid = entered.some(r => salesQty(r) < 0 || Number(r.closing) < 0);
   const totalSales = entered.reduce((acc, r) => acc + salesQty(r) * r.mrp, 0);
 
-  const save = () => {
+  const save = async () => {
     if (!entered.length) return setToast({ kind: 'error', text: 'Enter the closing stock for at least one item.' });
     if (invalid) return setToast({ kind: 'error', text: 'Closing stock cannot be more than the opening stock.' });
+    if (!(await toastStore.defer('ok', `Closing stock for ${entered.length} items will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     api<{ doc_no: string }>('/transactions/closing-stock', {
       method: 'POST',
       body: { as_on: asOn, lines: entered.map(r => ({ item_code: r.item_code, closing_qty: Number(r.closing) })) },
@@ -59,8 +61,9 @@ export default function ClosingStockEntry() {
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
-  const generate = () => {
+  const generate = async () => {
     if (!savedDoc) return;
+    if (!(await toastStore.defer('ok', `Sales invoice for ${savedDoc} will be generated when this closes.`, 'Invoice not generated. Nothing was changed.'))) return;
     api<ApiDoc>(`/transactions/closing-stock/${savedDoc}/generate-invoice`, { method: 'POST', body: { counter, salesperson: salesPerson } })
       .then(inv => {
         setGenerateOpen(false);

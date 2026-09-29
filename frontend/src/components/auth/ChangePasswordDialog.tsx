@@ -20,7 +20,7 @@ export default function ChangePasswordDialog({ user, onClose }: { user: string; 
   const [errors, setErrors] = useState<Errors>({});
   const [saving, setSaving] = useState(false);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const errs: Errors = {};
     if (!current) errs.current = 'Enter your current password';
@@ -35,6 +35,10 @@ export default function ChangePasswordDialog({ user, onClose }: { user: string; 
       return;
     }
     setSaving(true);
+    if (!(await toast.later('ok', 'Your password will be changed when this closes.', 'Password not changed.'))) {
+      setSaving(false);
+      return;
+    }
     api<{ access_token: string }>('/auth/change-password', { method: 'POST', body: { current_password: current, new_password: next } })
       .then(res => {
         setAuthToken(res.access_token);

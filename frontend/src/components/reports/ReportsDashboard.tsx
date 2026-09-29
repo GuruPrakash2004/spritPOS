@@ -168,6 +168,7 @@ const ReportsDashboard = () => {
     const res = await fetchReport();
     if (!res) return;
     if (!res.rows.length) return toast.error('Nothing to export for this period.');
+    if (!(await toast.later('ok', `${res.name} will be exported to XLS when this closes.`, 'Export cancelled.'))) return;
     downloadXls(`${res.name} ${res.from_date} to ${res.to_date}`, `${company?.name || 'Company'} - ${res.name}`,
       `Period: ${toDmy(res.from_date)} to ${toDmy(res.to_date)}`, res.columns, res.rows);
     toast.ok(`${res.name} exported to XLS`);

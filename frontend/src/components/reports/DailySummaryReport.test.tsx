@@ -1,7 +1,7 @@
 // Refresh fetches the report again and shows a popup on every press, not only the first.
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toastStore } from '../common/toastStore'
 import DailySummaryReport from './DailySummaryReport'
 
@@ -17,6 +17,10 @@ vi.mock('../../lib/api', async importOriginal => ({
   api: vi.fn(async () => dsr),
 }))
 
+afterEach(() => vi.restoreAllMocks())
+
+// Actions wait for their popup (toastStore.defer); here it closes at once so the request goes out.
+beforeEach(() => { vi.spyOn(toastStore, 'defer').mockResolvedValue(true) })
 afterEach(() => vi.restoreAllMocks())
 
 describe('DailySummaryReport', () => {

@@ -25,7 +25,10 @@ describe('toastStore.defer', () => {
   const noMotion = () =>
     vi.spyOn(window, 'matchMedia').mockImplementation((query: string) =>
       ({ matches: query.includes('reduced-motion'), media: query } as MediaQueryList))
-  const clear = () => toastStore.getSnapshot().forEach(i => toastStore.cancel(i.id))
+  const clear = () => {
+    noMotion()   // closes at once, so the loop ends
+    while (toastStore.getSnapshot().length) toastStore.getSnapshot().forEach(i => toastStore.cancel(i.id))
+  }
   afterEach(clear)
 
   it('goes ahead when the popup closes', async () => {
@@ -43,6 +46,14 @@ describe('toastStore.defer', () => {
     const go = toastStore.defer('backup', 'Backup starts when this closes')
     toastStore.cancel(toastStore.getSnapshot()[0].id)
     await expect(go).resolves.toBe(false)
+  })
+
+  it('says what was cancelled', async () => {
+    noMotion()
+    const go = toastStore.defer('delete', 'Item will be deleted when this closes', 'Delete cancelled.')
+    toastStore.cancel(toastStore.getSnapshot()[0].id)
+    await expect(go).resolves.toBe(false)
+    expect(toastStore.getSnapshot().map(i => [i.text, i.pending])).toEqual([['Delete cancelled.', undefined]])
   })
 
   it('waits for the countdown before going ahead', async () => {

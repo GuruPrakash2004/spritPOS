@@ -27,7 +27,7 @@ export default function ReportEmailDialog({ request, defaultTo, onClose }: {
   const [errors, setErrors] = useState<Errors>({});
   const [sending, setSending] = useState(false);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const list = to.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
     const errs: Errors = {};
@@ -42,6 +42,10 @@ export default function ReportEmailDialog({ request, defaultTo, onClose }: {
       return;
     }
     setSending(true);
+    if (!(await toast.later('ok', `${request.name} will be emailed to ${list.join(', ')} when this closes.`, 'Email not sent.'))) {
+      setSending(false);
+      return;
+    }
     api<{ sent_to: string[]; rows: number }>('/reports/custom/email', { method: 'POST', body: { ...request, to: list, message } })
       .then(res => {
         toast.ok(`${request.name} (${res.rows} rows) emailed to ${res.sent_to.join(', ')}`);

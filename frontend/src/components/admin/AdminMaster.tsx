@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { FormErrorSummary } from '../common/FormErrorSummary';
 import { api, errorText, type ApiAdminUser, type ApiRole } from '../../lib/api';
 import { ADMIN_ROLE } from '../../lib/modules';
@@ -89,7 +90,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
   };
 
-  const saveUser = () => {
+  const saveUser = async () => {
     if (!userForm) return;
     const { user, password, role, active, isNew } = userForm;
     const errors: Record<string, string> = {};
@@ -108,6 +109,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     setUserFormErrors({});
 
     const body = { user: user.trim().toUpperCase(), password: password || null, role, active };
+    if (!(await toastStore.defer('ok', `User ${body.user} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     const request = isNew
       ? api('/admin/users', { method: 'POST', body })
       : api(`/admin/users/${encodeURIComponent(user)}`, { method: 'PUT', body });
@@ -120,6 +122,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
 
   const deleteUser = async (name: string) => {
     if (!(await confirm(`Delete user ${name}? They will no longer be able to sign in.`))) return;
+    if (!(await toastStore.defer('delete', `User ${name} will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
     api(`/admin/users/${encodeURIComponent(name)}`, { method: 'DELETE' })
       .then(() => { setToast({ kind: 'ok', text: `User ${name} deleted.` }); reload(); })
       .catch(fail);
@@ -202,7 +205,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     setRoleDraft({ ...roleDraft, modules: nextMods, actions: nextActs });
   };
 
-  const saveRole = () => {
+  const saveRole = async () => {
     if (!roleDraft) return;
     const name = roleDraft.name.trim();
     const errors: Record<string, string> = {};
@@ -217,6 +220,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     setRoleFormErrors({});
 
     const body = { name, modules: [...roleDraft.modules], rights: draftRights(roleDraft) };
+    if (!(await toastStore.defer('ok', `Rights for ${name} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     api(`/admin/roles/${encodeURIComponent(roleName || name)}`, { method: 'PUT', body })
       .then(() => {
         setToast({ kind: 'ok', text: `Rights for ${name} saved, including Add/Edit/Delete. Signed-in users get the change within a minute.` });
@@ -228,6 +232,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
   const deleteRole = async () => {
     if (!roleName) return;
     if (!(await confirm(`Delete role ${roleName}?`))) return;
+    if (!(await toastStore.defer('delete', `Role ${roleName} will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
     api(`/admin/roles/${encodeURIComponent(roleName)}`, { method: 'DELETE' })
       .then(() => {
         setToast({ kind: 'ok', text: `Role ${roleName} deleted.` });

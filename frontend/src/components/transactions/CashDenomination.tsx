@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { api, errorText, qs, todayIso, type ApiDenomination, type ApiFullDsr } from '../../lib/api';
 import { field, money, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
@@ -34,7 +35,8 @@ export default function CashDenomination() {
   const total = NOTES.reduce((acc, v) => acc + v * n(String(v)), 0) + n('coins');
   const diff = expected === null ? 0 : total - expected;
 
-  const save = () => {
+  const save = async () => {
+    if (!(await toastStore.defer('ok', `Cash count of ₹ ${money(total)} for ${on} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     const body = { date: on, counts: Object.fromEntries([...NOTES.map(String), 'coins'].map(k => [k, n(k)])) };
     api<ApiDenomination>('/transactions/denomination', { method: 'POST', body })
       .then(d => setToast({ kind: 'ok', text: `Cash count for ${d.date} saved — ₹ ${money(d.total)}.` }))

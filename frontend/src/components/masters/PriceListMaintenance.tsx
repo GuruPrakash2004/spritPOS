@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Download } from 'lucide-react';
 import Toast from '../common/Toast';
+import { toastStore } from '../common/toastStore';
 import { api, errorText, type ApiItemFull } from '../../lib/api';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
@@ -46,9 +47,10 @@ export default function PriceListMaintenance() {
     setPicked(next);
   };
 
-  const apply = () => {
+  const apply = async () => {
     if (!picked.size) return setToast({ kind: 'error', text: 'Select at least one item.' });
     if (!delta) return setToast({ kind: 'error', text: 'Enter the amount to change the rate by.' });
+    if (!(await toastStore.defer('ok', `${column === 'mrp' ? 'MRP' : 'Purchase rate'} for ${picked.size} items will be updated when this closes.`, 'Rate update cancelled. Nothing was changed.'))) return;
     api<ApiItemFull[]>('/masters/items/price-list', { method: 'POST', body: { item_codes: [...picked], column, change_by: delta } })
       .then(updated => {
         setToast({ kind: 'ok', text: `Updated ${column === 'mrp' ? 'MRP' : 'purchase rate'} for ${updated.length} items.` });
