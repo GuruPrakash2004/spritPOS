@@ -16,8 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
-from . import db, db_store, persistence, store, writeback
-from .routers import auth, company_files, custom_reports, masters, reports, transactions
+from . import admin_audit, db, db_store, gsettings, persistence, store, writeback
+from .routers import auth, company_files, custom_reports, masters, reports, tools, transactions, utilities
 from .schemas import SettingsIn, WritebackBackfillIn, WritebackRetryIn
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -41,7 +41,8 @@ _write_lock = asyncio.Lock()
 WRITE_METHODS = {"POST", "PUT", "DELETE"}
 IDEMPOTENT_KEEP = 500   # replies remembered for Idempotency-Key replays
 # POSTs that change no app data and may be slow (SMTP, SQL Server reconnect): they must not hold up bills.
-NOT_WRITES = {"/reports/custom/email", "/admin/writeback/sync", "/admin/writeback/flush", "/admin/writeback/retry"}
+NOT_WRITES = {"/reports/custom/email", "/admin/writeback/sync", "/admin/writeback/flush", "/admin/writeback/retry",
+              "/tools/sql/execute"}
 
 
 def _idempotency_key(request: Request) -> str | None:
@@ -82,11 +83,14 @@ async def serialise_and_save_writes(request: Request, call_next):
             return Response(saved["body"], status_code=saved["status"], media_type="application/json",
                             headers={"Idempotent-Replay": "true"})
         moves_from = writeback.begin_request()
+        admin_audit.begin()
         response = await call_next(request)
         if response.status_code >= 400:
             writeback.discard_request()
+            admin_audit.discard()
             return response
         writeback.commit_request(moves_from, getattr(request.state, "user", None))
+        admin_audit.commit(getattr(request.state, "user", None))
         if key:
             body = b"".join([chunk async for chunk in response.body_iterator])
             store.IDEMPOTENT[key] = {"status": response.status_code, "body": body.decode(), "request": body_hash}
@@ -130,6 +134,9 @@ app.include_router(masters.router)
 app.include_router(transactions.router)
 app.include_router(reports.router)
 app.include_router(custom_reports.router)
+app.include_router(tools.router)
+app.include_router(utilities.router)
+app.include_router(utilities.values_router)
 
 
 @app.on_event("startup")
@@ -164,8 +171,12 @@ def get_settings():
 
 @app.put("/settings", tags=["Global Settings"])
 def update_settings(body: SettingsIn, admin: dict = Depends(auth.require_admin)):
-    for section, values in body.model_dump(exclude_none=True).items():
-        store.SETTINGS[section].update(values)
+    before = {k: dict(v) for k, v in store.SETTINGS.items()}
+    gsettings.set_from_legacy(body.model_dump(exclude_none=True))
+    for section in store.SETTINGS:
+        earlier, changed = admin_audit.diff(before.get(section), store.SETTINGS[section])
+        if changed:
+            admin_audit.record("Global Settings", "Edited", section, earlier, changed)
     return store.SETTINGS
 
 

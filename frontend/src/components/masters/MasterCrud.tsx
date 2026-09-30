@@ -12,7 +12,7 @@ import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
-import { api, canDo, canSeeCost, errorText } from '../../lib/api';
+import { api, canDo, canSeeCost, errorText, fieldRight } from '../../lib/api';
 import { badge, field, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
 
 export type MasterField = {
@@ -40,7 +40,9 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
   reloadKey?: number; // bump to re-fetch the list after an outside change
 }) {
   // Cost fields are left out entirely for roles that can't see costs; the backend keeps their values.
-  const fields = allFields.filter(f => !f.costField || canSeeCost());
+  // Cost fields for roles without cost access, and fields the role's Field Level Rights hide (Admin Master
+  // (Security)), are neither shown nor sent; the server keeps their values.
+  const fields = allFields.filter(f => (!f.costField || canSeeCost()) && fieldRight(path, f.key) !== 'hidden');
   const [rows, setRows] = useState<Row[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [form, setForm] = useState<Row>(() => blank(fields));
@@ -351,6 +353,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
                       {listFields.map((f, i) => (
                         <td key={f.key} className={`px-4 py-2.5 ${i > 1 ? 'hidden sm:table-cell' : ''} ${i === 0 ? `font-medium ${isSel ? 'text-accent-ink' : 'text-stone-900 dark:text-stone-50'}` : 'text-stone-600 dark:text-stone-300'} ${f.type === 'number' ? 'text-right tabular-nums' : ''}`}>
                           {f.type === 'bool' ? <span className={badge(r[f.key] ? 'success' : 'neutral')}>{r[f.key] ? 'Yes' : 'No'}</span> : String(r[f.key] ?? '')}
+                          {i === 0 && r.authorised === false && <span className={`${badge('warning')} ml-2`}>Waiting for approval</span>}
                         </td>
                       ))}
                     </tr>
@@ -376,7 +379,8 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
 
             <div className={`grid gap-4 ${fields.length > 8 ? 'sm:grid-cols-2' : ''}`}>
               {fields.map(f => {
-                const locked = readOnly || ((f.key === 'code' || f.newOnly) && mode === 'Edit');
+                // Read-only by Field Level Rights: can be filled in for a new record, not changed afterwards.
+                const locked = readOnly || ((f.key === 'code' || f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit');
                 const value = form[f.key];
                 const opts = f.options ?? options[f.key] ?? [];
                 const id = `mc-${path}-${f.key}`;

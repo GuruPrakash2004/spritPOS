@@ -57,10 +57,13 @@ masters_from_db = False
 status = {"last_error": None, "last_error_at": None, "last_sync_at": None, "written": 0}
 
 
-def changed(kind: str, doc: dict, action: str = "save", moves_ref: str | None = None, item: str | None = None) -> None:
+def changed(kind: str, doc: dict, action: str = "save", moves_ref: str | None = None, item: str | None = None,
+            moves: list[dict] | None = None) -> None:
     """Note that `doc` was created or changed by this request. Queued only if the request succeeds.
     `moves_ref` is the doc_no this request's stock moves carry, when it differs from the document's
-    (an item's opening stock is logged as "OPENING"); `item` keeps only that item's moves.
+    (an item's opening stock is logged as "OPENING"); `item` keeps only that item's moves. `moves` gives the
+    event's stock moves explicitly instead (Utilities → Merge Items moves an item's web stock change to
+    another item without adding to store.MOVEMENTS).
 
     Queued whether or not DB_WRITE_ENABLED is on. Not queued:
     - while the backend runs on seed data: those bills use sample items and numbers and must never reach
@@ -76,7 +79,7 @@ def changed(kind: str, doc: dict, action: str = "save", moves_ref: str | None = 
         return
     doc_no = doc.get("doc_no") or doc.get("date")
     _pending.append({"kind": kind, "doc_no": doc_no, "doc": doc, "action": action, "moves_ref": moves_ref or doc_no,
-                     "item": item})
+                     "item": item, "moves": moves})
 
 
 def begin_request() -> int:
@@ -98,7 +101,9 @@ def commit_request(moves_from: int, user: str | None) -> None:
         return
     moves = store.MOVEMENTS[moves_from:]
     for p in _pending:
+        own = p.get("moves")
         store.OUTBOX.append(_event(p["kind"], p["doc_no"], p["action"], user, p["doc"],
+                                   own if own is not None else
                                    [m for m in moves if m["doc_no"] == p["moves_ref"]
                                     and (p["item"] is None or m["item"] == p["item"])]))
         logger.info("Queued %s %s %s by %s", p["action"], p["kind"], p["doc_no"], user or "?")
@@ -306,7 +311,8 @@ def backfill_candidates() -> list[dict]:
         if ("denomination", day) not in queued:
             found.append(("denomination", day, doc, []))
     for m in app_moves:
-        no = f"OPENING/{m['item']}"
+        # Numbered by the item it was opened for, even after that item was merged into another.
+        no = f"OPENING/{m.get('merged_from', m['item'])}"
         if m["kind"] == "opening" and ("opening_stock", no) not in queued:
             found.append(("opening_stock", no, {"doc_no": no, "date": m["date"],
                                                 "lines": [{"item_code": m["item"], "qty": m["qty"], "rate": m.get("rate")}]},

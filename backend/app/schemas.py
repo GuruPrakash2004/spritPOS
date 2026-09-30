@@ -47,7 +47,13 @@ class Company(BaseModel):
         return value
 
 
-class Item(BaseModel):
+class MasterRow(BaseModel):
+    """Base of the master models. `authorised` is set by the server only (Master Approvals in Admin Master
+    (Security)): False while a row waits for approval; whatever a client sends is ignored."""
+    authorised: bool | None = None
+
+
+class Item(MasterRow):
     code: str
     name: str
     short_name: str = ""
@@ -69,29 +75,29 @@ class Item(BaseModel):
     active: bool = True
 
 
-class ItemGroup(BaseModel):
+class ItemGroup(MasterRow):
     code: str
     name: str
     liquor: bool = True
     consider_for_loyalty: bool = True
 
 
-class Uom(BaseModel):
+class Uom(MasterRow):
     code: str
     name: str
 
 
-class Package(BaseModel):
+class Package(MasterRow):
     code: str
     litres_per_bottle: float = Field(gt=0)
 
 
-class Brand(BaseModel):
+class Brand(MasterRow):
     code: str
     name: str
 
 
-class Supplier(BaseModel):
+class Supplier(MasterRow):
     code: str
     name: str
     alias: str = Field("", description="Name used when exporting to Tally")
@@ -106,7 +112,7 @@ class Supplier(BaseModel):
     active: bool = True
 
 
-class Customer(BaseModel):
+class Customer(MasterRow):
     code: str
     name: str
     mobile: str = ""
@@ -115,18 +121,18 @@ class Customer(BaseModel):
     points: float = 0
 
 
-class LedgerGroup(BaseModel):
+class LedgerGroup(MasterRow):
     code: str
     name: str
 
 
-class Ledger(BaseModel):
+class Ledger(MasterRow):
     code: str
     name: str
     group: str
 
 
-class SalesCounter(BaseModel):
+class SalesCounter(MasterRow):
     code: str
     name: str
     system_name: str = ""
@@ -237,14 +243,15 @@ class GenerateInvoiceIn(BaseModel):
     salesperson: str | None = None
 
 
+# Password fields arrive encrypted from the browser ("enc:v1:...", app/secure_fields.py), hence the length.
 class LoginIn(BaseModel):
     user: str = Field(max_length=50)
-    password: str = Field(max_length=200)
+    password: str = Field(max_length=1000)
 
 
 class ChangePasswordIn(BaseModel):
-    current_password: str = Field(max_length=200)
-    new_password: str = Field(max_length=200)
+    current_password: str = Field(max_length=1000)
+    new_password: str = Field(max_length=1000)
 
 
 class CancelIn(BaseModel):
@@ -290,9 +297,49 @@ class SettingsIn(BaseModel):
 
 class UserIn(BaseModel):
     user: str = Field(min_length=2, max_length=20, pattern=r"^[A-Za-z0-9_.-]+$")
-    password: str | None = Field(None, max_length=200, description="Required for a new user; leave empty on update to keep it")
+    password: str | None = Field(None, max_length=1000, description="Encrypted (enc:v1:...). Required for a new user; leave empty on update to keep it")
     role: str
     active: bool = True
+    # Legacy frmMstUSer fields (all optional).
+    full_name: str = Field("", max_length=80)
+    email: str = Field("", max_length=120)
+    mobile: str = Field("", max_length=20)
+    department: str = Field("", max_length=60)
+    dob: date_type | None = None
+    password_reset_on: date_type | None = Field(None, description="From this date the user must change their password")
+    inactive_reason: str = Field("", max_length=200, description="Required when the user is marked inactive")
+
+
+class LoginSettingsIn(BaseModel):
+    """Admin Master (Security) → Login Settings (legacy frmUtlLoginSettings)."""
+    min_length: int = Field(8, ge=8, le=64)
+    require_mix: bool = True
+    require_upper: bool = False
+    require_lower: bool = False
+    require_digit: bool = False
+    require_special: bool = False
+    password_expiry_days: int = Field(0, ge=0, le=3650, description="0 = never expires")
+    show_remember_me: bool = False
+
+
+class FieldRightsIn(BaseModel):
+    """master path -> field -> "hidden" | "readonly" (fields not listed are normal)."""
+    masters: dict[str, dict[str, Literal["hidden", "readonly"]]]
+
+
+class MasterApprovalIn(BaseModel):
+    masters: list[str]
+
+
+class ReportRightsIn(BaseModel):
+    users: list[str] = Field(default_factory=list, description="Empty = everyone who can open Customised Reports")
+
+
+class AdnlAdminPasswordIn(BaseModel):
+    """Change Adnl. ADMIN Password: your own login password (encrypted for "current") and the new additional
+    ADMIN password (encrypted for "new"; empty removes it, so your own password is asked instead)."""
+    current_password: str = Field(max_length=1000)
+    new_password: str = Field("", max_length=1000)
 
 
 class ActionRights(BaseModel):
@@ -344,3 +391,5 @@ class BackfillDoc(BaseModel):
 class WritebackBackfillIn(BaseModel):
     """POST /admin/writeback/backfill: the documents to queue, picked from the GET preview."""
     documents: list[BackfillDoc] = Field(min_length=1, max_length=5000)
+
+

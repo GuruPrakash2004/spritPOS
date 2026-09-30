@@ -23,11 +23,14 @@ import {
   money, panel, PB_SERIES, pctOf, PURCHASE_TYPES, stockRow, today, type Row, type Supplier,
 } from './purchaseBillData';
 import { AddSupplierModal, CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
+import { useDocSettings } from '../../../lib/docSettings';
 
 export default function PurchaseBill() {
   const [pbSeries, setPbSeries] = useState('');
   const [pbNo, setPbNo] = useState(201);
   const [pbDate, setPbDate] = useState(today);
+  // Transaction Settings for Purchase Bill: Copy From allowed, and whether the bill date can be changed.
+  const docSettings = useDocSettings('purchase_bill');
   useStockItems();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplier, setSupplier] = useState('');
@@ -253,7 +256,7 @@ export default function PurchaseBill() {
     // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Save was pressed.
     const key = saveKey.current;
     const body = {
-      date: pbDate, supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: Number(invValue) || 0,
+      date: docSettings.allow_edit_date ? pbDate : today(), supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: Number(invValue) || 0,
       purchase_type: purchaseType, remarks, tcs: totals.tcs, cess: totals.cess + totals.compCess,
       lines: filled.map(r => ({ item_code: r.code, bottles: r.qty, rate: r.rate })),
     };
@@ -316,7 +319,7 @@ export default function PurchaseBill() {
             </div>
             <div>
               <label className={labelClass} htmlFor="pb-date">Bill date</label>
-              <input id="pb-date" type="date" value={pbDate} onChange={e => setPbDate(e.target.value)} className={`${field} tabular-nums`} />
+              <input id="pb-date" type="date" value={docSettings.allow_edit_date ? pbDate : today()} disabled={!docSettings.allow_edit_date} onChange={e => setPbDate(e.target.value)} className={`${field} tabular-nums`} />
             </div>
             <div className="sm:col-span-2">
               <label htmlFor="pb-supplier" className={labelClass}>Supplier<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
@@ -402,7 +405,7 @@ export default function PurchaseBill() {
           </button>
           <input ref={fileInput} type="file" multiple hidden onChange={e => setAttachments([...attachments, ...Array.from(e.target.files ?? []).map(f => f.name)])} />
           {sep}
-          <button onClick={() => { setCopyOpen(true); openCopyFrom(); }} className={ghostButton} title="Copy lines from a Purchase Indent"><FileInput size={14} />Copy from indent</button>
+          {docSettings.allow_copy_from && <button onClick={() => { setCopyOpen(true); openCopyFrom(); }} className={ghostButton} title="Copy lines from a Purchase Indent"><FileInput size={14} />Copy from indent</button>}
           <span className="ml-auto pr-1 text-xs tabular-nums text-stone-500">{totals.items} items · {totals.qty} qty</span>
         </div>
         <div className="min-h-[260px] overflow-x-auto">

@@ -7,6 +7,7 @@ import pytest
 from app import store
 from app.passwords import hash_password, password_problem, verify_password
 from app.routers import auth
+from conftest import enc
 
 
 # ---------- Password hashing ----------
@@ -42,17 +43,17 @@ def test_password_same_as_user_name_is_refused():
 
 
 async def test_new_user_password_is_hashed_and_works(client, anon_client):
-    res = await client.post("/admin/users", json={"user": "ANITHA", "password": "Counter#12", "role": "Cashier"})
+    res = await client.post("/admin/users", json={"user": "ANITHA", "password": enc("Counter#12", "user"), "role": "Cashier"})
     assert res.status_code == 201
     assert "password" not in res.json() and "password_hash" not in res.json()
     assert store.USERS["ANITHA"]["password_hash"].startswith("pbkdf2_sha256$")
 
-    login = await anon_client.post("/auth/login", json={"user": "anitha", "password": "Counter#12"})
+    login = await anon_client.post("/auth/login", json={"user": "anitha", "password": enc("Counter#12")})
     assert login.status_code == 200
 
 
 async def test_weak_password_is_refused_for_a_new_user(client):
-    res = await client.post("/admin/users", json={"user": "ANITHA", "password": "abcd", "role": "Cashier"})
+    res = await client.post("/admin/users", json={"user": "ANITHA", "password": enc("abcd", "user"), "role": "Cashier"})
 
     assert res.status_code == 422
     assert "ANITHA" not in store.USERS
@@ -64,22 +65,22 @@ async def test_db_user_legacy_password_is_upgraded_to_a_hash(anon_client):
                              "legacy_password": base64.b64encode(b"Legacy#1").decode(), "role": "Manager",
                              "active": True, "pwv": 1}
 
-    res = await anon_client.post("/auth/login", json={"user": "OFFICE", "password": "Legacy#1"})
+    res = await anon_client.post("/auth/login", json={"user": "OFFICE", "password": enc("Legacy#1")})
 
     assert res.status_code == 200
     u = store.USERS["OFFICE"]
     assert u["password_hash"].startswith("pbkdf2_sha256$")
     assert "legacy_password" not in u and "default_password" not in u
     # The default (user code) password stops working once the real one is hashed.
-    assert (await anon_client.post("/auth/login", json={"user": "OFFICE", "password": "office"})).status_code == 401
+    assert (await anon_client.post("/auth/login", json={"user": "OFFICE", "password": enc("office")})).status_code == 401
 
 
 # ---------- Brute force ----------
 async def test_five_wrong_passwords_lock_the_user_out(anon_client):
     for _ in range(auth.MAX_FAILS_PER_USER):
-        assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": "wrong"})).status_code == 401
+        assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("wrong")})).status_code == 401
 
-    locked = await anon_client.post("/auth/login", json={"user": "GURU", "password": "guru"})
+    locked = await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("guru")})
 
     assert locked.status_code == 429
     assert "Too many failed logins" in locked.json()["detail"]
@@ -87,19 +88,19 @@ async def test_five_wrong_passwords_lock_the_user_out(anon_client):
 
 async def test_a_good_login_clears_earlier_failures(anon_client):
     for _ in range(auth.MAX_FAILS_PER_USER - 1):
-        await anon_client.post("/auth/login", json={"user": "GURU", "password": "wrong"})
-    assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": "guru"})).status_code == 200
+        await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("wrong")})
+    assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("guru")})).status_code == 200
 
-    assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": "wrong"})).status_code == 401
+    assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("wrong")})).status_code == 401
 
 
 # ---------- Tokens ----------
 async def test_password_change_signs_the_user_out(client, anon_client):
-    login = await anon_client.post("/auth/login", json={"user": "GURU", "password": "guru"})
+    login = await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("guru")})
     old_token = {"Authorization": f"Bearer {login.json()['access_token']}"}
     assert (await anon_client.get("/auth/me", headers=old_token)).status_code == 200
 
-    await client.put("/admin/users/GURU", json={"user": "GURU", "password": "Manager#99", "role": "Manager"})
+    await client.put("/admin/users/GURU", json={"user": "GURU", "password": enc("Manager#99", "user"), "role": "Manager"})
 
     res = await anon_client.get("/auth/me", headers=old_token)
     assert res.status_code == 401
@@ -107,7 +108,7 @@ async def test_password_change_signs_the_user_out(client, anon_client):
 
 
 async def test_deactivated_user_is_signed_out(client, cashier_client):
-    await client.put("/admin/users/RAVI", json={"user": "RAVI", "role": "Cashier", "active": False})
+    await client.put("/admin/users/RAVI", json={"user": "RAVI", "role": "Cashier", "active": False, "inactive_reason": "Left the shop"})
 
     assert (await cashier_client.get("/auth/me")).status_code == 401
 
@@ -203,22 +204,22 @@ async def test_security_headers_are_sent(anon_client):
 
 
 async def test_user_names_with_odd_characters_are_refused(client):
-    res = await client.post("/admin/users", json={"user": "<script>", "password": "Counter#12", "role": "Cashier"})
+    res = await client.post("/admin/users", json={"user": "<script>", "password": enc("Counter#12", "user"), "role": "Cashier"})
 
     assert res.status_code == 422
 
 
 # ---------- Change my own password ----------
 async def test_user_changes_own_password(cashier_client, anon_client):
-    res = await cashier_client.post("/auth/change-password", json={"current_password": "ravi", "new_password": "Counter#77"})
+    res = await cashier_client.post("/auth/change-password", json={"current_password": enc("ravi", "current"), "new_password": enc("Counter#77", "new")})
 
     assert res.status_code == 200
     # The new token works; the session it replaced does not.
     new_headers = {"Authorization": f"Bearer {res.json()['access_token']}"}
     assert (await anon_client.get("/auth/me", headers=new_headers)).status_code == 200
     assert (await cashier_client.get("/auth/me")).status_code == 401
-    assert (await anon_client.post("/auth/login", json={"user": "RAVI", "password": "Counter#77"})).status_code == 200
-    assert (await anon_client.post("/auth/login", json={"user": "RAVI", "password": "ravi"})).status_code == 401
+    assert (await anon_client.post("/auth/login", json={"user": "RAVI", "password": enc("Counter#77")})).status_code == 200
+    assert (await anon_client.post("/auth/login", json={"user": "RAVI", "password": enc("ravi")})).status_code == 401
 
 
 @pytest.mark.parametrize(("current", "new", "problem"), [
@@ -227,7 +228,7 @@ async def test_user_changes_own_password(cashier_client, anon_client):
     ("ravi", "ravi", "different from the current"),
 ])
 async def test_change_password_rules(cashier_client, current, new, problem):
-    res = await cashier_client.post("/auth/change-password", json={"current_password": current, "new_password": new})
+    res = await cashier_client.post("/auth/change-password", json={"current_password": enc(current, "current"), "new_password": enc(new, "new")})
 
     assert res.status_code == 422
     assert problem in res.json()["detail"]
@@ -235,9 +236,9 @@ async def test_change_password_rules(cashier_client, current, new, problem):
 
 async def test_guessing_the_current_password_is_locked_out(cashier_client):
     for _ in range(auth.MAX_FAILS_PER_USER):
-        await cashier_client.post("/auth/change-password", json={"current_password": "guess", "new_password": "Counter#77"})
+        await cashier_client.post("/auth/change-password", json={"current_password": enc("guess", "current"), "new_password": enc("Counter#77", "new")})
 
-    res = await cashier_client.post("/auth/change-password", json={"current_password": "ravi", "new_password": "Counter#77"})
+    res = await cashier_client.post("/auth/change-password", json={"current_password": enc("ravi", "current"), "new_password": enc("Counter#77", "new")})
 
     assert res.status_code == 429
 
@@ -272,7 +273,7 @@ async def test_rights_ticks_are_enforced(client, manager_client):
 
 
 async def test_login_tells_the_screen_its_rights(anon_client):
-    res = await anon_client.post("/auth/login", json={"user": "RAVI", "password": "ravi"})
+    res = await anon_client.post("/auth/login", json={"user": "RAVI", "password": enc("ravi")})
 
     assert res.json()["rights"]["Item Master"]["delete"] is False
 
@@ -332,3 +333,59 @@ async def test_token_from_before_the_update_gets_a_clear_message(anon_client):
 
     assert res.status_code == 401
     assert res.json()["detail"] == "The app was updated. Please log in again."
+
+
+# ─── Credentials are always encrypted from the UI (app/secure_fields.py) ─────────
+
+async def test_plain_password_is_refused(anon_client):
+    res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": "admin"})
+    assert res.status_code == 400
+    assert "encrypted" in res.json()["detail"]
+
+
+async def test_transport_key_is_public_and_login_works_with_it(anon_client):
+    import base64, json as _json, time
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    key = (await anon_client.get("/auth/transport-key")).json()
+    assert key["alg"] == "RSA-OAEP-256"
+    pub = serialization.load_der_public_key(base64.b64decode(key["spki"]))
+    ct = pub.encrypt(_json.dumps({"v": "admin", "t": key["server_time"], "f": "login"}).encode(),
+                     padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
+    res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": "enc:v1:" + base64.b64encode(ct).decode()})
+    assert res.status_code == 200
+
+
+async def test_stale_encrypted_password_is_refused(anon_client, monkeypatch):
+    from app import secure_fields
+    old = enc("admin")
+    monkeypatch.setattr(secure_fields.time, "time", lambda: 10**10)
+    res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": old})
+    assert res.status_code == 400 and "too long ago" in res.json()["detail"]
+
+
+def test_sealed_secret_round_trips_and_hides_the_value():
+    from app import secure_fields
+    sealed = secure_fields.seal("S3cret!")
+    assert sealed.startswith("sealed:v1:") and "S3cret" not in sealed
+    assert secure_fields.unseal(sealed) == "S3cret!"
+    assert secure_fields.unseal("plain-from-hand-written-env") == "plain-from-hand-written-env"
+
+
+async def test_an_encrypted_password_works_only_once(anon_client):
+    once = enc("admin")
+    assert (await anon_client.post("/auth/login", json={"user": "ADMIN", "password": once})).status_code == 200
+    again = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": once})
+    assert again.status_code == 400 and "already sent" in again.json()["detail"]
+
+
+async def test_an_encrypted_value_only_works_for_its_field(anon_client):
+    res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": enc("admin", "current")})
+    assert res.status_code == 400 and "different field" in res.json()["detail"]
+
+
+async def test_transport_key_gives_server_time_for_pcs_with_a_wrong_clock(anon_client):
+    import time
+    key = (await anon_client.get("/auth/transport-key")).json()
+    assert abs(key["server_time"] - time.time() * 1000) < 5000
+

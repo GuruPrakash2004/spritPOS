@@ -10,14 +10,14 @@ import softventLogo from '../../img/brand/softvent_logo.png';
 import softventLogoGold from '../../img/brand/softvent_logo_gold.png';
 
 interface VlqmsLogoProps {
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   showText?: boolean;
   className?: string;
   onDark?: boolean;
 }
 
 // Logo height per size; the width follows the logo's 3:1 proportions.
-const HEIGHT = { sm: 'h-9', md: 'h-11', lg: 'h-16' } as const;
+const HEIGHT = { xs: 'h-7', sm: 'h-9', md: 'h-11', lg: 'h-16' } as const;
 
 export const VlqmsLogo: React.FC<VlqmsLogoProps> = ({ size = 'md', showText = false, className = '', onDark = false }) => {
   const img = `${HEIGHT[size]} w-auto select-none`;

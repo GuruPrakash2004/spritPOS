@@ -14,7 +14,7 @@ import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard,
 import ChangePasswordDialog from './components/auth/ChangePasswordDialog';
 import KeyboardShortcutsModal from './components/common/KeyboardShortcutsModal';
 import AdminMaster from './components/admin/AdminMaster';
-import { api, getAuthToken, setAuthRights, setAuthUser, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
+import { api, getAuthToken, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
 import { ADMIN_MASTER, ADMIN_PATH, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
 import { iconButton, primaryButton } from './lib/styles';
 import CashDenomination from './components/transactions/CashDenomination';
@@ -42,6 +42,14 @@ import Sidebar from './components/layout/Sidebar';
 import SupplierMaster from './components/masters/SupplierMaster';
 import { Dashboard } from './components/dashboard/Dashboard';
 import StockBalanceReport from './components/reports/StockBalanceReport';
+import SqlQueryExecution from './components/tools/SqlQueryExecution';
+import ReWriteStock from './components/tools/ReWriteStock';
+import GlobalSettings from './components/utilities/GlobalSettings';
+import AdminAuditLog from './components/utilities/AdminAuditLog';
+import About from './components/utilities/About';
+import RemoveDuplicateInvoice from './components/utilities/RemoveDuplicateInvoice';
+import MergeItems from './components/utilities/MergeItems';
+import CompareStock from './components/utilities/CompareStock';
 import { useCompanyProfile } from './hooks/useCompanyProfile';
 
 // Per-tab memory for a page refresh (sessionStorage; cleared when the tab closes).
@@ -88,6 +96,7 @@ export default function App() {
       .then(me => {
         setAuthUser(me.user, me.role);
         setAuthRights(me.modules, me.rights);
+        setFieldRights(me.field_rights);
         setSession({ user: me, finYear: readSaved(FY_KEY) || DEFAULT_FIN_YEAR });
         const tab = readSaved(TAB_KEY);
         if (tab && (tab === 'Dashboard' || canOpen(me.modules, me.role, tab))) setActiveTab(tab);
@@ -105,9 +114,11 @@ export default function App() {
       api<ApiUser>('/auth/me')
         .then(me => {
           setAuthRights(me.modules, me.rights);
+          setFieldRights(me.field_rights);
           setSession(s => (s && (s.user.role !== me.role || s.user.modules.join() !== me.modules.join()
-            || JSON.stringify(s.user.rights ?? {}) !== JSON.stringify(me.rights ?? {}))
-            ? { ...s, user: { ...s.user, role: me.role, modules: me.modules, rights: me.rights } } : s));
+            || JSON.stringify(s.user.rights ?? {}) !== JSON.stringify(me.rights ?? {})
+            || !!s.user.must_change_password !== !!me.must_change_password)
+            ? { ...s, user: { ...s.user, role: me.role, modules: me.modules, rights: me.rights, must_change_password: me.must_change_password } } : s));
         })
         .catch(() => undefined);   // offline: try again next time; a 401 is handled by the session handler
     };
@@ -193,6 +204,15 @@ export default function App() {
       case 'Stock Balance Report': return <StockBalanceReport />;
       case 'Reports Dashboard':
       case 'Customised Reports': return <ReportsDashboard />;
+      case 'SQL Query Execution': return <SqlQueryExecution />;
+      case 'Re Write Stock': return <ReWriteStock />;
+      case 'Global Settings': return <GlobalSettings />;
+      case 'ADMIN Audit Log': return <AdminAuditLog />;
+      case 'About': return <About />;
+      case 'Remove Duplicate Invoice': return <RemoveDuplicateInvoice />;
+      case 'Replace and Remove Duplicate items': return <MergeItems key="replace" mode="replace" />;
+      case 'Merge Items': return <MergeItems key="merge" mode="merge" />;
+      case 'Compare Stock': return <CompareStock />;
       default: return (
         <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#D4C8BA] bg-[#FFFCF7] p-8 text-center dark:border-line-strong dark:bg-surface">
           <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-stone-500"><Settings size={22} /></span>
@@ -212,6 +232,7 @@ export default function App() {
     setSessionNotice('');
     setAuthUser(user.user, user.role, user.access_token || user.token);
     setAuthRights(user.modules, user.rights);
+    setFieldRights(user.field_rights);
     setSession({ user, finYear });
     if (window.location.pathname === ADMIN_PATH) {
       window.history.replaceState(null, '', '/');
@@ -222,7 +243,8 @@ export default function App() {
   const moduleGroup = activeTab === ADMIN_MASTER ? 'Administration'
     : REPORTS[activeTab] ? 'Reports'
     : MODULE_GROUPS.find(g => g.modules.includes(activeTab))?.group ?? 'General';
-  const moduleLabel = activeTab === 'Reports Dashboard' ? 'Customised Reports' : activeTab;
+  const moduleLabel = activeTab === 'Reports Dashboard' ? 'Customised Reports'
+    : activeTab === ADMIN_MASTER ? 'Admin Master (Security)' : activeTab;
 
   return (
     <div className={`app-shell flex h-screen overflow-hidden font-sans ${darkMode ? 'dark bg-[#0A0A0A] text-stone-100' : 'bg-[#F5F1E9] text-[#29231F]'}`}>
@@ -303,7 +325,9 @@ export default function App() {
         </footer>
       </div>
       <SnackbarContainer />
-      {changingPassword && <ChangePasswordDialog user={user.user} onClose={() => setChangingPassword(false)} />}
+      {changingPassword && !user.must_change_password && <ChangePasswordDialog user={user.user} onClose={() => setChangingPassword(false)} />}
+      {user.must_change_password && <ChangePasswordDialog forced user={user.user}
+        onClose={() => setSession(s => (s ? { ...s, user: { ...s.user, must_change_password: false } } : s))} />}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );

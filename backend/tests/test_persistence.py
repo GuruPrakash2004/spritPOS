@@ -7,6 +7,7 @@ from datetime import date
 import pytest
 
 from app import persistence, store
+from conftest import enc
 
 TODAY = date.today().isoformat()
 TABLES = ("ITEMS", "USERS", "ROLES", "CUSTOMERS", "COUNTERS", "SETTINGS", "DENOMINATIONS", "COMPANY", "EDITS",
@@ -46,8 +47,8 @@ async def test_bills_stock_users_and_numbers_survive_a_restart(client, anon_clie
         "date": TODAY, "counter": "counter10", "salesperson": "GURU", "lines": [{"item_code": "VIN-750", "bottles": 3}]})).json()
     await client.post("/masters/items", json={"code": "NEW-1", "name": "NEW RUM 750", "group": "RUM", "package": "750ml",
                                               "mrp": 500, "purchase_rate": 400, "qoh": 12})
-    await client.put("/admin/users/GURU", json={"user": "GURU", "password": "Manager#99", "role": "Manager"})
-    await client.post("/admin/users", json={"user": "ANITHA", "password": "Counter#12", "role": "Cashier"})
+    await client.put("/admin/users/GURU", json={"user": "GURU", "password": enc("Manager#99", "user"), "role": "Manager"})
+    await client.post("/admin/users", json={"user": "ANITHA", "password": enc("Counter#12", "user"), "role": "Cashier"})
     await client.delete("/masters/uoms/NOS")
 
     fresh_start(pristine, seq)
@@ -56,9 +57,9 @@ async def test_bills_stock_users_and_numbers_survive_a_restart(client, anon_clie
     assert store.ITEMS["VIN-750"]["qoh"] == stock_before - 3
     assert store.ITEMS["NEW-1"]["qoh"] == 12
     assert "NOS" not in store.UOMS
-    assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": "Manager#99"})).status_code == 200
-    assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": "guru"})).status_code == 401
-    assert (await anon_client.post("/auth/login", json={"user": "ANITHA", "password": "Counter#12"})).status_code == 200
+    assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("Manager#99")})).status_code == 200
+    assert (await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("guru")})).status_code == 401
+    assert (await anon_client.post("/auth/login", json={"user": "ANITHA", "password": enc("Counter#12")})).status_code == 200
     # Numbering carries on instead of reusing the saved bill's number.
     nxt = (await client.post("/transactions/sales-invoice", json={
         "date": TODAY, "counter": "counter10", "salesperson": "GURU", "lines": [{"item_code": "VIN-750", "bottles": 1}]})).json()
@@ -72,7 +73,7 @@ async def test_failed_requests_are_not_saved(client, state_file):
 
 
 async def test_state_file_is_private_and_has_no_plain_passwords(client, state_file):
-    await client.post("/admin/users", json={"user": "ANITHA", "password": "Counter#12", "role": "Cashier"})
+    await client.post("/admin/users", json={"user": "ANITHA", "password": enc("Counter#12", "user"), "role": "Cashier"})
 
     assert stat.S_IMODE(os.stat(state_file).st_mode) == 0o600
     raw = state_file.read_bytes()

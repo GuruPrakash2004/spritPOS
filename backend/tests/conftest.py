@@ -27,7 +27,7 @@ import httpx  # noqa: E402
 import pytest  # noqa: E402
 import respx  # noqa: E402
 
-from app import persistence, store  # noqa: E402
+from app import persistence, secure_fields, store  # noqa: E402
 from app.main import app  # noqa: E402
 from app.routers import auth  # noqa: E402
 
@@ -71,6 +71,12 @@ def block_network():
         yield router
 
 
+def enc(secret: str, purpose: str = "login") -> str:
+    """A password as the browser sends it: RSA-OAEP encrypted for one field (app/secure_fields.py):
+    "login", "user" (Admin Master), "current" / "new" (change password)."""
+    return secure_fields.encrypt_for_server(secret, purpose)
+
+
 def _app_client() -> httpx.AsyncClient:
     """httpx client wired straight to the FastAPI app (no login)."""
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
@@ -78,7 +84,7 @@ def _app_client() -> httpx.AsyncClient:
 
 async def _log_in(c: httpx.AsyncClient, user: str, password: str) -> httpx.AsyncClient:
     """Log `c` in: later requests send the user's Bearer token."""
-    res = await c.post("/auth/login", json={"user": user, "password": password})
+    res = await c.post("/auth/login", json={"user": user, "password": enc(password)})
     assert res.status_code == 200, res.text
     c.headers["Authorization"] = f"Bearer {res.json()['access_token']}"
     return c

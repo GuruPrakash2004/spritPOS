@@ -3,11 +3,12 @@
 // updated by hand when a report is added. On small screens it slides in over the page.
 
 import VlqmsLogo from './VlqmsLogo';
+import DevelopedBy from './DevelopedBy';
 import {
   BarChart2, Building, CreditCard, Database, FileText, LayoutDashboard,
   Monitor, Package, PackageMinus, RotateCcw, Scale, ShoppingCart, Tag, Truck,
   Users, ClipboardList, X, Banknote, Boxes, CalendarCheck, ClipboardCheck,
-  Droplets, FolderTree, IndianRupee, ShieldCheck, Wine,
+  Droplets, FolderTree, IndianRupee, ShieldCheck, SquareTerminal, RefreshCcwDot, SlidersHorizontal, FileX2, Replace, GitMerge, GitCompare, History, Info,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ADMIN_MASTER, MODULE_GROUPS } from '../../lib/modules';
@@ -74,6 +75,7 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3 text-xs">
           {item(<LayoutDashboard size={16} />, 'Dashboard')}
+          {item(<Info size={16} />, 'About')}
           {heading('Masters', MODULE_GROUPS.find(g => g.group === 'Masters')!.modules)}
           {item(<Building size={16} />, 'Company Master')}
           {item(<Package size={16} />, 'Item Master')}
@@ -101,8 +103,18 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
           {item(<BarChart2 size={16} />, 'Stock Balance Report')}
           {REPORT_ITEMS.map(name => item(name.includes('Litres') ? <Droplets size={16} /> : name.startsWith('Stock') ? <Boxes size={16} /> : <BarChart2 size={16} />, name))}
           {item(<BarChart2 size={16} />, 'Reports Dashboard', 'Customised Reports')}
+          {heading('Tools', MODULE_GROUPS.find(g => g.group === 'Tools')!.modules)}
+          {item(<SquareTerminal size={16} />, 'SQL Query Execution')}
+          {item(<RefreshCcwDot size={16} />, 'Re Write Stock')}
+          {heading('Utilities', MODULE_GROUPS.find(g => g.group === 'Utilities')!.modules)}
+          {item(<SlidersHorizontal size={16} />, 'Global Settings')}
+          {item(<FileX2 size={16} />, 'Remove Duplicate Invoice')}
+          {item(<Replace size={16} />, 'Replace and Remove Duplicate items')}
+          {item(<GitMerge size={16} />, 'Merge Items')}
+          {item(<GitCompare size={16} />, 'Compare Stock')}
+          {item(<History size={16} />, 'ADMIN Audit Log')}
           {heading('Administration', [ADMIN_MASTER])}
-          {item(<ShieldCheck size={16} />, ADMIN_MASTER)}
+          {item(<ShieldCheck size={16} />, ADMIN_MASTER, 'Admin Master (Security)')}
         </nav>
 
         <div className="shrink-0 border-t border-[#E2D8CC] dark:border-[#1E1E1E] px-4 py-3 text-[11px] text-[#70675F] dark:text-stone-500">
@@ -114,9 +126,7 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
             </span>
           </div>
           <div className="mt-0.5 truncate">Signed in as <span className="font-medium text-[#64283A] dark:text-[#D4A847]">{user}</span></div>
-          <div className="mt-2 flex justify-center opacity-10" aria-hidden="true">
-            <Wine size={14} className="text-[#B08A45] dark:text-[#D4A847]" />
-          </div>
+          <DevelopedBy className="mt-3 border-t border-[#E2D8CC] pt-3 dark:border-[#1E1E1E]" />
         </div>
       </aside>
     </>

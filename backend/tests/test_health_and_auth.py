@@ -1,5 +1,6 @@
 """Health check, login, and who may call what."""
 import pytest
+from conftest import enc
 
 
 async def test_health_is_public(anon_client):
@@ -11,7 +12,7 @@ async def test_health_is_public(anon_client):
 
 
 async def test_login_returns_token_role_and_modules(anon_client):
-    res = await anon_client.post("/auth/login", json={"user": "admin", "password": "admin"})
+    res = await anon_client.post("/auth/login", json={"user": "admin", "password": enc("admin")})
 
     assert res.status_code == 200
     body = res.json()
@@ -23,18 +24,18 @@ async def test_login_returns_token_role_and_modules(anon_client):
 
 
 async def test_login_rejects_wrong_password(anon_client):
-    res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": "wrong"})
+    res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": enc("wrong")})
 
     assert res.status_code == 401
     assert res.json()["detail"] == "Invalid user name or password"
 
 
 async def test_changed_password_replaces_the_old_one(client, anon_client):
-    res = await client.put("/admin/users/GURU", json={"user": "GURU", "password": "n3w-pass", "role": "Manager"})
+    res = await client.put("/admin/users/GURU", json={"user": "GURU", "password": enc("n3w-pass", "user"), "role": "Manager"})
     assert res.status_code == 200
 
-    old = await anon_client.post("/auth/login", json={"user": "GURU", "password": "guru"})
-    new = await anon_client.post("/auth/login", json={"user": "GURU", "password": "n3w-pass"})
+    old = await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("guru")})
+    new = await anon_client.post("/auth/login", json={"user": "GURU", "password": enc("n3w-pass")})
 
     assert old.status_code == 401
     assert new.status_code == 200
@@ -93,6 +94,6 @@ async def test_cashier_cannot_list_users(cashier_client):
 
 
 async def test_non_ascii_password_is_just_wrong(anon_client):
-    res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": "pässwörd"})
+    res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": enc("pässwörd")})
 
     assert res.status_code == 401

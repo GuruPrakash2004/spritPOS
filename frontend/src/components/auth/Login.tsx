@@ -4,9 +4,12 @@
 
 import { useState, useEffect, type FormEvent } from 'react';
 import { AlertCircle, Loader2, LogIn, Moon, Sun, Wine } from 'lucide-react';
-import { api, errorText, type ApiUser } from '../../lib/api';
+import { api, errorText, setRememberSession, type ApiUser } from '../../lib/api';
+import { loadPasswordRules } from '../../lib/passwords';
+import { encryptSecret } from '../../lib/secureField';
 import { IMAGES } from '../../constants/images';
 import VlqmsLogo from '../layout/VlqmsLogo';
+import DevelopedBy from '../layout/DevelopedBy';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 
 const FIN_YEARS = ['01/04/2026 - 31/03/2027', '01/04/2025 - 31/03/2026'];
@@ -179,6 +182,10 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
   const [user, setUser] = useState('ADMIN');
   const [password, setPassword] = useState('');
   const [finYear, setFinYear] = useState(FIN_YEARS[0]);
+  // Login Settings: offer "Remember me" only when the Administrator allows it.
+  const [offerRemember, setOfferRemember] = useState(false);
+  const [remember, setRemember] = useState(false);
+  useEffect(() => { loadPasswordRules().then(r => setOfferRemember(r.show_remember_me)); }, []);
   // Starts with the reason the last session ended, if any (see App.tsx).
   const [error, setError] = useState(notice);
   const [busy, setBusy] = useState(false);
@@ -198,7 +205,10 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
     e.preventDefault();
     if (!user.trim() || !password) return setError('Enter user name and password.');
     setBusy(true);
-    api<ApiUser>('/auth/login', { method: 'POST', body: { user, password } })
+    setRememberSession(offerRemember && remember);
+    // The password leaves the browser only encrypted (lib/secureField.ts).
+    encryptSecret(password, 'login')
+      .then(sealed => api<ApiUser>('/auth/login', { method: 'POST', body: { user, password: sealed } }))
       .then(u => onLogin(u, finYear))
       .catch(err => setError(errorText(err)))
       .finally(() => setBusy(false));
@@ -344,6 +354,12 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
                     {FIN_YEARS.map(y => <option key={y}>{y}</option>)}
                   </select>
                 </div>
+                {offerRemember && (
+                  <label className="flex items-center gap-2 text-xs text-[#70675F] dark:text-stone-400">
+                    <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
+                    Remember me on this device (until Sign out)
+                  </label>
+                )}
               </div>
 
               {error && (
@@ -368,6 +384,8 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
                 {busy ? 'Signing in…' : 'Sign in'}
               </button>
+
+              <DevelopedBy className="mt-6 border-t border-[#E3D9CD] pt-5 dark:border-[#2A2A2A]" />
             </form>
 
             {/* Demo credential hint */}

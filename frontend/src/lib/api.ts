@@ -2,7 +2,8 @@
 //
 // - Every call goes to /api/<path>; Vite proxies that to http://localhost:8001 (see vite.config.ts).
 // - After login, setAuthUser() stores the JWT (sessionStorage `vlqms_jwt_token`: it survives a page
-//   refresh but not closing the tab, which suits a shared shop counter); each request then sends
+//   refresh but not closing the tab, which suits a shared shop counter; with "Remember me", offered when
+//   Login Settings allow it, it is kept in localStorage `vlqms_jwt_remember` until sign-out); each request then sends
 //   `Authorization: Bearer <token>`. The backend needs it on every endpoint except login, the health
 //   check, GET /masters/company and company image content.
 // - Failed requests throw ApiError with FastAPI's `detail` text; show it with errorText(e).
@@ -12,14 +13,18 @@ export class ApiError extends Error {}
 
 // The logged-in user and JWT token.
 const TOKEN_KEY = 'vlqms_jwt_token';
+const REMEMBER_KEY = 'vlqms_jwt_remember';
 const readToken = () => {
   try {
     localStorage.removeItem(TOKEN_KEY);   // older builds kept the token here, surviving browser restarts
-    return sessionStorage.getItem(TOKEN_KEY) || '';
+    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(REMEMBER_KEY) || '';
   } catch {
     return '';
   }
 };
+let rememberSession = (() => { try { return !!localStorage.getItem(REMEMBER_KEY); } catch { return false; } })();
+/** "Remember me" at sign-in: keep this device signed in after the browser closes (until Sign out). */
+export const setRememberSession = (on: boolean) => { rememberSession = on; };
 let authUser = '';
 let authRole = '';
 let authToken = readToken();
@@ -29,6 +34,9 @@ export const setAuthToken = (token: string) => {
   try {
     if (token) sessionStorage.setItem(TOKEN_KEY, token);
     else sessionStorage.removeItem(TOKEN_KEY);
+    if (token && rememberSession) localStorage.setItem(REMEMBER_KEY, token);
+    else localStorage.removeItem(REMEMBER_KEY);
+    if (!token) rememberSession = false;
   } catch {
     // Storage blocked (private mode): the session just won't survive a refresh.
   }
@@ -57,6 +65,12 @@ export const canSeeCost = () => authModules.includes('*') || COST_MODULES.some(m
 export const canDo = (module: string, action: 'add' | 'edit' | 'delete') =>
   (authModules.includes('*') || authModules.includes(module)) && authRights[module]?.[action] !== false;
 export const getAuthRole = () => authRole;
+
+// Field Level Rights of the signed-in user's role (Admin Master (Security)): master path -> field -> mode.
+// MasterCrud hides "hidden" fields and locks "readonly" ones; the backend enforces the same.
+let authFieldRights: ApiFieldRights = {};
+export const setFieldRights = (rights: ApiFieldRights | undefined) => { authFieldRights = rights ?? {}; };
+export const fieldRight = (master: string, field: string): 'hidden' | 'readonly' | undefined => authFieldRights[master]?.[field];
 
 // App.tsx registers this: a 401 from any call except login means the session is over (expired token,
 // password changed, user deactivated), so the app returns to the sign-in page with the server's reason.
@@ -136,7 +150,7 @@ export type ApiCounter = { code: string; name: string; system_name: string; pref
 
 export type ApiItem = {
   code: string; name: string; hsn_code: string; group: string; brand: string; liqtype: string; uom: string;
-  package: string; bottles_per_case: number; mrp: number; purchase_rate: number | null; qoh: number;
+  package: string; bottles_per_case: number; mrp: number; purchase_rate: number | null; qoh: number; active?: boolean;
 };
 
 export type ApiStockRow = {
@@ -190,18 +204,35 @@ export type ApiCompany = {
 // Add/Edit/Delete ticks per module (Admin Master). A module with no entry has full rights.
 export type ApiRights = Record<string, { add: boolean; edit: boolean; delete: boolean }>;
 
+export type ApiFieldRights = Record<string, Record<string, 'hidden' | 'readonly'>>;
+
 export type ApiUser = {
   user: string;
   role: string;
   modules: string[];
   rights?: ApiRights;
+  field_rights?: ApiFieldRights;
+  must_change_password?: boolean;
   company: ApiCompany;
   access_token?: string;
   token?: string;
   token_type?: string;
 };
 
-export type ApiAdminUser = { user: string; role: string; active: boolean };
+export type ApiAdminUser = {
+  user: string; role: string; active: boolean; full_name?: string; email?: string; mobile?: string; department?: string;
+  dob?: string | null; password_reset_on?: string | null; inactive_reason?: string; password_expired?: boolean;
+};
+export type ApiLoginSettings = {
+  min_length: number; require_mix: boolean; require_upper: boolean; require_lower: boolean; require_digit: boolean;
+  require_special: boolean; password_expiry_days: number; show_remember_me: boolean;
+};
+export type ApiFieldRightsAdmin = { masters: Record<string, string[]>; roles: Record<string, ApiFieldRights> };
+export type ApiMasterApproval = {
+  masters: Record<string, string>; required: string[];
+  pending: { master: string; screen: string; code: string; name: string; changed_by: string | null }[];
+};
+export type ApiReportRights = { reports: string[]; rights: Record<string, string[]>; users: string[] };
 
 export type ApiRole = { name: string; modules: string[]; rights?: ApiRights; users: number };
 
@@ -242,3 +273,72 @@ export const qs = (params: Record<string, string | number | undefined>) => {
   const s = p.toString();
   return s ? `?${s}` : '';
 };
+
+// Tools → SQL Query Execution (backend/app/routers/tools.py). target "sqlserver" = the vLQMS SQL Server
+// (changes only to dbo.Web_* tables), "local" = the web app's SQLite file (changes only to web_outbox).
+export type ApiSqlTarget = 'sqlserver' | 'local';
+export type ApiSqlStatus = {
+  db_connected: boolean; database: string | null; driver: string | null;
+  local_saved: boolean; local_writable: string[];
+};
+export type ApiSqlObject = { kind: 'Tables' | 'Views' | 'Procedures'; schema: string; name: string };
+export type ApiSqlResult = {
+  kind?: 'read' | 'write';
+  table?: string;           // write: the table changed
+  rows_affected?: number;   // write: "N row(s) affected"
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+  row_count: number;
+  truncated: boolean;
+  elapsed_ms: number;
+};
+export type ApiSqlTop = ApiSqlResult & {
+  object: { schema: string; name: string; type: string }; total_rows: number;
+  writable: boolean;        // a web table: its rows can be changed with an UPDATE / DELETE query
+};
+
+// Tools → Re Write Stock (backend/app/stock_rewrite.py). On the "ledger" tab the two quantities are
+// ledger_stock (base + movements) and qoh; on the others trn_stock (documents) and sys_stock (movements).
+export type ApiStockDiffRow = {
+  item_code: string;
+  item_name: string;
+  trn_stock?: number;
+  sys_stock?: number;
+  ledger_stock?: number;
+  qoh?: number;
+  diff: number;
+};
+export type ApiStockTab = { key: string; caption: string; rows: ApiStockDiffRow[]; error?: string | null };
+export type ApiStockCheck = { tabs: ApiStockTab[]; rewrite_required: boolean };
+export type ApiRewriteCheck = { web: ApiStockCheck; desktop: ApiStockCheck | null; db_connected: boolean };
+export type ApiRewriteResult = {
+  rewritten: boolean;
+  message: string;
+  items_changed?: number;
+  movements?: number;
+  check: ApiStockCheck;
+};
+
+// ─── Utilities (backend app/routers/utilities.py) ──────────────────────────────
+export type ApiSettingKind = 'yn' | 'number' | 'text' | 'date';
+export type ApiSetting = {
+  code: string; group: string; caption: string; value: string; kind: ApiSettingKind; remarks: string;
+  effect: string | null; hidden: boolean; source: 'web' | 'custom' | 'env'; readonly: boolean;
+};
+export type ApiAuditItem = { code: string | null; name: string | null; status: string | null; details: string | null };
+export type ApiAuditRow = {
+  id: number | string; at: string; screen: string; action: string; main_fld: string; user_code: string | null;
+  earlier: string; changed: string; items: ApiAuditItem[];
+};
+export type ApiAbout = {
+  product: string; software_version: string; api_version: string; company: string; db_connected: boolean; server_time: string;
+};
+export type ApiDupInvoice = {
+  doc_no: string; date: string; time: string; added_by: string; sales_type: string; bill_system: 'Web' | 'Desktop';
+  qty: number; value: number; counter: string; removable: boolean; duplicate_of: string | null; why_not: string | null;
+};
+export type ApiMergeSide = { code: string; name: string; qoh: number; active: boolean };
+export type ApiMergePreview = {
+  from: ApiMergeSide; to: ApiMergeSide; lines: Record<string, number>; movements: number; qoh_after: number; message?: string;
+};
+export type ApiStockSheet = { basis: string; rows: { code: string; name: string; qty: number; value: number }[] };

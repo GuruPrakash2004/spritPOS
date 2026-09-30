@@ -6,7 +6,7 @@ import type { ApiRights } from '../../lib/api';
 export interface MatrixScreen {
   id: string;
   name: string;
-  group: 'GENERAL' | 'MASTERS' | 'TRANSACTIONS' | 'REPORTS' | 'ADMINISTRATION';
+  group: 'GENERAL' | 'MASTERS' | 'TRANSACTIONS' | 'REPORTS' | 'TOOLS' | 'UTILITIES' | 'ADMINISTRATION';
   sub: string;
   hasOpen: boolean;
   hasAdd: boolean;
@@ -56,11 +56,20 @@ export const MATRIX_SCREENS: MatrixScreen[] = [
   { id: 'Stock Level / Reorder', name: 'Stock Level / Reorder', group: 'REPORTS', sub: 'Reorder levels (ROL) and minimum order quantities', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'Reports Dashboard', name: 'Reports Dashboard', group: 'REPORTS', sub: 'Customised MIS reports across inventory and ledgers', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
 
+  // Tools (SQL Query Execution is Administrator-only, so it has no tick here)
+  { id: 'Re Write Stock', name: 'Re Write Stock', group: 'TOOLS', sub: 'Check stock against documents and rebuild QOH', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
+
+  // Utilities (Global Settings and the ADMIN Audit Log are Administrator-only, so they have no tick here)
+  { id: 'Remove Duplicate Invoice', name: 'Remove Duplicate Invoice', group: 'UTILITIES', sub: 'Remove bills saved twice (stock and points go back)', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
+  { id: 'Replace and Remove Duplicate items', name: 'Replace and Remove Duplicate items', group: 'UTILITIES', sub: 'Replace an item created twice with the right one', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
+  { id: 'Merge Items', name: 'Merge Items', group: 'UTILITIES', sub: 'Fold one item into another (bills, stock, QOH)', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
+  { id: 'Compare Stock', name: 'Compare Stock', group: 'UTILITIES', sub: 'Compare two stock sheets item by item', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
+
   // Administration
   { id: 'Admin Master', name: 'Admin Master', group: 'ADMINISTRATION', sub: 'Users, roles, structured item permissions and passwords', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: true },
 ];
 
-export const GROUPS = ['GENERAL', 'MASTERS', 'TRANSACTIONS', 'REPORTS', 'ADMINISTRATION'] as const;
+export const GROUPS = ['GENERAL', 'MASTERS', 'TRANSACTIONS', 'REPORTS', 'TOOLS', 'UTILITIES', 'ADMINISTRATION'] as const;
 
 export interface RoleDraft {
   name: string;
@@ -99,4 +108,59 @@ export function draftRights(draft: RoleDraft): ApiRights {
     };
   });
   return out;
+}
+
+// Tick changes on a role draft (Admin Master (Security) → Roles & rights).
+// Ticking Open gives the screen's actions (Cashiers don't get Delete by default); unticking it removes them.
+export function toggleOpenDraft(draft: RoleDraft, screenId: string): RoleDraft {
+  const modules = new Set(draft.modules);
+  const actions = new Set(draft.actions);
+  if (modules.has(screenId)) {
+    modules.delete(screenId);
+    ['add', 'edit', 'delete'].forEach(a => actions.delete(`${screenId}:${a}`));
+  } else {
+    modules.add(screenId);
+    const s = MATRIX_SCREENS.find(x => x.id === screenId);
+    if (s?.hasAdd) actions.add(`${screenId}:add`);
+    if (s?.hasEdit) actions.add(`${screenId}:edit`);
+    if (s?.hasDelete && draft.name !== 'Cashier') actions.add(`${screenId}:delete`);
+  }
+  return { ...draft, modules, actions };
+}
+
+export function toggleActionDraft(draft: RoleDraft, screenId: string, action: 'add' | 'edit' | 'delete'): RoleDraft {
+  const key = `${screenId}:${action}`;
+  const modules = new Set(draft.modules);
+  const actions = new Set(draft.actions);
+  if (actions.has(key)) actions.delete(key);
+  else { actions.add(key); modules.add(screenId); }   // an action needs the screen open
+  return { ...draft, modules, actions };
+}
+
+export function toggleGroupDraft(draft: RoleDraft, group: string, col: 'open' | 'add' | 'edit' | 'delete'): RoleDraft {
+  const screens = MATRIX_SCREENS.filter(s => s.group === group);
+  const modules = new Set(draft.modules);
+  const actions = new Set(draft.actions);
+  if (col === 'open') {
+    const allOpen = screens.every(s => modules.has(s.id));
+    screens.forEach(s => {
+      if (allOpen) {
+        modules.delete(s.id);
+        ['add', 'edit', 'delete'].forEach(a => actions.delete(`${s.id}:${a}`));
+      } else {
+        modules.add(s.id);
+        if (s.hasAdd) actions.add(`${s.id}:add`);
+        if (s.hasEdit) actions.add(`${s.id}:edit`);
+        if (s.hasDelete && draft.name !== 'Cashier') actions.add(`${s.id}:delete`);
+      }
+    });
+  } else {
+    const applicable = screens.filter(s => (col === 'add' ? s.hasAdd : col === 'edit' ? s.hasEdit : s.hasDelete));
+    const allOn = applicable.every(s => actions.has(`${s.id}:${col}`));
+    applicable.forEach(s => {
+      if (allOn) actions.delete(`${s.id}:${col}`);
+      else { actions.add(`${s.id}:${col}`); modules.add(s.id); }
+    });
+  }
+  return { ...draft, modules, actions };
 }

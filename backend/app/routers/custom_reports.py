@@ -9,7 +9,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 
-from .. import mailer, store
+from .. import mailer, security, store
 from ..schemas import ReportEmailIn
 from .auth import get_current_user, require_module
 
@@ -261,9 +261,23 @@ REPORTS = {
 }
 
 
+@router.get("/allowed")
+def allowed_reports(current_user: dict = Depends(get_current_user)):
+    """Customised Reports this user may run (Admin Master (Security) → Report Rights): `known` is every report
+    the server has, `allowed` those this user may run."""
+    return {"known": list(REPORTS), "allowed": [n for n in REPORTS if security.can_run_report(current_user, n)]}
+
+
+def _check_report_right(user: dict, name: str) -> None:
+    if not security.can_run_report(user, name):
+        raise HTTPException(403, f"You are not allowed to view '{name}' (Admin Master (Security) → Report Rights)")
+
+
 @router.get("")
 def run_report(name: str, from_date: date, to_date: date, ledger: list[str] = Query([]),
-               supplier: list[str] = Query([]), group: list[str] = Query([])):
+               supplier: list[str] = Query([]), group: list[str] = Query([]),
+               current_user: dict = Depends(get_current_user)):
+    _check_report_right(current_user, name)
     if from_date > to_date:
         raise HTTPException(422, "From Date cannot be after To Date")
     if (to_date - from_date).days > 3660:
@@ -286,9 +300,10 @@ async def email_report(body: ReportEmailIn, current_user: dict = Depends(get_cur
     if not mailer.configured():
         raise HTTPException(503, "Email isn't set up: add the SMTP settings to backend/.env (see .env.example). "
                                  "Meanwhile use Export XLS and attach the file to your email.")
+    _check_report_right(current_user, body.name)
     _check_email_rate(current_user["user"])
     report = await run_in_threadpool(run_report, body.name, body.from_date, body.to_date, body.ledger, body.supplier,
-                                     body.group)
+                                     body.group, current_user)
     if not report["rows"]:
         raise HTTPException(422, "Nothing to email for this period")
     company = store.COMPANY.get("name") or "Company"

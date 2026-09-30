@@ -17,7 +17,7 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import store, writeback
+from .. import admin_audit, gsettings, security, store, writeback
 from ..schemas import (
     Brand, Company, Customer, Item, ItemGroup, Ledger, LedgerGroup, Package, PriceUpdate, SalesCounter, Supplier, Uom,
 )
@@ -86,6 +86,16 @@ def _check_item(body: Item) -> None:
         raise HTTPException(422, f"Unknown brand '{body.brand}'")
 
 
+def _check_margin(row: dict) -> None:
+    """Global Settings PurSellVarPer: MRP must exceed the purchase rate by at least this %. Checked on the row
+    as it will be saved (with the stored purchase rate when the caller can't see or send it)."""
+    pct = gsettings.number("PurSellVarPer")
+    rate = row.get("purchase_rate") or 0
+    if pct > 0 and rate and row.get("mrp", 0) < round(rate * (1 + pct / 100), 2):
+        raise HTTPException(422, f"MRP of {row.get('code')} must be at least {pct:g}% above the purchase rate "
+                                 f"(₹ {rate * (1 + pct / 100):.2f}; Global Settings → PurSellVarPer)")
+
+
 def _clean(path: str, body: BaseModel, table: dict) -> BaseModel:
     """Request-side validation shared by create and update."""
     body.code = _check_code(body.code)
@@ -105,8 +115,10 @@ def _clean(path: str, body: BaseModel, table: dict) -> BaseModel:
 
 
 def _shown(path: str, row: dict, user: dict) -> dict:
-    """An item row as this user may see it (purchase rate hidden from roles without cost access)."""
-    return {**row, "purchase_rate": None} if path == "items" and hides_cost(user) else row
+    """A row as this user may see it: purchase rate hidden from roles without cost access, and fields hidden by
+    the role's Field Level Rights (Admin Master (Security))."""
+    row = {**row, "purchase_rate": None} if path == "items" and hides_cost(user) else row
+    return security.hide_fields(user, path, row)
 
 
 def _open_stock(code: str, qty: float) -> None:
@@ -144,12 +156,19 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
         body = _clean(path, body, table)
         if body.code in table:
             raise HTTPException(409, f"{tag} '{body.code}' already exists")
-        table[body.code] = body.model_dump()
+        row = security.apply_field_rights(current_user, path, body.model_dump(), None)
+        if path == "items":
+            _check_margin(row)
+        row.pop("authorised", None)
+        security.mark_approval(current_user, path, row)
+        row["changed_by"] = current_user["user"]
+        table[body.code] = row
         store.touch(store_name, body.code)
         if path == "items":
             if table[body.code]["purchase_rate"] is None:
                 table[body.code]["purchase_rate"] = 0.0
             _open_stock(body.code, body.qoh)
+        admin_audit.record(tag, "Added", body.code, "", admin_audit.diff({}, table[body.code])[1])
         return _shown(path, table[body.code], current_user)
 
     @router.put(f"/{path}/{{code}}", response_model=model, tags=[tag], name=f"Update {tag}", dependencies=can_edit)
@@ -163,13 +182,26 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
             reason = IN_USE[path](code)
             if reason:
                 raise HTTPException(409, f"Can't change the code of {tag} '{code}': {reason}")
-        row = body.model_dump()
+        row = security.apply_field_rights(current_user, path, body.model_dump(), table[code])
+        row.pop("authorised", None)
+        for k in ("authorised", "auth_by", "auth_on"):
+            if k in table[code]:
+                row[k] = table[code][k]
         if path == "items":
             row["qoh"] = table[code]["qoh"]   # stock changes only through transactions
             if row["purchase_rate"] is None or not can_see_cost(current_user):
                 row["purchase_rate"] = table[code]["purchase_rate"]   # can't be changed by someone who can't see it
+            _check_margin(row)
+        security.mark_approval(current_user, path, row)
+        row["changed_by"] = current_user["user"]
+        earlier, changed = admin_audit.diff({k: v for k, v in table[code].items() if k != "changed_by"},
+                                            {k: v for k, v in row.items() if k != "changed_by"})
+        if changed:
+            admin_audit.record(tag, "Edited", code if body.code == code else f"{code} → {body.code}", earlier, changed)
         table.pop(code)
         table[body.code] = row
+        if path == "items" and body.code != code:
+            store.rename_item_stock(code, body.code)
         store.touch(store_name, code)
         store.touch(store_name, body.code)
         return _shown(path, row, current_user)
@@ -183,7 +215,10 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
         reason = IN_USE[path](code)
         if reason:
             raise HTTPException(409, f"Can't delete {tag} '{code}': {reason}")
+        admin_audit.record(tag, "Deleted", code, admin_audit.diff(table[code], {})[0], "")
         del table[code]
+        if path == "items":
+            store.rename_item_stock(code, None)
         store.touch(store_name, code)
 
 
@@ -194,6 +229,9 @@ def get_company():
 
 @router.put("/company", response_model=Company, tags=["Company Master"])
 def update_company(body: Company, admin: dict = Depends(require_admin)):
+    earlier, changed = admin_audit.diff(store.COMPANY, {**store.COMPANY, **body.model_dump()})
+    if changed:
+        admin_audit.record("Company Master", "Edited", store.COMPANY.get("name") or "Company", earlier, changed)
     store.COMPANY.update(body.model_dump())
     store.touch("COMPANY", "*")
     return store.COMPANY
@@ -201,16 +239,24 @@ def update_company(body: Company, admin: dict = Depends(require_admin)):
 
 @router.post("/items/price-list", response_model=list[Item], tags=["Item Price List Maintenance"],
              dependencies=[Depends(require_right("edit", "Price List Maintenance"))])
-def bulk_update_rates(body: PriceUpdate):
-    """Select by item group or item codes, then shift a rate column by an amount (legacy Load → Apply)."""
+def bulk_update_rates(body: PriceUpdate, current_user: dict = Depends(get_current_user)):
+    """Select by item group or item codes, then shift a rate column by an amount (legacy Load → Apply).
+    Follows Admin Master (Security): a column that is read-only for the role is refused, and changed items of a
+    master that needs approval wait for it again."""
+    if security.field_rights(current_user, "items").get(body.column):
+        raise HTTPException(403, f"You may not change {body.column.replace('_', ' ')} (Field Level Rights for your role)")
     targets = [i for i in store.ITEMS.values()
                if (body.group and i["group"] == body.group) or (body.item_codes and i["code"] in body.item_codes)]
     if not targets:
         raise HTTPException(404, "No items match the selection")
     for i in targets:
+        old = i[body.column]
         i[body.column] = round(max(0.0, i[body.column] + body.change_by), 2)
+        security.mark_approval(current_user, "items", i)
+        i["changed_by"] = current_user["user"]
         store.touch("ITEMS", i["code"])
-    return targets
+        admin_audit.record("Price List Maintenance", "Edited", i["code"], f"{body.column}: {old}", f"{body.column}: {i[body.column]}")
+    return [_shown("items", i, current_user) for i in targets]
 
 
 @router.post("/items/import", tags=["Item Master"], dependencies=[Depends(require_right("add", "Item Master"))])
@@ -227,6 +273,12 @@ def import_items(rows: list[Item], overwrite: bool = False, current_user: dict =
         except HTTPException as e:
             problems.append(f"Row {n} ({r.code or 'no code'}): {e.detail}")
             continue
+        existing = store.ITEMS.get(r.code)
+        try:
+            rate = r.purchase_rate if r.purchase_rate is not None and can_see_cost(current_user) else (existing or {}).get("purchase_rate")
+            _check_margin({**r.model_dump(), "purchase_rate": rate})
+        except HTTPException as e:
+            problems.append(f"Row {n} ({r.code}): {e.detail}")
         if r.code in seen:
             problems.append(f"Row {n} ({r.code}): the same code appears twice in the file")
         seen.add(r.code)
@@ -239,7 +291,16 @@ def import_items(rows: list[Item], overwrite: bool = False, current_user: dict =
         if existing and not overwrite:
             duplicates.append(r.code)
             continue
-        store.ITEMS[r.code] = r.model_dump()
+        row = security.apply_field_rights(current_user, "items", r.model_dump(), existing)
+        allowed = store.IMPORT_FIELDS.get("fields") or []
+        if existing and allowed:   # Global Settings → Bulk Item Import Fields: only these change on existing items
+            row = {**existing, **{f: row[f] for f in allowed if f in row}}
+        row.pop("authorised", None)
+        security.mark_approval(current_user, "items", row)
+        row["changed_by"] = current_user["user"]
+        admin_audit.record("Item Master", "Imported" if existing else "Added", r.code,
+                           *admin_audit.diff(existing, row | ({"qoh": existing["qoh"]} if existing else {})))
+        store.ITEMS[r.code] = row
         store.touch("ITEMS", r.code)
         if store.ITEMS[r.code]["purchase_rate"] is None:
             store.ITEMS[r.code]["purchase_rate"] = existing["purchase_rate"] if existing else 0.0

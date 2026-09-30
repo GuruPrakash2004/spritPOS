@@ -1,10 +1,16 @@
-// Tests for the Change password dialog: inline mistakes, and the new token replacing the old one.
+// Tests for the Change password dialog: inline mistakes, both passwords sent encrypted, and the new token
+// replacing the old one.
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toastStore } from '../common/toastStore'
 import ChangePasswordDialog from './ChangePasswordDialog'
 import { getAuthToken, setAuthUser } from '../../lib/api'
+
+// Passwords leave the browser only encrypted; here the encryption is a visible stand-in.
+vi.mock('../../lib/secureField', () => ({ encryptSecret: async (p: string, f: string) => (p ? `enc:${f}:${p}` : p) }))
+// Password rules: the defaults (the real rules come from GET /auth/login-settings).
+vi.mock('../../lib/passwords', async importOriginal => ({ ...(await importOriginal<typeof import('../../lib/passwords')>()), loadPasswordRules: async () => ({}) }))
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -56,7 +62,7 @@ describe('ChangePasswordDialog', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('/api/auth/change-password')
-    expect(JSON.parse(String(init.body))).toEqual({ current_password: 'ravi', new_password: 'Counter#77' })
+    expect(JSON.parse(String(init.body))).toEqual({ current_password: 'enc:current:ravi', new_password: 'enc:new:Counter#77' })
     expect(getAuthToken()).toBe('new-token')
   })
 

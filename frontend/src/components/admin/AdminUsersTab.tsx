@@ -1,11 +1,16 @@
-// Users tab of Admin Master: the user list plus the add/edit form (user, password, role, active).
+// Users tab of Admin Master (Security): the user list plus the add/edit form (user, password, role, active,
+// and the desktop user master's full name, email, mobile, department, DOB, password reset date and inactive reason).
 
 import { FilePlus, Pencil, Save, Trash2, X } from 'lucide-react';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import type { ApiAdminUser, ApiRole } from '../../lib/api';
 import { badge, field, iconButton, label, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
 
-export type UserForm = { user: string; password: string; role: string; active: boolean; isNew: boolean };
+export type UserForm = {
+  user: string; password: string; role: string; active: boolean; isNew: boolean;
+  full_name: string; email: string; mobile: string; department: string; dob: string; password_reset_on: string; inactive_reason: string;
+};
+const bad = '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake';
 
 type Props = {
   users: ApiAdminUser[];
@@ -51,7 +56,11 @@ export default function AdminUsersTab({ users, roles, currentUser, userForm, err
                     <span className="font-medium text-stone-800 dark:text-stone-200">{user.role}</span>
                     {user.role === 'Cashier' && <span className="ml-2 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">(Can Add Items)</span>}
                   </td>
-                  <td className="px-4 py-2.5"><span className={badge(user.active ? 'success' : 'neutral')}>{user.active ? 'Active' : 'Inactive'}</span></td>
+                  <td className="px-4 py-2.5">
+                    <span className={badge(user.active ? 'success' : 'neutral')}>{user.active ? 'Active' : 'Inactive'}</span>
+                    {user.password_expired && <span className={`${badge('warning')} ml-1`}>Password expired</span>}
+                    {user.full_name && <div className="mt-0.5 text-[11px] text-stone-500">{user.full_name}</div>}
+                  </td>
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-1">
                       <button onClick={() => onEdit(user)} className={iconButton} aria-label={`Edit ${user.user}`} title="Edit"><Pencil size={14} /></button>
@@ -93,10 +102,30 @@ export default function AdminUsersTab({ users, roles, currentUser, userForm, err
             </select>
             <InlineError message={errors.role} />
           </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {([['full_name', 'Full name', 'text'], ['email', 'Email ID', 'email'], ['mobile', 'Mobile No', 'tel'], ['department', 'Department', 'text'],
+              ['dob', 'DOB', 'date'], ['password_reset_on', 'Password reset on', 'date']] as const).map(([k, caption, type]) => (
+              <div key={k}>
+                <label htmlFor={`am-${k}`} className={label}>{caption}</label>
+                <input id={`am-${k}`} type={type} value={userForm[k]} onChange={event => onChange(k, event.target.value)}
+                  className={`${field} ${errors[k] ? bad : ''}`} aria-invalid={!!errors[k]} />
+                <InlineError message={errors[k]} />
+                {k === 'password_reset_on' && <p className="mt-1 text-[11px] text-stone-500">From this date the user must change their password at sign-in.</p>}
+              </div>
+            ))}
+          </div>
           <label className="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-200">
             <input type="checkbox" checked={userForm.active} onChange={event => onChange('active', event.target.checked)} className="h-4 w-4 accent-accent" />
             Active (inactive users cannot log in)
           </label>
+          {!userForm.active && (
+            <div>
+              <label htmlFor="am-inactive_reason" className={label}>Reason for inactive{required}</label>
+              <input id="am-inactive_reason" value={userForm.inactive_reason} onChange={event => onChange('inactive_reason', event.target.value)}
+                className={`${field} ${errors.inactive_reason ? bad : ''}`} aria-invalid={!!errors.inactive_reason} />
+              <InlineError message={errors.inactive_reason} />
+            </div>
+          )}
           <div className="flex justify-end gap-2 border-t border-line pt-4">
             <button onClick={onCancel} className={secondaryButton}><X size={14} />Cancel</button>
             <button onClick={onSave} className={primaryButton}><Save size={14} />Save user</button>

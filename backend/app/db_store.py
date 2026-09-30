@@ -330,7 +330,8 @@ def load_sales_invoices(limit: int = 200) -> None:
         rate = _f(r.get("SINVRate"))
         amt = _f(r.get("SINVAmt"))
         item_id = str(r.get("ITEMID") or "")
-        item_code = item_by_id.get(item_id, item_id)
+        # Items merged away in the web app (Utilities → Merge Items) land on the item they became.
+        item_code = store.merged_code(store.MERGED_ITEM_IDS.get(str(item_id)) or item_by_id.get(item_id, item_id))
         item_obj = store.ITEMS.get(item_code, {})
         pkg_name = item_obj.get("package", "750ml")
         try:
@@ -397,7 +398,8 @@ def load_purchase_bills(limit: int = 100) -> None:
         rate = _f(r.get("PBRate"))
         amt = _f(r.get("PBAmt"))
         item_id = str(r.get("ITEMID") or "")
-        item_code = item_by_id.get(item_id, item_id)
+        # Items merged away in the web app (Utilities → Merge Items) land on the item they became.
+        item_code = store.merged_code(store.MERGED_ITEM_IDS.get(str(item_id)) or item_by_id.get(item_id, item_id))
         item_obj = store.ITEMS.get(item_code, {})
         bills[pb_no]["lines"].append({
             "item_code": item_code,
@@ -445,6 +447,7 @@ def live_sales_and_stock(start: date, end: date) -> dict | None:
             return _live_cache["data"]
         try:
             id_to_code = {str(it.get("_itemid")): code for code, it in store.ITEMS.items() if it.get("_itemid")}
+            id_to_code.update({k: store.merged_code(v) for k, v in store.MERGED_ITEM_IDS.items()})
             sales = db.fetchall(f"""
                 SELECT d.ITEMID, SUM(d.SINVQty) AS QTY, MIN(h.SINVDate) AS FIRSTDATE, MAX(h.SINVDate) AS LASTDATE
                 FROM TrnHdrSINV h WITH (NOLOCK)
@@ -472,8 +475,11 @@ def live_sales_and_stock(start: date, end: date) -> dict | None:
                 last_sold[code] = max(last_sold.get(code, ""), last)
             if first and (first_sale is None or first < first_sale):
                 first_sale = first
-        qoh = {id_to_code[str(r.get("ITEMID"))]: _f(r.get("CLBal"))
-               for r in stock if str(r.get("ITEMID")) in id_to_code}
+        qoh: dict[str, float] = {}
+        for r in stock:   # added up: a merged item's old ItemID maps to the item it became
+            code = id_to_code.get(str(r.get("ITEMID")))
+            if code:
+                qoh[code] = qoh.get(code, 0.0) + _f(r.get("CLBal"))
 
         data = {"sold": sold, "last_sold": last_sold, "first_sale": first_sale, "qoh": qoh}
         _live_cache.update(at=time.monotonic(), key=key, data=data)
@@ -490,7 +496,7 @@ def load_masters() -> None:
     logger.info("Master data loaded: %d items, %d users, %d suppliers", len(store.ITEMS), len(store.USERS), len(store.SUPPLIERS))
     # Movements before this index are the seeded demo history; later ones are bills made in this app.
     store.DB_BASE_MOVEMENTS = len(store.MOVEMENTS)
-    store.APP_MOVEMENTS_FROM = len(store.MOVEMENTS)
+    store.mark_app_start()
 
 
 def load_transactions() -> None:

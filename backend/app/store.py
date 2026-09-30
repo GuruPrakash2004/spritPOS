@@ -12,6 +12,9 @@ Key rules:
   carry "origin" ("seed" / "db"); documents made through the app have none, and are the ones
   app/persistence.py saves.
 - Call touch(TABLE, key) after changing a master row, user or role, so the change is saved.
+- BASE_QOH is each item's QOH where the app's own movements start (MOVEMENTS[APP_MOVEMENTS_FROM:]), so
+  QOH must always equal BASE_QOH + those movements; Tools → Re Write Stock checks and restores that.
+  Set both with mark_app_start(), never one without the other.
 - ROLES maps a role to the module names it may open (the React sidebar names; "*" = all).
 """
 import copy
@@ -119,7 +122,8 @@ SALES_PERSONS = ["GURU", "PRADEEP", "RAVI", "ADMIN"]
 # The demo logins (ADMIN/admin, GURU/guru, PRADEEP/pradeep, RAVI/ravi) are for development:
 # change them in Admin Master before real use.
 def _user(name: str, password: str, role: str) -> dict:
-    return {"user": name, "password_hash": hash_password(password), "role": role, "active": True, "pwv": 1}
+    return {"user": name, "password_hash": hash_password(password), "role": role, "active": True, "pwv": 1,
+            "password_set_on": date.today().isoformat()}
 
 
 SEED_USERS = {u["user"]: u for u in [
@@ -159,6 +163,9 @@ SETTINGS = {
     "loyalty": {"points_per_rupee": 0.01, "alert_when_points_above": 500, "min_bill_amount": 1000},
     "invoice": {"salesperson_required": True, "print_preview": False, "barcode_scan_jumps_to_qty": True},
 }
+# Global Settings rows (legacy UtlGSettings), code -> row; seeded and managed by app/gsettings.py, which also
+# keeps SETTINGS above (the older /settings shape) in step with them.
+GSETTINGS: dict[str, dict] = {}
 
 # Transactions: doc type -> {doc_no: doc}
 DOCS: dict[str, dict[str, dict]] = {k: {} for k in [
@@ -172,10 +179,16 @@ DB_BASE_MOVEMENTS = 0
 # Index into MOVEMENTS where movements made through this app start (after the seed history and the DB
 # load). app/persistence.py saves MOVEMENTS[APP_MOVEMENTS_FROM:] and replays them after a restart.
 APP_MOVEMENTS_FROM = 0
+# Each item's QOH at that index (items created later in the app start from 0). See mark_app_start().
+BASE_QOH: dict[str, float] = {}
 
 # Master rows changed through the app, per table name ("ITEMS", "USERS", "ROLES", "COMPANY", ...).
 # app/persistence.py saves these rows (or their deletion) and lays them back over the seed/DB data on start.
 EDITS: dict[str, set[str]] = {}
+
+# ADMIN Audit Log entries of the request that just succeeded, written with the state by persistence.save()
+# (app/admin_audit.py fills it).
+AUDIT_OUT: list[dict] = []
 
 # Writes queued for SQL Server (app/writeback.py, only with DB_WRITE_ENABLED). Saved with the rest of the
 # app state (app/persistence.py) so nothing queued is lost on a restart.
@@ -228,6 +241,63 @@ def find(table: dict, key: str) -> dict | None:
 def next_doc_no(kind: str, prefix: str) -> str:
     """Next number in a document series, e.g. next_doc_no("sales_invoice", "c10") -> "26/c10-0083718"."""
     return f"{FY_PREFIX}/{prefix}-{next(_seq[kind]):07d}"
+
+
+def mark_app_start() -> None:
+    """Record where the app's own stock movements begin: later movements are the app's, and QOH at this
+    moment is each item's base (Tools → Re Write Stock rebuilds QOH as base + app movements)."""
+    global APP_MOVEMENTS_FROM
+    APP_MOVEMENTS_FROM = len(MOVEMENTS)
+    BASE_QOH.clear()
+    BASE_QOH.update({code: item["qoh"] for code, item in ITEMS.items()})
+
+
+def rename_item_stock(old: str, new: str | None) -> None:
+    """An item was re-coded (new) or deleted (None): move or drop its base QOH and its app "opening"
+    movements, so Re Write Stock doesn't count them for a later item with the old code. Only called for
+    items that are in no document, so opening movements are the only ones it can have."""
+    base = BASE_QOH.pop(old, None)
+    if new is not None and base is not None:
+        BASE_QOH[new] = base
+    kept = []
+    for m in MOVEMENTS[APP_MOVEMENTS_FROM:]:
+        if m["item"] == old and m["kind"] == "opening":
+            if new is None:
+                continue
+            m = {**m, "item": new}
+        kept.append(m)
+    MOVEMENTS[APP_MOVEMENTS_FROM:] = kept
+
+
+# Admin Master (Security), see app/security.py. SECURITY: {"login": Login Settings, "adnl_admin_hash": ...};
+# FIELD_RIGHTS[role][master path][field] = "hidden" | "readonly"; MASTER_APPROVAL["masters"] = master
+# paths whose rows need approval; REPORT_RIGHTS[report name] = users who may run that Customised Report.
+SECURITY: dict = {}
+FIELD_RIGHTS: dict[str, dict] = {}
+MASTER_APPROVAL: dict[str, list] = {"masters": []}
+REPORT_RIGHTS: dict[str, list] = {}
+
+# Global Settings → Other Settings (app/doc_settings.py): per-document print and transaction settings, number
+# prefixes, the sidebar's hidden modules and shortcut codes, and the fields an Item import may overwrite.
+DOC_SETTINGS: dict[str, dict] = {}
+NUMBER_SERIES: dict[str, dict] = {}
+MENU_LAYOUT: dict = {"hidden": [], "codes": {}}
+IMPORT_FIELDS: dict[str, list] = {"fields": []}
+
+# Items merged away (Utilities → Merge Items / Replace and Remove Duplicate items): old code -> the item it
+# was merged into, and the old item's desktop ItemID -> that item. Saved by persistence.py; db_store maps
+# bills loaded later from SQL Server through them.
+MERGED_ITEMS: dict[str, str] = {}
+MERGED_ITEM_IDS: dict[str, str] = {}
+
+
+def merged_code(code: str) -> str:
+    """The item a (possibly merged-away) code now lives on."""
+    seen = set()
+    while code in MERGED_ITEMS and code not in seen:
+        seen.add(code)
+        code = MERGED_ITEMS[code]
+    return code
 
 
 def move_stock(item_code: str, qty: float, kind: str, doc_no: str, on: date, rate: float) -> None:
@@ -383,4 +453,4 @@ def _seed_sales_history():
 
 
 _seed_sales_history()
-APP_MOVEMENTS_FROM = len(MOVEMENTS)
+mark_app_start()

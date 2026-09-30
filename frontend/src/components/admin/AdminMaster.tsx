@@ -1,14 +1,17 @@
-// Admin Master (/adminMaster, Administrator only): users, roles and per-screen rights
-// (legacy frmMstRole + frmUtlAssignRights).
+// Admin Master (Security) (/adminMaster, Administrator only; the desktop menu's Utilities → Security, 700):
+// users, roles and per-screen rights (legacy frmMstUSer, frmMstRole, frmMstRights), plus the tabs Field rights
+// (frmMstFldRights), Master approvals (frmUtlMstApprovals), Report rights (frmUtlAssignRight) and Login settings
+// (frmUtlLoginSettings, Change Adnl. ADMIN Password). Rights are per role: a user who needs different rights
+// gets a role of their own.
 //
-// Endpoints: /admin/users (GET/POST/PUT/DELETE) and /admin/roles (GET/PUT/DELETE).
-// Note: only the list of modules a role may open is saved. The Add/Edit/Delete ticks in the grid
-// are UI-only; the backend does not store them.
+// Endpoints: /admin/users (GET/POST/PUT/DELETE), /admin/roles, /admin/field-rights,
+// /admin/master-approval, /admin/report-rights, /admin/login-settings, /admin/adnl-admin-password.
+// A role's modules and its Add/Edit/Delete ticks are saved and enforced by the server.
 
 import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   FilePlus, KeyRound, Save, Trash2, Users, X,
-  Eye, Edit3,
+  Eye, Edit3, TextCursorInput, BadgeCheck, FileBarChart, LockKeyhole,
 } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
@@ -17,16 +20,23 @@ import { FormErrorSummary } from '../common/FormErrorSummary';
 import { api, errorText, type ApiAdminUser, type ApiRole } from '../../lib/api';
 import { ADMIN_ROLE } from '../../lib/modules';
 import { badge, label, pageHeader, pageSub, pageTitle, primaryButton, secondaryButton, dangerButton } from '../../lib/styles';
-import { MATRIX_SCREENS, type RoleDraft, draftRights, parseRoleToDraft } from './matrixDefs';
+import { MATRIX_SCREENS, type RoleDraft, draftRights, parseRoleToDraft, toggleActionDraft, toggleGroupDraft, toggleOpenDraft } from './matrixDefs';
 import AdminUsersTab, { type UserForm } from './AdminUsersTab';
-import { passwordProblem } from '../../lib/passwords';
+import { loadPasswordRules, passwordProblem } from '../../lib/passwords';
+import FieldRightsTab from './FieldRightsTab';
+import ApprovalsTab from './ApprovalsTab';
+import ReportRightsTab from './ReportRightsTab';
+import LoginSettingsTab from './LoginSettingsTab';
+import { encryptSecret } from '../../lib/secureField';
 import PermissionMatrixTable from './PermissionMatrixTable';
 
 const tabButton = (on: boolean) => `-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-xs font-semibold transition-colors ${on
   ? 'border-[#64283A] text-[#64283A] dark:border-[#D4A847] dark:text-[#E8C36A]'
   : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50'}`;
+const EMPTY_USER_DETAILS = { full_name: '', email: '', mobile: '', department: '', dob: '', password_reset_on: '', inactive_reason: '' };
+
 export default function AdminMaster({ currentUser }: { currentUser: string }) {
-  const [tab, setTab] = useState<'users' | 'roles'>('roles');
+  const [tab, setTab] = useState<'users' | 'roles' | 'fields' | 'approvals' | 'reports' | 'login'>('roles');
   const [users, setUsers] = useState<ApiAdminUser[]>([]);
   const [roles, setRoles] = useState<ApiRole[]>([]);
   const [userForm, setUserForm] = useState<UserForm | null>(null);
@@ -69,7 +79,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     }).catch(fail);
   }, []);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { reload(); loadPasswordRules(); }, [reload]);
 
   // ---- Users ----
   const handleUserFieldChange = <K extends keyof UserForm>(k: K, v: UserForm[K]) => {
@@ -86,14 +96,18 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
 
   const focusUserField = (k: string) => {
     const map: Record<string, string> = { user: 'am-user', password: 'am-pwd', role: 'am-role' };
+    if (!map[k]) map[k] = `am-${k}`;
     const el = document.getElementById(map[k] || k);
     if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
   };
 
   const saveUser = async () => {
     if (!userForm) return;
-    const { user, password, role, active, isNew } = userForm;
+    const { user, password, role, active, isNew, full_name, email, mobile, department, dob, password_reset_on, inactive_reason } = userForm;
     const errors: Record<string, string> = {};
+    if (email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) errors.email = 'EmailID is not valid!!';
+    if (!active && !inactive_reason.trim()) errors.inactive_reason = 'Enter why this user is inactive';
+    if (dob && dob > new Date().toISOString().slice(0, 10)) errors.dob = 'Not a valid DOB';
 
     if (!user.trim()) errors.user = 'Enter the user name';
     if (!role) errors.role = 'Select a role';
@@ -108,11 +122,19 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     }
     setUserFormErrors({});
 
-    const body = { user: user.trim().toUpperCase(), password: password || null, role, active };
+    const body = {
+      user: user.trim().toUpperCase(), password: password || null, role, active, full_name: full_name.trim(), email: email.trim(),
+      mobile: mobile.trim(), department: department.trim(), dob: dob || null, password_reset_on: password_reset_on || null,
+      inactive_reason: active ? '' : inactive_reason.trim(),
+    };
     if (!(await toastStore.defer('ok', `User ${body.user} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
-    const request = isNew
-      ? api('/admin/users', { method: 'POST', body })
-      : api(`/admin/users/${encodeURIComponent(user)}`, { method: 'PUT', body });
+    // The password leaves the browser only encrypted (lib/secureField.ts).
+    const request = encryptSecret(body.password ?? '', 'user').then(sealed => {
+      const sent = { ...body, password: sealed || null };
+      return isNew
+        ? api('/admin/users', { method: 'POST', body: sent })
+        : api(`/admin/users/${encodeURIComponent(user)}`, { method: 'PUT', body: sent });
+    });
     request.then(() => {
       setToast({ kind: 'ok', text: `User ${body.user} saved.` });
       setUserForm(null);
@@ -128,82 +150,10 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
       .catch(fail);
   };
 
-  // ---- Matrix Toggle Logic ----
-  const toggleOpen = (screenId: string) => {
-    if (!roleDraft) return;
-    const nextMods = new Set(roleDraft.modules);
-    const nextActs = new Set(roleDraft.actions);
-
-    if (nextMods.has(screenId)) {
-      nextMods.delete(screenId);
-      // Unticking open also removes button rights
-      nextActs.delete(`${screenId}:add`);
-      nextActs.delete(`${screenId}:edit`);
-      nextActs.delete(`${screenId}:delete`);
-    } else {
-      nextMods.add(screenId);
-      // Ticking open gives default actions
-      const s = MATRIX_SCREENS.find(x => x.id === screenId);
-      if (s) {
-        if (s.hasAdd) nextActs.add(`${screenId}:add`);
-        if (s.hasEdit) nextActs.add(`${screenId}:edit`);
-        if (s.hasDelete && roleDraft.name !== 'Cashier') nextActs.add(`${screenId}:delete`);
-      }
-    }
-    setRoleDraft({ ...roleDraft, modules: nextMods, actions: nextActs });
-  };
-
-  const toggleAction = (screenId: string, actionType: 'add' | 'edit' | 'delete') => {
-    if (!roleDraft) return;
-    const key = `${screenId}:${actionType}`;
-    const nextActs = new Set(roleDraft.actions);
-    const nextMods = new Set(roleDraft.modules);
-
-    if (nextActs.has(key)) {
-      nextActs.delete(key);
-    } else {
-      nextActs.add(key);
-      nextMods.add(screenId); // ensure open is ticked if an action is ticked
-    }
-    setRoleDraft({ ...roleDraft, modules: nextMods, actions: nextActs });
-  };
-
-  const toggleGroup = (group: string, col: 'open' | 'add' | 'edit' | 'delete') => {
-    if (!roleDraft) return;
-    const groupScreens = MATRIX_SCREENS.filter(s => s.group === group);
-    const nextMods = new Set(roleDraft.modules);
-    const nextActs = new Set(roleDraft.actions);
-
-    if (col === 'open') {
-      const allOpen = groupScreens.every(s => nextMods.has(s.id));
-      groupScreens.forEach(s => {
-        if (allOpen) {
-          nextMods.delete(s.id);
-          nextActs.delete(`${s.id}:add`);
-          nextActs.delete(`${s.id}:edit`);
-          nextActs.delete(`${s.id}:delete`);
-        } else {
-          nextMods.add(s.id);
-          if (s.hasAdd) nextActs.add(`${s.id}:add`);
-          if (s.hasEdit) nextActs.add(`${s.id}:edit`);
-          if (s.hasDelete && roleDraft.name !== 'Cashier') nextActs.add(`${s.id}:delete`);
-        }
-      });
-    } else {
-      const applicable = groupScreens.filter(s => (col === 'add' ? s.hasAdd : col === 'edit' ? s.hasEdit : s.hasDelete));
-      const allActive = applicable.every(s => nextActs.has(`${s.id}:${col}`));
-      applicable.forEach(s => {
-        const key = `${s.id}:${col}`;
-        if (allActive) {
-          nextActs.delete(key);
-        } else {
-          nextActs.add(key);
-          nextMods.add(s.id);
-        }
-      });
-    }
-    setRoleDraft({ ...roleDraft, modules: nextMods, actions: nextActs });
-  };
+  // ---- Matrix ticks ----
+  const toggleOpen = (screenId: string) => setRoleDraft(d => toggleOpenDraft(d, screenId));
+  const toggleAction = (screenId: string, actionType: 'add' | 'edit' | 'delete') => setRoleDraft(d => toggleActionDraft(d, screenId, actionType));
+  const toggleGroup = (group: string, col: 'open' | 'add' | 'edit' | 'delete') => setRoleDraft(d => toggleGroupDraft(d, group, col));
 
   const saveRole = async () => {
     if (!roleDraft) return;
@@ -292,21 +242,38 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
       <div className={pageHeader}>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className={pageTitle}>Admin Master</h1>
+            <h1 className={pageTitle}>Admin Master (Security)</h1>
             <span className={badge('neutral')}>Administrators only</span>
           </div>
           <p className={pageSub}>Users, roles, structured item permissions and operational hierarchy.</p>
         </div>
       </div>
 
-      <div role="tablist" aria-label="Admin sections" className="flex gap-1 border-b border-line">
+      <div role="tablist" aria-label="Admin sections" className="flex gap-1 overflow-x-auto border-b border-line">
         <button role="tab" aria-selected={tab === 'users'} onClick={() => setTab('users')} className={tabButton(tab === 'users')}>
           <Users size={14} />Users
         </button>
         <button role="tab" aria-selected={tab === 'roles'} onClick={() => setTab('roles')} className={tabButton(tab === 'roles')}>
           <KeyRound size={14} />Roles &amp; rights
         </button>
+        <button role="tab" aria-selected={tab === 'fields'} onClick={() => setTab('fields')} className={tabButton(tab === 'fields')}>
+          <TextCursorInput size={14} />Field rights
+        </button>
+        <button role="tab" aria-selected={tab === 'approvals'} onClick={() => setTab('approvals')} className={tabButton(tab === 'approvals')}>
+          <BadgeCheck size={14} />Master approvals
+        </button>
+        <button role="tab" aria-selected={tab === 'reports'} onClick={() => setTab('reports')} className={tabButton(tab === 'reports')}>
+          <FileBarChart size={14} />Report rights
+        </button>
+        <button role="tab" aria-selected={tab === 'login'} onClick={() => setTab('login')} className={tabButton(tab === 'login')}>
+          <LockKeyhole size={14} />Login settings
+        </button>
       </div>
+
+      {tab === 'fields' && <FieldRightsTab roles={roles} />}
+      {tab === 'approvals' && <ApprovalsTab />}
+      {tab === 'reports' && <ReportRightsTab />}
+      {tab === 'login' && <LoginSettingsTab currentUser={currentUser} />}
 
       {tab === 'users' && <AdminUsersTab
         users={users}
@@ -316,11 +283,15 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
         errors={userFormErrors}
         onNew={() => {
           setUserFormErrors({});
-          setUserForm({ user: '', password: '', role: roles.find(r => r.name !== ADMIN_ROLE)?.name ?? ADMIN_ROLE, active: true, isNew: true });
+          setUserForm({ user: '', password: '', role: roles.find(r => r.name !== ADMIN_ROLE)?.name ?? ADMIN_ROLE, active: true, isNew: true, ...EMPTY_USER_DETAILS });
         }}
         onEdit={user => {
           setUserFormErrors({});
-          setUserForm({ user: user.user, password: '', role: user.role, active: user.active, isNew: false });
+          setUserForm({
+            user: user.user, password: '', role: user.role, active: user.active, isNew: false, full_name: user.full_name ?? '',
+            email: user.email ?? '', mobile: user.mobile ?? '', department: user.department ?? '', dob: user.dob ?? '',
+            password_reset_on: user.password_reset_on ?? '', inactive_reason: user.inactive_reason ?? '',
+          });
         }}
         onDelete={deleteUser}
         onChange={handleUserFieldChange}

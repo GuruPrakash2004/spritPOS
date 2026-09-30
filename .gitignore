@@ -39,3 +39,6 @@ backend/data/
 
 # Understand-Anything knowledge graph (generated, local only)
 .ua/
+
+# avoid .exe
+/App/

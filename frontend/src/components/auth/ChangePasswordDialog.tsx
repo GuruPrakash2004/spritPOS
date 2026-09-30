@@ -3,17 +3,21 @@
 // lib/passwords.ts and returns a new token, which replaces the old one (other sessions are signed out).
 // Mistakes show inline under the field; the server's answer shows as a popup.
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import Modal from '../common/Modal';
 import { TextField } from '../common/FormField';
 import { toast } from '../common/toastStore';
 import { api, errorText, setAuthToken } from '../../lib/api';
-import { passwordProblem } from '../../lib/passwords';
+import { encryptSecret } from '../../lib/secureField';
+import { loadPasswordRules, passwordProblem } from '../../lib/passwords';
 import { primaryButton, secondaryButton } from '../../lib/styles';
 
 type Errors = Partial<Record<'current' | 'next' | 'confirm', string>>;
 
-export default function ChangePasswordDialog({ user, onClose }: { user: string; onClose: () => void }) {
+// forced: the password has expired (Login Settings / Password reset date), so it must be changed before anything
+// else; there is no Cancel.
+export default function ChangePasswordDialog({ user, onClose, forced = false }: { user: string; onClose: () => void; forced?: boolean }) {
+  useEffect(() => { loadPasswordRules(); }, []);
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -39,7 +43,9 @@ export default function ChangePasswordDialog({ user, onClose }: { user: string; 
       setSaving(false);
       return;
     }
-    api<{ access_token: string }>('/auth/change-password', { method: 'POST', body: { current_password: current, new_password: next } })
+    // Both passwords leave the browser only encrypted (lib/secureField.ts).
+    Promise.all([encryptSecret(current, 'current'), encryptSecret(next, 'new')])
+      .then(([cur, nxt]) => api<{ access_token: string }>('/auth/change-password', { method: 'POST', body: { current_password: cur, new_password: nxt } }))
       .then(res => {
         setAuthToken(res.access_token);
         toast.ok('Password changed. Other devices signed in as you have been signed out.');
@@ -57,14 +63,15 @@ export default function ChangePasswordDialog({ user, onClose }: { user: string; 
 
   return (
     <Modal
-      title={`Change password · ${user}`}
-      onClose={onClose}
+      title={forced ? `Your password has expired · ${user}` : `Change password · ${user}`}
+      onClose={forced ? () => undefined : onClose}
       footer={<>
-        <button type="button" onClick={onClose} className={secondaryButton}>Cancel</button>
+        {!forced && <button type="button" onClick={onClose} className={secondaryButton}>Cancel</button>}
         <button type="submit" form="change-password" disabled={saving} className={primaryButton}>{saving ? 'Saving…' : 'Change password'}</button>
       </>}
     >
       <form id="change-password" onSubmit={submit} className="space-y-4" noValidate>
+        {forced && <p className="text-xs text-stone-600 dark:text-stone-300">Choose a new password to continue.</p>}
         <TextField id="cp-current" label="Current password" type="password" value={current} required
           hasError={!!errors.current} errorMessage={errors.current}
           onChange={e => { setCurrent(e.target.value); clear('current'); }} />

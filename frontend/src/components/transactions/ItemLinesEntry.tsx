@@ -10,6 +10,8 @@ import { api, errorText, type ApiDoc, type ApiItemFull, type ApiInvoice } from '
 import { field, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader, printButton } from '../../lib/styles';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 import { type DocumentCategory } from '../print/rptRegistry';
+import { useConfirm } from '../common/ConfirmDialog';
+import { useDocSettings, type DocKind } from '../../lib/docSettings';
 
 export type EntryLine = { item_code: string; cases: number; bottles: number; rate: number };
 
@@ -30,6 +32,9 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   const [lines, setLines] = useState<EntryLine[]>([blankLine()]);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [printDoc, setPrintDoc] = useState<ApiInvoice | null>(null);
+  // Print Settings for this document: print after save (none / ask / preview) and the default format.
+  const docSettings = useDocSettings(endpoint.replace('/transactions/', '').replace(/-/g, '_') as DocKind);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
     if (!toast) return;
@@ -110,9 +115,9 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
     api<ApiDoc>(endpoint, { method: 'POST', body: buildBody(filled) })
       .then(doc => {
         setToast({ kind: 'ok', text: `${title} ${doc.doc_no} saved — ${doc.totals.qty} bottles.` });
-        if (andPrint) {
-          setPrintDoc(makeDoc(doc.doc_no));
-        }
+        const printable = makeDoc(doc.doc_no);   // built now: the lines are cleared below
+        if (andPrint || docSettings.after_save === 'preview') setPrintDoc(printable);
+        else if (docSettings.after_save === 'prompt') confirm(`Do you want to print ${title} ${doc.doc_no}?`).then(ok => { if (ok) setPrintDoc(printable); });
         setLines([blankLine()]);
       })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
@@ -121,6 +126,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
+      {confirmDialog}
       <div className={pageHeader}>
         <div>
           <h1 className={pageTitle}>{title}</h1>
@@ -183,6 +189,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
         <PrintFormatSelectorModal
           category={category}
           data={printDoc}
+          initialModelId={docSettings.default_format || undefined}
           title={`Print ${title} (${printDoc.doc_no})`}
           onClose={() => setPrintDoc(null)}
         />

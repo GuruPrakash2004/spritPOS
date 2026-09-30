@@ -55,6 +55,15 @@ const ReportsDashboard = () => {
       .catch(e => toast.error(errorText(e)));
   }, [filterOn, masters]);
 
+  // Reports this user may run (Admin Master (Security) → Report rights); null until loaded = show all.
+  // Only reports the server has and this user may not run are hidden ("not available yet" ones stay listed).
+  const [hiddenReports, setHiddenReports] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    api<{ known: string[]; allowed: string[] }>('/reports/custom/allowed')
+      .then(r => setHiddenReports(new Set(r.known.filter(n => !r.allowed.includes(n)))))
+      .catch(() => undefined);
+  }, []);
+
   // Default period: this month so far.
   const [fromDate, setFromDate] = useState(() => `${todayIso().slice(0, 8)}01`);
   const [toDate, setToDate] = useState(todayIso);
@@ -194,7 +203,7 @@ const ReportsDashboard = () => {
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
         {/* Report catalogue */}
         <nav aria-label="Reports" className={`${panel} max-h-[640px] overflow-y-auto p-2`}>
-          {reportCategories.map(group => (
+          {reportCategories.map(g => ({ ...g, reports: g.reports.filter(r => !hiddenReports.has(r)) })).filter(g => g.reports.length).map(group => (
             <div key={group.cat} className="mb-2 last:mb-0">
               <div className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-stone-500 dark:text-stone-400">{group.cat}</div>
               {group.reports.map(rep => (

@@ -5,6 +5,10 @@
 // stock on the backend (store.move_stock). Held bills get their own HOLD- series.
 // Items come from the live catalogue (data/stockData.ts; a line's `id` is its STOCK_ITEMS index), and
 // the bill total is rounded to the rupee exactly as the backend rounds it.
+// Global Settings used here: QTYSELINV (Y: Enter after a scan moves to Qty; N: the item is added at once)
+// and InvPreview (Y: the print preview opens after every saved bill). Transaction/Print Settings for Sales Invoice
+// (lib/docSettings.ts): after save none / ask "Do you want to print the invoice..?" / preview, and the default
+// print format.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileStack, PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine, ChevronDown } from 'lucide-react';
@@ -18,6 +22,7 @@ import { STOCK_ITEMS, litresPerBottle, loadStockItems, sellable, stockIndex, use
 import { numberToWords } from '../../lib/formatters';
 import { PARTIES, PAYMENT_TYPES, SALES_PERSONS, type InvoiceSetup, type PaymentType } from '../../data/salesCounters';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import { useDocSettings } from '../../lib/docSettings';
 
 type Line = { id: number; name: string; qoh: number; qty: number; rate: number; discPct: number };
 
@@ -76,6 +81,10 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   // One key per bill: pressing Save twice (or a retry) can't make two bills. Renewed for each new bill.
   const saveKey = useRef(newIdempotencyKey());
   const { confirm, dialog: confirmDialog } = useConfirm();
+  // Global Settings values (GET /settings/values); until they load, a scan adds the item at once.
+  const [gsettings, setGsettings] = useState<Record<string, string>>({});
+  const qtyAfterScan = gsettings.QTYSELINV?.toUpperCase() === 'Y';
+  const docSettings = useDocSettings('sales_invoice');
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -85,6 +94,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   // Customers come from Customer Master so loyalty points are current; salespeople from the backend.
   useEffect(() => {
     api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(() => undefined);
+    api<Record<string, string>>('/settings/values').then(v => { if (v && typeof v === 'object') setGsettings(v); }).catch(() => undefined);
     api<string[]>('/sales-persons')
       .then(list => { if (list.length) { setSalesPersons(list); setSalesPerson(p => (list.includes(p) ? p : list[0])); } })
       .catch(() => undefined);
@@ -290,7 +300,8 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
       setPrevBill({ no: doc.doc_no, time: now.toLocaleTimeString('en-IN'), amount: doc.totals.net });
       setToast({ kind: 'ok', text: `Bill ${doc.doc_no} saved — ₹ ${money(doc.totals.net)}.` });
       // Print the bill exactly as the server saved it (number, totals, points).
-      if (andPrint) setPrintInvoiceData(doc);
+      if (andPrint || gsettings.InvPreview?.toUpperCase() === 'Y' || docSettings.after_save === 'preview') setPrintInvoiceData(doc);
+      else if (docSettings.after_save === 'prompt') confirm('Do you want to print the invoice..?').then(ok => { if (ok) setPrintInvoiceData(doc); });
       setSeq(seq + 1);
       resetBill();
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
@@ -338,7 +349,11 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
               <label htmlFor="si-barcode" className={labelClass}>Scan or search item</label>
               <div className="relative">
                 <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                <input id="si-barcode" ref={barcodeRef} autoFocus list="si-items" value={barcode} onChange={e => setBarcode(e.target.value)} onKeyDown={e => e.key === 'Enter' && scan()} className={`${field} h-10 pl-9 font-mono text-sm`} placeholder="KSBCL code or item name, then Enter" />
+                <input id="si-barcode" ref={barcodeRef} autoFocus list="si-items" value={barcode} onChange={e => setBarcode(e.target.value)} onKeyDown={e => {
+                  if (e.key !== 'Enter') return;
+                  if (qtyAfterScan && barcode.trim()) { const q = document.getElementById('si-qty') as HTMLInputElement | null; q?.focus(); q?.select(); }
+                  else scan();
+                }} className={`${field} h-10 pl-9 font-mono text-sm`} placeholder="KSBCL code or item name, then Enter" />
               </div>
               <datalist id="si-items">{sellable().map(i => <option key={i.code} value={i.code}>{i.brand} {i.name} {i.pkg}</option>)}</datalist>
             </div>
@@ -583,6 +598,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
         <PrintFormatSelectorModal
           category="SALES_INVOICE"
           data={printInvoiceData}
+          initialModelId={docSettings.default_format || undefined}
           title={`Print Sales Invoice (${printInvoiceData.doc_no})`}
           onClose={() => setPrintInvoiceData(null)}
         />
