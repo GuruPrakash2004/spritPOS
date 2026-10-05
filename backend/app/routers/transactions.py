@@ -6,15 +6,14 @@ Delete tick (require_right). Anything that takes
 stock out (sale, held-bill release, stock deduction, purchase return) first checks the total
 quantity per item across all lines, so stock can't go below zero.
 
-Each saved or changed document is passed to writeback.changed(); with DB_WRITE_ENABLED it is copied to
-SQL Server's Web_ tables once the request succeeds (app/writeback.py). Held bills are not posted, so they
-are not sent until released."""
+Documents are saved to SQL Server's Web_ tables when the request succeeds (app/sqlstore.py); sales invoices
+and purchase bills also in the desktop's format. Held bills are saved whole but not posted until released."""
 from collections import defaultdict
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import admin_audit, doc_settings, gsettings, security, store, writeback
+from .. import admin_audit, doc_settings, gsettings, security, store
 from ..schemas import (
     CancelIn, ClosingStockIn, DenominationIn, ExpenseIn, GenerateInvoiceIn, Line, PurchaseBillIn, PurchaseIndentIn, SalesInvoiceIn,
     SalesReturnIn, StockDeductionIn,
@@ -22,6 +21,27 @@ from ..schemas import (
 from .auth import get_current_user, hides_cost, require_right
 
 router = APIRouter(prefix="/transactions")
+
+# A bill with no customer is the walk-in cash customer's ("CASH", the desktop's CUSTID 0); no points.
+WALK_IN = {"code": "CASH", "name": "CASH", "points": 0.0}
+
+
+@router.get("/next-number", tags=["Sales Invoice"])
+def next_number(kind: str, counter: str = "", current_user: dict = Depends(get_current_user)):
+    """The number the next document of a kind will most likely get (a sales invoice: on that counter). Only a
+    preview, nothing is taken: the number is given when the document is saved, and another counter may save first."""
+    if kind not in store.DOCS:
+        raise HTTPException(404, f"Unknown document kind '{kind}'")
+    if kind == "sales_invoice":
+        row = store.COUNTERS.get(counter)
+        if row is None:
+            raise HTTPException(404, f"Sales counter '{counter}' not found")
+        prefix = row["prefix"]
+    else:
+        prefix = doc_settings.prefix(kind)
+    seq = store._seq.setdefault(kind, store.Seq(1))
+    return {"doc_no": f"{store.FY_PREFIX}/{prefix}-{seq.value:07d}", "fy_prefix": store.FY_PREFIX, "prefix": prefix,
+            "number": seq.value}
 
 SALES = Depends(require_right("add", "Sales Invoice"))
 SALES_CANCEL = Depends(require_right("delete", "Sales Invoice"))
@@ -125,7 +145,6 @@ def create_indent(body: PurchaseIndentIn):
     doc_no = store.next_doc_no("purchase_indent", doc_settings.prefix("purchase_indent"))
     store.DOCS["purchase_indent"][doc_no] = {"doc_no": doc_no, "date": body.date.isoformat(), "supplier": body.supplier,
                                              "lines": lines, "totals": tot, "remarks": body.remarks}
-    writeback.changed("purchase_indent", store.DOCS["purchase_indent"][doc_no])
     admin_audit.record("Purchase Indent", "Added", doc_no, "", f"supplier {body.supplier}",
                        admin_audit.doc_items(store.DOCS["purchase_indent"][doc_no], "Added"))
     return store.DOCS["purchase_indent"][doc_no]
@@ -161,7 +180,6 @@ def create_purchase_bill(body: PurchaseBillIn):
         store.move_stock(l["item_code"], sign * l["qty"], "purchase", doc_no, body.date, l["rate"])
     doc = body.model_dump(mode="json", exclude={"lines"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
     store.DOCS["purchase_bill"][doc_no] = doc
-    writeback.changed("purchase_bill", doc)
     if doc_settings.settings("purchase_bill")["update_rate_from_pb"] and sign > 0:
         # Invoice Settings "Update Rate From PB to Item Master": the item's purchase rate follows this bill.
         for l in lines:
@@ -201,6 +219,8 @@ def create_sales_invoice(body: SalesInvoiceIn, current_user: dict = Depends(get_
     if gsettings.yes("SPID") and not body.salesperson:
         raise HTTPException(422, "Salesperson is required (Global Settings)")
     cust = store.find(store.CUSTOMERS, body.customer)
+    if not cust and body.customer.strip().upper() in ("", "CASH"):
+        cust = WALK_IN   # the walk-in cash customer, also when the shop's customer list has no CASH row
     if not cust:
         raise HTTPException(422, f"Unknown customer '{body.customer}'")
     security.check_authorised("customers", cust["code"], "Customer")
@@ -239,7 +259,6 @@ def create_sales_invoice(body: SalesInvoiceIn, current_user: dict = Depends(get_
     }
     if not body.hold:
         _post_sale(doc, cust)
-        writeback.changed("sales_invoice", doc)
     store.DOCS["sales_invoice"][doc_no] = doc
     admin_audit.record("Sales Invoice", "Held" if body.hold else "Added", doc_no, "",
                        f"counter {doc['counter']}; customer {doc['customer']}; net {tot['net']}",
@@ -261,7 +280,7 @@ def release_held_bill(doc_no: str):
     for l in doc["lines"]:
         security.check_authorised("items", l["item_code"], "Item")      # changed after the bill was held
     security.check_authorised("customers", doc["customer"], "Customer")
-    cust = store.CUSTOMERS.get(doc["customer"]) or store.CUSTOMERS["CASH"]
+    cust = store.CUSTOMERS.get(doc["customer"]) or WALK_IN
     if doc["totals"]["points_redeemed"] > cust["points"]:
         raise HTTPException(422, f"Customer has only {cust['points']} points")
     # Releasing turns the parked bill into a real invoice with the next number in its counter's series.
@@ -272,7 +291,6 @@ def release_held_bill(doc_no: str):
                        admin_audit.doc_items(doc, "Added"))
     _post_sale(doc, cust)
     store.DOCS["sales_invoice"][new_no] = doc
-    writeback.changed("sales_invoice", doc, "release")
     return doc
 
 
@@ -309,7 +327,6 @@ def cancel_invoice(doc_no: str, body: CancelIn):
         store.touch("CUSTOMERS", cust["code"])
     doc["status"] = "CANCELLED"
     doc["cancel_remarks"] = body.remarks
-    writeback.changed("sales_invoice", doc, "cancel")
     admin_audit.record("Sales Invoice", "Cancelled", doc_no, "status: SAVED", f"status: CANCELLED; reason: {body.remarks}",
                        admin_audit.doc_items(doc, "Removed"))
     return doc
@@ -361,7 +378,6 @@ def create_sales_return(body: SalesReturnIn):
         store.move_stock(l["item_code"], l["qty"], "sales-return", doc_no, body.date, l["rate"])
     doc = body.model_dump(mode="json", exclude={"lines"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
     store.DOCS["sales_return"][doc_no] = doc
-    writeback.changed("sales_return", doc)
     admin_audit.record("Sales Return", "Added", doc_no, "",
                        f"against {body.against_invoice}" if body.against_invoice else "without an invoice",
                        admin_audit.doc_items(doc, "Added"))
@@ -379,7 +395,6 @@ def create_expense(body: ExpenseIn):
     doc_no = store.next_doc_no("expense", doc_settings.prefix("expense"))
     doc = body.model_dump(mode="json") | {"doc_no": doc_no, "total": round(sum(l.amount for l in body.lines), 2)}
     store.DOCS["expense"][doc_no] = doc
-    writeback.changed("expense", doc)
     admin_audit.record("Expense Entry", "Added", doc_no, "", f"total {doc['total']}",
                        [{"code": l.ledger, "name": store.LEDGERS.get(l.ledger, {}).get("name", ""), "status": "Added",
                          "details": f"{l.amount}"} for l in body.lines])
@@ -398,7 +413,6 @@ def create_stock_deduction(body: StockDeductionIn):
         store.move_stock(l["item_code"], -l["qty"], "deduction", doc_no, body.date, l["rate"])
     doc = body.model_dump(mode="json", exclude={"lines"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
     store.DOCS["stock_deduction"][doc_no] = doc
-    writeback.changed("stock_deduction", doc)
     admin_audit.record("Stock Deduction", "Added", doc_no, "", "", admin_audit.doc_items(doc, "Added"))
     return doc
 
@@ -433,7 +447,6 @@ def create_closing_stock(body: ClosingStockIn):
     doc = {"doc_no": doc_no, "date": body.as_on.isoformat(), "lines": lines, "invoice_no": None,
            "total_amount": round(sum(l["amount"] for l in lines), 2)}
     store.DOCS["closing_stock"][doc_no] = doc
-    writeback.changed("closing_stock", doc)
     admin_audit.record("Closing Stock Entry", "Added", doc_no, "", f"total {doc['total_amount']}",
                        [{"code": l["item_code"], "name": store.ITEMS.get(l["item_code"], {}).get("name", ""), "status": "Added",
                          "details": f"OP {l['op_qty']}, closing {l['closing_qty']}, sold {l['sales_qty']}"} for l in lines])
@@ -453,7 +466,6 @@ def generate_invoice_from_cse(doc_no: str, body: GenerateInvoiceIn, current_user
     inv = create_sales_invoice(SalesInvoiceIn(date=date.fromisoformat(cse["date"]), counter=body.counter,
                                               salesperson=body.salesperson, lines=lines), current_user)
     cse["invoice_no"] = inv["doc_no"]
-    writeback.changed("closing_stock", cse, "invoiced")
     admin_audit.record("Closing Stock Entry", "Invoice generated", doc_no, "", f"invoice {inv['doc_no']}")
     return inv
 
@@ -476,7 +488,6 @@ def save_denomination(body: DenominationIn):
     admin_audit.record("Cash Denomination", "Edited" if old else "Added", doc["date"],
                        f"total {old['total']}" if old else "", f"total {doc['total']}")
     store.DENOMINATIONS[doc["date"]] = doc
-    writeback.changed("denomination", doc)
     return doc
 
 

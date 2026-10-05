@@ -59,7 +59,7 @@ export default function KeyboardShortcutsModal({ onClose }: { onClose: () => voi
     >
       <div className="space-y-6 py-1">
         <p className="text-xs text-[#70675F] dark:text-stone-400">
-          Press any of these key combinations to quickly navigate and operate vLQMS.
+          Press any of these key combinations to quickly navigate and operate e-vLQMS ERP.
         </p>
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">

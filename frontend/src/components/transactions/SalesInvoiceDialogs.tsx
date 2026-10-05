@@ -52,7 +52,7 @@ export function ReprintDialog({ initialNo, onClose }: { initialNo: string; onClo
       <div className="mb-3 flex items-end gap-2">
         <div className="flex-1">
           <label htmlFor="rp-no" className={label}>Bill No</label>
-          <input id="rp-no" value={no} onChange={e => setNo(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(no)} placeholder="26/c10-0083718" className={`${field} w-full font-mono`} />
+          <input id="rp-no" value={no} onChange={e => setNo(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(no)} placeholder="Bill number" className={`${field} w-full font-mono`} />
         </div>
         <button onClick={() => load(no)} className={secondaryButton}><Search size={14} />Find</button>
       </div>

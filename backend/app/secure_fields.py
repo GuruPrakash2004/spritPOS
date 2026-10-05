@@ -15,8 +15,8 @@ At rest: user passwords are never stored, only PBKDF2 hashes (app/passwords.py).
 be able to read back (the SQL Server password saved from Utilities → Database Connectivity) are sealed with
 AES-256-GCM: seal()/unseal(), "sealed:v1:<base64 nonce+ciphertext>".
 
-Keys live in backend/data/ (gitignored, owner-only 0600): transport_key.pem and secret.key. When saving to
-disk is off (VLQMS_STATE_DB empty, the tests) they are made in memory for this process only.
+Keys live in backend/data/ (gitignored, owner-only 0600): transport_key.pem and secret.key. With
+VLQMS_KEYS_IN_MEMORY set (the tests) they are made in memory for this process only.
 """
 import base64
 import json
@@ -46,7 +46,7 @@ _used_lock = threading.Lock()
 
 
 def _on_disk() -> bool:
-    return bool(os.environ.get("VLQMS_STATE_DB", "x"))
+    return not os.environ.get("VLQMS_KEYS_IN_MEMORY")
 
 
 def _load_or_create(path: Path, make: "callable") -> bytes:

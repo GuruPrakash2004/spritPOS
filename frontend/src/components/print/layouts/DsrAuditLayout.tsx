@@ -3,7 +3,7 @@
 import React from 'react';
 import type { ApiCompany, ApiFullDsr } from '../../../lib/api';
 import { money } from '../../../lib/styles';
-import { SAMPLE_DSR_DATA } from '../samplePrintData';
+import { EMPTY_DSR } from '../printData';
 
 interface DsrAuditLayoutProps {
   modelId: string;
@@ -20,13 +20,13 @@ export const DsrAuditLayout: React.FC<DsrAuditLayoutProps> = ({
   watermark,
   isPrintPreview = false,
 }) => {
-  const storeName = company?.name || 'THE LIQUOR HOUSE';
-  const storeAddress = company?.address || 'No. 42, Brigade Road, Bangalore - 560001';
+  const storeName = company?.name || '';
+  const storeAddress = company?.address || '';
   const storeLicence = company?.licence_type ? `${company.licence_type}` : 'CL-2 Retail Vend of Liquor';
-  const storeGstin = company?.gstin || '29AAAAA0000A1Z5';
+  const storeGstin = company?.gstin || '';
 
   const given = data as Partial<ApiFullDsr> | null;
-  const dsr: ApiFullDsr = (given && (given.sales_incl_gst || given.total_bills)) ? given as ApiFullDsr : SAMPLE_DSR_DATA;
+  const dsr: ApiFullDsr = { ...EMPTY_DSR, ...given } as ApiFullDsr;
   const isDmp = modelId === 'RptDSR_8.5';
 
   return (

@@ -1,6 +1,6 @@
 // Tests for SQL Query Execution: a query runs only after its waiting popup, F5 runs the selected text,
 // rows and the server's error text are shown, nothing runs when the popup is cancelled, a change to a web
-// table asks first and reports the rows affected, and without SQL Server the local database is used.
+// table asks first and reports the rows affected, and without SQL Server nothing can run.
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +15,7 @@ const bodies = () => fetchMock.mock.calls
   .filter(([url]) => String(url).endsWith('/tools/sql/execute'))
   .map(([, init]) => JSON.parse(String(init.body)))
 const executed = () => bodies().map(b => b.sql)
-const STATUS = { db_connected: true, database: 'vLQMSLHOUSE', driver: 'pymssql', local_saved: true, local_writable: ['web_outbox'] }
+const STATUS = { db_connected: true, database: 'vLQMSLHOUSE', driver: 'pymssql' }
 
 beforeEach(() => {
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -102,22 +102,12 @@ describe('SqlQueryExecution', () => {
     expect(bodies()).toEqual([{ sql: "UPDATE Web_DocHeader SET Status = 'X'", target: 'sqlserver' }])
   })
 
-  it('uses the local database when SQL Server is not connected', async () => {
-    fetchMock.mockImplementation(async (url: string) => url.includes('/tools/sql/status')
-      ? json({ ...STATUS, db_connected: false, database: null, driver: null })
-      : url.includes('/tools/sql/objects') ? json([{ kind: 'Tables', schema: 'main', name: 'web_outbox' }])
-      : json({ kind: 'read', columns: ['n'], rows: [[1]], row_count: 1, truncated: false, elapsed_ms: 1 }))
-    const user = userEvent.setup()
+  it('runs nothing while SQL Server is not connected', async () => {
+    fetchMock.mockImplementation(async () => json({ ...STATUS, db_connected: false, database: null, driver: null }))
     render(<SqlQueryExecution />)
 
-    expect(await screen.findByRole('radio', { name: 'Web app local database' })).toHaveAttribute('aria-checked', 'true')
-    expect(await screen.findByText('web_outbox')).toBeInTheDocument()
-    await user.type(screen.getByLabelText('SQL query'), 'SELECT COUNT(*) AS n FROM web_outbox')
-    await user.click(screen.getByRole('button', { name: /execute query/i }))
-
-    await waitFor(() => expect(bodies()).toEqual([{ sql: 'SELECT COUNT(*) AS n FROM web_outbox', target: 'local' }]))
-    await user.click(screen.getByRole('radio', { name: 'vLQMS SQL Server' }))
-    expect(screen.getByText(/SQL Server is not connected/)).toBeInTheDocument()
+    expect(await screen.findByText(/SQL Server is not connected/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /execute query/i })).toBeDisabled()
+    expect(screen.queryByRole('radio')).toBeNull()   // no second (local) database any more
   })
 })

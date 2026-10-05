@@ -4,7 +4,7 @@ import React from 'react';
 import type { ApiCompany, ApiInvoice } from '../../../lib/api';
 import { money } from '../../../lib/styles';
 import { numberToWords } from '../../../lib/formatters';
-import { SAMPLE_INVOICE_DATA } from '../samplePrintData';
+import { EMPTY_DOC } from '../printData';
 
 interface DotMatrixLayoutProps {
   modelId: string;
@@ -21,12 +21,12 @@ export const DotMatrixLayout: React.FC<DotMatrixLayoutProps> = ({
   watermark,
   isPrintPreview = false,
 }) => {
-  const storeName = company?.name || 'THE LIQUOR HOUSE';
-  const storeAddress = company?.address || 'Brigade Road, Bangalore';
-  const storeLicence = company?.licence_type || 'CL-2 Retail';
+  const storeName = company?.name || '';
+  const storeAddress = company?.address || '';
+  const storeLicence = company?.licence_type || '';
 
   const given = data as Partial<ApiInvoice> | null;
-  const inv: ApiInvoice = given?.lines?.length ? given as ApiInvoice : SAMPLE_INVOICE_DATA;
+  const inv: ApiInvoice = { ...EMPTY_DOC, ...given } as ApiInvoice;
 
   return (
     <div
@@ -57,12 +57,12 @@ export const DotMatrixLayout: React.FC<DotMatrixLayoutProps> = ({
         <div className="text-[10px]">{storeLicence}</div>
         <div>================================================================</div>
         <div className="flex justify-between text-[10px]">
-          <span>BILL: {inv?.doc_no || '26/c10-0083718'}</span>
-          <span>DATE: {inv?.date || '2026-09-26'} {inv?.time || ''}</span>
+          <span>BILL: {inv?.doc_no}</span>
+          <span>DATE: {inv?.date} {inv?.time}</span>
         </div>
         <div className="flex justify-between text-[10px]">
-          <span>COUNTER: {inv?.counter || 'C1'}</span>
-          <span>CUST: {inv?.customer || 'CASH'}</span>
+          <span>COUNTER: {inv?.counter}</span>
+          <span>CUST: {inv?.customer}</span>
         </div>
         <div>----------------------------------------------------------------</div>
       </div>

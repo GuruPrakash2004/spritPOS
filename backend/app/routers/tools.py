@@ -1,17 +1,16 @@
 """Tools menu of the desktop app (MstMenu type 6): SQL Query Execution and Re Write Stock.
 
-SQL Query Execution (legacy frmUtlSQLQueryExec, shortcut 600), Administrator only, on two databases:
-- target "sqlserver", the vLQMS SQL Server database: SELECT anything; INSERT / UPDATE / DELETE only on the
-  web app's own dbo.Web_* tables (not Web_SchemaVersion, which tools/migrate.py owns). The desktop app's
-  tables are never changed. Reads run through db.read_only() (always rolled back), changes through
-  db.write_statement() (committed). A SQL login set up from migrations/000_web_login.template.sql can't
-  write the desktop tables anyway, so SQL Server itself is the second guard.
-- target "local", this web app's SQLite file (app/persistence.py): SELECT anything; changes only to the
-  write-back queue web_outbox. SQLite's authorizer is the second guard.
+SQL Query Execution (legacy frmUtlSQLQueryExec, shortcut 600), Administrator only, on the vLQMS SQL Server
+database: SELECT anything; INSERT / UPDATE / DELETE only on the web app's own dbo.Web_* tables (not
+Web_SchemaVersion, which the schema scripts own). The old desktop tables are never changed. Reads run through
+db.read_only() (always rolled back), changes through db.write_statement() (committed). The web app keeps its
+data in memory, loaded from the Web_ tables at startup: a change made here shows on the screens after a
+restart, and a later edit on a screen can overwrite it. ("target" is kept in the API; "sqlserver" is the
+only database now that the web app has no local SQLite file.)
 Table changes (CREATE / ALTER / DROP) are never run here: the Web_* schema comes from backend/migrations.
 One statement at a time. The object explorer, Select Top 1000, View Top 200 Rows, Script Table As and
 view/procedure definitions mirror the desktop screen; object names are looked up before use, so user
-text never becomes an identifier. Every run is recorded in the SQLite tool_audit table.
+text never becomes an identifier. Every run is recorded in Web_ToolAudit (app/sqlstore.py).
 
 Re Write Stock (legacy frmStkRewrite, shortcut 604), module right "Re Write Stock": app/stock_rewrite.py.
 """
@@ -27,7 +26,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .. import db, persistence, stock_rewrite
+from .. import db, sqlstore, stock_rewrite
 from .auth import require_admin, require_module
 
 logger = logging.getLogger("vlqms.tools")
@@ -37,7 +36,7 @@ router = APIRouter(prefix="/tools", tags=["Tools"])
 SQL_TOOL = "SQL Query Execution"
 REWRITE_TOOL = "Re Write Stock"
 MAX_ROWS = 5000
-Target = Literal["sqlserver", "local"]
+Target = Literal["sqlserver"]
 
 # Words never allowed outside the statement's own leading verb: they change schema, rights, sessions or the
 # server, run code, reach other servers, or change data a second time. Matched as whole words after
@@ -148,9 +147,15 @@ def _top_level(text: str, word: str) -> bool:
     return False
 
 
+# The web app's own records and the audit trail: never changed by hand (roles and password hashes are in
+# Web_AppRow; the logs must not be edited; the setup markers guard the old data's copy).
+PROTECTED = {"web_schemaversion", "web_approw", "web_appdoc", "web_appmove", "web_appsetting", "web_setup",
+             "web_toolaudit", "web_utladmaudit", "web_utladmaudititem"}
+
+
 def _writable(target: Target, schema: str | None, table: str) -> bool:
-    if target == "local":
-        return schema in (None, "main") and table.lower() in persistence.LOCAL_WRITABLE
+    if table.lower() in PROTECTED:
+        return False
     return (schema or "dbo").lower() == "dbo" and table.lower().startswith("web_") and table.lower() != "web_schemaversion"
 
 
@@ -169,7 +174,7 @@ def _check_sql(sql: str, target: Target = "sqlserver") -> Statement:
     if _FOUR_PART.search(body):
         raise SqlRefused("Queries on other servers (four-part names) are not allowed.")
     first = body.lstrip("( \t\r\n").split(None, 1)[0].upper()
-    where = "the web app's own tables" if target == "sqlserver" else "the write-back queue (web_outbox)"
+    where = "the web app's own tables"
     if first in ("SELECT", "WITH"):
         bad = _FORBIDDEN_RE.search(body)
         if bad:
@@ -213,15 +218,13 @@ def _cell(v: Any) -> Any:
 
 
 def _need(target: Target) -> None:
-    if target == "sqlserver" and not db.is_db_available():
-        raise HTTPException(409, "SQL Server is not connected: this works only on the office network, with the "
-                                 "database settings in backend/.env. The web app's local database is still available.")
+    if not db.is_db_available():
+        raise HTTPException(409, "SQL Server is not connected: set up the database from the sign-in page first.")
 
 
 def _read(target: Target, sql: str, params: tuple = (), max_rows: int = MAX_ROWS) -> dict:
     started = time.perf_counter()
-    result = (persistence.run_local_sql(sql, max_rows=max_rows) if target == "local"
-              else db.read_only(sql, params, max_rows=max_rows))
+    result = db.read_only(sql, params, max_rows=max_rows)
     result["rows"] = [[_cell(v) for v in row] for row in result["rows"]]
     result["row_count"] = len(result["rows"])
     result["elapsed_ms"] = round((time.perf_counter() - started) * 1000)
@@ -229,8 +232,7 @@ def _read(target: Target, sql: str, params: tuple = (), max_rows: int = MAX_ROWS
 
 
 def _error(exc: Exception, target: Target) -> HTTPException:
-    prefix = "SQL Server" if target == "sqlserver" else "Local database"
-    return HTTPException(400, f"{prefix}: {db.safe_error(exc)}")
+    return HTTPException(400, f"SQL Server: {db.safe_error(exc)}")
 
 
 # ─── SQL Query Execution ─────────────────────────────────────────────────────
@@ -250,8 +252,7 @@ def sql_status(admin: dict = Depends(require_admin)):
         except Exception:
             name = None
     return {"db_connected": db.is_db_available(), "database": name,
-            "driver": db.driver_name() if db.is_db_available() else None,
-            "local_saved": persistence.enabled(), "local_writable": sorted(persistence.LOCAL_WRITABLE)}
+            "driver": db.driver_name() if db.is_db_available() else None}
 
 
 @router.get("/sql/objects")
@@ -259,9 +260,6 @@ def sql_objects(target: Target = "sqlserver", search: str = Query("", max_length
     """Object explorer: tables, views (and procedures on SQL Server), optionally filtered by name."""
     _need(target)
     term = search.strip().lower()
-    if target == "local":
-        return [{"kind": o["kind"], "schema": "main", "name": o["name"]} for o in persistence.local_objects()
-                if term in o["name"].lower()]
     sql = ("SELECT CASE o.type WHEN 'U' THEN 'Tables' WHEN 'V' THEN 'Views' ELSE 'Procedures' END AS kind, "
            "s.name AS schema_name, o.name AS name FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id "
            "WHERE o.type IN ('U', 'V', 'P') AND o.is_ms_shipped = 0")
@@ -277,18 +275,12 @@ def sql_objects(target: Target = "sqlserver", search: str = Query("", max_length
 
 
 def _q(part: str, target: Target) -> str:
-    return '"' + part.replace('"', '""') + '"' if target == "local" else "[" + part.replace("]", "]]") + "]"
+    return "[" + part.replace("]", "]]") + "]"
 
 
 def _object(target: Target, name: str, schema: str | None) -> dict:
     """The table / view / procedure with this name (404 if none): exact schema, name, type and quoted name."""
     _need(target)
-    if target == "local":
-        found = next((o for o in persistence.local_objects() if o["name"] == name), None)
-        if not found:
-            raise HTTPException(404, f"No table or view named '{name}' in the local database")
-        return {"schema": "main", "name": found["name"], "type": "U" if found["kind"] == "Tables" else "V",
-                "full": _q(found["name"], target), "sql": found["sql"]}
     sql = ("SELECT TOP 1 s.name, o.name, o.type FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id "
            "WHERE o.type IN ('U', 'V', 'P') AND o.name = ?")
     params: tuple = (name,)
@@ -306,8 +298,6 @@ def _object(target: Target, name: str, schema: str | None) -> dict:
 
 
 def _columns(target: Target, obj: dict) -> list[dict]:
-    if target == "local":
-        return [c | {"max_length": None, "precision": None, "scale": None} for c in persistence.local_columns(obj["name"])]
     rows = _read(target,
         "SELECT c.COLUMN_NAME, c.DATA_TYPE, c.CHARACTER_MAXIMUM_LENGTH, c.NUMERIC_PRECISION, c.NUMERIC_SCALE, "
         "c.IS_NULLABLE, c.COLUMN_DEFAULT, COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsIdentity') "
@@ -341,8 +331,6 @@ def _type_text(c: dict) -> str:
 
 
 def _definition(target: Target, obj: dict) -> str:
-    if target == "local":
-        return obj.get("sql") or "-- No definition stored for this object."
     rows = _read(target, "SELECT OBJECT_DEFINITION(OBJECT_ID(?))", (f"{obj['schema']}.{obj['name']}",))["rows"]
     text = rows[0][0] if rows else None
     return text or "-- The definition of this object is encrypted or not available."
@@ -361,13 +349,11 @@ def sql_script(name: str = Query(..., max_length=128), kind: Literal["create", "
             if not cols:
                 raise HTTPException(422, "Only tables and views can be selected from")
             col_list = ",\n       ".join(_q(c["name"], target) for c in cols)
-            if target == "local":
-                return {"script": f"SELECT {col_list}\nFROM {obj['full']}\nLIMIT 1000"}
             return {"script": f"SELECT TOP 1000 {col_list}\nFROM {obj['full']}"}
         if kind == "drop":
             word = {"U": "TABLE", "V": "VIEW", "P": "PROCEDURE"}[obj["type"]]
             return {"script": f"DROP {word} {obj['full']}"}
-        if obj["type"] != "U" or target == "local":
+        if obj["type"] != "U":
             return {"script": _definition(target, obj)}
         pk = [r[0] for r in _read(target,
             "SELECT k.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS t JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k "
@@ -397,7 +383,7 @@ def sql_definition(name: str = Query(..., max_length=128), schema: str | None = 
                    target: Target = "sqlserver", admin: dict = Depends(require_admin)):
     """A view's or procedure's source (the desktop's sp_helptext)."""
     obj = _object(target, name, schema)
-    if obj["type"] == "U" and target == "sqlserver":
+    if obj["type"] == "U":
         raise HTTPException(422, f"{obj['name']} is a table: use Script Table As → Create")
     try:
         return {"object": _public(obj), "definition": _definition(target, obj)}
@@ -414,15 +400,11 @@ def sql_top(name: str = Query(..., max_length=128), n: int = Query(200, ge=1, le
     if obj["type"] == "P":
         raise HTTPException(422, f"{obj['name']} is a procedure: only tables and views have rows")
     try:
-        if target == "local":
-            result = _read(target, f"SELECT * FROM {obj['full']} LIMIT {int(n)}")
-            total = _read(target, f"SELECT COUNT(*) FROM {obj['full']}")["rows"][0][0]
-        else:
-            result = _read(target, f"SELECT TOP {int(n)} * FROM {obj['full']}")
-            total = _read(target, f"SELECT COUNT_BIG(*) FROM {obj['full']}")["rows"][0][0]
+        result = _read(target, f"SELECT TOP {int(n)} * FROM {obj['full']}")
+        total = _read(target, f"SELECT COUNT_BIG(*) FROM {obj['full']}")["rows"][0][0]
     except Exception as exc:
         raise _error(exc, target)
-    writable = _writable(target, None if target == "local" else obj["schema"], obj["name"]) and obj["type"] == "U"
+    writable = _writable(target, obj["schema"], obj["name"]) and obj["type"] == "U"
     return {"object": _public(obj), **result, "total_rows": total, "writable": writable}
 
 
@@ -430,29 +412,31 @@ def sql_top(name: str = Query(..., max_length=128), n: int = Query(200, ge=1, le
 def sql_execute(body: SqlIn, admin: dict = Depends(require_admin)):
     """Execute Query (F5): one statement. SELECT returns rows (at most 5,000); INSERT / UPDATE / DELETE on
     the web app's own tables is committed and returns the rows affected. Every run is audited."""
-    where = "[local] " if body.target == "local" else ""
+    where = ""
     try:
         stmt = _check_sql(body.sql, body.target)
     except SqlRefused as exc:
-        persistence.audit_tool(admin["user"], SQL_TOOL, where + body.sql, False, message=str(exc))
+        sqlstore.audit_tool(admin["user"], SQL_TOOL, where + body.sql, False, message=str(exc))
         raise HTTPException(400, str(exc))
     _need(body.target)
+    if stmt.kind != "read" and sqlstore.test_data():
+        sqlstore.audit_tool(admin["user"], SQL_TOOL, where + body.sql, False, message="refused: Test data is on")
+        raise HTTPException(409, "Test data is on: changes to the database are refused until it is switched off.")
     started = time.perf_counter()
     try:
         if stmt.kind == "read":
             result = _read(body.target, stmt.sql) | {"kind": "read"}
             count = result["row_count"]
         else:
-            count = (persistence.run_local_sql(stmt.sql, write_table=stmt.table.split(".")[-1])["rows_affected"]
-                     if body.target == "local" else db.write_statement(stmt.sql))
+            count = db.write_statement(stmt.sql)
             result = {"kind": "write", "table": stmt.table, "rows_affected": count, "columns": [], "rows": [],
                       "row_count": 0, "truncated": False,
                       "elapsed_ms": round((time.perf_counter() - started) * 1000)}
     except Exception as exc:
         error = _error(exc, body.target)
-        persistence.audit_tool(admin["user"], SQL_TOOL, where + stmt.sql, False, message=error.detail)
+        sqlstore.audit_tool(admin["user"], SQL_TOOL, where + stmt.sql, False, message=error.detail)
         raise error
-    persistence.audit_tool(admin["user"], SQL_TOOL, where + stmt.sql, True, row_count=count)
+    sqlstore.audit_tool(admin["user"], SQL_TOOL, where + stmt.sql, True, row_count=count)
     logger.info("SQL Query Execution by %s on %s: %s, %d row(s)", admin["user"], body.target, stmt.kind, count)
     return result
 
@@ -461,7 +445,7 @@ def sql_execute(body: SqlIn, admin: dict = Depends(require_admin)):
 def tools_audit(tool: Literal["SQL Query Execution", "Re Write Stock"] | None = None,
                 limit: int = Query(50, ge=1, le=500), admin: dict = Depends(require_admin)):
     """Who ran which Tools action, newest first (Administrator only)."""
-    return persistence.tool_audit_rows(tool, limit)
+    return sqlstore.tool_audit_rows(tool, limit)
 
 
 # ─── Re Write Stock ──────────────────────────────────────────────────────────
@@ -484,8 +468,8 @@ def rewrite_stock(user: dict = REWRITE):
     try:
         result = stock_rewrite.rebuild_movements()
     except stock_rewrite.RewriteRefused as exc:
-        persistence.audit_tool(user["user"], REWRITE_TOOL, "Re-Write", False, message=str(exc))
+        sqlstore.audit_tool(user["user"], REWRITE_TOOL, "Re-Write", False, message=str(exc))
         raise HTTPException(409, str(exc))
-    persistence.audit_tool(user["user"], REWRITE_TOOL, "Re-Write", True, row_count=result.get("items_changed", 0),
+    sqlstore.audit_tool(user["user"], REWRITE_TOOL, "Re-Write", True, row_count=result.get("items_changed", 0),
                            message=result["message"])
     return result

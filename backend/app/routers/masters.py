@@ -17,9 +17,9 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import admin_audit, gsettings, security, store, writeback
+from .. import admin_audit, gsettings, security, store
 from ..schemas import (
-    Brand, Company, Customer, Item, ItemGroup, Ledger, LedgerGroup, Package, PriceUpdate, SalesCounter, Supplier, Uom,
+    Brand, Company, CompanyOut, Customer, Item, ItemGroup, Ledger, LedgerGroup, Package, PriceUpdate, SalesCounter, SalesPerson, Supplier, Uom,
 )
 from .auth import can_see_cost, get_current_user, hides_cost, require_admin, require_right
 
@@ -57,6 +57,9 @@ IN_USE: dict[str, Callable[[str], str | None]] = {
         ln.get("ledger") == c for d in store.DOCS["expense"].values() for ln in d["lines"]) else None,
     "sales-counters": lambda c: "sales bills were made on this counter" if any(
         d.get("counter") == c for d in store.DOCS["sales_invoice"].values()) else None,
+    "sales-persons": lambda c: "sales bills name this sales person" if any(
+        d.get("salesperson") in (c, (store.SALES_PERSONS.get(c) or {}).get("name"))
+        for d in store.DOCS["sales_invoice"].values()) else None,
 }
 
 
@@ -111,6 +114,8 @@ def _clean(path: str, body: BaseModel, table: dict) -> BaseModel:
         raise HTTPException(422, "Bill prefix cannot be blank")
     elif path == "customers" and body.points < 0:
         raise HTTPException(422, "Points cannot be negative")
+    elif path == "packages" and body.litres_per_bottle <= 0:
+        raise HTTPException(422, "Litres per bottle must be more than 0")
     return body
 
 
@@ -126,10 +131,6 @@ def _open_stock(code: str, qty: float) -> None:
     store.ITEMS[code]["qoh"] = 0
     if qty:
         store.move_stock(code, qty, "opening", "OPENING", date.today(), store.ITEMS[code]["purchase_rate"])
-        writeback.changed("opening_stock", {"doc_no": f"OPENING/{code}", "date": date.today().isoformat(),
-                                            "lines": [{"item_code": code, "qty": qty,
-                                                       "rate": store.ITEMS[code]["purchase_rate"]}]},
-                          moves_ref="OPENING", item=code)
 
 
 def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tuple[str, ...], store_name: str) -> None:
@@ -222,19 +223,27 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
         store.touch(store_name, code)
 
 
-@router.get("/company", response_model=Company, tags=["Company Master"])
+def _company() -> dict:
+    return {**store.COMPANY, "fin_years": store.FIN_YEARS}
+
+
+@router.get("/company", response_model=CompanyOut, tags=["Company Master"])
 def get_company():
-    return store.COMPANY
+    return _company()
 
 
-@router.put("/company", response_model=Company, tags=["Company Master"])
+@router.put("/company", response_model=CompanyOut, tags=["Company Master"])
 def update_company(body: Company, admin: dict = Depends(require_admin)):
     earlier, changed = admin_audit.diff(store.COMPANY, {**store.COMPANY, **body.model_dump()})
     if changed:
         admin_audit.record("Company Master", "Edited", store.COMPANY.get("name") or "Company", earlier, changed)
-    store.COMPANY.update(body.model_dump())
+    changes = body.model_dump()
+    if store.FIN_YEARS:   # the financial year is the desktop's (Web_MstCompFinYear), not edited here
+        changes.update(fy_start=store.COMPANY["fy_start"], fy_end=store.COMPANY["fy_end"])
+    store.COMPANY.update(changes)
     store.touch("COMPANY", "*")
-    return store.COMPANY
+    store.set_fin_year()
+    return _company()
 
 
 @router.post("/items/price-list", response_model=list[Item], tags=["Item Price List Maintenance"],
@@ -324,3 +333,4 @@ crud("customers", store.CUSTOMERS, Customer, "Customer Master", ("Customer Maste
 crud("ledger-groups", store.LEDGER_GROUPS, LedgerGroup, "Ledger Group Master", ("Ledger Group Master",), "LEDGER_GROUPS")
 crud("ledgers", store.LEDGERS, Ledger, "Ledger Master", ("Ledger Master",), "LEDGERS")
 crud("sales-counters", store.COUNTERS, SalesCounter, "Sales Counter Master", ("Sales Counter Master",), "COUNTERS")
+crud("sales-persons", store.SALES_PERSONS, SalesPerson, "Sales Person Master", ("Sales Person Master",), "SALES_PERSONS")

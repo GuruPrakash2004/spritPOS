@@ -1,4 +1,5 @@
-"""Apply or roll back the SQL Server schema for the web write-back (backend/migrations/).
+"""Apply or roll back the Web_ schema (backend/migrations/). Usually not needed: the one-time Database setup
+(app/setup_db.py, tools/setup_db.py) applies 002 itself.
 
 Run from backend/, against the TEST copy of the database first:
     .venv/bin/python tools/migrate.py status
@@ -7,7 +8,7 @@ Run from backend/, against the TEST copy of the database first:
 
 Connection settings come from backend/.env (DB_HOST, DB_NAME, ...). If MIGRATE_DB_USER / MIGRATE_DB_PASSWORD
 are set, they are used instead of DB_USER / DB_PASSWORD, so the app's own login never needs CREATE TABLE.
-The app itself never changes the schema: it only checks the version (app/writeback.py).
+The app only creates the schema through the Database setup, and checks its version (setup_db.is_ready).
 Every script is guarded with IF NOT EXISTS / IF OBJECT_ID, so running it twice changes nothing.
 """
 import argparse
@@ -19,22 +20,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import db  # noqa: E402  (loads backend/.env)
+from app.setup_db import batches  # noqa: E402
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
 SCRIPT = re.compile(r"^(\d{3})_[\w-]+\.sql$")
-
-
-def batches(sql: str) -> list[str]:
-    """Split a script on lines that hold only GO (as SSMS/sqlcmd do)."""
-    parts, current = [], []
-    for line in sql.splitlines():
-        if line.strip().upper() == "GO":
-            parts.append("\n".join(current))
-            current = []
-        else:
-            current.append(line)
-    parts.append("\n".join(current))
-    return [p for p in parts if re.sub(r"--[^\n]*", "", p).strip()]
 
 
 def scripts() -> dict[int, Path]:
@@ -50,7 +39,7 @@ def applied() -> set[int]:
 def run(path: Path) -> None:
     for sql in batches(path.read_text()):
         with db.transaction() as cur:
-            cur.execute(sql)
+            cur.execute_raw(sql)
     print(f"  ran {path.name}")
 
 

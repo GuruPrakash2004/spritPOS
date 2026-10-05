@@ -25,8 +25,8 @@ class Company(BaseModel):
     cin: str = ""
     excise_phone: str = ""
     ksbcl_code: str = ""
-    licence_type: str = "CL-2"
-    state: str = "Karnataka"
+    licence_type: str = ""
+    state: str = ""
     fy_start: str
     fy_end: str
 
@@ -89,7 +89,7 @@ class Uom(MasterRow):
 
 class Package(MasterRow):
     code: str
-    litres_per_bottle: float = Field(gt=0)
+    litres_per_bottle: float   # above 0 on save (masters._clean); desktop rows may hold 0
 
 
 class Brand(MasterRow):
@@ -121,6 +121,34 @@ class Customer(MasterRow):
     points: float = 0
 
 
+class FinYear(BaseModel):
+    start: str
+    end: str
+    active: bool = False
+
+
+class CompanyOut(BaseModel):
+    """The company profile as served: blank until the shop's database is loaded (no validation on the way out),
+    plus the financial years from Web_MstCompFinYear."""
+    name: str = ""
+    email: str = ""
+    address: str = ""
+    phone: str = ""
+    fax: str = ""
+    mobile: str = ""
+    website: str = ""
+    gstin: str = ""
+    pan: str = ""
+    cin: str = ""
+    excise_phone: str = ""
+    ksbcl_code: str = ""
+    licence_type: str = ""
+    state: str = ""
+    fy_start: str = ""
+    fy_end: str = ""
+    fin_years: list[FinYear] = []
+
+
 class LedgerGroup(MasterRow):
     code: str
     name: str
@@ -138,6 +166,13 @@ class SalesCounter(MasterRow):
     system_name: str = ""
     prefix: str
     inactive: bool = False
+
+
+class SalesPerson(MasterRow):
+    code: str
+    name: str
+    mobile: str = ""
+    active: bool = True
 
 
 class PriceUpdate(BaseModel):
@@ -376,20 +411,5 @@ class ReportEmailIn(BaseModel):
         if not out:
             raise ValueError("Enter at least one email address")
         return out
-
-
-class WritebackRetryIn(BaseModel):
-    """POST /admin/writeback/retry: which FAILED outbox rows to retry (none = all of them)."""
-    ids: list[str] | None = Field(None, max_length=1000)
-
-
-class BackfillDoc(BaseModel):
-    kind: str = Field(max_length=30)
-    doc_no: str = Field(max_length=60)
-
-
-class WritebackBackfillIn(BaseModel):
-    """POST /admin/writeback/backfill: the documents to queue, picked from the GET preview."""
-    documents: list[BackfillDoc] = Field(min_length=1, max_length=5000)
 
 

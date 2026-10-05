@@ -5,7 +5,8 @@
 
 import { useEffect, useState } from 'react';
 import ItemLinesEntry from './ItemLinesEntry';
-import { api, todayIso, type ApiInvoice, type ApiSupplier } from '../../lib/api';
+import { api, errorText, todayIso, type ApiInvoice, type ApiSupplier } from '../../lib/api';
+import { toastStore } from '../common/toastStore';
 import { field, label } from '../../lib/styles';
 import { useDocSettings } from '../../lib/docSettings';
 
@@ -19,16 +20,20 @@ export function PurchaseIndent() {
   const [date, setDate] = useState(todayIso());
   // Transaction Settings: when the date can't be changed, it is today's.
   const dateLocked = !useDocSettings('purchase_indent').allow_edit_date;
-  const [supplier, setSupplier] = useState('KSBCL');
+  const [supplier, setSupplier] = useState('');
   const [suppliers, setSuppliers] = useState<ApiSupplier[]>([]);
   const [remarks, setRemarks] = useState('');
 
-  useEffect(() => { api<ApiSupplier[]>('/masters/suppliers').then(setSuppliers).catch(() => undefined); }, []);
+  useEffect(() => {
+    api<ApiSupplier[]>('/masters/suppliers')
+      .then(list => { setSuppliers(list); setSupplier(s => s || list[0]?.code || ''); })
+      .catch(e => toastStore.add('error', errorText(e)));
+  }, []);
 
   return (
     <ItemLinesEntry
       title="Purchase Indent"
-      subtitle="Order raised on KSBCL. It does not change stock; copy it into a Purchase Bill when the goods arrive."
+      subtitle="Order raised on a supplier. It does not change stock; copy it into a Purchase Bill when the goods arrive."
       endpoint="/transactions/purchase-indent"
       rateField="purchase_rate"
       rateLabel="PB Rate"

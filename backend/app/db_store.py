@@ -1,14 +1,10 @@
 """DB → In-memory Store loader.
 
-Called at startup if the SQL Server connection is available.
-Reads the real data from vLQMSLHOUSE and populates the in-memory
-store dicts so all existing routers work with live data.
-
-The store is the single source of truth for the running process.
-For writes (create/update/delete) that need to persist, each router
-should call db.execute() in addition to updating the store dict.
+Called at startup (app/boot.py) once the database is set up. Reads the Web_ tables (Web_MstITEM,
+Web_TrnHdrSINV, ...: a copy of every legacy vLQMS table with the same columns, filled by the one-time
+Database setup, app/setup_db.py) and fills the in-memory store dicts, so every router works with live data.
+The legacy tables themselves are never read here.
 """
-import copy
 import logging
 import threading
 import time
@@ -41,7 +37,7 @@ def load_company() -> None:
             CompName, Address1, Address2, CompLoc,
             TELNO, FAXNO, MOBNO, WEB, GSTNO, PANNO, CINNO,
             EMAIL, RTLCODE
-        FROM MstComp
+        FROM Web_MstComp
         WHERE CompID = 1
     """)
     if not row:
@@ -50,7 +46,7 @@ def load_company() -> None:
                 CompName, Address1, Address2, CompLoc,
                 TELNO, FAXNO, MOBNO, WEB, GSTNO, PANNO, CINNO,
                 EMAIL, RTLCODE
-            FROM MstComp
+            FROM Web_MstComp
         """)
     if row:
         addr_parts = [
@@ -72,7 +68,7 @@ def load_company() -> None:
             "cin": _s(row.get("CINNO", "")),
             "excise_phone": _s(row.get("MOBNO")),
             "ksbcl_code": _s(row.get("RTLCODE")),
-            "state": "Karnataka",   # hardcoded as MstComp has no CompState column
+            # MstComp has no state or licence column: those stay as saved from Company Master (sqlstore.apply)
         })
         logger.info("Loaded company: %s", store.COMPANY["name"])
 
@@ -90,18 +86,16 @@ def load_items() -> None:
             COALESCE(i.BotPerCases, 12) as BPC,
             COALESCE(q.CLBal, 0) as QOH,
             i.InActive
-        FROM MstITEM i
-        LEFT JOIN MstITEMGROUP ig ON ig.ITEMGROUPID = i.ITEMGroupID
-        LEFT JOIN MstBrand b ON b.BRANDID = i.BrandID
-        LEFT JOIN MstPKG p ON p.PKGID = i.PKGID
-        LEFT JOIN MstUOM u ON u.UOMID = i.UOMID
-        LEFT JOIN TrnQOH q ON q.ITEMID = i.ITEMID AND q.LOCID = 1
+        FROM Web_MstITEM i
+        LEFT JOIN Web_MstITEMGROUP ig ON ig.ITEMGROUPID = i.ITEMGroupID
+        LEFT JOIN Web_MstBrand b ON b.BRANDID = i.BrandID
+        LEFT JOIN Web_MstPKG p ON p.PKGID = i.PKGID
+        LEFT JOIN Web_MstUOM u ON u.UOMID = i.UOMID
+        LEFT JOIN Web_TrnQOH q ON q.ITEMID = i.ITEMID AND q.LOCID = 1
         WHERE i.ITEMID > 0 AND i.InActive = 'N'
     """)
     if not rows:
-        logger.warning("No items loaded from DB")
-        return
-
+        logger.warning("No items in Web_MstITEM")
     store.ITEMS.clear()
     for r in rows:
         code = _s(r.get("ITEMCODE")) or str(r.get("ITEMID"))
@@ -133,16 +127,30 @@ def load_items() -> None:
 
 
 
+def load_packages() -> None:
+    """Pack sizes (Web_MstPKG), keyed by name as items refer to them (e.g. "750ML")."""
+    rows = db.fetchall("""
+        SELECT PKGID, PKGCODE, PKGNAME, LTRPERBOT
+        FROM Web_MstPKG
+        WHERE InActive = 'N'
+    """)
+    store.PACKAGES.clear()
+    for r in rows:
+        code = _s(r.get("PKGNAME")) or _s(r.get("PKGCODE")) or str(r.get("PKGID"))
+        store.PACKAGES[code] = {"code": code, "litres_per_bottle": _f(r.get("LTRPERBOT"))}
+    logger.info("Loaded %d packages from DB", len(store.PACKAGES))
+
+
 def load_customers() -> None:
     rows = db.fetchall("""
         SELECT CUSTID, CUSTCODE, CUSTNAME, MOBNO, CARDNO, SENDSMS, InActive
-        FROM MstCUST
+        FROM Web_MstCUST
         WHERE CUSTID >= 0
     """)
     store.CUSTOMERS.clear()
     for r in rows:
         code = _s(r.get("CUSTCODE")) or str(r.get("CUSTID"))
-        if not code or code == "-":
+        if not code or code == "-" or r.get("CUSTID") == 0:   # CUSTID 0 is the desktop's walk-in cash customer
             code = "CASH"
         store.CUSTOMERS[code] = {
             "code": code,
@@ -158,7 +166,7 @@ def load_customers() -> None:
 def load_suppliers() -> None:
     rows = db.fetchall("""
         SELECT SUPPID, SUPPCODE, SUPPNAME, GSTNO, City, InActive
-        FROM MstSUPP
+        FROM Web_MstSUPP
         WHERE SUPPID > 0 AND InActive = 'N'
     """)
     store.SUPPLIERS.clear()
@@ -177,7 +185,7 @@ def load_suppliers() -> None:
 def load_item_groups() -> None:
     rows = db.fetchall("""
         SELECT ITEMGROUPID, ITEMGROUPCODE, ITEMGROUPNAME, LOYALTY, LiqItem, InActive
-        FROM MstITEMGROUP
+        FROM Web_MstITEMGROUP
         WHERE ITEMGROUPID > 0 AND InActive = 'N'
     """)
     store.ITEM_GROUPS.clear()
@@ -195,7 +203,7 @@ def load_item_groups() -> None:
 def load_brands() -> None:
     rows = db.fetchall("""
         SELECT BRANDID, BRANDCODE, BRANDNAME, InActive
-        FROM MstBrand
+        FROM Web_MstBrand
         WHERE BRANDID > 0 AND InActive = 'N'
     """)
     store.BRANDS.clear()
@@ -208,7 +216,7 @@ def load_brands() -> None:
 def load_uoms() -> None:
     rows = db.fetchall("""
         SELECT UOMID, UOMCODE, UOMNAME, InActive
-        FROM MstUOM
+        FROM Web_MstUOM
         WHERE UOMID > 0 AND InActive = 'N'
     """)
     store.UOMS.clear()
@@ -218,16 +226,112 @@ def load_uoms() -> None:
     logger.info("Loaded %d UOMs from DB", len(store.UOMS))
 
 
+def load_fin_year() -> None:
+    """The active financial year (Web_MstCompFinYear), which also gives document numbers their year prefix."""
+    rows = db.fetchall("SELECT yrFdate, yrTdate, Active FROM Web_MstCompFinYear ORDER BY yrFdate DESC")
+    years = [{"start": str(r.get("yrFdate") or "")[:10], "end": str(r.get("yrTdate") or "")[:10],
+              "active": _s(r.get("Active")).upper() in ("Y", "1", "TRUE")} for r in rows if r.get("yrFdate")]
+    store.FIN_YEARS[:] = years
+    current = next((y for y in years if y["active"]), years[0] if years else None)
+    if current:
+        store.COMPANY.update({"fy_start": current["start"], "fy_end": current["end"]})
+    store.set_fin_year()
+    logger.info("Financial year: %s to %s", store.COMPANY.get("fy_start"), store.COMPANY.get("fy_end"))
+
+
+def load_ledger_groups() -> None:
+    rows = db.fetchall("""
+        SELECT LEDGROUPID, LEDGROUPCODE, LEDGROUPNAME
+        FROM Web_MstLedgroup
+        WHERE LEDGROUPID > 0 AND InActive = 'N'
+    """)
+    store.LEDGER_GROUPS.clear()
+    for r in rows:
+        code = _s(r.get("LEDGROUPCODE")) or _s(r.get("LEDGROUPNAME")) or str(r.get("LEDGROUPID"))
+        store.LEDGER_GROUPS[code] = {"code": code, "name": _s(r.get("LEDGROUPNAME")) or code}
+    logger.info("Loaded %d ledger groups from DB", len(store.LEDGER_GROUPS))
+
+
+def load_ledgers() -> None:
+    rows = db.fetchall("""
+        SELECT l.LEDID, l.LEDCODE, l.LEDNAME, g.LEDGROUPCODE, g.LEDGROUPNAME
+        FROM Web_MstLed l
+        LEFT JOIN Web_MstLedgroup g ON g.LEDGROUPID = l.LEDGROUPID
+        WHERE l.LEDID > 0 AND l.InActive = 'N'
+    """)
+    store.LEDGERS.clear()
+    for r in rows:
+        code = _s(r.get("LEDCODE")) or _s(r.get("LEDNAME")) or str(r.get("LEDID"))
+        store.LEDGERS[code] = {"code": code, "name": _s(r.get("LEDNAME")) or code,
+                               "group": _s(r.get("LEDGROUPCODE")) or _s(r.get("LEDGROUPNAME"))}
+    logger.info("Loaded %d ledgers from DB", len(store.LEDGERS))
+
+
+def load_counters() -> None:
+    """Sales counters (Web_MstSC). "_scid" is the desktop's SCID, which bills store (Web_TrnHdrSINV.SCID)."""
+    rows = db.fetchall("SELECT SCID, SCCODE, SCNAME, SYSNAME, PREFIX, InActive FROM Web_MstSC WHERE SCID > 0")
+    store.COUNTERS.clear()
+    for r in rows:
+        code = _s(r.get("SCCODE")) or str(r.get("SCID"))
+        store.COUNTERS[code] = {"code": code, "_scid": str(r.get("SCID") or ""), "name": _s(r.get("SCNAME")) or code,
+                                "system_name": _s(r.get("SYSNAME")), "prefix": _s(r.get("PREFIX")) or code,
+                                "inactive": _s(r.get("InActive")) == "Y"}
+    logger.info("Loaded %d sales counters from DB", len(store.COUNTERS))
+
+
+def load_sales_persons() -> None:
+    """Sales persons (Web_MstSP). "_spid" is the desktop's SPID, which bills store (Web_TrnHdrSINV.SPID)."""
+    rows = db.fetchall("SELECT SPID, SPCODE, SPNAME, MOBNO, InActive FROM Web_MstSP WHERE SPID > 0")
+    store.SALES_PERSONS.clear()
+    for r in rows:
+        code = _s(r.get("SPCODE")) or str(r.get("SPID"))
+        store.SALES_PERSONS[code] = {"code": code, "_spid": str(r.get("SPID") or ""), "name": _s(r.get("SPNAME")) or code,
+                                     "mobile": _s(r.get("MOBNO")), "active": _s(r.get("InActive")) != "Y"}
+    logger.info("Loaded %d sales persons from DB", len(store.SALES_PERSONS))
+
+
+def load_last_purchase() -> None:
+    """When each item was last received (for Stock Ageing), from the purchase bills."""
+    rows = db.fetchall("""
+        SELECT d.ITEMID, MAX(h.PBDate) AS LASTDATE
+        FROM Web_TrnHdrPB h WITH (NOLOCK)
+        JOIN Web_TrnDtlPB d WITH (NOLOCK) ON d.PBID = h.PBID
+        WHERE ISNULL(h.Cancelled, 'N') <> 'Y'
+        GROUP BY d.ITEMID
+    """)
+    by_id = {it.get("_itemid"): code for code, it in store.ITEMS.items() if it.get("_itemid")}
+    store.LAST_PURCHASE.clear()
+    for r in rows:
+        code = by_id.get(str(r.get("ITEMID") or ""))
+        if code and r.get("LASTDATE"):
+            store.LAST_PURCHASE[code] = str(r["LASTDATE"])[:10]
+    logger.info("Loaded the last purchase date of %d items", len(store.LAST_PURCHASE))
+
+
+# Desktop role codes/names (Web_MstROLE) taken as the web roles: matched whole, so "NON ADMIN" is not an admin.
+ADMIN_ROLE_NAMES = {"ADMIN", "ADMINISTRATOR", "ADMINISTRATORS", "SUPER ADMIN", "SUPERADMIN"}
+MANAGER_ROLE_NAMES = {"MANAGER", "MANAGERS", "STORE MANAGER", "SHOP MANAGER"}
+
+
+def _role_for(user_code: str, role_code: str, role_name: str) -> str:
+    """The web role of a desktop user, from their desktop role (Web_MstROLE)."""
+    names = {role_code.strip().upper(), role_name.strip().upper()} - {""}
+    if names & ADMIN_ROLE_NAMES:
+        return store.ADMIN_ROLE
+    if names & MANAGER_ROLE_NAMES or user_code in ("OFFICE", "MANAGER"):
+        return "Manager"
+    return "Cashier"
+
+
 def load_users() -> None:
     rows = db.fetchall("""
-        SELECT UserID, UserCode, LoginPwd, UserName, Inactive
-        FROM MstUser
-        WHERE UserID > 0
+        SELECT u.UserID, u.UserCode, u.LoginPwd, u.UserName, u.Inactive, r.ROLECODE, r.ROLENAME
+        FROM Web_MstUser u
+        LEFT JOIN Web_MstROLE r ON r.ROLEID = u.RoleID
+        WHERE u.UserID > 0
     """)
-    # Start with the standard users (already hashed in store.SEED_USERS).
+    # Only the shop's own users; a role or password changed in the web app is laid over them by sqlstore.apply().
     store.USERS.clear()
-    store.USERS.update(copy.deepcopy(store.SEED_USERS))
-
     for r in rows:
         uname = _s(r.get("UserCode")).upper()
         if not uname:
@@ -236,27 +340,39 @@ def load_users() -> None:
         # MstUser.LoginPwd is the legacy app's reversible (base64) password. It is kept only until the
         # user's first successful login, which replaces it with a PBKDF2 hash (auth._verify_password).
         # Hashing every DB user here would slow startup by ~0.2 s per user.
-        if uname in store.USERS:
-            store.USERS[uname]["legacy_password"] = pwd_raw
-            store.USERS[uname]["active"] = _s(r.get("Inactive")) != "Y"
-        else:
-            store.USERS[uname] = {
-                "user": uname,
-                "password_hash": None,
-                "default_password": True,   # until changed: the lowercase user code (e.g. office/office)
-                "legacy_password": pwd_raw,
-                "role": "Manager" if uname in ("OFFICE", "MANAGER") else "Cashier",
-                "active": _s(r.get("Inactive")) != "Y",
-                "pwv": 1,
-            }
+        store.USERS[uname] = {
+            "user": uname,
+            "full_name": _s(r.get("UserName")),
+            "password_hash": None,
+            "default_password": True,   # until changed: the lowercase user code (e.g. office/office)
+            "legacy_password": pwd_raw,
+            "role": _role_for(uname, _s(r.get("ROLECODE")), _s(r.get("ROLENAME"))),
+            "active": _s(r.get("Inactive")) != "Y",
+            "pwv": 1,
+        }
     logger.info("Loaded %d users into store", len(store.USERS))
 
 
+def _test_data_on() -> bool:
+    """Test data was switched on while the history was loading: the live bills must not join the sample ones."""
+    from . import sqlstore
+    return sqlstore.test_data()
+
+
 def _drop_loaded(docs: dict) -> None:
-    """Remove seed and previously loaded DB documents before a (re)load, keeping bills made in the app.
+    """Remove previously loaded DB documents before a (re)load, keeping bills made in the app.
     (This used to clear everything, which silently deleted bills saved while the DB was loading.)"""
-    for no in [no for no, d in docs.items() if d.get("origin") in ("seed", "db")]:
+    for no in [no for no, d in docs.items() if d.get("origin") == "db"]:
         del docs[no]
+
+
+def _add_loaded(docs: dict, bills: dict) -> None:
+    """Add bills read from the legacy-format tables, never over a document the web app made (the web writes
+    its own bills there too; the whole document comes from Web_AppDoc)."""
+    for no, b in bills.items():
+        if no in docs and "origin" not in docs[no]:
+            continue
+        docs[no] = b
 
 
 def load_sales_invoices(limit: int = 200) -> None:
@@ -267,8 +383,8 @@ def load_sales_invoices(limit: int = 200) -> None:
                 SINVID, SINVNO, SINVDate, CUSTID,
                 TOTAMT, CASHAMT, CARDAMT, TOTQTY,
                 SPID, SCID, AddedBy, Cancelled, SINVTime
-            FROM TrnHdrSINV WITH (NOLOCK)
-            WHERE Cancelled = 'N'
+            FROM Web_TrnHdrSINV WITH (NOLOCK)
+            WHERE Cancelled = 'N' AND ISNULL(BILLSYSTEM, '') <> 'WEB'   -- web bills come whole from Web_AppDoc
             ORDER BY SINVID DESC
         )
         SELECT
@@ -279,7 +395,7 @@ def load_sales_invoices(limit: int = 200) -> None:
             d.SINVDtlID, d.ITEMID, d.SINVQty, d.SINVRate, d.SINVAmt,
             d.CGSTPER, d.CGSTAMT, d.SGSTPER, d.SGSTAMT
         FROM RecentHdr h
-        JOIN TrnDtlSINV d WITH (NOLOCK) ON d.SINVID = h.SINVID
+        JOIN Web_TrnDtlSINV d WITH (NOLOCK) ON d.SINVID = h.SINVID
         ORDER BY h.SINVID DESC
     """)
 
@@ -288,6 +404,9 @@ def load_sales_invoices(limit: int = 200) -> None:
     for code, item in store.ITEMS.items():
         # We need ITEMID from DB — store it during item load
         item_by_id[item.get("_itemid", "")] = code
+
+    counter_by_id = {c.get("_scid"): code for code, c in store.COUNTERS.items() if c.get("_scid")}
+    person_by_id = {p.get("_spid"): p.get("name") or code for code, p in store.SALES_PERSONS.items() if p.get("_spid")}
 
     docs = store.DOCS["sales_invoice"]
     _drop_loaded(docs)
@@ -301,9 +420,9 @@ def load_sales_invoices(limit: int = 200) -> None:
                 "doc_no": sinv_no,
                 "date": str(r.get("SINVDate", ""))[:10],
                 "time": _s(r.get("SINVTime")) or "00:00:00",
-                "counter": _s(r.get("SCID")) or "counter10",
+                "counter": counter_by_id.get(_s(r.get("SCID")), _s(r.get("SCID"))),
                 "customer": "CASH",
-                "salesperson": _s(r.get("AddedBy")),
+                "salesperson": person_by_id.get(_s(r.get("SPID"))) or _s(r.get("AddedBy")),
                 "status": "SAVED",
                 "payment_type": "CASH" if _f(r.get("CASHAMT")) >= t * 0.5 else "UPI",
                 "lines": [],
@@ -356,7 +475,9 @@ def load_sales_invoices(limit: int = 200) -> None:
 
     for b in bills.values():
         b["origin"] = "db"
-    docs.update(bills)
+    if _test_data_on():
+        return
+    _add_loaded(docs, bills)
     logger.info("Loaded %d sales invoices from DB", len(docs))
 
 
@@ -365,14 +486,14 @@ def load_purchase_bills(limit: int = 100) -> None:
     rows = db.fetchall(f"""
         WITH RecentPB AS (
             SELECT TOP {limit} PBID, PBNO, PBDate, SUPPID, PartyName
-            FROM TrnHdrPB WITH (NOLOCK)
+            FROM Web_TrnHdrPB WITH (NOLOCK)
             ORDER BY PBID DESC
         )
         SELECT
             h.PBID, h.PBNO, h.PBDate, h.SUPPID, h.PartyName,
             d.PBDtlID, d.ITEMID, d.PBQty, d.PBRate, d.PBAmt, d.NOOFCASES
         FROM RecentPB h
-        JOIN TrnDtlPB d WITH (NOLOCK) ON d.PBID = h.PBID
+        JOIN Web_TrnDtlPB d WITH (NOLOCK) ON d.PBID = h.PBID
         ORDER BY h.PBID DESC
     """)
 
@@ -417,7 +538,9 @@ def load_purchase_bills(limit: int = 100) -> None:
 
     for b in bills.values():
         b["origin"] = "db"
-    docs.update(bills)
+    if _test_data_on():
+        return
+    _add_loaded(docs, bills)
     logger.info("Loaded %d purchase bills from DB", len(docs))
 
 
@@ -450,13 +573,13 @@ def live_sales_and_stock(start: date, end: date) -> dict | None:
             id_to_code.update({k: store.merged_code(v) for k, v in store.MERGED_ITEM_IDS.items()})
             sales = db.fetchall(f"""
                 SELECT d.ITEMID, SUM(d.SINVQty) AS QTY, MIN(h.SINVDate) AS FIRSTDATE, MAX(h.SINVDate) AS LASTDATE
-                FROM TrnHdrSINV h WITH (NOLOCK)
-                JOIN TrnDtlSINV d WITH (NOLOCK) ON d.SINVID = h.SINVID
+                FROM Web_TrnHdrSINV h WITH (NOLOCK)
+                JOIN Web_TrnDtlSINV d WITH (NOLOCK) ON d.SINVID = h.SINVID
                 WHERE h.Cancelled = 'N'
                   AND h.SINVDate >= '{start.isoformat()}' AND h.SINVDate < '{(end + timedelta(days=1)).isoformat()}'
                 GROUP BY d.ITEMID
             """)
-            stock = db.fetchall("SELECT ITEMID, CLBal FROM TrnQOH WITH (NOLOCK) WHERE LOCID = 1")
+            stock = db.fetchall("SELECT ITEMID, CLBal FROM Web_TrnQOH WITH (NOLOCK) WHERE LOCID = 1")
         except Exception as e:  # keep the panel working on the in-memory data
             logger.error("live_sales_and_stock failed: %s", e)
             return None
@@ -488,13 +611,15 @@ def live_sales_and_stock(start: date, end: date) -> dict | None:
 
 def load_masters() -> None:
     """Load all master tables from SQL Server (runs in < 0.2s)."""
-    for fn in (load_company, load_item_groups, load_brands, load_uoms, load_items, load_customers, load_suppliers, load_users):
+    for fn in (load_company, load_fin_year, load_item_groups, load_brands, load_uoms, load_packages, load_items,
+               load_customers, load_suppliers, load_ledger_groups, load_ledgers, load_counters, load_sales_persons,
+               load_last_purchase, load_users):
         try:
             fn()
         except Exception as e:
             logger.error("%s failed: %s", fn.__name__, e)
     logger.info("Master data loaded: %d items, %d users, %d suppliers", len(store.ITEMS), len(store.USERS), len(store.SUPPLIERS))
-    # Movements before this index are the seeded demo history; later ones are bills made in this app.
+    # Movements before this index were there before the load (none: the store starts empty); later ones are the app's.
     store.DB_BASE_MOVEMENTS = len(store.MOVEMENTS)
     store.mark_app_start()
 
@@ -515,7 +640,7 @@ def load_transactions() -> None:
 def load_all() -> None:
     """Load all master + transaction data from SQL Server into the store."""
     if not db.is_db_available():
-        logger.warning("DB not available — keeping in-memory seed data")
+        logger.warning("DB not available — nothing loaded")
         return
     load_masters()
     load_transactions()

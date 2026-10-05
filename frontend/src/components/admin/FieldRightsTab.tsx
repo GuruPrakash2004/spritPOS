@@ -1,6 +1,7 @@
 // Field rights tab of Admin Master (Security) (legacy frmMstFldRights, "Master Field Rights"): for a role and a
 // master, each field is Normal, Hidden (not shown to that role, kept as it is when they save) or Read-only
 // (shown, but they can't change it). The server enforces it; MasterCrud shows it. Administrators see everything.
+// "Dashboard" lists the Dashboard's panels instead of fields: each is Normal or Hidden for the role.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
@@ -12,7 +13,7 @@ import { field, label, panel, primaryButton, tableBody, tableHead } from '../../
 const MASTER_NAMES: Record<string, string> = {
   items: 'Item Master', 'item-groups': 'Item Group Master', uoms: 'UOM Master', packages: 'Package Master', brands: 'Brand Master',
   suppliers: 'Supplier Master', customers: 'Customer Master', 'ledger-groups': 'Ledger Group Master', ledgers: 'Ledger Master',
-  'sales-counters': 'Sales Counter Master',
+  'sales-counters': 'Sales Counter Master', 'sales-persons': 'Sales Person Master', dashboard: 'Dashboard',
 };
 const caption = (f: string) => f.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
 
@@ -70,11 +71,13 @@ export default function FieldRightsTab({ roles }: { roles: ApiRole[] }) {
           <tbody className={tableBody}>
             {(data?.masters[master] ?? []).map(f => (
               <tr key={f}>
-                <td className="px-4 py-1.5">{caption(f)}</td>
+                <td className="px-4 py-1.5">{data?.captions?.[master]?.[f] ?? caption(f)}</td>
                 <td className="px-4 py-1.5 font-mono text-stone-500">{f}</td>
                 <td className="px-4 py-1.5">
                   <select aria-label={`Rights for ${f}`} value={current[master]?.[f] ?? 'normal'} onChange={e => setMode(f, e.target.value)} className={field}>
-                    <option value="normal">Normal</option><option value="readonly">Read-only</option><option value="hidden">Hidden</option>
+                    <option value="normal">Normal</option>
+                    {master !== 'dashboard' && <option value="readonly">Read-only</option>}
+                    <option value="hidden">Hidden</option>
                   </select>
                 </td>
               </tr>

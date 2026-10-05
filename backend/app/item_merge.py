@@ -2,15 +2,14 @@
 frmTrnRemoveDuplicates): one item is folded into another and then removed.
 
 The desktop app re-points every transaction line, the stock list and QOH from the item being removed to the
-item kept (adding the two QOHs), then deletes the old item and its dependent master rows. Here, on the web
-app's own data (the desktop tables are never written):
+item kept (adding the two QOHs), then deletes the old item and its dependent master rows. The web app does
+the same in memory, and sqlstore.merged() does it in SQL Server's Web_ tables on the request's save (every
+Web_ table with an ITEMID, Web_TrnQOH added together, the web's ledger Web_AppMove):
 - every document line (web and loaded desktop bills) and every stock movement moves to the kept item;
 - base QOH (store.BASE_QOH) and QOH are added together, so Tools → Re Write Stock still balances;
 - the last purchase date keeps the later one;
 - the old item is deleted (store.touch), and store.MERGED_ITEMS remembers old -> kept so bills loaded later
   from SQL Server, and a restart, land on the kept item;
-- write-back gets an "item_merge" event whose stock moves take the old item's web stock change off it and
-  put it on the kept item (Web_StockBalance stays right);
 - the ADMIN Audit Log gets the merge with each document line count.
 Merge Items needs both items active (as the desktop screen's list only offers active items); Replace and
 Remove takes any item, picked by name.
@@ -20,7 +19,7 @@ from datetime import date
 
 from fastapi import HTTPException
 
-from . import admin_audit, gsettings, persistence, store, writeback
+from . import admin_audit, gsettings, sqlstore, store
 
 SCREENS = {"merge": "Merge Items", "replace": "Replace and Remove Duplicate items"}
 
@@ -44,11 +43,6 @@ def _lines(src: str) -> Counter:
         for d in docs.values():
             out[kind] += sum(1 for ln in d.get("lines", []) if ln.get("item_code") == src)
     return +out
-
-
-def _web_change(code: str) -> float:
-    """The removed item's stock change as queued for SQL Server (only what write-back actually sends)."""
-    return persistence.outbox_item_change(code)
 
 
 def _check_frozen(src: str) -> None:
@@ -91,7 +85,6 @@ def merge(src: str, dst: str, mode: str) -> dict:
     """Fold `src` into `dst` and delete `src`. Runs inside one write request (the middleware saves it)."""
     info = preview(src, dst, mode)
     _check_frozen(src)
-    web_change = _web_change(src)
 
     for kind, docs in store.DOCS.items():
         for d in docs.values():
@@ -122,14 +115,7 @@ def merge(src: str, dst: str, mode: str) -> dict:
     store.touch("ITEMS", src)
     store.touch("ITEMS", dst)
 
-    today = date.today().isoformat()
-    doc_no = f"MERGE/{src}"
-    moves = [] if not web_change else [
-        {"item": src, "qty": -web_change, "kind": "merge", "doc_no": doc_no, "date": today, "rate": 0},
-        {"item": dst, "qty": web_change, "kind": "merge", "doc_no": doc_no, "date": today, "rate": 0},
-    ]
-    writeback.changed("item_merge", {"doc_no": doc_no, "date": today, "status": "MERGED", "from": src, "to": dst,
-                                     "mode": mode, "lines": []}, "merge", moves=moves)
+    sqlstore.merged(src, dst)
     counts = ", ".join(f"{k.replace('_', ' ')}: {n}" for k, n in info["lines"].items()) or "no document lines"
     admin_audit.record(SCREENS[mode], "Merged", f"{src} → {dst}",
                        f"{src} {old.get('name', '')}: QOH {info['from']['qoh']}; {dst}: QOH {info['to']['qoh']}",

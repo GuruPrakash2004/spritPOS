@@ -8,7 +8,6 @@ import Modal from '../common/Modal';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { api, errorText, qs, todayIso, type ApiClosingLoad, type ApiCounter, type ApiDoc } from '../../lib/api';
-import { SALES_PERSONS } from '../../data/salesCounters';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 type Row = ApiClosingLoad & { closing: string };
@@ -22,7 +21,8 @@ export default function ClosingStockEntry() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [counters, setCounters] = useState<ApiCounter[]>([]);
   const [counter, setCounter] = useState('');
-  const [salesPerson, setSalesPerson] = useState(SALES_PERSONS[0]);
+  const [salesPersons, setSalesPersons] = useState<string[]>([]);
+  const [salesPerson, setSalesPerson] = useState('');
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -34,7 +34,10 @@ export default function ClosingStockEntry() {
   useEffect(() => {
     api<ApiCounter[]>('/masters/sales-counters')
       .then(list => { const active = list.filter(c => !c.inactive); setCounters(active); setCounter(active[0]?.code ?? ''); })
-      .catch(() => undefined);
+      .catch(e => toastStore.add('error', errorText(e)));
+    api<string[]>('/sales-persons')
+      .then(list => { setSalesPersons(list); setSalesPerson(list[0] ?? ''); })
+      .catch(e => toastStore.add('error', errorText(e)));
   }, []);
 
   const load = () => {
@@ -155,7 +158,8 @@ export default function ClosingStockEntry() {
             <div>
               <label htmlFor="cse-sp" className={label}>Sales Person</label>
               <select id="cse-sp" value={salesPerson} onChange={e => setSalesPerson(e.target.value)} className={`${field} w-full`}>
-                {SALES_PERSONS.map(p => <option key={p}>{p}</option>)}
+                {!salesPersons.length && <option value="">No sales persons (Sales Person Master)</option>}
+                {salesPersons.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
           </div>

@@ -13,26 +13,32 @@ import { toastStore } from '../common/toastStore';
 import DropdownMenu, { menuItem } from '../common/DropdownMenu';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from '../../lib/styles';
-import { api, errorText, type ApiCounter } from '../../lib/api';
-import { DEFAULT_COUNTER, type SalesCounter } from '../../data/salesCounters';
+import { api, errorText, todayIso, type ApiCounter, type ApiInvoice } from '../../lib/api';
+import { NO_COUNTER, counterFromApi, type SalesCounter } from '../../data/salesCounters';
 import { downloadText, toCsv } from '../../lib/csv';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
-import { SAMPLE_INVOICE_DATA } from '../print/samplePrintData';
 
-const fromApi = (c: ApiCounter): SalesCounter => ({ code: c.code, name: c.name, systemName: c.system_name, prefix: c.prefix, inactive: c.inactive });
+const fromApi = counterFromApi;
 const toApi = (c: SalesCounter): ApiCounter => ({ code: c.code, name: c.name, system_name: c.systemName, prefix: c.prefix, inactive: c.inactive });
 
-const EMPTY_COUNTER: SalesCounter = { code: '', name: '', systemName: '', prefix: '', inactive: false };
+const EMPTY_COUNTER: SalesCounter = NO_COUNTER;
+
+// "Print bill format": the counter's bill layout with no lines, to check how it prints.
+const blankBill = (c: SalesCounter): ApiInvoice => ({
+  doc_no: '', date: todayIso(), time: '', counter: c.name || c.code, customer: '', salesperson: '', status: 'SAVED', lines: [],
+  totals: { qty: 0, litres: 0, basic: 0, cgst: 0, sgst: 0, discount: 0, points_redeemed: 0, points_earned: 0, net: 0 },
+  payment: { cash: 0, card: 0, upi: 0, credit: 0 },
+});
 
 type Mode = 'View' | 'New' | 'Edit';
 
 const inputClass = `${field} font-mono read-only:bg-subtle read-only:text-stone-600 dark:read-only:text-stone-300`;
 
 export default function SalesCounterMaster({ onSave }: { onSave: (counter: SalesCounter) => void }) {
-  const [records, setRecords] = useState<SalesCounter[]>([DEFAULT_COUNTER]);
+  const [records, setRecords] = useState<SalesCounter[]>([]);
   const [index, setIndex] = useState(0);
   const [mode, setMode] = useState<Mode>('View');
-  const [form, setForm] = useState<SalesCounter>(DEFAULT_COUNTER);
+  const [form, setForm] = useState<SalesCounter>(EMPTY_COUNTER);
   const [files, setFiles] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
@@ -272,7 +278,7 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
               <InlineError message={formErrors.prefix} />
             </div>
             <p className="text-xs text-stone-500 sm:col-span-2 dark:text-stone-400">
-              Bills on this counter are numbered like <span className="rounded bg-subtle px-1.5 py-0.5 font-mono text-stone-800 dark:text-stone-200">26/{form.prefix || '<prefix>'}-0083718</span>
+              Bills on this counter are numbered like <span className="rounded bg-subtle px-1.5 py-0.5 font-mono text-stone-800 dark:text-stone-200">&lt;year&gt;/{form.prefix || '<prefix>'}-0000001</span>
             </p>
           </div>
         </section>
@@ -301,11 +307,7 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
       {showPrintModal && (
         <PrintFormatSelectorModal
           category="SALES_INVOICE"
-          data={{
-            ...SAMPLE_INVOICE_DATA,
-            counter: (records[index] || form).name || (records[index] || form).code || 'Counter 1',
-            doc_no: `26/${(records[index] || form).prefix || 'c1'}-0083718`,
-          }}
+          data={blankBill(records[index] || form)}
           title={`Print Bill Format (${(records[index] || form).name || (records[index] || form).code || 'Counter'})`}
           onClose={() => setShowPrintModal(false)}
         />

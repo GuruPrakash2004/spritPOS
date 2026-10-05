@@ -1,0 +1,25 @@
+# Nothing secret or local goes into an image: settings, keys, uploads, the desktop app, the print formats
+# (some embed the desktop's SQL Server connection), virtualenvs and builds.
+**/.env
+**/*.env
+**/.env.*
+!**/.env.example
+backend/data/
+backend/uploads/
+backend/Rpts/
+backend/.venv/
+**/__pycache__/
+frontend/node_modules/
+frontend/dist/
+App/
+CLAUDE.local.md
+.git/
+.ua/
+.claude/
+**/.DS_Store
+**/SvtConn.ini
+**/*.bak
+**/*.BAK
+**/*.pem
+**/*.key
+**/*.log

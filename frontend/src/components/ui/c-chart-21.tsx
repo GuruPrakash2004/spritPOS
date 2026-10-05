@@ -17,21 +17,6 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 
-const defaultChartData = [
-  { priority: "whisky", bugs: 42, fill: "#0CBF82", color: "#0CBF82", label: "Whisky" },
-  { priority: "beer", bugs: 26, fill: "#3383FF", color: "#3383FF", label: "Beer" },
-  { priority: "rum_vodka", bugs: 18, fill: "#FE9E0C", color: "#FE9E0C", label: "Rum & Vodka" },
-  { priority: "scotch", bugs: 14, fill: "#FF2F60", color: "#FF2F60", label: "Scotch" },
-];
-
-const defaultChartConfig = {
-  bugs: { label: "Bugs" },
-  whisky: { label: "Whisky", color: "#0CBF82" },
-  beer: { label: "Beer", color: "#3383FF" },
-  rum_vodka: { label: "Rum & Vodka", color: "#FE9E0C" },
-  scotch: { label: "Scotch", color: "#FF2F60" },
-} satisfies ChartConfig;
-
 export function Pattern({
   data,
   config,
@@ -49,8 +34,9 @@ export function Pattern({
   nameKey?: string;
   className?: string;
 }) {
-  const activeData = data || defaultChartData;
-  const activeConfig = config || defaultChartConfig;
+  // No made-up slices: an empty chart until the caller passes real data.
+  const activeData = data ?? [];
+  const activeConfig: ChartConfig = config ?? {};
 
   // 4 Unique Colors matching reference image (media_1790374531785.png):
   // 1: Green (#0CBF82), 2: Blue (#3383FF), 3: Orange (#FE9E0C), 4: Red (#FF2F60)

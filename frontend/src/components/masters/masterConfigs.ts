@@ -40,6 +40,14 @@ export const LEDGER_GROUP_FIELDS: MasterField[] = [
   { key: 'name', label: 'Group Name', required: true },
 ];
 
+// Mirrors backend schemas.SalesPerson (the desktop's MstSP).
+export const SALES_PERSON_FIELDS: MasterField[] = [
+  { key: 'code', label: 'Sales Person Code', required: true },
+  { key: 'name', label: 'Sales Person Name', required: true },
+  { key: 'mobile', label: 'Mobile No' },
+  { key: 'active', label: 'Active', type: 'bool', default: true },
+];
+
 export const LEDGER_FIELDS: MasterField[] = [
   { key: 'code', label: 'Ledger Code', required: true },
   { key: 'name', label: 'Ledger Name', required: true },

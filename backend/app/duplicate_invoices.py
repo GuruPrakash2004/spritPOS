@@ -20,7 +20,7 @@ from datetime import date, datetime
 
 from fastapi import HTTPException
 
-from . import admin_audit, gsettings, store, writeback
+from . import admin_audit, gsettings, store
 
 DUPLICATE_MINUTES = 10
 
@@ -111,7 +111,6 @@ def remove(doc_nos: list[str]) -> dict:
             store.touch("CUSTOMERS", cust["code"])
         d["status"] = "DELETED"
         d["deleted_at"] = datetime.now().isoformat(timespec="seconds")
-        writeback.changed("sales_invoice", d, "delete")
         admin_audit.record("Remove Duplicate Invoice", "Deleted", no,
                            f"status: SAVED; date {d['date']} {d.get('time', '')}; counter {d.get('counter', '')}; net {tot.get('net', 0)}",
                            "status: DELETED" + ("" if keep else " (removed from the web app's bills)"),

@@ -299,7 +299,7 @@ const ReportsDashboard = () => {
             <div className="flex items-center gap-2 text-xs text-stone-500">
               <span className="tabular-nums">{toDmy(result.from_date)} – {toDmy(result.to_date)}</span>
               <span className={badge('neutral')}>{result.rows.length} row{result.rows.length === 1 ? '' : 's'}</span>
-              <button onClick={() => setShowPrintModal(true)} className={iconButton} aria-label="Print report" title="Print report"><Printer size={14} /></button>
+              <button onClick={() => setShowPrintModal(true)} disabled={!result.rows.length} className={iconButton} aria-label="Print report" title={result.rows.length ? 'Print report' : 'Nothing to print for this period'}><Printer size={14} /></button>
               <button onClick={exportXls} className={iconButton} aria-label="Export XLS" title="Export XLS"><Download size={14} /></button>
             </div>
           </div>

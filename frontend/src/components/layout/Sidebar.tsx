@@ -8,7 +8,7 @@ import {
   BarChart2, Building, CreditCard, Database, FileText, LayoutDashboard,
   Monitor, Package, PackageMinus, RotateCcw, Scale, ShoppingCart, Tag, Truck,
   Users, ClipboardList, X, Banknote, Boxes, CalendarCheck, ClipboardCheck,
-  Droplets, FolderTree, IndianRupee, ShieldCheck, SquareTerminal, RefreshCcwDot, SlidersHorizontal, FileX2, Replace, GitMerge, GitCompare, History, Info,
+  Droplets, FolderTree, IndianRupee, ShieldCheck, SquareTerminal, RefreshCcwDot, SlidersHorizontal, FileX2, Replace, GitMerge, GitCompare, History, Info, CloudUpload, UserCheck,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ADMIN_MASTER, MODULE_GROUPS } from '../../lib/modules';
@@ -66,7 +66,7 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
         {/* Brand */}
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-[#E2D8CC] dark:border-[#1E1E1E] px-4">
           <div className="flex items-center gap-2.5 p-[4px]">
-            <VlqmsLogo size="sm" showText={true} />
+            <VlqmsLogo size="sm" textOnly />
           </div>
           <button className="rounded-lg p-1.5 text-[#8E847A] hover:bg-[#E8DFD2] hover:text-[#29231F] md:hidden dark:text-stone-500 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-50" onClick={onClose} aria-label="Close navigation">
             <X size={18} />
@@ -87,6 +87,7 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
           {item(<FileText size={16} />, 'Ledger Master')}
           {item(<FolderTree size={16} />, 'Ledger Group Master')}
           {item(<Monitor size={16} />, 'Sales Counter Master')}
+          {item(<UserCheck size={16} />, 'Sales Person Master')}
           {item(<Package size={16} />, 'Package Master')}
           {item(<Tag size={16} />, 'Brand Master')}
           {heading('Transactions', MODULE_GROUPS.find(g => g.group === 'Transactions')!.modules)}
@@ -113,13 +114,14 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
           {item(<GitMerge size={16} />, 'Merge Items')}
           {item(<GitCompare size={16} />, 'Compare Stock')}
           {item(<History size={16} />, 'ADMIN Audit Log')}
+          {item(<CloudUpload size={16} />, 'Web Sync')}
           {heading('Administration', [ADMIN_MASTER])}
           {item(<ShieldCheck size={16} />, ADMIN_MASTER, 'Admin Master (Security)')}
         </nav>
 
         <div className="shrink-0 border-t border-[#E2D8CC] dark:border-[#1E1E1E] px-4 py-3 text-[11px] text-[#70675F] dark:text-stone-500">
           <div className="flex items-center justify-between">
-            <span className="truncate">{company?.name || 'vLQMS'}</span>
+            <span className="truncate">{company?.name || 'e-vLQMS ERP'}</span>
             <span className={`flex items-center gap-1.5 ${isOnline ? 'text-emerald-700 dark:text-emerald-400' : 'text-[#9A4B45] dark:text-red-400'}`}>
               <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-[#9A4B45]'}`} />
               {isOnline === null ? 'Checking' : isOnline ? 'Online' : 'Offline'}

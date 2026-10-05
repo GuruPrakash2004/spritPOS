@@ -41,3 +41,11 @@ describe('DailySummaryReport', () => {
     expect(screen.getByText(/Updated/)).toBeInTheDocument()
   })
 })
+
+describe('DailySummaryReport printing', () => {
+  it('has nothing to print on a day with no bills (no sample figures)', async () => {
+    render(<DailySummaryReport />)
+    const print = await screen.findByRole('button', { name: /^print$/i })
+    await waitFor(() => expect(print).toBeDisabled())
+  })
+})

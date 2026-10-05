@@ -92,3 +92,13 @@ async def test_supplier_list_survives_odd_db_rows(client):
 
     assert res.status_code == 200
     assert {"X1", "X2"} <= {s["code"] for s in res.json()}
+
+
+async def test_package_with_zero_litres_from_the_desktop_still_lists(client):
+    # Desktop MstPKG rows can hold LTRPERBOT 0; listing must not fail, but saving one with 0 is refused.
+    from app import store
+    store.PACKAGES["NA"] = {"code": "NA", "litres_per_bottle": 0.0}
+    res = await client.get("/masters/packages")
+    assert res.status_code == 200 and any(p["code"] == "NA" for p in res.json())
+    res = await client.post("/masters/packages", json={"code": "ZERO", "litres_per_bottle": 0})
+    assert res.status_code == 422

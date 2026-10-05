@@ -1,7 +1,7 @@
 // Tools → SQL Query Execution (legacy frmUtlSQLQueryExec, shortcut 600). Administrator only.
-// Two databases (switch at the top): the vLQMS SQL Server, where changes are allowed only on the web app's
-// own Web_* tables (the desktop app's tables stay untouched), and the web app's local SQLite database, where
-// only the write-back queue (web_outbox) can be changed. The backend decides what may run
+// Runs on the vLQMS SQL Server database, where changes are allowed only on the web app's own Web_* tables
+// (the old desktop tables stay untouched). The web app keeps its data in memory from startup, so a change
+// made here shows on the screens after the backend restarts. The backend decides what may run
 // (backend/app/routers/tools.py); a change asks first, then waits for its popup, then shows "N row(s) affected".
 //
 // Left: object explorer (Tables / Views / Procedures) with a name filter and a hide/pin toggle; each
@@ -33,7 +33,6 @@ const writeHistory = (list: string[]) => {
 };
 
 const cellText = (v: unknown) => (v === null || v === undefined ? 'NULL' : String(v));
-const TARGET_LABEL: Record<ApiSqlTarget, string> = { sqlserver: 'vLQMS SQL Server', local: 'Web app local database' };
 
 // INSERT / UPDATE / DELETE (after any leading comments): these ask before they run.
 const writeVerb = (sql: string) => {
@@ -71,7 +70,7 @@ function ResultGrid({ result, startAt = 1 }: { result: ApiSqlResult; startAt?: n
 
 export default function SqlQueryExecution() {
   const [status, setStatus] = useState<ApiSqlStatus | null>(null);
-  const [target, setTarget] = useState<ApiSqlTarget>('sqlserver');
+  const target: ApiSqlTarget = 'sqlserver';
   const { confirm, dialog } = useConfirm();
   const [objects, setObjects] = useState<ApiSqlObject[]>([]);
   const [search, setSearch] = useState('');
@@ -89,13 +88,12 @@ export default function SqlQueryExecution() {
   const menuAnchor = useRef<HTMLElement | null>(null);
   const historyRef = useRef<HTMLButtonElement>(null);
   const serverUp = status?.db_connected === true;
-  // The chosen database can be used: the local one always, SQL Server only when connected.
-  const connected = status !== null && (target === 'local' || serverUp);
+  const connected = status !== null && serverUp;
 
   useEffect(() => {
     api<ApiSqlStatus>('/tools/sql/status')
-      .then(st => { setStatus(st); if (!st.db_connected) setTarget('local'); })
-      .catch(e => { setStatus({ db_connected: false, database: null, driver: null, local_saved: false, local_writable: [] }); setTarget('local'); setError(errorText(e)); });
+      .then(setStatus)
+      .catch(e => { setStatus({ db_connected: false, database: null, driver: null }); setError(errorText(e)); });
   }, []);
 
   // Explorer list, filtered on the server by name (debounced while typing).
@@ -107,14 +105,6 @@ export default function SqlQueryExecution() {
     return () => window.clearTimeout(t);
   }, [connected, search, target]);
 
-  const switchTarget = (next: ApiSqlTarget) => {
-    if (next === target) return;
-    setTarget(next);
-    setObjects([]);
-    setResult(null);
-    setError('');
-  };
-
   const grouped = useMemo(() => Object.fromEntries(KINDS.map(k => [k, objects.filter(o => o.kind === k)])) as Record<string, ApiSqlObject[]>, [objects]);
 
   // Run `text` (the selection or the whole box). Waits for its popup; Cancel stops it.
@@ -122,7 +112,7 @@ export default function SqlQueryExecution() {
     const query = text.trim();
     if (!query) { setError('Type a query to execute.'); editor.current?.focus(); return; }
     const verb = writeVerb(query);
-    if (verb && !(await confirm(`Run this ${verb} on the ${TARGET_LABEL[target]}? The change is saved immediately and can't be undone from here.`))) return;
+    if (verb && !(await confirm(`Run this ${verb} on the vLQMS SQL Server? The change is saved immediately and can't be undone from here.`))) return;
     if (!(await toastStore.defer('ok', verb ? 'Changes will be saved when this closes.' : 'Query will run when this closes.',
       verb ? 'Cancelled. Nothing was changed.' : 'Query cancelled. Nothing was run.'))) return;
     setRunning(true);
@@ -194,7 +184,7 @@ export default function SqlQueryExecution() {
       downloadText(`${name}.csv`, toCsv([result.columns, ...result.rows.map(r => r.map(cellText))]));
     } else {
       const cols = result.columns.map((c, i) => ({ key: `c${i}`, label: c, align: 'left' as const }));
-      downloadXls(name, 'SQL Query Execution', `${target === 'local' ? TARGET_LABEL.local : status?.database ?? ''} · ${result.row_count} rows`, cols,
+      downloadXls(name, 'SQL Query Execution', `${status?.database ?? ''} · ${result.row_count} rows`, cols,
         result.rows.map(r => Object.fromEntries(r.map((v, i) => [`c${i}`, typeof v === 'number' ? v : v === null ? null : String(v)]))));
     }
     toastStore.add('ok', `${result.row_count} rows exported to ${what}.`);
@@ -212,21 +202,12 @@ export default function SqlQueryExecution() {
         <div>
           <h1 className={pageTitle}>SQL Query Execution</h1>
           <p className={pageSub}>
-            {target === 'local'
-              ? 'Queries on the web app\'s own database. Rows of the write-back queue (web_outbox) can be changed; the rest is read-only.'
-              : 'Queries on the vLQMS database. SELECT anything; INSERT, UPDATE and DELETE work on the web app\'s Web_* tables only, never on the desktop app\'s tables.'}
+            Queries on the vLQMS database. SELECT anything; INSERT, UPDATE and DELETE work on the web app's Web_* tables only,
+            never on the old desktop tables. The screens show a change after the backend restarts.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs text-[#70675F] dark:text-stone-400">
-          <div role="radiogroup" aria-label="Database" className="inline-flex rounded-lg border border-[#DCD1C5] p-0.5 dark:border-line">
-            {(['sqlserver', 'local'] as ApiSqlTarget[]).map(t => (
-              <button key={t} role="radio" aria-checked={target === t} onClick={() => switchTarget(t)}
-                className={`rounded-md px-2.5 py-1 font-medium ${target === t ? 'bg-[#64283A] text-white dark:bg-[#D4A847] dark:text-black' : 'hover:text-[#29231F] dark:hover:text-stone-100'}`}>
-                {TARGET_LABEL[t]}
-              </button>
-            ))}
-          </div>
-          {target === 'sqlserver' && <span className="flex items-center gap-1.5"><Database size={14} />DB Name : <strong className="text-[#29231F] dark:text-stone-100">{status?.database ?? '—'}</strong></span>}
+          <span className="flex items-center gap-1.5"><Database size={14} />DB Name : <strong className="text-[#29231F] dark:text-stone-100">{status?.database ?? '—'}</strong></span>
           <span className={`inline-flex items-center gap-1.5 ${connected ? 'text-emerald-700 dark:text-emerald-400' : 'text-[#9A4B45] dark:text-red-400'}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-[#9A4B45]'}`} />
             {status === null ? 'Checking…' : connected ? 'Connected' : 'Not connected'}
@@ -236,8 +217,7 @@ export default function SqlQueryExecution() {
 
       {status && !connected && (
         <div className={`${panel} px-5 py-4 text-sm text-[#70675F] dark:text-stone-300`}>
-          SQL Server is not connected. It works only when the backend can reach the vLQMS database (office network, settings in <code>backend/.env</code>).
-          The web app local database is still available.
+          SQL Server is not connected. It works once the backend can reach the shop's database (set up from the sign-in page's Database setup).
         </div>
       )}
 

@@ -62,12 +62,14 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
     api<Row[]>(`/masters/${path}`)
       .then(list => { setRows(list); if (list[0]) { setSelected(String(list[0].code)); setForm(list[0]); } })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
-    fields.filter(f => f.optionsFrom).forEach(f => {
+    // From allFields (the prop, stable between renders), not `fields`: that is filtered anew on every render,
+    // so depending on it re-ran this effect after each load and fetched the lists in an endless loop.
+    allFields.filter(f => f.optionsFrom).forEach(f => {
       api<Row[]>(`/masters/${f.optionsFrom}`)
         .then(list => setOptions(o => ({ ...o, [f.key]: list.map(r => String(r.code)) })))
         .catch(() => undefined);
     });
-  }, [path, fields, reloadKey]);
+  }, [path, allFields, reloadKey]);
 
   const readOnly = mode === 'View';
   const listFields = fields.filter(f => f.showInList !== false).slice(0, 4);

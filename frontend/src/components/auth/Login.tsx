@@ -1,6 +1,8 @@
 // Sign-in page (legacy frmLogin). Posts to POST /auth/login and hands the returned user
 // (role, modules, JWT) and the chosen financial year to App.tsx via onLogin.
 // Has its own light/dark toggle and shows the company name from useCompanyProfile().
+// On a new install (GET /setup/status: needs_setup) it shows the one-time Database setup instead of the form;
+// when the database is set up but can't be reached it says so, with Retry.
 
 import { useState, useEffect, type FormEvent } from 'react';
 import { AlertCircle, Loader2, LogIn, Moon, Sun, Wine } from 'lucide-react';
@@ -10,9 +12,13 @@ import { encryptSecret } from '../../lib/secureField';
 import { IMAGES } from '../../constants/images';
 import VlqmsLogo from '../layout/VlqmsLogo';
 import DevelopedBy from '../layout/DevelopedBy';
+import DatabaseSetup from './DatabaseSetup';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
+import CreateAdmin from './CreateAdmin';
+import { finYearLabel } from '../../lib/formatters';
 
-const FIN_YEARS = ['01/04/2026 - 31/03/2027', '01/04/2025 - 31/03/2026'];
+type DbState = { configured: boolean; connected: boolean; needs_setup: boolean; needs_admin?: boolean };
+const RETRY_MS = 20_000;
 
 // ─── REALISTIC WATER DROPLET FLOW & LIQUOR SPLASH DYNAMICS ───
 // Simulates individual liquor water droplets cascading downwards with gravity acceleration
@@ -179,13 +185,30 @@ const LiquidDropletWaterfall = () => {
 
 export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUser, finYear: string) => void; notice?: string }) {
   const { company } = useCompanyProfile();
-  const [user, setUser] = useState('ADMIN');
+  const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
-  const [finYear, setFinYear] = useState(FIN_YEARS[0]);
+  // The shop's financial years (newest first), the active one chosen.
+  const finYears = (company?.fin_years?.length ? company.fin_years : company?.fy_start ? [{ start: company.fy_start, end: company.fy_end, active: true }] : [])
+    .map(y => ({ label: finYearLabel(y.start, y.end), active: y.active })).filter(y => y.label);
+  const [pickedYear, setFinYear] = useState('');
+  const finYear = pickedYear || finYears.find(y => y.active)?.label || finYears[0]?.label || '';
   // Login Settings: offer "Remember me" only when the Administrator allows it.
   const [offerRemember, setOfferRemember] = useState(false);
   const [remember, setRemember] = useState(false);
   useEffect(() => { loadPasswordRules().then(r => setOfferRemember(r.show_remember_me)); }, []);
+  // One-time Database setup / database offline (backend routers/setup.py).
+  const [dbState, setDbState] = useState<DbState | null>(null);
+  const loadDbState = () => api<DbState>('/setup/status').then(setDbState).catch(() => setDbState(null));
+  useEffect(() => { loadDbState(); }, []);
+  const setup = !!dbState?.needs_setup;
+  const offline = !!dbState && dbState.configured && !dbState.connected && !setup;
+  const needsAdmin = !!dbState?.needs_admin && !setup && !offline;
+  // While the database is offline there is nobody to sign in: check again every 20 s.
+  useEffect(() => {
+    if (!offline) return;
+    const timer = window.setInterval(loadDbState, RETRY_MS);
+    return () => window.clearInterval(timer);
+  }, [offline]);
   // Starts with the reason the last session ended, if any (see App.tsx).
   const [error, setError] = useState(notice);
   const [busy, setBusy] = useState(false);
@@ -267,7 +290,7 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
         <div className="relative z-10 flex flex-col justify-between p-10 xl:p-14 w-full">
           {/* Top — Custom VLQMS Emblem Logo */}
           <div className="flex items-center gap-3 p-[4px] animate-fadeInUp">
-            <VlqmsLogo size="md" showText={true} onDark={true} />
+            <VlqmsLogo size="md" textOnly onDark={true} />
           </div>
 
           {/* Bottom — Hero Typography & Metric Badges */}
@@ -297,7 +320,7 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
           <img src={IMAGES.login.hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-65" />
           <div className="absolute inset-0 bg-gradient-to-b from-[#180E09]/75 via-[#180E09]/40 to-[#F5F1E9] dark:to-[#0A0A0A]" />
           <div className="relative z-10 flex items-center gap-3 p-6">
-            <VlqmsLogo size="sm" showText={true} onDark={true} />
+            <VlqmsLogo size="sm" textOnly onDark={true} />
           </div>
         </div>
 
@@ -306,15 +329,12 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
           <div className="w-full max-w-sm">
             {/* Custom VLQMS Crest Logo & Welcome Headline */}
             <div className="mb-8 hidden flex-col items-center text-center lg:flex animate-fadeInUp">
-              <div className="mb-4 p-[4px]">
-                <VlqmsLogo size="lg" />
-              </div>
               <h1 className="text-2xl font-bold tracking-tight text-[#29231F] dark:text-white"
                   style={{ fontFamily: 'var(--font-display)' }}>
-                Welcome back
+                {setup ? 'Set up e-vLQMS ERP' : 'Welcome back'}
               </h1>
               <p className="mt-1 text-xs text-[#70675F] dark:text-stone-400">
-                Sign in to vLQMS · {company?.name || 'Company profile'} · {company?.licence_type || 'Licence'}
+                {setup ? 'Connect this shop\'s database once, then sign in.' : `Sign in to e-vLQMS ERP · ${company?.name || 'Company profile'} · ${company?.licence_type || 'Licence'}`}
               </p>
             </div>
 
@@ -323,12 +343,22 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
               <h1 className="text-xl font-bold text-[#29231F] dark:text-white"
                   style={{ fontFamily: 'var(--font-display)' }}>Welcome back</h1>
               <p className="mt-1 text-xs text-[#70675F] dark:text-stone-400">
-                Sign in to vLQMS · {company?.name || 'Company profile'} · {company?.licence_type || 'Licence'}
+                Sign in to e-vLQMS ERP · {company?.name || 'Company profile'} · {company?.licence_type || 'Licence'}
               </p>
             </div>
 
+            {setup && <DatabaseSetup inputClass={inputClass} labelClass={labelClass} onDone={loadDbState} />}
+            {offline && (
+              <p role="alert" className="mb-4 flex items-center gap-2 rounded-xl bg-[#9A4B45]/10 px-4 py-3 text-xs font-medium text-[#9A4B45] dark:bg-red-500/10 dark:text-red-400">
+                <AlertCircle size={14} className="shrink-0" />Database offline: the SQL Server can't be reached. Sign-in comes back when it does (checked every 20 seconds).
+                <button type="button" onClick={loadDbState} className="ml-auto font-semibold underline">Retry</button>
+              </p>
+            )}
+
+            {needsAdmin && <CreateAdmin inputClass={inputClass} labelClass={labelClass} onDone={loadDbState} />}
+
             {/* Warm Frosted Glass Form Card */}
-            <form
+            {!setup && !offline && !needsAdmin && <form
               onSubmit={submit}
               className="animate-fadeInUp animate-fadeInUp-d2
                          glass-card-login rounded-2xl p-7
@@ -351,7 +381,8 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
                   <label htmlFor="login-fy" className={labelClass}>Financial year</label>
                   <select id="login-fy" value={finYear} onChange={e => setFinYear(e.target.value)}
                     className={`${inputClass} tabular-nums`}>
-                    {FIN_YEARS.map(y => <option key={y}>{y}</option>)}
+                    {!finYears.length && <option value="">—</option>}
+                    {finYears.map(y => <option key={y.label}>{y.label}</option>)}
                   </select>
                 </div>
                 {offerRemember && (
@@ -386,14 +417,7 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
               </button>
 
               <DevelopedBy className="mt-6 border-t border-[#E3D9CD] pt-5 dark:border-[#2A2A2A]" />
-            </form>
-
-            {/* Demo credential hint */}
-            <div className="mt-6 animate-fadeInUp animate-fadeInUp-d4">
-              <p className="text-center text-xs text-[#70675F] dark:text-stone-500">
-                Demo access: <span className="font-semibold text-[#64283A] dark:text-[#D4A847]">ADMIN / admin</span>
-              </p>
-            </div>
+            </form>}
 
             {/* Decorative wine icon */}
             <div className="mt-8 flex justify-center animate-float opacity-20 dark:opacity-15" aria-hidden="true">
@@ -403,7 +427,7 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
         </main>
 
         <footer className="pb-6 text-center text-[11px] text-[#958B81] dark:text-stone-600">
-          Softvent vLQMS Cloud ERP · Licence 827106637
+          Softvent e-vLQMS ERP · Licence 827106637
         </footer>
       </div>
     </div>

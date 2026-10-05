@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard, KeyRound } from 'lucide-react';
 import ChangePasswordDialog from './components/auth/ChangePasswordDialog';
 import KeyboardShortcutsModal from './components/common/KeyboardShortcutsModal';
+import DataModeToggle from './components/layout/DataModeToggle';
 import AdminMaster from './components/admin/AdminMaster';
 import { api, getAuthToken, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
 import { ADMIN_MASTER, ADMIN_PATH, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
@@ -26,7 +27,7 @@ import ItemMaster from './components/masters/ItemMaster';
 import Login from './components/auth/Login';
 import ModuleSearch from './components/layout/ModuleSearch';
 import {
-  BrandMaster, CustomerMaster, ItemGroupMaster, LedgerGroupMaster, LedgerMaster, PackageMaster, UOMMaster,
+  BrandMaster, CustomerMaster, ItemGroupMaster, LedgerGroupMaster, LedgerMaster, PackageMaster, SalesPersonMaster, UOMMaster,
 } from './components/masters/Masters';
 import PriceListMaintenance from './components/masters/PriceListMaintenance';
 import ApiReport from './components/reports/ApiReport';
@@ -35,7 +36,8 @@ import { PurchaseIndent, SalesReturn, StockDeduction } from './components/transa
 import PurchaseBill from './components/transactions/PurchaseBill';
 import ReportsDashboard from './components/reports/ReportsDashboard';
 import SalesCounterMaster from './components/masters/SalesCounterMaster';
-import { DEFAULT_COUNTER, FIRST_BILL_SEQ, billNumber, type InvoiceSetup, type SalesCounter } from './data/salesCounters';
+import { NO_COUNTER, type InvoiceSetup, type SalesCounter } from './data/salesCounters';
+import { finYearLabel } from './lib/formatters';
 import SalesInvoice from './components/transactions/SalesInvoice';
 import SalesInvoiceSetup from './components/transactions/SalesInvoiceSetup';
 import Sidebar from './components/layout/Sidebar';
@@ -48,6 +50,7 @@ import GlobalSettings from './components/utilities/GlobalSettings';
 import AdminAuditLog from './components/utilities/AdminAuditLog';
 import About from './components/utilities/About';
 import RemoveDuplicateInvoice from './components/utilities/RemoveDuplicateInvoice';
+import WebSync from './components/utilities/WebSync';
 import MergeItems from './components/utilities/MergeItems';
 import CompareStock from './components/utilities/CompareStock';
 import { useCompanyProfile } from './hooks/useCompanyProfile';
@@ -55,7 +58,6 @@ import { useCompanyProfile } from './hooks/useCompanyProfile';
 // Per-tab memory for a page refresh (sessionStorage; cleared when the tab closes).
 const FY_KEY = 'vlqms_fin_year';
 const TAB_KEY = 'vlqms_active_tab';
-const DEFAULT_FIN_YEAR = '01/04/2026 - 31/03/2027';
 const SESSION_CHECK_MS = 60_000;
 const readSaved = (key: string) => { try { return sessionStorage.getItem(key) || ''; } catch { return ''; } };
 const writeSaved = (key: string, value: string) => { try { sessionStorage.setItem(key, value); } catch { /* storage blocked */ } };
@@ -65,7 +67,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [darkMode, setDarkMode] = useState(false);
   const [invoiceDraft, setInvoiceDraft] = useState<InvoiceSetup>({
-    counter: DEFAULT_COUNTER, invoiceNo: billNumber(DEFAULT_COUNTER.prefix, FIRST_BILL_SEQ), paymentType: 'CASH', customer: '',
+    counter: NO_COUNTER, invoiceNo: '', paymentType: 'CASH', customer: '',
   });
   const [billOpen, setBillOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -97,7 +99,7 @@ export default function App() {
         setAuthUser(me.user, me.role);
         setAuthRights(me.modules, me.rights);
         setFieldRights(me.field_rights);
-        setSession({ user: me, finYear: readSaved(FY_KEY) || DEFAULT_FIN_YEAR });
+        setSession({ user: me, finYear: readSaved(FY_KEY) });
         const tab = readSaved(TAB_KEY);
         if (tab && (tab === 'Dashboard' || canOpen(me.modules, me.role, tab))) setActiveTab(tab);
       })
@@ -117,8 +119,8 @@ export default function App() {
           setFieldRights(me.field_rights);
           setSession(s => (s && (s.user.role !== me.role || s.user.modules.join() !== me.modules.join()
             || JSON.stringify(s.user.rights ?? {}) !== JSON.stringify(me.rights ?? {})
-            || !!s.user.must_change_password !== !!me.must_change_password)
-            ? { ...s, user: { ...s.user, role: me.role, modules: me.modules, rights: me.rights, must_change_password: me.must_change_password } } : s));
+            || !!s.user.must_change_password !== !!me.must_change_password || s.user.data_mode !== me.data_mode)
+            ? { ...s, user: { ...s.user, role: me.role, modules: me.modules, rights: me.rights, must_change_password: me.must_change_password, data_mode: me.data_mode } } : s));
         })
         .catch(() => undefined);   // offline: try again next time; a 401 is handled by the session handler
     };
@@ -160,7 +162,7 @@ export default function App() {
 
   // Sales Invoice is two steps: the setup form collects counter + invoice details, then the bill screen opens.
   const openInvoiceSetup = (counter: SalesCounter) => {
-    setInvoiceDraft(draft => ({ ...draft, counter, invoiceNo: billNumber(counter.prefix, FIRST_BILL_SEQ) }));
+    setInvoiceDraft(draft => ({ ...draft, counter, invoiceNo: '' }));
     setBillOpen(false);
     setActiveTab('Sales Invoice');
   };
@@ -177,7 +179,7 @@ export default function App() {
     if (activeTab === ADMIN_MASTER) return <AdminMaster currentUser={session?.user.user ?? ''} />;
     if (REPORTS[activeTab]) return <ApiReport name={activeTab} />;
     switch (activeTab) {
-      case 'Dashboard': return <Dashboard />;
+      case 'Dashboard': return <Dashboard dataMode={session?.user.data_mode} />;
       case 'Company Master': return <CompanyMaster canEditFiles={session?.user.role === ADMIN_ROLE} />;
       case 'Item Master': return <ItemMaster />;
       case 'Item Group Master': return <ItemGroupMaster />;
@@ -186,6 +188,7 @@ export default function App() {
       case 'Customer Master': return <CustomerMaster />;
       case 'Ledger Master': return <LedgerMaster />;
       case 'Ledger Group Master': return <LedgerGroupMaster />;
+      case 'Sales Person Master': return <SalesPersonMaster />;
       case 'Sales Counter Master': return <SalesCounterMaster onSave={openInvoiceSetup} />;
       case 'Package Master': return <PackageMaster />;
       case 'Price List Maintenance': return <PriceListMaintenance />;
@@ -213,6 +216,7 @@ export default function App() {
       case 'Replace and Remove Duplicate items': return <MergeItems key="replace" mode="replace" />;
       case 'Merge Items': return <MergeItems key="merge" mode="merge" />;
       case 'Compare Stock': return <CompareStock />;
+      case 'Web Sync': return <WebSync />;
       default: return (
         <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#D4C8BA] bg-[#FFFCF7] p-8 text-center dark:border-line-strong dark:bg-surface">
           <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-stone-500"><Settings size={22} /></span>
@@ -280,12 +284,13 @@ export default function App() {
               <Keyboard size={15} className="text-[#64283A] dark:text-[#D4A847]" />
               <span className="hidden sm:inline">Shortcuts</span>
             </button>
+            <DataModeToggle mode={user.data_mode} isAdmin={user.role === ADMIN_ROLE} />
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <span className="hidden rounded-md border px-2 py-1 text-[11px] font-medium tabular-nums lg:inline
                              border-[#E3D9CD] text-[#64283A]
-                             dark:border-[#2A2A2A] dark:text-[#D4A847]" title="Financial year">FY {finYear}</span>
+                             dark:border-[#2A2A2A] dark:text-[#D4A847]" title="Financial year">FY {finYear || finYearLabel(company?.fy_start, company?.fy_end) || '—'}</span>
             <button onClick={() => setDarkMode(!darkMode)} className={`${iconButton} print:hidden`} title={darkMode ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}>
               {darkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>

@@ -18,16 +18,21 @@ import DropdownMenu, { menuItem } from '../../common/DropdownMenu';
 import { api, errorText, newIdempotencyKey, type ApiDoc, type ApiIndent, type ApiSupplier } from '../../../lib/api';
 import { loadStockItems, sellable, STOCK_ITEMS, useStockItems } from '../../../data/stockData';
 import { numberToWords } from '../../../lib/formatters';
+import type { NextNumber } from '../../../data/salesCounters';
 import {
-  amt, blankRow, cell, cloneRow, field, FY_PREFIX, headCell, iconButton, infoBar, isFilled,
-  money, panel, PB_SERIES, pctOf, PURCHASE_TYPES, stockRow, today, type Row, type Supplier,
+  amt, blankRow, cell, cloneRow, field, headCell, iconButton, infoBar, isFilled,
+  money, panel, pctOf, PURCHASE_TYPES, stockRow, today, type Row, type Supplier,
 } from './purchaseBillData';
 import { AddSupplierModal, CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
 import { useDocSettings } from '../../../lib/docSettings';
 
 export default function PurchaseBill() {
-  const [pbSeries, setPbSeries] = useState('');
-  const [pbNo, setPbNo] = useState(201);
+  // The backend gives the PB number when the bill is saved; this is its preview (GET /transactions/next-number).
+  const [pbDisplay, setPbDisplay] = useState('—');
+  const loadNextNo = useCallback(() => {
+    api<NextNumber>('/transactions/next-number?kind=purchase_bill').then(n => setPbDisplay(n.doc_no)).catch(() => setPbDisplay('—'));
+  }, []);
+  useEffect(() => { loadNextNo(); }, [loadNextNo]);
   const [pbDate, setPbDate] = useState(today);
   // Transaction Settings for Purchase Bill: Copy From allowed, and whether the bill date can be changed.
   const docSettings = useDocSettings('purchase_bill');
@@ -68,7 +73,6 @@ export default function PurchaseBill() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const pbDisplay = `${FY_PREFIX}/${pbSeries}/${String(pbNo).padStart(5, '0')}`;
   const selectedIndex = rows.findIndex(r => r.uid === selectedUid);
   const selectedRow = rows[selectedIndex];
 
@@ -265,7 +269,7 @@ export default function PurchaseBill() {
       const moved = purchaseType === 'Purchase Return' ? 'returned to the supplier' : 'added to stock';
       setToast({ kind: 'ok', text: `Purchase Bill ${doc.doc_no} saved — ${doc.totals.qty} bottles ${moved}.` });
       loadStockItems().catch(() => undefined);
-      setPbNo(pbNo + 1);
+      loadNextNo();
       resetBill();
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
@@ -309,13 +313,8 @@ export default function PurchaseBill() {
           {/* PB number, supplier, billing address */}
           <section aria-label="Bill details" className={`${panel} grid gap-4 p-5 sm:grid-cols-2`}>
             <div>
-              <span className={labelClass} id="pb-no-label">PB no.</span>
-              <div className="flex gap-2" role="group" aria-labelledby="pb-no-label">
-                <select value={pbSeries} onChange={e => setPbSeries(e.target.value)} className={`${field} w-20`} aria-label="PB series">
-                  {PB_SERIES.map(s => <option key={s} value={s}>{s || '—'}</option>)}
-                </select>
-                <input type="number" min={1} value={pbNo} onChange={e => setPbNo(Math.max(1, Math.floor(Number(e.target.value)) || 1))} className={`${field} text-right font-mono`} aria-label="PB number" />
-              </div>
+              <label className={labelClass} htmlFor="pb-no">Next PB no.</label>
+              <input id="pb-no" value={pbDisplay} readOnly disabled title="Given when the bill is saved" className={`${field} font-mono`} />
             </div>
             <div>
               <label className={labelClass} htmlFor="pb-date">Bill date</label>

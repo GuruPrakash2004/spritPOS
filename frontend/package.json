@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:central": "vite --mode central --port 5180 --open /central.html",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

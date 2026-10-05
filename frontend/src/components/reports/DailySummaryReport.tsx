@@ -74,7 +74,7 @@ export default function DailySummaryReport() {
         <div className="flex items-end gap-2 print:hidden">
           <input type="date" value={on} onChange={e => setOn(e.target.value)} className={`${field} tabular-nums`} aria-label="Report date" />
           <button onClick={handleRefresh} disabled={refreshing} className={secondaryButton}><RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
-          <button onClick={() => setShowPrintModal(true)} disabled={!dsr} className={printButton}><Printer size={14} />Print</button>
+          <button onClick={() => setShowPrintModal(true)} disabled={!dsr?.total_bills} title={dsr?.total_bills ? undefined : 'No bills on this day: nothing to print'} className={printButton}><Printer size={14} />Print</button>
         </div>
       </div>
 

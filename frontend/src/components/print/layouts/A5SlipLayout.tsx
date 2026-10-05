@@ -4,7 +4,7 @@ import React from 'react';
 import type { ApiCompany, ApiInvoice } from '../../../lib/api';
 import { money } from '../../../lib/styles';
 import { numberToWords } from '../../../lib/formatters';
-import { SAMPLE_INVOICE_DATA } from '../samplePrintData';
+import { EMPTY_DOC } from '../printData';
 
 interface A5SlipLayoutProps {
   modelId: string;
@@ -21,13 +21,13 @@ export const A5SlipLayout: React.FC<A5SlipLayoutProps> = ({
   watermark,
   isPrintPreview = false,
 }) => {
-  const storeName = company?.name || 'THE LIQUOR HOUSE';
-  const storeAddress = company?.address || 'No. 42, Brigade Road, Bangalore - 560001';
+  const storeName = company?.name || '';
+  const storeAddress = company?.address || '';
   const storeLicence = company?.licence_type ? `${company.licence_type}` : 'CL-2 Retail';
-  const storeGstin = company?.gstin || '29AAAAA0000A1Z5';
+  const storeGstin = company?.gstin || '';
 
   const given = data as Partial<ApiInvoice> | null;
-  const inv: ApiInvoice = given?.lines?.length ? given as ApiInvoice : SAMPLE_INVOICE_DATA;
+  const inv: ApiInvoice = { ...EMPTY_DOC, ...given } as ApiInvoice;
 
   return (
     <div
@@ -55,16 +55,16 @@ export const A5SlipLayout: React.FC<A5SlipLayoutProps> = ({
             <span className="inline-block px-2 py-0.5 bg-stone-800 text-white font-bold text-[11px] uppercase rounded-xs">
               RETAIL CASH MEMO
             </span>
-            <div className="text-[11px] font-mono font-bold mt-1">NO: {inv?.doc_no || '26/c10-0083718'}</div>
-            <div className="text-[10px] text-stone-500">{inv?.date || '2026-09-26'} {inv?.time || ''}</div>
+            <div className="text-[11px] font-mono font-bold mt-1">NO: {inv?.doc_no}</div>
+            <div className="text-[10px] text-stone-500">{inv?.date} {inv?.time}</div>
           </div>
         </div>
 
         {/* Customer & Counter Info */}
         <div className="flex justify-between text-[11px] bg-stone-50 p-1.5 border border-stone-200 rounded-xs">
-          <span>Customer: <strong>{inv?.customer || 'CASH'}</strong></span>
-          <span>Counter: <strong>{inv?.counter || 'Counter 1'}</strong></span>
-          <span>Staff: <strong>{inv?.salesperson || 'Staff'}</strong></span>
+          <span>Customer: <strong>{inv?.customer}</strong></span>
+          <span>Counter: <strong>{inv?.counter}</strong></span>
+          <span>Staff: <strong>{inv?.salesperson}</strong></span>
           <span>Payment: <strong>{inv?.payment?.card ? 'CARD' : inv?.payment?.upi ? 'UPI' : 'CASH'}</strong></span>
         </div>
 

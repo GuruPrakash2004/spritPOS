@@ -14,7 +14,7 @@ const blank = (): Line => ({ ledger: '', amount: '', narration: '' });
 // Expense Entry posts amounts against ledgers from Ledger Master; cash expenses reduce the DSR cash balance.
 export default function ExpenseEntry() {
   const [date, setDate] = useState(todayIso());
-  const [paidFrom, setPaidFrom] = useState('CASH');
+  const [paidFrom, setPaidFrom] = useState<'CASH' | 'BANK'>('CASH');
   const [ledgers, setLedgers] = useState<ApiLedger[]>([]);
   const [lines, setLines] = useState<Line[]>([blank()]);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -27,8 +27,8 @@ export default function ExpenseEntry() {
 
   useEffect(() => { api<ApiLedger[]>('/masters/ledgers').then(setLedgers).catch(e => setToast({ kind: 'error', text: errorText(e) })); }, []);
 
-  const expenseLedgers = ledgers.filter(l => l.group !== 'Cash-in-hand' && l.group !== 'Bank Accounts');
-  const payLedgers = ledgers.filter(l => l.group === 'Cash-in-hand' || l.group === 'Bank Accounts');
+  // Cash and bank ledgers are where money is paid from, not expense heads (group names come from the shop's Ledger Group Master).
+  const expenseLedgers = ledgers.filter(l => !/cash|bank/i.test(l.group));
   const filled = lines.filter(l => l.ledger);
   const total = filled.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
   const update = (i: number, patch: Partial<Line>) => setLines(lines.map((l, x) => (x === i ? { ...l, ...patch } : l)));
@@ -61,8 +61,9 @@ export default function ExpenseEntry() {
         <div><label htmlFor="ex-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="ex-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} tabular-nums`} /></div>
         <div>
           <label htmlFor="ex-paid" className={label}>Paid From<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
-          <select id="ex-paid" value={paidFrom} onChange={e => setPaidFrom(e.target.value)} className={field}>
-            {payLedgers.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+          <select id="ex-paid" value={paidFrom} onChange={e => setPaidFrom(e.target.value as 'CASH' | 'BANK')} className={field}>
+            <option value="CASH">Cash</option>
+            <option value="BANK">Bank</option>
           </select>
         </div>
       </div>

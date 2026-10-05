@@ -11,7 +11,7 @@ export const MODULE_GROUPS: { group: string; modules: string[] }[] = [
     group: 'Masters',
     modules: [
       'Company Master', 'Item Master', 'Price List Maintenance', 'Item Group Master', 'UOM Master', 'Supplier Master',
-      'Customer Master', 'Ledger Master', 'Ledger Group Master', 'Sales Counter Master', 'Package Master', 'Brand Master',
+      'Customer Master', 'Ledger Master', 'Ledger Group Master', 'Sales Counter Master', 'Sales Person Master', 'Package Master', 'Brand Master',
     ],
   },
   {
@@ -32,7 +32,7 @@ export const MODULE_GROUPS: { group: string; modules: string[] }[] = [
   { group: 'Tools', modules: ['SQL Query Execution', 'Re Write Stock'] },
   // The desktop app's UTILITIES menu (MstMenu type 7), with its captions; screens are added as they are built.
   // Its Security item is Admin Master, shown as "Admin Master (Security)" under Administration.
-  { group: 'Utilities', modules: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log'] },
+  { group: 'Utilities', modules: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Web Sync'] },
 ];
 
 export const ADMIN_MASTER = 'Admin Master';
@@ -61,6 +61,7 @@ export const MODULE_KEYWORDS: Record<string, string> = {
   'Customer Master': 'customer party loyalty card points sms mobile',
   'Ledger Master': 'ledger account expense head',
   'Ledger Group Master': 'ledger group account',
+  'Sales Person Master': 'salesman salesperson staff sp',
   'Sales Counter Master': 'counter pos terminal prefix',
   'Package Master': 'package bottle size litres ml',
   'Brand Master': 'brand',
@@ -95,5 +96,6 @@ export const MODULE_KEYWORDS: Record<string, string> = {
   'Compare Stock': '714 compare stock sheet excel difference mismatch closing utilities',
   'Global Settings': '702 ctrl+g global settings setting configuration freeze date salesperson loyalty points utilities',
   'ADMIN Audit Log': 'admin audit log history changes who changed edited deleted trail utilities',
+  'Web Sync': 'web sync central head office owner upload push dsr summary branches shops utilities',
   'About': 'about version softvent help',
 };

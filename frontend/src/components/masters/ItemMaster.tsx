@@ -23,8 +23,7 @@ export default function ItemMaster() {
 
   const downloadTemplate = () => {
     const header = ITEM_IMPORT_COLUMNS.map(([col]) => col);
-    const example = ['KF-330', 'KINGFISHER PREMIUM LAGER BEER 330ML', 'KF330', '2203', 'BEER', 'Kingfisher', 'Beer', 'BTL', '650ml', 24, 110, 95, 0, 0, 24, 48];
-    downloadText('ItemImport_Template.csv', toCsv([header, example]));
+    downloadText('ItemImport_Template.csv', toCsv([header]));
   };
 
   const loadFile = async (file: File) => {

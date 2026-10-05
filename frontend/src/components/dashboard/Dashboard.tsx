@@ -13,7 +13,7 @@ import {
   ArrowUpRight, ArrowDownRight,
   Package, Receipt, TrendingUp, Truck, Wine,
 } from 'lucide-react';
-import { api, qs, todayIso, type ApiDailySale, type ApiFullDsr, type ApiIndent, type ApiItemFull, type ApiRestockRow, type ApiStockMovement } from '../../lib/api';
+import { api, fieldRight, qs, todayIso, type DataMode, type ApiDailySale, type ApiFullDsr, type ApiIndent, type ApiItemFull, type ApiRestockRow, type ApiStockMovement } from '../../lib/api';
 import { money, panel } from '../../lib/styles';
 import { IMAGES } from '../../constants/images';
 import RestockCarousel from './RestockCarousel';
@@ -33,8 +33,11 @@ const LiveBadge = ({ live }: { live: boolean }) => (
 );
 
 // ─── DASHBOARD ───
-export const Dashboard = () => {
-  const { company } = useCompanyProfile();
+// A panel is left out when the role's Field Level Rights hide it (Admin Master → Field rights → Dashboard).
+const shown = (panel: string) => fieldRight('dashboard', panel) !== 'hidden';
+
+export const Dashboard = ({ dataMode }: { dataMode?: DataMode }) => {
+  const { company, isOnline } = useCompanyProfile();
   const [dsr, setDsr] = useState<ApiFullDsr | null>(null);
   const [dailySales, setDailySales] = useState<ApiDailySale[] | null>(null);
   const [stockMovement, setStockMovement] = useState<ApiStockMovement | null>(null);
@@ -43,31 +46,16 @@ export const Dashboard = () => {
   const [restockRows, setRestockRows] = useState<ApiRestockRow[] | null>(null);
   const [storeImage, setStoreImage] = useState<string>(IMAGES.dashboard.store);
 
-  // Real-time store operational hours (CL-2 Retail License: 10:00 AM to 10:30 PM)
-  const [isStoreOpen, setIsStoreOpen] = useState(() => {
-    const now = new Date();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    return minutes >= 10 * 60 && minutes < 22 * 60 + 30;
-  });
-
-  useEffect(() => {
-    const checkStoreStatus = () => {
-      const now = new Date();
-      const minutes = now.getHours() * 60 + now.getMinutes();
-      setIsStoreOpen(minutes >= 10 * 60 && minutes < 22 * 60 + 30);
-    };
-    const timer = setInterval(checkStoreStatus, 20000);
-    return () => clearInterval(timer);
-  }, []);
-
   useEffect(() => {
     const loadDsr = () => api<ApiFullDsr>(`/reports/dsr${qs({ on: todayIso() })}`).then(setDsr).catch(() => setDsr(null));
     const loadIndents = () => api<ApiIndent[]>('/transactions/purchase-indent').then(setIndents).catch(() => setIndents(null));
     const loadItems = () => {
       api<ApiItemFull[]>('/masters/items').then(setItems).catch(() => setItems(null));
-      api<ApiRestockRow[]>(`/reports/restock${qs({ days: RESTOCK_DAYS, limit: 10 })}`)
-        .then(setRestockRows)
-        .catch(() => setRestockRows(null));
+      if (shown('restock')) {
+        api<ApiRestockRow[]>(`/reports/restock${qs({ days: RESTOCK_DAYS, limit: 10 })}`)
+          .then(setRestockRows)
+          .catch(() => setRestockRows(null));
+      }
     };
     const loadSales = () => {
       const now = new Date();
@@ -85,7 +73,7 @@ export const Dashboard = () => {
       loadDsr();
       loadIndents();
       loadSales();
-      loadStockMovement();
+      if (shown('stock_movement')) loadStockMovement();
     };
     loadDashboardData();
     loadItems();
@@ -178,7 +166,8 @@ export const Dashboard = () => {
     <div className="mx-auto max-w-7xl space-y-6">
 
       {/* ═══ HERO BANNER ═══ */}
-      <section className="animate-fadeInUp relative overflow-hidden rounded-2xl dark:rounded-3xl border border-line dark:border-[#2A2A2A]">
+      {shown('hero') && (
+<section className="animate-fadeInUp relative overflow-hidden rounded-2xl dark:rounded-3xl border border-line dark:border-[#2A2A2A]">
         <div className="absolute inset-0">
           <img
             src={IMAGES.dashboard.hero}
@@ -225,9 +214,11 @@ export const Dashboard = () => {
           </div>
         </div>
       </section>
+      )}
 
       {/* ═══ KPI STAT CARDS ═══ */}
-      <section aria-label="Key figures" className="stagger-enter grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      {shown('kpis') && (
+<section aria-label="Key figures" className="stagger-enter grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {stats.map(s => (
           <div key={s.label} className="card-3d rounded-2xl border p-4 sm:p-5
                                         bg-[#FFFCF7] border-[#E3D9CD] shadow-[0_8px_30px_rgba(72,53,38,0.06)]
@@ -244,14 +235,16 @@ export const Dashboard = () => {
           </div>
         ))}
       </section>
+      )}
 
       {/* ═══ RESTOCK IMMEDIATELY (fast sellers running out first, from /reports/restock) ═══ */}
-      <RestockCarousel rows={restockRows} days={RESTOCK_DAYS} badge={<LiveBadge live={restockRows !== null} />} />
+      {shown('restock') && <RestockCarousel rows={restockRows} days={RESTOCK_DAYS} badge={<LiveBadge live={restockRows !== null} />} />}
 
       {/* ═══ FULL-SPAN WAREHOUSE BANNER ═══ */}
-      <section className="animate-fadeInUp animate-fadeInUp-d3">
+      {shown('company_banner') && (
+<section data-panel="company_banner" className="animate-fadeInUp animate-fadeInUp-d3">
         <div className="group relative overflow-hidden rounded-2xl dark:rounded-3xl h-64 sm:h-72 lg:h-80 img-zoom border border-[#E3D9CD] dark:border-[#2A2A2A] shadow-[0_8px_30px_rgba(72,53,38,0.06)] dark:shadow-card">
-          <img src={IMAGES.dashboard.warehouse} alt="Warehouse"
+          <img src={IMAGES.dashboard.warehouse} alt=""
             className="absolute inset-0 h-full w-full object-cover object-center
                        transition-transform duration-700 ease-out group-hover:scale-[1.035]"
             style={{ opacity: 0.85, filter: 'saturate(0.9) brightness(0.95)' }}
@@ -266,23 +259,22 @@ export const Dashboard = () => {
           </div>
           <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <p className="text-[10px] font-bold tracking-[0.25em] text-[#D3BB89] uppercase">Warehouse & Logistics</p>
               <h3 className="mt-1 text-2xl sm:text-3xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>
-                {company?.name ? `${company.name} Distribution Center` : 'Distribution Center'}
+                {company?.name || 'Company profile'}
               </h3>
-              <p className="mt-2 text-xs sm:text-sm text-stone-300/80">{company?.address || 'Company address unavailable'} · Excise Licence {company?.licence_type || 'not configured'} · Primary Bonded Depot</p>
-            </div>
-            <div className="flex items-center gap-2.5 text-xs text-white/80">
-              <span className="rounded-full bg-white/10 backdrop-blur px-3.5 py-1.5 border border-white/15 font-medium">Active Depot</span>
-              <span className="rounded-full bg-[#B08A45]/20 backdrop-blur px-3.5 py-1.5 border border-[#B08A45]/30 text-[#D3BB89] font-medium">Bonded Storage</span>
+              <p className="mt-2 text-xs sm:text-sm text-stone-300/80">
+                {[company?.address, company?.licence_type && `Excise Licence ${company.licence_type}`, company?.gstin && `GSTIN ${company.gstin}`].filter(Boolean).join(' · ') || 'Fill in the company details in Company Master.'}
+              </p>
             </div>
           </div>
         </div>
       </section>
+      )}
 
       {/* ═══ CHARTS ═══ */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 animate-fadeInUp animate-fadeInUp-d4">
-        <section className="xl:col-span-2 rounded-2xl border p-5
+        {shown('sales_chart') && (
+<section className="xl:col-span-2 rounded-2xl border p-5
                             bg-[#FFFCF7] border-[#E3D9CD] shadow-[0_8px_30px_rgba(72,53,38,0.06)]
                             dark:glass-card dark:border-[#2A2A2A] dark:bg-transparent">
           <div className="mb-5 flex items-start justify-between gap-3">
@@ -321,8 +313,10 @@ export const Dashboard = () => {
             {!weekData.length && <span className="w-full text-center text-xs text-[#70675F] dark:text-stone-400">Sales data unavailable</span>}
           </div>
         </section>
+      )}
 
-        <div className="h-full">
+        {shown('inventory_mix') && (
+<div data-panel="inventory_mix" className="h-full">
           {hasInventoryValue ? (
             <Pattern
               data={inventoryMixData}
@@ -342,10 +336,12 @@ export const Dashboard = () => {
             </div>
           )}
         </div>
+      )}
       </div>
 
       {/* ═══ STOCK MOVEMENT ═══ */}
-      <section className="rounded-2xl border p-5 animate-fadeInUp animate-fadeInUp-d5
+      {shown('stock_movement') && (
+<section data-panel="stock_movement" className="rounded-2xl border p-5 animate-fadeInUp animate-fadeInUp-d5
                           bg-[#FFFCF7] border-[#E3D9CD] shadow-[0_8px_30px_rgba(72,53,38,0.06)]
                           dark:glass-card dark:border-[#2A2A2A] dark:bg-transparent">
         <div className="mb-5 flex items-start justify-between gap-3">
@@ -366,9 +362,11 @@ export const Dashboard = () => {
           {!stockMovement && <p className="text-xs text-[#70675F] dark:text-stone-400">Stock movement data unavailable.</p>}
         </div>
       </section>
+      )}
 
       {/* ═══ FOOTER STORE BANNER (COMPANY MASTER 1ST IMAGE) ═══ */}
-      <section className="animate-fadeInUp animate-fadeInUp-d5">
+      {shown('store_banner') && (
+<section data-panel="store_banner" className="animate-fadeInUp animate-fadeInUp-d5">
         <div className="group relative overflow-hidden rounded-2xl dark:rounded-3xl h-48 sm:h-60 lg:h-72 img-zoom border border-[#E3D9CD] dark:border-[#2A2A2A] shadow-[0_8px_30px_rgba(72,53,38,0.06)] dark:shadow-card">
           <img
             src={storeImage}
@@ -393,26 +391,24 @@ export const Dashboard = () => {
                 {company?.name || 'Company profile unavailable'}
               </h3>
               <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-stone-300/85 max-w-lg">
-                {company?.address || 'Company address unavailable'} · Primary Retail Billing Counter
+                {company?.address || 'Company address unavailable'}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2.5 text-xs text-white/90">
+              {/* The backend's real state (GET /masters/company every 30 s), not a fixed timetable */}
               <span className={`inline-flex items-center gap-1.5 rounded-full backdrop-blur px-3.5 py-1.5 border font-semibold ${
-                isStoreOpen
+                isOnline
                   ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
                   : 'bg-rose-500/20 border-rose-500/30 text-rose-300'
               }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${isStoreOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                {isStoreOpen ? 'Store Open' : 'Store Closed'}
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/20 px-3.5 py-1.5 font-medium text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.22)] backdrop-blur">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_7px_rgba(16,185,129,0.8)]" />
-                POS Counters Online
+                <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+                {isOnline === false ? 'Server offline' : isOnline === null ? 'Connecting…' : dataMode === 'test' ? 'Test data' : 'Live data'}
               </span>
             </div>
           </div>
         </div>
       </section>
+      )}
     </div>
   );
 };

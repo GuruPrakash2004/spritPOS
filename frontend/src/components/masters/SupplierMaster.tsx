@@ -10,13 +10,15 @@ import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, sec
 import { toast } from '../common/toastStore';
 import { FormErrorSummary } from '../common/FormErrorSummary';
 import { api, errorText, type ApiSupplier } from '../../lib/api';
+import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 
 const BLANK: ApiSupplier = {
-  code: '', name: '', alias: '', address: '', city: '', pin: '', state: 'Karnataka', country: 'INDIA',
+  code: '', name: '', alias: '', address: '', city: '', pin: '', state: '', country: 'INDIA',
   phone: '', gstin: '', currency: 'Rupees', active: true,
 };
 
 const SupplierMaster = () => {
+  const { company } = useCompanyProfile();
   const [suppliers, setSuppliers] = useState<ApiSupplier[]>([]);
   // Code of the supplier being edited; '' while entering a new one.
   const [editing, setEditing] = useState('');
@@ -38,7 +40,7 @@ const SupplierMaster = () => {
     setErrors({});
     const row = suppliers.find(r => r.code === code);
     setEditing(row ? row.code : '');
-    setForm(row ?? BLANK);
+    setForm(row ?? { ...BLANK, state: company?.state ?? '' });   // a new supplier starts in the shop's own state
   };
 
   const handleFieldChange = (key: keyof ApiSupplier, value: string | boolean) => {

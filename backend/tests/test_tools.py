@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 
-from app import db, persistence, store
+from app import db, sqlstore, store
 from app.routers import tools
 
 TODAY = date.today().isoformat()
@@ -41,13 +41,6 @@ def test_reads_are_accepted(sql):
 def test_changes_to_the_web_tables_are_accepted(sql, table):
     stmt = tools._check_sql(sql, "sqlserver")
     assert stmt.kind == "write" and stmt.table == table
-
-
-def test_local_changes_only_to_the_outbox():
-    assert tools._check_sql("UPDATE web_outbox SET sync_status = 'PENDING' WHERE sync_status = 'FAILED'", "local").table == "web_outbox"
-    for sql in ("UPDATE state SET data = ''", "DELETE FROM tool_audit", "UPDATE Web_DocHeader SET Status = 'X'"):
-        with pytest.raises(tools.SqlRefused):
-            tools._check_sql(sql, "local")
 
 
 @pytest.mark.parametrize("sql", [
@@ -129,7 +122,7 @@ async def test_execute_returns_rows_capped_at_5000_and_audits(client, sqlserver)
     body = res.json()
     assert body["kind"] == "read" and body["columns"] == ["ItemID", "ItemName"]
     assert body["row_count"] == 5000 and body["truncated"] is True
-    audit = persistence.tool_audit_rows("SQL Query Execution")
+    audit = sqlstore.tool_audit_rows("SQL Query Execution")
     assert audit[0]["ok"] and audit[0]["row_count"] == 5000 and audit[0]["user_code"] == "ADMIN"
 
 
@@ -142,7 +135,7 @@ async def test_changes_to_web_tables_are_committed_and_audited(client, sqlserver
     assert res.json() | {"elapsed_ms": 0} == {"kind": "write", "table": "Web_DocHeader", "rows_affected": 3, "columns": [],
                                               "rows": [], "row_count": 0, "truncated": False, "elapsed_ms": 0}
     assert ("WRITE", sql) in sqlserver
-    assert persistence.tool_audit_rows("SQL Query Execution")[0]["row_count"] == 3
+    assert sqlstore.tool_audit_rows("SQL Query Execution")[0]["row_count"] == 3
 
 
 async def test_desktop_tables_are_never_changed(client, sqlserver):
@@ -151,7 +144,7 @@ async def test_desktop_tables_are_never_changed(client, sqlserver):
     assert res.status_code == 400
     assert "never changed by the web app" in res.json()["detail"]
     assert sqlserver == []
-    assert persistence.tool_audit_rows("SQL Query Execution")[0]["ok"] is False
+    assert sqlstore.tool_audit_rows("SQL Query Execution")[0]["ok"] is False
 
 
 async def test_execute_shows_the_sql_server_error_but_not_the_server(client, sqlserver, monkeypatch):
@@ -170,45 +163,18 @@ async def test_execute_shows_the_sql_server_error_but_not_the_server(client, sql
     assert res.json()["detail"] == "SQL Server: The connection to SQL Server failed. Check the network and try again."
 
 
-async def test_sql_server_needs_a_connection_but_the_local_database_does_not(client):
+async def test_sql_server_needs_a_connection(client):
     res = await client.post("/tools/sql/execute", json={"sql": "SELECT 1"})
     assert res.status_code == 409
     status = (await client.get("/tools/sql/status")).json()
-    assert status["db_connected"] is False and status["database"] is None and status["local_writable"] == ["web_outbox"]
-
-    res = await client.post("/tools/sql/execute", json={"sql": "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
-                                                        "target": "local"})
-    assert res.status_code == 200
-    assert ["web_outbox"] in res.json()["rows"] and ["tool_audit"] in res.json()["rows"]
-
-
-async def test_local_outbox_rows_can_be_changed_but_not_the_saved_state(client):
-    persistence.add_events([{"id": "e1", "kind": "sales_invoice", "doc_no": "26/c10-1", "action": "save", "user": "ADMIN",
-                             "at": "2026-09-29T10:00:00", "doc": {}, "moves": []}])
-    persistence.claim("e1")
-    persistence.mark_failed("e1", "boom")
-
-    res = await client.post("/tools/sql/execute", json={
-        "sql": "UPDATE web_outbox SET sync_status = 'PENDING', last_sync_error = NULL WHERE sync_status = 'FAILED'", "target": "local"})
-
-    assert res.status_code == 200 and res.json()["rows_affected"] == 1
-    assert persistence.outbox_counts()["pending"] == 1
-    assert (await client.post("/tools/sql/execute", json={"sql": "DELETE FROM state", "target": "local"})).status_code == 400
-
-
-def test_the_sqlite_authorizer_stops_changes_the_check_would_miss():
-    import sqlite3
-    for sql, table in (("DELETE FROM tool_audit", "web_outbox"), ("UPDATE state SET data = ''", "state"),
-                       ("ATTACH DATABASE ':memory:' AS x", None), ("PRAGMA writable_schema = 1", None),
-                       ("CREATE TABLE x (a)", "web_outbox")):
-        with pytest.raises(sqlite3.DatabaseError):
-            persistence.run_local_sql(sql, write_table=table)
+    assert status["db_connected"] is False and status["database"] is None
+    # There is no local database any more.
+    assert (await client.post("/tools/sql/execute", json={"sql": "SELECT 1", "target": "local"})).status_code == 422
 
 
 async def test_sql_tools_are_administrator_only(manager_client, cashier_client, sqlserver):
     for c in (manager_client, cashier_client):
         assert (await c.post("/tools/sql/execute", json={"sql": "SELECT 1"})).status_code == 403
-        assert (await c.post("/tools/sql/execute", json={"sql": "SELECT 1", "target": "local"})).status_code == 403
         assert (await c.get("/tools/sql/objects")).status_code == 403
         assert (await c.get("/tools/audit")).status_code == 403
 
@@ -228,15 +194,6 @@ async def test_object_explorer_scripts_and_top_rows(client, sqlserver):
     assert top["total_rows"] == 7 and top["writable"] is False
     assert any(sql == "SELECT TOP 200 * FROM [dbo].[MstItem]" for sql, _ in sqlserver)
     assert (await client.get("/tools/sql/top", params={"name": "Web_DocHeader"})).json()["writable"] is True
-
-
-async def test_local_explorer_lists_the_sqlite_tables(client):
-    objects = (await client.get("/tools/sql/objects", params={"target": "local"})).json()
-    assert {"kind": "Tables", "schema": "main", "name": "web_outbox"} in objects
-    script = (await client.get("/tools/sql/script", params={"name": "web_outbox", "target": "local"})).json()["script"]
-    assert "CREATE TABLE web_outbox" in script
-    top = (await client.get("/tools/sql/top", params={"name": "web_outbox", "target": "local"})).json()
-    assert top["writable"] is True and top["total_rows"] == 0
 
 
 async def test_unknown_objects_are_404_and_names_never_reach_the_sql(client, sqlserver):
@@ -283,7 +240,7 @@ async def test_rewrite_repairs_a_lost_movement_and_a_wrong_qoh(client):
     assert store.ITEMS["RC-750"]["qoh"] == rc
     assert store.ITEMS["NEW-1"]["qoh"] == 12   # the opening movement is kept
     assert res.json()["check"]["rewrite_required"] is False
-    assert persistence.tool_audit_rows("Re Write Stock")[0]["ok"] is True
+    assert sqlstore.tool_audit_rows("Re Write Stock")[0]["ok"] is True
 
 
 async def test_rewrite_follows_cancellations_returns_and_deductions(client):
@@ -317,23 +274,6 @@ async def test_rewrite_refuses_when_an_item_would_go_negative(client):
     assert "would go negative" in res.json()["detail"]
     assert store.ITEMS["RC-750"]["name"] in res.json()["detail"]
     assert store.MOVEMENTS == before[0] and store.ITEMS["RC-750"]["qoh"] == 3
-
-
-async def test_rewritten_stock_survives_a_restart(client, tmp_path, monkeypatch):
-    monkeypatch.setattr(persistence, "PATH", str(tmp_path / "state.sqlite3"))
-    stock = store.ITEMS["VIN-750"]["qoh"]
-    await client.post("/transactions/sales-invoice", json=bill([{"item_code": "VIN-750", "bottles": 2}]))
-    store.ITEMS["VIN-750"]["qoh"] = stock + 40
-    await client.post("/tools/rewrite-stock")
-    saved_moves = len(store.MOVEMENTS)
-
-    # Restart: seed QOH, no app movements, then load the file.
-    store.ITEMS["VIN-750"]["qoh"] = stock
-    del store.MOVEMENTS[store.APP_MOVEMENTS_FROM:]
-    assert persistence.load()
-
-    assert store.ITEMS["VIN-750"]["qoh"] == stock - 2
-    assert len(store.MOVEMENTS) == saved_moves
 
 
 async def test_rewrite_stock_needs_the_module_right(manager_client, cashier_client):

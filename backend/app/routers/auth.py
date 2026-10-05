@@ -33,7 +33,7 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .. import admin_audit, secure_fields, security, store
+from .. import admin_audit, db, secure_fields, security, sqlstore, store
 from ..passwords import hash_password, verify_password
 from ..schemas import (
     AdnlAdminPasswordIn, ChangePasswordIn, FieldRightsIn, LoginIn, LoginSettingsIn, MasterApprovalIn, ReportRightsIn, RoleIn,
@@ -98,6 +98,10 @@ PUBLIC_ROUTES = {
     ("GET", "/auth/login-settings"),                   # password rules and "Remember me" for the sign-in page
     ("GET", "/masters/company"),                       # company name on the sign-in page
     ("GET", "/company/files/{file_id}/content"),       # company images in <img> tags
+    # One-time Database setup on the sign-in page: they check the setup code (or an Administrator's token
+    # once the database is ready) themselves, in routers/setup.py.
+    ("GET", "/setup/status"), ("GET", "/setup/progress"),
+    ("POST", "/setup/test"), ("POST", "/setup/connect"), ("POST", "/setup/run"), ("POST", "/setup/admin"),
 }
 
 
@@ -195,7 +199,8 @@ def _session(u: dict) -> dict:
     role = u.get("role", "Cashier")
     return {"user": u["user"], "role": role, "modules": security.modules_for(u), "rights": security.rights_for_user(u),
             "field_rights": {} if role == store.ADMIN_ROLE else store.FIELD_RIGHTS.get(role, {}),
-            "must_change_password": security.password_expired(u), "company": store.COMPANY}
+            "must_change_password": security.password_expired(u), "company": store.COMPANY,
+            "data_mode": sqlstore.data_mode()}
 
 
 def _set_password(u: dict, password: str) -> None:
@@ -218,7 +223,9 @@ def _verify_password(u: dict, entered: str) -> bool:
             legacy_ok = secrets.compare_digest(base64.b64decode(u["legacy_password"]), entered.encode())
         except (binascii.Error, ValueError):
             legacy_ok = False
-    default_ok = bool(u.get("default_password")) and secrets.compare_digest(u["user"].lower().encode(), entered.encode())
+    # The lowercase user code is never a password for an Administrator (it would be ADMIN/admin all over again).
+    default_ok = (bool(u.get("default_password")) and u.get("role") != store.ADMIN_ROLE
+                  and secrets.compare_digest(u["user"].lower().encode(), entered.encode()))
     if legacy_ok or default_ok:
         u["password_hash"] = hash_password(entered)   # upgrade: from now on only the hash is kept
         u["password_set_on"] = date.today().isoformat()
@@ -276,6 +283,8 @@ def transport_key():
 @router.post("/auth/login")
 def login(body: LoginIn, request: Request):
     """Authenticate user and issue a signed JWT token."""
+    if db.configured() and not (sqlstore.enabled() or sqlstore.test_data()):
+        raise HTTPException(503, "The database isn't set up yet, or it can't be reached. Sign in once it is back.")
     username = body.user.strip().upper()
     password = secure_fields.decrypt(body.password, "login")
     address = request.client.host if request.client else "unknown"
@@ -382,7 +391,7 @@ def create_user(body: UserIn, current_admin: dict = Depends(require_admin)):
     if not password:
         raise HTTPException(422, "Enter a password for the new user")
     _check_new_password(password, name)
-    u = {"user": name, "role": body.role, "active": body.active, "pwv": 0, **_user_details(body)}
+    u = {"user": name, "role": body.role, "role_set_in_web": True, "active": body.active, "pwv": 0, **_user_details(body)}
     _set_password(u, password)
     store.USERS[name] = u
     store.touch("USERS", name)
@@ -414,7 +423,7 @@ def update_user(name: str, body: UserIn, current_admin: dict = Depends(require_a
         earlier, changed = (earlier + "; " if earlier else "") + "password: (old)", (changed + "; " if changed else "") + "password: (changed)"
     if changed:
         admin_audit.record("Admin Master (Security)", "User edited", u["user"], earlier, changed)
-    u.update(role=body.role, active=body.active, **details)
+    u.update(role=body.role, role_set_in_web=True, active=body.active, **details)
     store.touch("USERS", u["user"])
     return _public(u)
 
@@ -474,6 +483,7 @@ def save_role(name: str, body: RoleIn, current_admin: dict = Depends(require_adm
         for u in store.USERS.values():
             if u.get("role") == name:
                 u["role"] = new_name
+                u["role_set_in_web"] = True
                 store.touch("USERS", u["user"])
         del store.ROLES[name]
         store.touch("ROLES", name)
@@ -528,7 +538,7 @@ def save_login_settings(body: LoginSettingsIn, current_admin: dict = Depends(req
 
 @admin.get("/field-rights")
 def get_field_rights(current_admin: dict = Depends(require_admin)):
-    return {"masters": security.master_fields(), "roles": store.FIELD_RIGHTS}
+    return {"masters": security.master_fields(), "roles": store.FIELD_RIGHTS, "captions": {security.DASHBOARD: security.DASHBOARD_PANELS}}
 
 
 @admin.put("/field-rights/{role}")
@@ -548,6 +558,8 @@ def save_field_rights(role: str, body: FieldRightsIn, current_admin: dict = Depe
         must = [f for f, mode in modes.items() if mode == "hidden" and f in security.required_fields()[path]]
         if must:
             raise HTTPException(422, f"{', '.join(must)} can't be hidden ({path} can't be saved without it); make it read-only instead")
+        if path == security.DASHBOARD and any(mode != "hidden" for mode in modes.values()):
+            raise HTTPException(422, "Dashboard panels can only be hidden (there is nothing to edit on them)")
         if modes:
             clean[path] = dict(modes)
     before = store.FIELD_RIGHTS.get(role, {})

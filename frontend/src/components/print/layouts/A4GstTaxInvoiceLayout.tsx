@@ -20,13 +20,16 @@ export const A4GstTaxInvoiceLayout: React.FC<A4GstTaxInvoiceLayoutProps> = ({
   watermark,
   isPrintPreview = false,
 }) => {
-  const storeName = company?.name || 'THE LIQUOR HOUSE';
-  const storeAddress = company?.address || 'No. 42, Brigade Road, Civil Station, Bangalore - 560001, Karnataka';
-  const storePhone = company?.phone || company?.mobile || '+91 98450 12345';
-  const storeEmail = company?.email || 'accounts@theliquorhouse.in';
-  const storeLicence = company?.licence_type ? `${company.licence_type}` : 'CL-2 (Retail Vend of Foreign Liquor & Beer)';
-  const storeGstin = company?.gstin || '29AAAAA0000A1Z5';
-  const storePan = company?.pan || 'AAAAA0000A';
+  const storeName = company?.name || '';
+  const storeAddress = company?.address || '';
+  const storePhone = company?.phone || company?.mobile || '';
+  const storeEmail = company?.email || '';
+  const storeLicence = company?.licence_type || '';
+  const storeGstin = company?.gstin || '';
+  const storePan = company?.pan || '';
+  // Place of supply: the company's state, with the GST state code (the first two digits of its GSTIN).
+  const stateCode = /^\d{2}/.test(storeGstin) ? storeGstin.slice(0, 2) : '';
+  const placeOfSupply = [company?.state, stateCode && `(State Code ${stateCode})`].filter(Boolean).join(' ');
 
   const inv = data as ApiInvoice;
 
@@ -80,26 +83,26 @@ export const A4GstTaxInvoiceLayout: React.FC<A4GstTaxInvoiceLayoutProps> = ({
           <div className="space-y-1">
             <div className="flex">
               <span className="w-28 text-stone-500 font-medium">Invoice No:</span>
-              <strong className="text-stone-900 font-mono text-sm">{inv?.doc_no || '26/c10-0083718'}</strong>
+              <strong className="text-stone-900 font-mono text-sm">{inv?.doc_no}</strong>
             </div>
             <div className="flex">
               <span className="w-28 text-stone-500 font-medium">Date & Time:</span>
-              <span className="text-stone-800">{inv?.date || '2026-09-26'} {inv?.time || '14:30'}</span>
+              <span className="text-stone-800">{inv?.date} {inv?.time}</span>
             </div>
             <div className="flex">
               <span className="w-28 text-stone-500 font-medium">Sales Counter:</span>
-              <span className="text-stone-800">{inv?.counter || 'Counter 1'}</span>
+              <span className="text-stone-800">{inv?.counter}</span>
             </div>
             <div className="flex">
               <span className="w-28 text-stone-500 font-medium">Salesperson:</span>
-              <span className="text-stone-800">{inv?.salesperson || 'Staff'}</span>
+              <span className="text-stone-800">{inv?.salesperson}</span>
             </div>
           </div>
 
           <div className="space-y-1 border-l border-stone-300 pl-4">
             <div className="flex">
               <span className="w-28 text-stone-500 font-medium">Customer:</span>
-              <strong className="text-stone-900">{inv?.customer || 'Retail Cash Customer'}</strong>
+              <strong className="text-stone-900">{inv?.customer}</strong>
             </div>
             <div className="flex">
               <span className="w-28 text-stone-500 font-medium">Payment Mode:</span>
@@ -107,7 +110,7 @@ export const A4GstTaxInvoiceLayout: React.FC<A4GstTaxInvoiceLayoutProps> = ({
             </div>
             <div className="flex">
               <span className="w-28 text-stone-500 font-medium">Place of Supply:</span>
-              <span className="text-stone-800">Karnataka (State Code 29)</span>
+              <span className="text-stone-800">{placeOfSupply}</span>
             </div>
           </div>
         </div>
@@ -128,7 +131,9 @@ export const A4GstTaxInvoiceLayout: React.FC<A4GstTaxInvoiceLayoutProps> = ({
           </thead>
           <tbody className="divide-y divide-stone-200">
             {inv?.lines?.map((line, idx) => {
-              const basic = (line.qty * line.rate) / 1.18; // illustrative calculation for display
+              const basic = line.amount;
+              const gst = (line.cgst ?? 0) + (line.sgst ?? 0);
+              const gstPct = basic ? Math.round((gst / basic) * 10000) / 100 : 0;
               return (
                 <tr key={idx} className="hover:bg-stone-50">
                   <td className="border-r border-stone-300 px-2 py-2 text-center text-stone-500">{idx + 1}</td>
@@ -136,12 +141,12 @@ export const A4GstTaxInvoiceLayout: React.FC<A4GstTaxInvoiceLayoutProps> = ({
                     <div className="font-semibold text-stone-900">{line.item_name}</div>
                     <div className="text-[10px] text-stone-500 font-mono">{line.item_code}</div>
                   </td>
-                  <td className="border-r border-stone-300 px-2 py-2 text-center font-mono text-[11px] text-stone-600">220890</td>
+                  <td className="border-r border-stone-300 px-2 py-2 text-center font-mono text-[11px] text-stone-600"></td>
                   <td className="border-r border-stone-300 px-2 py-2 text-right font-bold text-stone-900">{line.qty}</td>
                   <td className="border-r border-stone-300 px-2 py-2 text-right tabular-nums">{money(line.rate)}</td>
                   <td className="border-r border-stone-300 px-2 py-2 text-right tabular-nums">{money(basic)}</td>
-                  <td className="border-r border-stone-300 px-2 py-2 text-right text-stone-600">0%*</td>
-                  <td className="px-3 py-2 text-right font-bold text-stone-900 tabular-nums">{money(line.amount)}</td>
+                  <td className="border-r border-stone-300 px-2 py-2 text-right text-stone-600">{gstPct}%</td>
+                  <td className="px-3 py-2 text-right font-bold text-stone-900 tabular-nums">{money(basic + gst)}</td>
                 </tr>
               );
             })}
@@ -201,7 +206,7 @@ export const A4GstTaxInvoiceLayout: React.FC<A4GstTaxInvoiceLayoutProps> = ({
             <ol className="list-decimal list-inside text-[11px] text-stone-600 space-y-0.5 mt-1">
               <li>Goods once sold will not be taken back or exchanged.</li>
               <li>Sale prohibited to persons below 21 years of age.</li>
-              <li>Subject to Bangalore jurisdiction.</li>
+              <li>Subject to local jurisdiction.</li>
             </ol>
           </div>
           <div className="text-right flex flex-col justify-between items-end h-24">

@@ -49,3 +49,16 @@ describe('money()', () => {
     expect(money(123456.7)).toBe('1,23,456.70')
   })
 })
+
+describe('Item Master loading', () => {
+  it('loads the list and each option list once, not in a loop', async () => {
+    const fetchMock = vi.fn(async (url: string) => json(url.includes('/masters/uoms') ? [{ code: 'BTL', name: 'Bottle' }] : []))
+    vi.stubGlobal('fetch', fetchMock)
+    setAuthRights(['Item Master'])
+    renderItems()
+    await screen.findByRole('heading', { name: 'Item Master' })
+    await new Promise(r => setTimeout(r, 200))   // a loop would keep fetching during this wait
+    const uomCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/masters/uoms')).length
+    expect(uomCalls).toBe(1)
+  })
+})

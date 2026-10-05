@@ -3,7 +3,6 @@
 import React from 'react';
 import type { ApiCompany } from '../../../lib/api';
 import { money } from '../../../lib/styles';
-import { SAMPLE_STOCK_BALANCE_DATA } from '../samplePrintData';
 
 interface StockRow {
   group: string;
@@ -33,10 +32,10 @@ export const StockBalancePrintLayout: React.FC<StockBalancePrintLayoutProps> = (
   watermark,
   isPrintPreview = false,
 }) => {
-  const storeName = company?.name || 'THE LIQUOR HOUSE';
+  const storeName = company?.name || '';
   const storeLicence = company?.licence_type ? `${company.licence_type}` : 'CL-2 Retail Vend of Liquor';
 
-  const rows: StockRow[] = (Array.isArray(data) && data.length > 0) ? data as StockRow[] : SAMPLE_STOCK_BALANCE_DATA;
+  const rows: StockRow[] = Array.isArray(data) ? data as StockRow[] : [];
   const isNoValuation = modelId === 'RptStkBal_Without_CLvalue';
 
   // Compute totals

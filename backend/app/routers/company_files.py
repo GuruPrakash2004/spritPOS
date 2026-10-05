@@ -1,6 +1,6 @@
 """Company Master → Images and Documents: files the administrator uploads for the company.
 
-Unlike the rest of the demo data these are kept on disk (backend/uploads/company/) with a small JSON
+Unlike the rest of the data (SQL Server) these are kept on disk (backend/uploads/company/) with a small JSON
 index, so uploaded licences and photos survive a server restart. Uploads arrive as base64 JSON so the
 API needs no multipart dependency; the size cap keeps that reasonable.
 """

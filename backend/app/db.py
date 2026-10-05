@@ -37,13 +37,53 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
-# No defaults for host or credentials: they come from backend/.env (never committed).
+# No defaults for host or credentials: they come from backend/.env (never committed), written by the sign-in
+# page's one-time Database setup (app/envfile.py) or by hand. DB_HOST may name an instance (localhost\SQLEXPRESS);
+# DB_PORT is optional (blank for a named instance). DB_AUTH is "sql" (DB_USER + password) or "windows"
+# (Windows login, pyodbc on Windows only). The password is DB_PASSWORD_ENC, sealed (secure_fields.seal), or a
+# hand-written DB_PASSWORD.
 DB_HOST = _env("DB_HOST")
-DB_PORT = _env("DB_PORT", "1433")
-DB_NAME = _env("DB_NAME", "vLQMSLHOUSE")
+DB_PORT = _env("DB_PORT")
+DB_NAME = _env("DB_NAME")
 DB_USER = _env("DB_USER")
+DB_AUTH = _env("DB_AUTH", "sql").lower()
 DB_PASSWORD = _env("DB_PASSWORD")
+DB_PASSWORD_ENC = _env("DB_PASSWORD_ENC")
 DB_DRIVER_OVERRIDE = _env("DB_DRIVER")
+
+
+def settings() -> dict:
+    """The connection settings in use (the password is never returned)."""
+    return {"host": DB_HOST, "port": DB_PORT, "database": DB_NAME, "user": DB_USER, "auth": DB_AUTH}
+
+
+def configured() -> bool:
+    return bool(DB_HOST and DB_NAME and (DB_USER or DB_AUTH == "windows"))
+
+
+def _password() -> str:
+    if DB_PASSWORD_ENC:
+        from . import secure_fields   # here, not at the top: secure_fields needs cryptography, db.py is imported early
+        return secure_fields.unseal(DB_PASSWORD_ENC)
+    return DB_PASSWORD
+
+
+def use_settings(host: str, port: str, database: str, user: str, auth: str, password_enc: str) -> None:
+    """Switch to new settings (after the setup screen saved them); call reconnect() next."""
+    global DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_AUTH, DB_PASSWORD, DB_PASSWORD_ENC
+    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_AUTH = host, port, database, user, auth
+    DB_PASSWORD, DB_PASSWORD_ENC = "", password_enc
+
+
+def _odbc(value: str) -> str:
+    """A value inside {…} in an ODBC connection string: a closing brace is doubled."""
+    return value.replace("}", "}}")
+
+
+def pyodbc_server(host: str, port: str) -> str:
+    """SERVER= for ODBC: a named instance is found by the SQL Browser, so it gets no port."""
+    return host if (not port or "\\" in host) else f"{host},{port}"
+
 
 # ─── Connection ──────────────────────────────────────────────────────────────
 
@@ -55,12 +95,13 @@ _db_available = False
 _driver_used: str = ""
 
 
-def _try_pyodbc() -> Any | None:
+def _try_pyodbc(host: str, port: str, database: str, user: str, password: str, auth: str,
+                login_timeout: int = 8) -> Any | None:
     """Attempt connection via pyodbc (requires ODBC Driver 17/18)."""
     try:
         import importlib
         pyodbc = importlib.import_module("pyodbc")
-    except ModuleNotFoundError:
+    except ImportError:   # not installed, or its native library (unixODBC) is missing
         return None
 
     drivers = (
@@ -74,14 +115,9 @@ def _try_pyodbc() -> Any | None:
     for drv in drivers:
         try:
             conn_str = (
-                f"DRIVER={{{drv}}};"
-                f"SERVER={DB_HOST},{DB_PORT};"
-                f"DATABASE={DB_NAME};"
-                f"UID={DB_USER};"
-                f"PWD={DB_PASSWORD};"
-                "TrustServerCertificate=yes;"
-                "Encrypt=yes;"
-                "Connection Timeout=8;"
+                f"DRIVER={{{drv}}};SERVER={pyodbc_server(host, port)};DATABASE={{{_odbc(database)}}};"
+                + ("Trusted_Connection=yes;" if auth == "windows" else f"UID={{{_odbc(user)}}};PWD={{{_odbc(password)}}};")
+                + f"TrustServerCertificate=yes;Encrypt=yes;Connection Timeout={login_timeout};"
             )
             conn = pyodbc.connect(conn_str, autocommit=False)
             return conn, drv
@@ -91,24 +127,28 @@ def _try_pyodbc() -> Any | None:
     return None
 
 
-def _try_pymssql() -> Any | None:
-    """Attempt connection via pymssql (pure-Python, no ODBC driver needed)."""
+def _try_pymssql(host: str, port: str, database: str, user: str, password: str, auth: str,
+                 login_timeout: int = 8) -> Any | None:
+    """Attempt connection via pymssql (pure-Python, no ODBC driver needed). SQL logins only."""
+    if auth == "windows":
+        return None
     try:
         import pymssql  # noqa: F401
-    except ModuleNotFoundError:
+    except ImportError:   # not installed, or its native library is missing
         return None
 
     for tds in ["7.4", "7.3", None]:
         try:
             kwargs = {
-                "server": DB_HOST,
-                "port": int(DB_PORT),
-                "database": DB_NAME,
-                "user": DB_USER,
-                "password": DB_PASSWORD,
-                "login_timeout": 8,
-                "timeout": 30,
+                "server": host,
+                "database": database,
+                "user": user,
+                "password": password,
+                "login_timeout": login_timeout,
+                "timeout": 600,          # the one-time data copy runs big INSERT ... SELECTs
             }
+            if port and "\\" not in host:
+                kwargs["port"] = int(port)
             if tds:
                 kwargs["tds_version"] = tds
             conn = pymssql.connect(**kwargs)
@@ -123,24 +163,45 @@ def init_db() -> bool:
     """Connect to SQL Server. Returns True if successful, False if falling back to in-memory store."""
     global _conn, _db_available, _driver_used
 
-    if not (DB_HOST and DB_USER):
-        logger.warning("DB_HOST / DB_USER not set in backend/.env — running with in-memory store.")
+    if not configured():
+        logger.warning("No database set up in backend/.env — no data until the Database setup has run.")
         _db_available = False
         return False
 
-    result = _try_pyodbc() or _try_pymssql()
+    args = (DB_HOST, DB_PORT, DB_NAME, DB_USER, _password(), DB_AUTH)
+    result = _try_pyodbc(*args) or _try_pymssql(*args)
     if result:
         _conn, _driver_used = result
         _db_available = True
-        logger.info("✅ Connected to SQL Server '%s' on %s:%s via %s", DB_NAME, DB_HOST, DB_PORT, _driver_used)
+        logger.info("Connected to SQL Server database '%s' via %s", DB_NAME, _driver_used)
         return True
 
-    logger.warning(
-        "⚠️  Could not connect to SQL Server at %s:%s/%s — running with in-memory store.",
-        DB_HOST, DB_PORT, DB_NAME,
-    )
+    logger.warning("Could not connect to SQL Server database '%s'.", DB_NAME)
     _db_available = False
     return False
+
+
+def test_connection(host: str, port: str, database: str, user: str, password: str, auth: str) -> dict:
+    """Try settings from the setup screen on a connection of their own (the app's connection is untouched).
+    Returns {"ok", "driver", "databases"} or {"ok": False, "error"}; the error never names the host."""
+    args = (host, port, database or "master", user, password, auth)
+    result = _try_pyodbc(*args, login_timeout=6) or _try_pymssql(*args, login_timeout=6)
+    if not result:
+        why = "Windows login needs the ODBC Driver for SQL Server on this Windows PC." if auth == "windows" else \
+            "Could not connect. Check the server name (e.g. localhost\\SQLEXPRESS), that SQL Server is running and " \
+            "accepts SQL logins and TCP/IP, and the login and password."
+        return {"ok": False, "error": why}
+    conn, driver = result
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sys.databases WHERE database_id > 4 AND state = 0 ORDER BY name")
+        names = [r[0] for r in cur.fetchall()]
+        return {"ok": True, "driver": driver, "databases": names}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def get_conn():
@@ -159,14 +220,15 @@ def driver_name() -> str:
 # ─── Query helpers ────────────────────────────────────────────────────────────
 
 def fetchall(sql: str, params: tuple = ()) -> list[dict]:
-    """Execute a SELECT and return list of dicts (column name → value)."""
+    """Execute a SELECT and return list of dicts (column name → value). Parameters use ? placeholders (for
+    both drivers, as in transaction()); without parameters the SQL runs exactly as written."""
     conn = get_conn()
     if conn is None:
         return []
     with _db_lock:
         cur = conn.cursor()
         try:
-            cur.execute(sql, params)
+            _user_statement(cur, sql, params, _driver_used.startswith("pymssql"))
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
         finally:
@@ -214,7 +276,7 @@ def executemany(sql: str, rows: list[tuple]) -> int:
             cur.close()
 
 
-# ─── Transactions (write-back, app/writeback.py) ─────────────────────────────
+# ─── Transactions (app/sqlstore.py, app/setup_db.py) ─────────────────────────
 
 class TxCursor:
     """A cursor inside db.transaction(). SQL uses ? placeholders for both drivers (pymssql wants %s),
@@ -230,6 +292,11 @@ class TxCursor:
 
     def fetchone(self):
         return self._cur.fetchone()
+
+    def execute_raw(self, sql: str) -> int:
+        """Run SQL with no parameters, exactly as written (schema scripts: a '?' or '%' stays as is)."""
+        self._cur.execute(sql)
+        return self._cur.rowcount
 
 
 @contextmanager
@@ -346,9 +413,41 @@ def safe_error(exc: Exception) -> str:
     return text[:1000]
 
 
+def abort_connection() -> None:
+    """Close the shared connection from another thread, WITHOUT the lock, so a statement stuck on a dead
+    network connection (the server dropped it and the driver waits for ever) fails and releases the lock.
+    The caller then reconnect()s. Only the setup copy's watchdog uses this."""
+    conn = _conn
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+# Set by disconnect() (About → Disconnect, for testing): nothing reconnects by itself until reconnect() is called
+# by an Administrator (About → Reconnect).
+MANUAL_OFFLINE = False
+
+
+def disconnect() -> None:
+    """Close the connection on purpose, to test how the app behaves without SQL Server (settings are kept)."""
+    global _conn, _db_available, MANUAL_OFFLINE
+    with _db_lock:
+        old, _conn, _db_available = _conn, None, False
+        MANUAL_OFFLINE = True
+    if old is not None:
+        try:
+            old.close()
+        except Exception:
+            pass
+    logger.warning("Disconnected from SQL Server on purpose (About → Reconnect brings it back)")
+
+
 def reconnect() -> bool:
-    """Drop the shared connection and connect again (after a network drop)."""
-    global _conn, _db_available
+    """Drop the shared connection and connect again (after a network drop, or after disconnect())."""
+    global _conn, _db_available, MANUAL_OFFLINE
+    MANUAL_OFFLINE = False
     with _db_lock:   # swap the old connection out; don't hold the lock through the login timeout
         old, _conn, _db_available = _conn, None, False
     if old is not None:

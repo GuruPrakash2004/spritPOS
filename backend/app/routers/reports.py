@@ -5,7 +5,7 @@ Summary Report (field list from Docs/WebDash.xlsx), hourly/daily/brand-wise sale
 reports, the Dashboard's stock-movement summary and restock priority list (sales velocity from
 saved invoices), and the list of legacy .rpt files in
 backend/Rpts/. Stock figures are computed from store.MOVEMENTS, so they only include
-movements made through store.move_stock() (plus the seeded sales history).
+movements made through store.move_stock().
 
 The frontend renders most of these through REPORTS in
 frontend/src/components/reports/reportDefs.ts.
@@ -17,7 +17,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from .. import db_store, store
+from .. import db_store, security, sqlstore, store
 from .auth import get_current_user, hides_cost, require_module
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -123,9 +123,16 @@ RESTOCK_COVER_DAYS = 14      # suggested order covers two weeks of sales
 _STATUS_ORDER = {"OUT_OF_STOCK": 0, "CRITICAL": 1, "LOW": 2, "OK": 3}
 
 
+def _dashboard_panel(user: dict, panel: str) -> None:
+    if security.dashboard_hidden(user, panel):
+        raise HTTPException(403, "This Dashboard panel is hidden for your role (Admin Master → Field Level Rights)")
+
+
 @router.get("/restock")
-def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None, ge=1)):
-    """Items to restock, fast sellers that are running out first (feeds the Dashboard panel).
+def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None, ge=1),
+            current_user: dict = Depends(get_current_user)):
+    """Items to restock, fast sellers that are running out first (feeds the Dashboard panel; 403 for a role whose
+    Field Level Rights hide that panel).
 
     Real time: the window is always the last `days` days up to today.
     - With SQL Server connected, sales and stock are read live from the DB (db_store.live_sales_and_stock,
@@ -136,6 +143,7 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
     an item sells and how close it is to running out, and is 0 for items that didn't sell. Only items
     that sell can need restock; those come first (out of stock, CRITICAL or LOW).
     """
+    _dashboard_panel(current_user, "restock")
     end = date.today()
     start = end - timedelta(days=max(days, 1) - 1)
     sold: dict[str, float] = defaultdict(float)
@@ -143,7 +151,7 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
     qoh_of: dict[str, float] = {code: it["qoh"] for code, it in store.ITEMS.items()}
     first_sale: str | None = None
 
-    live = db_store.live_sales_and_stock(start, end)
+    live = None if sqlstore.test_data() else db_store.live_sales_and_stock(start, end)
     if live is not None:
         source = "live"
         sold.update(live["sold"])
@@ -335,7 +343,9 @@ def daily_sales(from_date: date, to_date: date):
 
 
 @router.get("/stock-movement")
-def stock_movement(on: date | None = None):
+def stock_movement(on: date | None = None, current_user: dict = Depends(get_current_user)):
+    """The Dashboard's Stock movement panel (403 for a role whose Field Level Rights hide it)."""
+    _dashboard_panel(current_user, "stock_movement")
     target_date = on or date.today()
     bal = stock_balance(target_date, target_date)
     op = sum(r["op_qty"] for r in bal)

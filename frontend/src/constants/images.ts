@@ -45,7 +45,7 @@ export const IMAGES = {
   },
   dashboard: {
     hero: bannerDistillery,
-    warehouse: 'https://images.unsplash.com/photo-1516594915697-87eb3b1c14ea?w=1600&q=85&auto=format&fit=crop',
+    warehouse: imgLoginHero,
     store: imgCompanyStore,
     barAtmosphere: imgCompanyStore,
   },
@@ -69,14 +69,14 @@ const CRAFT = photo(whiskyTimelessCraft, 'center 95%');
 const PURE_CLASS = photo(lighterPureClass, 'center bottom');
 const OPENER = photo(bottleOpenerBar, 'center 55%');
 
-// Known brands and specific items first: these win over the category pools.
+// Known brands first (matched on the item's name): these win over the category pools.
 const BRAND_PHOTOS: [RegExp, ProductPhoto][] = [
   [/bottle ?opener|\bopener\b/, OPENER],
   [/lighter|zippo/, PURE_CLASS],
-  [/royal challenge|\brc-750\b/, photo(imgRoyalChallenge)],
-  [/green label|vin green|\bvin-750\b/, photo(imgVinGreenLabel)],
-  [/mcdowell|\bmcd1\b|no\.1/, photo(imgMcDowells)],
-  [/kingfisher|\bkfu?-\d/, photo(imgKingfisher)],
+  [/royal challenge/, photo(imgRoyalChallenge)],
+  [/green label|vin green/, photo(imgVinGreenLabel)],
+  [/mcdowell|no\.1/, photo(imgMcDowells)],
+  [/kingfisher/, photo(imgKingfisher)],
 ];
 
 // Softvent's own photos: always offered first for these categories (before the rotated pool).

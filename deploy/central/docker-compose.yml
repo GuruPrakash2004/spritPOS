@@ -1,0 +1,39 @@
+# The hosted central site. From this folder:  docker compose --env-file central.env up -d --build
+# Copy central.env.example to central.env first and fill it in (central.env is never committed).
+# `--profile db` also runs a SQL Server here; leave it out when the central database is elsewhere (Azure SQL,
+# another server).
+services:
+  api:
+    build: { context: ../.., dockerfile: deploy/central/Dockerfile, target: api }
+    env_file: central.env
+    volumes:
+      - central-keys:/app/backend/data      # transport key + secret.key: back these up
+    restart: unless-stopped
+
+  web:
+    build: { context: ../.., dockerfile: deploy/central/Dockerfile, target: web }
+    environment:
+      CENTRAL_DOMAIN: ${CENTRAL_DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [api]
+    restart: unless-stopped
+
+  sqlserver:
+    profiles: ["db"]
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    restart: unless-stopped
+
+volumes:
+  central-keys:
+  caddy-data:
+  caddy-config:
+  sqlserver-data:

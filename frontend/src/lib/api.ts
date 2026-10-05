@@ -142,8 +142,12 @@ export const newIdempotencyKey = () =>
 // Message text for any caught error, ready for a toast.
 export const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-// Today as YYYY-MM-DD, the date format every backend date parameter expects.
-export const todayIso = () => new Date().toISOString().slice(0, 10);
+// Today as YYYY-MM-DD, the date format every backend date parameter expects. The PC's own date, not UTC's
+// (toISOString would give yesterday's date in India before 05:30).
+export const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 // Shapes returned by the backend (snake_case, as FastAPI sends them).
 export type ApiCounter = { code: string; name: string; system_name: string; prefix: string; inactive: boolean };
@@ -175,7 +179,7 @@ export type ApiStockMovement = {
   flow: ApiStockMovementItem[];
 };
 
-export type ApiLine = { item_code: string; item_name: string; cases: number; bottles: number; qty: number; rate: number; amount: number; litres: number };
+export type ApiLine = { item_code: string; item_name: string; cases: number; bottles: number; qty: number; rate: number; amount: number; litres: number; cgst?: number; sgst?: number };
 
 export type ApiInvoice = {
   doc_no: string; date: string; time?: string; counter: string; customer: string; salesperson: string | null;
@@ -195,10 +199,14 @@ export type ApiSupplier = {
 
 export type ApiLedger = { code: string; name: string; group: string };
 
+// GET /transactions/next-number: the number the next document of a kind will most likely get (a preview).
+export type ApiNextNumber = { doc_no: string; fy_prefix: string; prefix: string; number: number };
+
 export type ApiCompany = {
   name: string; email: string; address: string; phone: string; fax: string; mobile: string; website: string;
   gstin: string; pan: string; cin: string; excise_phone: string; ksbcl_code: string;
   licence_type: string; state: string; fy_start: string; fy_end: string;
+  fin_years?: { start: string; end: string; active: boolean }[];   // from GET /masters/company (Web_MstCompFinYear)
 };
 
 // Add/Edit/Delete ticks per module (Admin Master). A module with no entry has full rights.
@@ -214,6 +222,7 @@ export type ApiUser = {
   field_rights?: ApiFieldRights;
   must_change_password?: boolean;
   company: ApiCompany;
+  data_mode?: DataMode;
   access_token?: string;
   token?: string;
   token_type?: string;
@@ -227,7 +236,10 @@ export type ApiLoginSettings = {
   min_length: number; require_mix: boolean; require_upper: boolean; require_lower: boolean; require_digit: boolean;
   require_special: boolean; password_expiry_days: number; show_remember_me: boolean;
 };
-export type ApiFieldRightsAdmin = { masters: Record<string, string[]>; roles: Record<string, ApiFieldRights> };
+export type ApiFieldRightsAdmin = {
+  masters: Record<string, string[]>; roles: Record<string, ApiFieldRights>;
+  captions?: Record<string, Record<string, string>>;   // e.g. the Dashboard panels' names
+};
 export type ApiMasterApproval = {
   masters: Record<string, string>; required: string[];
   pending: { master: string; screen: string; code: string; name: string; changed_by: string | null }[];
@@ -274,12 +286,11 @@ export const qs = (params: Record<string, string | number | undefined>) => {
   return s ? `?${s}` : '';
 };
 
-// Tools → SQL Query Execution (backend/app/routers/tools.py). target "sqlserver" = the vLQMS SQL Server
-// (changes only to dbo.Web_* tables), "local" = the web app's SQLite file (changes only to web_outbox).
-export type ApiSqlTarget = 'sqlserver' | 'local';
+// Tools → SQL Query Execution (backend/app/routers/tools.py): the vLQMS SQL Server (changes only to
+// dbo.Web_* tables). "target" is kept in the requests; SQL Server is the only one.
+export type ApiSqlTarget = 'sqlserver';
 export type ApiSqlStatus = {
   db_connected: boolean; database: string | null; driver: string | null;
-  local_saved: boolean; local_writable: string[];
 };
 export type ApiSqlObject = { kind: 'Tables' | 'Views' | 'Procedures'; schema: string; name: string };
 export type ApiSqlResult = {
@@ -330,12 +341,20 @@ export type ApiAuditRow = {
   id: number | string; at: string; screen: string; action: string; main_fld: string; user_code: string | null;
   earlier: string; changed: string; items: ApiAuditItem[];
 };
+// What the screens show: the shop's SQL Server ("live"), the sample data of the Test data switch ("test"), or nothing.
+export type DataMode = 'live' | 'test' | 'none';
 export type ApiAbout = {
   product: string; software_version: string; api_version: string; company: string; db_connected: boolean; server_time: string;
+  db_configured: boolean; db_disconnected_for_testing: boolean; data_mode: DataMode;
 };
 export type ApiDupInvoice = {
   doc_no: string; date: string; time: string; added_by: string; sales_type: string; bill_system: 'Web' | 'Desktop';
   qty: number; value: number; counter: string; removable: boolean; duplicate_of: string | null; why_not: string | null;
+};
+/** Utilities → Web Sync: whether it is set up, the central site (host only) and how the last push went. */
+export type ApiWebSync = {
+  configured: boolean; central: string; every_minutes: number; last_ok: string | null; last_day: string | null;
+  last_stock_ok: string | null; last_error: string | null; last_error_at: string | null;
 };
 export type ApiMergeSide = { code: string; name: string; qoh: number; active: boolean };
 export type ApiMergePreview = {

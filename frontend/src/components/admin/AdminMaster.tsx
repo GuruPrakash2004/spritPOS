@@ -45,12 +45,8 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
   const { confirm, dialog } = useConfirm();
 
   // Role draft with structured module rights and action button permissions
-  const [roleDraft, setRoleDraft] = useState<RoleDraft>(() =>
-    parseRoleToDraft({
-      name: 'Manager',
-      modules: MATRIX_SCREENS.filter(s => s.id !== 'Admin Master').map(s => s.id),
-    })
-  );
+  // Empty until /admin/roles loads (then the chosen role's saved rights).
+  const [roleDraft, setRoleDraft] = useState<RoleDraft>(() => parseRoleToDraft({ name: 'Manager', modules: [] }));
 
   const [roleFormErrors, setRoleFormErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);

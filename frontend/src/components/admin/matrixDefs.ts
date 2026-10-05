@@ -27,6 +27,7 @@ export const MATRIX_SCREENS: MatrixScreen[] = [
   { id: 'Supplier Master', name: 'Supplier Master', group: 'MASTERS', sub: 'KSBCL and other suppliers, GST details', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: true },
   { id: 'Customer Master', name: 'Customer Master', group: 'MASTERS', sub: 'Customers, loyalty cards and points', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: true },
   { id: 'Ledger Master', name: 'Ledger Master', group: 'MASTERS', sub: 'Account heads used by Expense Entry', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: true },
+  { id: 'Sales Person Master', name: 'Sales Person Master', group: 'MASTERS', sub: 'Sales persons chosen on each bill', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: true },
   { id: 'Ledger Group Master', name: 'Ledger Group Master', group: 'MASTERS', sub: 'Groups for ledgers (expenses, cash, bank…)', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: true },
   { id: 'Sales Counter Master', name: 'Sales Counter Master', group: 'MASTERS', sub: 'POS counter terminals and bill prefixes', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: true },
   { id: 'Package Master', name: 'Package Master', group: 'MASTERS', sub: 'Bottle sizes and litres per bottle for excise totals', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: true },
@@ -63,6 +64,7 @@ export const MATRIX_SCREENS: MatrixScreen[] = [
   { id: 'Remove Duplicate Invoice', name: 'Remove Duplicate Invoice', group: 'UTILITIES', sub: 'Remove bills saved twice (stock and points go back)', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'Replace and Remove Duplicate items', name: 'Replace and Remove Duplicate items', group: 'UTILITIES', sub: 'Replace an item created twice with the right one', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'Merge Items', name: 'Merge Items', group: 'UTILITIES', sub: 'Fold one item into another (bills, stock, QOH)', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
+  { id: 'Web Sync', name: 'Web Sync', group: 'UTILITIES', sub: "Send the day's summary and stock to the central site", hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'Compare Stock', name: 'Compare Stock', group: 'UTILITIES', sub: 'Compare two stock sheets item by item', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
 
   // Administration

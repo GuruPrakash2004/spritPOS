@@ -2,7 +2,7 @@
 the ADMIN Audit Log recording, and About."""
 from datetime import date, timedelta
 
-from app import persistence, store
+from app import sqlstore, store
 from conftest import enc
 
 TODAY = date.today().isoformat()
@@ -126,7 +126,7 @@ async def test_passwords_never_reach_the_audit(client):
 
 
 async def test_tools_runs_show_in_the_audit_log(client):
-    persistence.audit_tool("ADMIN", "SQL Query Execution", "SELECT 1", True, 1)
+    sqlstore.audit_tool("ADMIN", "SQL Query Execution", "SELECT 1", True, 1)
     rows = (await client.get("/utilities/audit", params={"screen": "SQL Query Execution"})).json()
     assert rows and rows[0]["changed"].startswith("SELECT 1")
 
@@ -139,7 +139,7 @@ async def test_audit_log_is_admin_only(cashier_client):
 
 async def test_about(cashier_client):
     res = (await cashier_client.get("/utilities/about")).json()
-    assert res["product"] == "vLQMS Web" and res["software_version"] and "db_connected" in res
+    assert res["product"] == "e-vLQMS ERP" and res["software_version"] and "db_connected" in res
 
 
 # ─── Remove Duplicate Invoice (711) ──────────────────────────────────────────
@@ -228,30 +228,6 @@ async def test_merge_refuses_invalid_choices(client):
     # Replace and Remove takes inactive items too.
     res = await client.post("/utilities/merge-items/replace", json={"from_item": "RC-750", "to_item": "VIN-750", "admin_password": enc("admin", "admin")})
     assert res.status_code == 200 and res.json()["message"] == "Item replaced and removed successfully"
-
-
-async def test_merge_survives_a_restart(client, tmp_path, monkeypatch):
-    monkeypatch.setattr(persistence, "PATH", str(tmp_path / "state.sqlite3"))
-    a, b = "RC-750", "VIN-750"
-    total = store.ITEMS[a]["qoh"] + store.ITEMS[b]["qoh"]
-    seed_items = {k: dict(v) for k, v in store.ITEMS.items()}
-    await client.post("/utilities/merge-items/merge", json={"from_item": a, "to_item": b, "admin_password": enc("admin", "admin")})
-    persistence.save()
-    # Restart: the seed data comes back (with the old item), then the saved state is laid over it.
-    store.ITEMS.clear()
-    store.ITEMS.update(seed_items)
-    store.MERGED_ITEMS.clear()
-    persistence.load()
-    assert a not in store.ITEMS and store.ITEMS[b]["qoh"] == total
-
-
-async def test_merge_queues_the_web_stock_change_for_sql_server(client, monkeypatch):
-    from app import writeback
-    monkeypatch.setattr(writeback, "masters_from_db", True)
-    await _sell(client, qty=1, item="RC-750")
-    await client.post("/utilities/merge-items/merge", json={"from_item": "RC-750", "to_item": "VIN-750", "admin_password": enc("admin", "admin")})
-    ev = [r for r in persistence.pending_rows() if r["transaction_type"] == "item_merge"][0]["event"]
-    assert {(m["item"], m["qty"]) for m in ev["moves"]} == {("RC-750", 1), ("VIN-750", -1)}
 
 
 async def test_merge_needs_its_module(cashier_client):
@@ -345,25 +321,6 @@ async def test_a_removed_bill_cannot_be_cancelled(client):
     assert store.ITEMS["VIN-750"]["qoh"] == before
 
 
-async def test_merge_into_an_item_made_in_the_app_survives_a_restart(client, tmp_path, monkeypatch):
-    monkeypatch.setattr(persistence, "PATH", str(tmp_path / "state.sqlite3"))
-    seed_items = {k: dict(v) for k, v in store.ITEMS.items()}
-    seed_moves = list(store.MOVEMENTS[:store.APP_MOVEMENTS_FROM])
-    new = dict(store.ITEMS["VIN-750"], code="NEWX", name="New item", qoh=0)
-    assert (await client.post("/masters/items", json=new)).status_code == 201
-    vin = store.ITEMS["VIN-750"]["qoh"]
-    await client.post("/utilities/merge-items/merge", json={"from_item": "VIN-750", "to_item": "NEWX", "admin_password": enc("admin", "admin")})
-    assert store.ITEMS["NEWX"]["qoh"] == vin
-    persistence.save()
-    # Restart: seed items and seed history come back, then the saved state is laid over them.
-    store.ITEMS.clear(); store.ITEMS.update(seed_items)
-    store.MOVEMENTS[:] = seed_moves
-    store.MERGED_ITEMS.clear(); store.EDITS.clear()
-    persistence.load()
-    assert "VIN-750" not in store.ITEMS and store.ITEMS["NEWX"]["qoh"] == vin
-    assert (await client.get("/tools/rewrite-stock")).json()["web"]["rewrite_required"] is False
-
-
 async def test_merge_adds_up_closing_stock_lines_and_respects_the_freeze_date(client):
     qa, qb = store.ITEMS["RC-750"]["qoh"], store.ITEMS["VIN-750"]["qoh"]
     cse = (await client.post("/transactions/closing-stock", json={"as_on": TODAY, "lines": [
@@ -377,15 +334,6 @@ async def test_merge_adds_up_closing_stock_lines_and_respects_the_freeze_date(cl
     await client.put("/utilities/settings/FreezeDate", json={"caption": "Freeze Date", "value": yesterday})
     res = await client.post("/utilities/merge-items/merge", json={"from_item": "OM-750", "to_item": "VIN-750", "admin_password": enc("admin", "admin")})
     assert res.status_code == 409 and "freeze date" in res.json()["detail"]
-
-
-async def test_merge_moves_only_what_was_queued_for_sql_server(client, monkeypatch):
-    from app import writeback
-    await _sell(client, qty=1, item="RC-750")            # seed mode: never queued
-    monkeypatch.setattr(writeback, "masters_from_db", True)
-    await client.post("/utilities/merge-items/merge", json={"from_item": "RC-750", "to_item": "VIN-750", "admin_password": enc("admin", "admin")})
-    ev = [r for r in persistence.pending_rows() if r["transaction_type"] == "item_merge"][0]["event"]
-    assert ev["moves"] == []
 
 
 # ─── Additional ADMIN password (Admin Master (Security)) ─────────────────────

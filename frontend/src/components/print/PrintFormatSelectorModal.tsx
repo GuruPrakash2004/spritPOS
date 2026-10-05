@@ -1,6 +1,6 @@
 // Print dialog: pick a legacy .rpt format for the current document, preview it with the matching web
-// layout from print/layouts/, then print (⌘/Ctrl+P). Uses sample data when a screen has nothing
-// to print yet (samplePrintData.ts).
+// layout from print/layouts/, then print (⌘/Ctrl+P). Prints only the real data: blank fields
+// print blank (printData.ts).
 
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -17,7 +17,7 @@ import {
 	getSavedModelPreference,
 	saveModelPreference,
 } from './rptRegistry';
-import { getEffectivePrintData, SAMPLE_COMPANY } from './samplePrintData';
+import { BLANK_COMPANY, printData } from './printData';
 import { A4GstTaxInvoiceLayout } from './layouts/A4GstTaxInvoiceLayout';
 import { A5SlipLayout } from './layouts/A5SlipLayout';
 import { AnalyticalReportLayout, type AnalyticalReportData } from './layouts/AnalyticalReportLayout';
@@ -145,8 +145,8 @@ export default function PrintFormatSelectorModal({
 
 	const renderLayout = (isPrintPreview: boolean) => {
 		if (!selectedModel) return null;
-		const effectiveData = getEffectivePrintData(category, data);
-		const effectiveCompany = company || SAMPLE_COMPANY;
+		const effectiveData = printData(category, data);
+		const effectiveCompany = company || BLANK_COMPANY;
 		const props = { modelId: selectedModel.id, data: effectiveData, company: effectiveCompany, watermark, isPrintPreview };
 
 		if (category === 'GENERIC_REPORT') return <AnalyticalReportLayout {...props} data={effectiveData as AnalyticalReportData} />;

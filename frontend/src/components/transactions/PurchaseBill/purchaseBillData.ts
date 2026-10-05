@@ -9,8 +9,6 @@ export type Row = {
 };
 export type Supplier = { name: string; address: string };
 
-export const FY_PREFIX = '26';
-export const PB_SERIES = ['', 'A', 'B'];
 export const PURCHASE_TYPES = ['Purchase', 'Purchase Return', 'Stock Transfer In'];
 
 export const today = () => new Date().toISOString().slice(0, 10);

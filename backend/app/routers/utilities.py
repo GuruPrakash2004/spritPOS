@@ -7,9 +7,11 @@ Built so far:
 - Compare Stock (714): two stock sheets compared in the browser; this gives the web app's current stock.
 - ADMIN Audit Log (frmRptAdminAuditLog): what was changed, by whom, when (app/admin_audit.py), plus the
   Tools runs (tool_audit). Administrator only.
+- Web Sync (frmModWebSync): the day's summary and the stock sent to the central site (app/websync.py).
 - About (frmUtlAbout).
 The web app never writes the desktop tables; every utility acts on the web app's own data.
 """
+import logging
 import re
 from datetime import date, datetime, timedelta
 from typing import Literal
@@ -17,10 +19,11 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, db, doc_settings, duplicate_invoices, gsettings, item_merge, persistence, security, store
+from .. import admin_audit, db, doc_settings, duplicate_invoices, gsettings, item_merge, security, sqlstore, store, websync
 from .auth import hides_cost, require_admin, require_module
 
 router = APIRouter(prefix="/utilities", tags=["Utilities"])
+logger = logging.getLogger("vlqms.utilities")
 values_router = APIRouter(tags=["Global Settings"])
 
 TOOLS_SCREENS = ("SQL Query Execution", "Re Write Stock")
@@ -96,7 +99,7 @@ def add_setting(body: SettingNew, admin: dict = Depends(require_admin)):
 
 @router.get("/audit/screens")
 def audit_screens(admin: dict = Depends(require_admin)):
-    return sorted(set(persistence.audit_screens()) | set(TOOLS_SCREENS))
+    return sorted(set(sqlstore.audit_screens()) | set(TOOLS_SCREENS))
 
 
 @router.get("/audit")
@@ -107,9 +110,9 @@ def audit_log(from_date: date = Query(default_factory=lambda: date.today() - tim
     if to_date < from_date:
         raise HTTPException(422, "To date is before From date")
     lo, hi = f"{from_date.isoformat()}T00:00:00", f"{to_date.isoformat()}T23:59:59"
-    rows = persistence.audit_rows(screen or None, lo, hi)
+    rows = sqlstore.audit_rows(screen or None, lo, hi)
     if not screen or screen in TOOLS_SCREENS:
-        for t in persistence.tool_audit_rows(screen or None, limit=5000):
+        for t in sqlstore.tool_audit_rows(screen or None, limit=5000):
             if lo <= t["at"] <= hi:
                 rows.append({"id": f"T{t['id']}", "at": t["at"], "screen": t["tool"],
                              "action": "Run" if t["ok"] else "Refused / failed", "main_fld": "",
@@ -125,13 +128,60 @@ def audit_log(from_date: date = Query(default_factory=lambda: date.today() - tim
 def about():
     from ..main import app
     return {
-        "product": "vLQMS Web",
+        "product": "e-vLQMS ERP",
         "software_version": gsettings.value("SWVersion"),
         "api_version": app.version,
         "company": store.COMPANY.get("name", ""),
         "db_connected": db.is_db_available(),
+        "db_configured": db.configured(),
+        "db_disconnected_for_testing": db.MANUAL_OFFLINE,
+        # "live": the shop's SQL Server; "test": the sample data (header switch); "none": nothing loaded
+        "data_mode": sqlstore.data_mode(),
         "server_time": datetime.now().isoformat(timespec="seconds"),
     }
+
+
+# ─── Testing: sample data and the database connection (Administrator only) ──────
+# These change no shop data, so main.py runs them without the "database offline" check and saves nothing after.
+
+class TestDataIn(BaseModel):
+    on: bool
+
+
+@router.post("/test-data")
+def set_test_data(body: TestDataIn, admin: dict = Depends(require_admin)):
+    """On: the screens show the sample data and nothing is saved (company, users and settings stay the shop's).
+    Off: everything is loaded again from SQL Server."""
+    if not body.on and sqlstore.test_data() and db.configured() and not db.is_db_available():
+        raise HTTPException(409, "Reconnect the database first (About → Reconnect database): switching test data off "
+                                 "loads the live data from it.")
+    sqlstore.use_test_data(body.on)
+    logger.warning("Test data switched %s by %s", "ON" if body.on else "OFF", admin["user"])
+    return about()
+
+
+@router.post("/database/disconnect")
+def disconnect_database(admin: dict = Depends(require_admin)):
+    """Close the SQL Server connection to test the app without it (the settings in .env are kept). Signed-in users
+    stay signed in and see what is in memory; nothing can be saved and nobody new can sign in until Reconnect."""
+    if not db.configured():
+        raise HTTPException(409, "No database is set up")
+    db.disconnect()
+    logger.warning("Database disconnected for testing by %s", admin["user"])
+    return about()
+
+
+@router.post("/database/reconnect")
+def reconnect_database(admin: dict = Depends(require_admin)):
+    """Connect again and load the shop's data (in test-data mode only the connection comes back)."""
+    if not db.configured():
+        raise HTTPException(409, "No database is set up")
+    if not db.reconnect():
+        raise HTTPException(503, "Could not connect to the database. Check that SQL Server is running and try again.")
+    if not sqlstore.test_data():
+        sqlstore.reload()
+    logger.warning("Database reconnected by %s", admin["user"])
+    return about()
 
 
 # ─── Remove Duplicate Invoice (711) ──────────────────────────────────────────
@@ -324,3 +374,33 @@ def save_import_fields(body: ImportFieldsIn, admin: dict = Depends(require_admin
                        ", ".join(before) or "all fields", ", ".join(store.IMPORT_FIELDS["fields"]) or "all fields")
     return {"available": available, "fields": store.IMPORT_FIELDS["fields"]}
 
+
+
+# ─── Web Sync (frmModWebSync) ────────────────────────────────────────────────
+
+class WebSyncIn(BaseModel):
+    day: date | None = None   # blank: today
+
+
+def _web_sync_status() -> dict:
+    """Whether Web Sync is set up and how the last push went; the central site by host only, never the key."""
+    return {"configured": websync.configured(), "central": websync.central_host(), "every_minutes": websync.minutes(),
+            **websync.STATUS}
+
+
+@router.get("/web-sync", dependencies=[Depends(require_module("Web Sync"))])
+def web_sync_status():
+    return _web_sync_status()
+
+
+@router.post("/web-sync", dependencies=[Depends(require_module("Web Sync"))])
+def web_sync_now(body: WebSyncIn):
+    """Sync now: send that day's summary (today by default) and the current stock to the central site."""
+    day = body.day or date.today()
+    if day > date.today():
+        raise HTTPException(422, "Choose today or an earlier day")
+    try:
+        websync.sync([day])
+    except websync.SyncFailed as exc:
+        raise HTTPException(502, str(exc)) from None
+    return _web_sync_status()

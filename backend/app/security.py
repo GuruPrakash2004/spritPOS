@@ -29,13 +29,27 @@ DEFAULT_LOGIN = {
     "require_special": False, "password_expiry_days": 0, "show_remember_me": False,
 }
 
+# Dashboard panels a role can be kept from seeing (Field Level Rights, document "dashboard"; only Hidden applies).
+# The keys are the frontend's (Dashboard.tsx); restock and stock_movement are also refused by their endpoints.
+DASHBOARD = "dashboard"
+DASHBOARD_PANELS = {
+    "hero": "Welcome banner", "kpis": "Key figures (today's sales, bills, stock)", "restock": "Restock immediately",
+    "company_banner": "Company banner", "sales_chart": "Sales, last 7 days", "inventory_mix": "Inventory mix",
+    "stock_movement": "Stock movement", "store_banner": "Store photo banner",
+}
+
+
+def dashboard_hidden(user: dict, panel: str) -> bool:
+    return field_rights(user, DASHBOARD).get(panel) == "hidden"
+
+
 def required_fields() -> dict[str, list[str]]:
     """Fields that may be made read-only but never hidden: those a master can't be saved without, and
     NOT_HIDEABLE."""
     from . import schemas
     return {path: sorted({f for f, info in model.model_fields.items() if info.is_required() and f != "code"}
                          | NOT_HIDEABLE.get(path, set()))
-            for path, model in _models(schemas).items()}
+            for path, model in _models(schemas).items()} | {DASHBOARD: []}
 
 
 def _default(path: str, f: str):
@@ -47,7 +61,8 @@ def _default(path: str, f: str):
 def _models(schemas) -> dict:
     return {"items": schemas.Item, "item-groups": schemas.ItemGroup, "uoms": schemas.Uom, "packages": schemas.Package,
             "brands": schemas.Brand, "suppliers": schemas.Supplier, "customers": schemas.Customer,
-            "ledger-groups": schemas.LedgerGroup, "ledgers": schemas.Ledger, "sales-counters": schemas.SalesCounter}
+            "ledger-groups": schemas.LedgerGroup, "ledgers": schemas.Ledger, "sales-counters": schemas.SalesCounter,
+            "sales-persons": schemas.SalesPerson}
 
 
 def master_fields() -> dict[str, list[str]]:
@@ -55,14 +70,16 @@ def master_fields() -> dict[str, list[str]]:
     from . import schemas
     models = {"items": schemas.Item, "item-groups": schemas.ItemGroup, "uoms": schemas.Uom, "packages": schemas.Package,
               "brands": schemas.Brand, "suppliers": schemas.Supplier, "customers": schemas.Customer,
-              "ledger-groups": schemas.LedgerGroup, "ledgers": schemas.Ledger, "sales-counters": schemas.SalesCounter}
-    return {path: [f for f in m.model_fields if f not in ("code", "authorised")] for path, m in models.items()}
+              "ledger-groups": schemas.LedgerGroup, "ledgers": schemas.Ledger, "sales-counters": schemas.SalesCounter,
+              "sales-persons": schemas.SalesPerson}
+    out = {path: [f for f in m.model_fields if f not in ("code", "authorised")] for path, m in models.items()}
+    return out | {DASHBOARD: list(DASHBOARD_PANELS)}
 
 
 # Master path -> store table name.
 TABLES = {"items": "ITEMS", "customers": "CUSTOMERS", "suppliers": "SUPPLIERS", "item-groups": "ITEM_GROUPS",
           "brands": "BRANDS", "uoms": "UOMS", "packages": "PACKAGES", "ledgers": "LEDGERS",
-          "ledger-groups": "LEDGER_GROUPS", "sales-counters": "COUNTERS"}
+          "ledger-groups": "LEDGER_GROUPS", "sales-counters": "COUNTERS", "sales-persons": "SALES_PERSONS"}
 
 # Masters whose rows can need approval, and the documents that refuse unapproved rows.
 # Only these are offered: rows waiting for approval can't be used on documents (items, customers, suppliers);

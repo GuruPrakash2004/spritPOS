@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toastStore } from '../common/toastStore'
 import SalesInvoice from './SalesInvoice'
 import { STOCK_ITEMS } from '../../data/stockData'
-import { DEFAULT_COUNTER } from '../../data/salesCounters'
 
 // Test data: one real-looking item that is not in the old sample list, with 5 in stock.
 const ITEM = {
@@ -39,7 +38,8 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals())
 
-const setup = { counter: DEFAULT_COUNTER, invoiceNo: '26/c10-0083718', paymentType: 'CASH' as const, customer: 'CASH' }
+const COUNTER = { code: 'C1', name: 'Front', systemName: 'PC1', prefix: 'c10', inactive: false }
+const setup = { counter: COUNTER, invoiceNo: '26/c10-0083718', paymentType: 'CASH' as const, customer: 'CASH' }
 
 async function scan(user: ReturnType<typeof userEvent.setup>, code: string, qty = '1') {
   const qtyBox = screen.getByLabelText('Qty')

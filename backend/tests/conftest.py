@@ -1,7 +1,8 @@
 """Shared pytest fixtures for the backend API tests.
 
-- The app always runs on the seed data in app/store.py. The DB settings are blanked before the app is
-  imported, and httpx's ASGITransport does not run the startup event, so tests never touch SQL Server.
+- The app itself has no sample data; the tests run on tests/seed.py, installed once below. The DB settings
+  are blanked before the app is imported, and httpx's ASGITransport does not run the startup event, so tests
+  never touch SQL Server.
 - The in-memory store is put back after every test, so a test that sells stock or adds a master
   doesn't leak into the next one. (Document number counters are not reset: assert on the pattern
   of a doc number, never on its exact value.)
@@ -18,18 +19,24 @@ import os
 os.environ["DB_HOST"] = ""
 os.environ["DB_USER"] = ""
 os.environ["DB_PASSWORD"] = ""
+os.environ["DB_NAME"] = ""
+os.environ["DB_PASSWORD_ENC"] = ""
 # Real password hashing, but with few rounds so the ~100 logins in the suite stay fast.
 os.environ["PASSWORD_HASH_ITERATIONS"] = "1000"
-# Don't write the real saved-state file; test_persistence.py points it at a temp file itself.
-os.environ["VLQMS_STATE_DB"] = ""
+# The encryption keys are made in memory, not in backend/data/.
+os.environ["VLQMS_KEYS_IN_MEMORY"] = "1"
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 import respx  # noqa: E402
 
-from app import persistence, secure_fields, store  # noqa: E402
+from app import secure_fields, sqlstore, store  # noqa: E402
 from app.main import app  # noqa: E402
 from app.routers import auth  # noqa: E402
+
+import seed  # noqa: E402  (tests/seed.py; pytest puts tests/ on sys.path)
+
+seed.install()
 
 
 def _store_tables() -> dict:
@@ -49,9 +56,10 @@ def reset_store():
     """
     snapshot = copy.deepcopy(_store_tables())
     auth.reset_login_failures()
-    persistence.reset_memory_outbox()   # the write-back outbox (in memory while saving is off)
+    sqlstore.reset_memory()   # the audit logs (in memory without a database)
     yield
-    persistence.reset_memory_outbox()
+    sqlstore._test_data = False   # the Test data switch never leaks into the next test
+    sqlstore.reset_memory()
     for name, saved in snapshot.items():
         current = getattr(store, name)
         if isinstance(current, dict):

@@ -1,19 +1,19 @@
 // Company Master: the store's profile (name, address, GSTIN, licence, FY) plus Images and Documents tabs.
 // Loads GET /masters/company and saves with PUT (Administrator only). After a save it calls
 // notifyCompanyProfileUpdated() so the header, login page and prints refresh.
-// Backup database (Administrator only) downloads the web app's SQLite state file from GET /admin/backup.
+// All data is in the shop's SQL Server (Web_ tables), which is backed up by SQL Server itself.
 
 import { useState, useEffect } from 'react';
 import { 
   Building2, ShieldCheck, Calendar, Image as ImageIcon,
-  FolderArchive, Save, Plus, DatabaseBackup,
+  FolderArchive, Save, Plus,
 } from 'lucide-react';
 import { CompanyDocuments, CompanyImages } from './CompanyFiles';
 import { TextField } from '../common/FormField';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
-import { api, apiDownload, errorText, type ApiCompany } from '../../lib/api';
+import { api, errorText, type ApiCompany } from '../../lib/api';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
 import { badge, field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
 
@@ -105,22 +105,6 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
     }
   };
 
-  // Downloads the web app's own data (SQLite). The SQL Server database is still backed up on the server.
-  // The popup waits first: the download starts only when it closes, and Cancel stops it.
-  const [backingUp, setBackingUp] = useState(false);
-  const handleBackup = async () => {
-    setBackingUp(true);
-    try {
-      if (!(await toastStore.defer('backup', 'Database backup will download when this closes.', 'Backup cancelled.'))) return;
-      const name = await apiDownload('/admin/backup', 'vlqms_backup.sqlite3');
-      setToast({ kind: 'ok', text: `Database backup downloaded: ${name}` });
-    } catch (error) {
-      setToast({ kind: 'error', text: errorText(error) });
-    } finally {
-      setBackingUp(false);
-    }
-  };
-
   // Keyboard shortcut for Cmd/Ctrl+S
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -148,11 +132,6 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
           <p className={pageSub}>Firm credentials, excise licences, retailer IDs and financial periods.</p>
         </div>
         <div className="flex items-center gap-2">
-          {canEditFiles && (
-            <button onClick={handleBackup} disabled={backingUp} className={secondaryButton} title="Download a copy of the web app's data (SQLite file)">
-              <DatabaseBackup size={14} />{backingUp ? 'Backing up…' : 'Backup database'}
-            </button>
-          )}
           {canEditFiles && <button onClick={handleSave} className={primaryButton}><Save size={14} />Save Master</button>}
         </div>
       </div>

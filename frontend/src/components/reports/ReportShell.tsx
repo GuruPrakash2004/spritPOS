@@ -65,7 +65,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
           <p className={pageSub}>{subtitle}</p>
         </div>
         <div className="flex gap-2 print:hidden">
-          <button onClick={() => setShowPrintModal(true)} className={printButton}><Printer size={14} />Print</button>
+          <button onClick={() => setShowPrintModal(true)} disabled={!rows?.length} title={rows?.length ? undefined : 'Run the report first; there is nothing to print'} className={printButton}><Printer size={14} />Print</button>
           <button onClick={exportCsv} disabled={!rows} className={exportButton}><FileDown size={14} />Export CSV</button>
         </div>
       </div>
