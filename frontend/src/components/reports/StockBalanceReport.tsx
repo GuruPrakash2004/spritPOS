@@ -1,11 +1,11 @@
 // Stock Balance report: opening, receipts, issues, closing and value per item for a date
 // (GET /reports/stock-balance). Printable in the stock register formats.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Printer } from 'lucide-react';
-import { api, errorText, todayIso, type ApiItem, type ApiStockRow } from '../../lib/api';
+import { errorText, getItems, getStockBalance, getStockBalanceFormats, renderStockBalancePrint, todayIso } from '../../lib/api';
 import { badge, money, pageHeader, pageSub, pageTitle, panel, tableBody, tableHead, tableRow, printButton } from '../../lib/styles';
-import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import ReportPrintModal from '../print/ReportPrintModal';
 
 type StockRow = { group: string; brand: string; name: string; pkg: string; opQty: number; recQty: number; issQty: number; clQty: number; rate: number; value: number | null };
 
@@ -13,10 +13,18 @@ export default function StockBalanceReport() {
   const [rows, setRows] = useState<StockRow[] | null>(null);
   const [error, setError] = useState('');
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [formats, setFormats] = useState<string[]>([]);
+  const day = todayIso();
+  // Stable between renders, so the print window's preview is asked for once per format.
+  const renderOn = useCallback((rpt: string, printer?: string) => renderStockBalancePrint(day, day, '', rpt, printer), [day]);
+
+  useEffect(() => {
+    getStockBalanceFormats().then(f => setFormats(f.formats)).catch(() => { /* printing says why */ });
+  }, []);
 
   useEffect(() => {
     const date = todayIso();
-    Promise.all([api<ApiItem[]>('/masters/items'), api<ApiStockRow[]>(`/reports/stock-balance?from_date=${date}&to_date=${date}`)])
+    Promise.all([getItems(), getStockBalance(date)])
       .then(([items, balance]) => {
         const byCode = new Map(items.map(item => [item.code, item]));
         setRows(balance.map(row => ({
@@ -83,10 +91,10 @@ export default function StockBalanceReport() {
       </div>
 
       {showPrintModal && rows && (
-        <PrintFormatSelectorModal
-          category="STOCK_BALANCE"
-          data={rows}
-          title="Stock Balance Register Print"
+        <ReportPrintModal
+          title={`Stock Balance (${day})`}
+          formats={formats}
+          render={renderOn}
           onClose={() => setShowPrintModal(false)}
         />
       )}

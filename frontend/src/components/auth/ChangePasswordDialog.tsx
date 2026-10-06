@@ -7,7 +7,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import Modal from '../common/Modal';
 import { TextField } from '../common/FormField';
 import { toast } from '../common/toastStore';
-import { api, errorText, setAuthToken } from '../../lib/api';
+import { changePassword, errorText, setAuthToken } from '../../lib/api';
 import { encryptSecret } from '../../lib/secureField';
 import { loadPasswordRules, passwordProblem } from '../../lib/passwords';
 import { primaryButton, secondaryButton } from '../../lib/styles';
@@ -45,7 +45,7 @@ export default function ChangePasswordDialog({ user, onClose, forced = false }: 
     }
     // Both passwords leave the browser only encrypted (lib/secureField.ts).
     Promise.all([encryptSecret(current, 'current'), encryptSecret(next, 'new')])
-      .then(([cur, nxt]) => api<{ access_token: string }>('/auth/change-password', { method: 'POST', body: { current_password: cur, new_password: nxt } }))
+      .then(([cur, nxt]) => changePassword({ current_password: cur, new_password: nxt }))
       .then(res => {
         setAuthToken(res.access_token);
         toast.ok('Password changed. Other devices signed in as you have been signed out.');

@@ -1,21 +1,20 @@
 // The last step of Database setup on the sign-in page (backend POST /setup/admin): shown instead of the login form
 // when the shop's database is in use but none of its users is an Administrator (the desktop's admin roles are
-// mapped to Administrator when the users load). Setup code (printed in the backend's window), a user name (a
-// desktop user keeps their details, any other name becomes a new user) and a new password, sent only encrypted
-// (lib/secureField.ts, purpose "new").
+// mapped to Administrator when the users load). A user name (a desktop user keeps their details, any other name
+// becomes a new user) and a new password, sent only encrypted (lib/secureField.ts, purpose "new").
 
 import { useState, type FormEvent } from 'react';
 import { AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
-import { api, errorText } from '../../lib/api';
+import { createAdmin, errorText } from '../../lib/api';
 import { encryptSecret } from '../../lib/secureField';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
 
-type Key = 'setup_code' | 'user' | 'password' | 'confirm';
-const ORDER: Key[] = ['setup_code', 'user', 'password', 'confirm'];
+type Key = 'user' | 'password' | 'confirm';
+const ORDER: Key[] = ['user', 'password', 'confirm'];
 
 export default function CreateAdmin({ inputClass, labelClass, onDone }: { inputClass: string; labelClass: string; onDone: () => void }) {
-  const [f, setF] = useState<Record<Key, string>>({ setup_code: '', user: '', password: '', confirm: '' });
+  const [f, setF] = useState<Record<Key, string>>({ user: '', password: '', confirm: '' });
   const [errors, setErrors] = useState<Partial<Record<Key, string>>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -25,7 +24,6 @@ export default function CreateAdmin({ inputClass, labelClass, onDone }: { inputC
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const errs: Partial<Record<Key, string>> = {};
-    if (!f.setup_code.trim()) errs.setup_code = 'Enter the setup code shown in the backend window';
     if (!f.user.trim()) errs.user = 'Enter the administrator\'s user name';
     if (f.password.length < 8) errs.password = 'Use at least 8 characters';
     else if (/^[a-z]+$/i.test(f.password) || /^\d+$/.test(f.password)) errs.password = 'Mix letters with numbers or symbols';
@@ -37,8 +35,8 @@ export default function CreateAdmin({ inputClass, labelClass, onDone }: { inputC
     if (!(await toastStore.defer('ok', `${user} will be made the Administrator when this closes.`, 'Cancelled. No administrator was made.'))) return;
     setBusy(true);
     try {
-      const body = { setup_code: f.setup_code.trim(), user, password: await encryptSecret(f.password, 'new') };
-      await api('/setup/admin', { method: 'POST', body });
+      const body = { user, password: await encryptSecret(f.password, 'new') };
+      await createAdmin(body);
       toastStore.add('ok', `${user} is now the Administrator. Sign in with the new password.`);
       onDone();
     } catch (err) {
@@ -51,7 +49,7 @@ export default function CreateAdmin({ inputClass, labelClass, onDone }: { inputC
   const input = (k: Key, label: string, props: Record<string, string> = {}) => (
     <div>
       <label htmlFor={`adm-${k}`} className={labelClass}>{label}</label>
-      <input id={`adm-${k}`} value={f[k]} onChange={e => set(k, k === 'user' || k === 'setup_code' ? e.target.value.toUpperCase() : e.target.value)}
+      <input id={`adm-${k}`} value={f[k]} onChange={e => set(k, k === 'user' ? e.target.value.toUpperCase() : e.target.value)}
         aria-invalid={!!errors[k] || undefined} className={`${inputClass} ${errors[k] ? '!border-red-500 !ring-2 !ring-red-500/20 animate-shake' : ''}`} {...props} />
       <InlineError message={errors[k]} />
     </div>
@@ -65,7 +63,6 @@ export default function CreateAdmin({ inputClass, labelClass, onDone }: { inputC
           None of this shop's users is an Administrator yet. Choose one and give it a password: a desktop user name makes that user the Administrator (and active) with this new password; any other name becomes a new user.
         </p>
       </div>
-      {input('setup_code', 'Setup code', { autoComplete: 'off', placeholder: 'Shown in the backend window' })}
       {input('user', 'User name', { autoComplete: 'off' })}
       {input('password', 'New password', { type: 'password', autoComplete: 'new-password' })}
       {input('confirm', 'Confirm password', { type: 'password', autoComplete: 'new-password' })}

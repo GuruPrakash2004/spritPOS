@@ -2,7 +2,7 @@
 
 Endpoints call record() while they change data. The write middleware (main.py) calls begin() before the
 request, then commit(user) when it succeeded (the entries move to store.AUDIT_OUT and sqlstore.save()
-writes them in the same SQL Server transaction as the request's changes, into Web_UtlAdmAudit) or discard() when it failed, so a refused change
+writes them in the same SQL Server transaction as the request's changes, into UtlAdmAudit) or discard() when it failed, so a refused change
 never appears in the log. Actions that run outside the middleware use write_now().
 
 What is recorded, as in the desktop app: master rows added / edited (with each changed field, from and to) /

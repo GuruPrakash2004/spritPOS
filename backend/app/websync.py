@@ -20,7 +20,7 @@ last day sent successfully up to today (at most CATCH_UP_DAYS; at the first roun
 then the stock, every WEB_SYNC_MINUTES. A failure is kept in STATUS and tried again on the next round; it
 never holds up billing.
 
-Month and year totals and the last purchase bill come from SQL Server (Web_TrnHdrSINV / Web_TrnHdrPB, which
+Month and year totals and the last purchase bill come from SQL Server (TrnHdrSINV / TrnHdrPB, which
 hold every bill, desktop and web) when it is connected; memory holds only the latest bills.
 """
 import logging
@@ -269,14 +269,14 @@ def _period_from_sql(month_from: str, year_from: str, to: str) -> dict | None:
     try:
         sales = db.fetchone(
             "SELECT SUM(CASE WHEN SINVDate >= ? THEN INVVALUE ELSE 0 END) AS mtd, SUM(INVVALUE) AS ytd "
-            "FROM dbo.Web_TrnHdrSINV WHERE SINVDate >= ? AND SINVDate < DATEADD(day, 1, CAST(? AS date)) "
+            "FROM dbo.TrnHdrSINV WHERE SINVDate >= ? AND SINVDate < DATEADD(day, 1, CAST(? AS date)) "
             "AND ISNULL(Cancelled, 'N') = 'N' AND ISNULL(IsDelete, 'N') = 'N'", (month_from, year_from, to)) or {}
         pur = db.fetchone(
             "SELECT SUM(CASE WHEN PBDate >= ? THEN GRNDTOT ELSE 0 END) AS mtd, SUM(GRNDTOT) AS ytd "
-            "FROM dbo.Web_TrnHdrPB WHERE PBDate >= ? AND PBDate < DATEADD(day, 1, CAST(? AS date)) "
+            "FROM dbo.TrnHdrPB WHERE PBDate >= ? AND PBDate < DATEADD(day, 1, CAST(? AS date)) "
             "AND ISNULL(Cancelled, 'N') = 'N'", (month_from, year_from, to)) or {}
         last = db.fetchone(
-            "SELECT TOP 1 PBNO, PBDate, GRNDTOT FROM dbo.Web_TrnHdrPB WHERE PBDate < DATEADD(day, 1, CAST(? AS date)) "
+            "SELECT TOP 1 PBNO, PBDate, GRNDTOT FROM dbo.TrnHdrPB WHERE PBDate < DATEADD(day, 1, CAST(? AS date)) "
             "AND ISNULL(Cancelled, 'N') = 'N' ORDER BY PBDate DESC, PBID DESC", (to,))
     except Exception as exc:   # an older Web_ schema, or the connection dropped: fall back to memory
         logger.warning("Web Sync: month/year totals from memory (%s)", type(exc).__name__)
@@ -347,7 +347,7 @@ def sync(days: list[date], stock: bool = True) -> dict:
         try:
             try:
                 for day in days:
-                    if not _live():   # e.g. Test data switched on meanwhile: never send sample figures
+                    if not _live():   # e.g. the database went away meanwhile: never send an empty store
                         raise SyncFailed("The shop's database isn't loaded, so nothing more was sent")
                     push(day)
                     STATUS["last_day"] = day.isoformat()

@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { FileDown, Play, Printer } from 'lucide-react';
-import { api, errorText, qs, todayIso, type ApiItem } from '../../lib/api';
+import { errorText, getItems, getReport, todayIso, type ApiItem } from '../../lib/api';
 import { downloadText, toCsv } from '../../lib/csv';
 import { badge, field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow, exportButton, printButton } from '../../lib/styles';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
@@ -30,7 +30,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
 
   useEffect(() => {
     if (filters.includes('item')) {
-      api<ApiItem[]>('/masters/items').then(list => { setItems(list); setItem(i => i || list[0]?.code || ''); }).catch(() => undefined);
+      getItems().then(list => { setItems(list); setItem(i => i || list[0]?.code || ''); }).catch(() => undefined);
     }
   }, [filters]);
 
@@ -40,7 +40,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
     if (filters.includes('range')) { params.from_date = from; params.to_date = to; }
     if (filters.includes('item')) params.item_code = item;
     if (filters.includes('months')) params.months = months;
-    api<Row[]>(`${endpoint}${qs(params)}`)
+    getReport<Row>(endpoint, params)
       .then(r => { setRows(r); setError(''); })
       .catch(e => { setRows(null); setError(errorText(e)); });
   };

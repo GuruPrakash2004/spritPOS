@@ -6,13 +6,13 @@ The browser front end of vLQMS, Softvent's liquor-store ERP: masters, purchase a
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173, proxies /api/* to the backend on :8001
+npm run dev      # http://localhost:5173; calls the backend at VITE_API_URL (frontend/.env, e.g. http://localhost:8001)
 npm run build    # type-check (tsc -b) and production build into dist/
 npm run lint     # eslint
 npm test         # Vitest + React Testing Library (watch); npm run test:run runs once
 ```
 
-Start the backend first (see `../backend/README.md`). Without it the screens show "API: offline" and API calls fail. Log in as `ADMIN` / `admin` to see every module. `GURU`/`guru` is a Manager, and `PRADEEP`/`pradeep` and `RAVI`/`ravi` are Cashiers.
+Start the backend first (see `../backend/README.md`). Without it the screens show "API: offline" and API calls fail. Sign in with one of the shop's own users (there are no demo logins; the first run asks you to connect the database on the sign-in page).
 
 ## Where things are
 
@@ -23,7 +23,7 @@ src/
 ├── main.tsx              entry point
 ├── App.tsx               login gate, app shell, and the switch that picks the screen for the active module
 ├── lib/                  code without UI
-│   ├── api.ts            api<T>() fetch wrapper, login token, backend response types
+│   ├── api.ts            the only backend client: address (VITE_API_URL), login token, one function per endpoint, response types
 │   ├── modules.ts        every module (screen) name, sidebar groups, search words, canOpen()
 │   ├── styles.ts         shared Tailwind class strings (panel, field, buttons, tables) and money()
 │   └── csv.ts, xlsExport.ts, formatters.ts, utils.ts

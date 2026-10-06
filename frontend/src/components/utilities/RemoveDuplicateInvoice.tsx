@@ -15,7 +15,7 @@ import { useAdminPassword } from '../common/AdminPasswordPrompt';
 import { encryptSecret } from '../../lib/secureField';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { api, errorText, type ApiDupInvoice } from '../../lib/api';
+import { errorText, listDuplicateInvoices, removeDuplicateInvoices, type ApiDupInvoice } from '../../lib/api';
 import { badge, dangerButton, field, fieldError, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -34,9 +34,9 @@ export default function RemoveDuplicateInvoice() {
   const { ask, dialog: passwordDialog } = useAdminPassword();
 
   const load = useCallback((f: string, t: string, no: string, dup: boolean) =>
-    api<ApiDupInvoice[]>(`/utilities/duplicate-invoices?${new URLSearchParams({
+    listDuplicateInvoices({
       from_date: f, to_date: t, ...(no.trim() ? { invoice_no: no.trim() } : {}), ...(dup ? { only_duplicates: 'true' } : {}),
-    })}`)
+    })
       .then(r => { setRows(r); setPicked(new Set()); return true; })
       .catch(e => { toastStore.add('error', errorText(e)); return false; })
       .finally(() => setLoading(false)), []);
@@ -71,7 +71,7 @@ export default function RemoveDuplicateInvoice() {
     setRemoving(true);
     try {
       const admin_password = await encryptSecret(password, 'admin');   // leaves the browser only encrypted
-      const res = await api<{ removed: string[]; message: string }>('/utilities/duplicate-invoices/remove', { method: 'POST', body: { doc_nos, admin_password } });
+      const res = await removeDuplicateInvoices({ doc_nos, admin_password });
       toastStore.add('ok', `${res.message} (${res.removed.length} invoice${res.removed.length === 1 ? '' : 's'})`);
       setLoading(true);
       await load(from, to, invoiceNo, onlyDup);

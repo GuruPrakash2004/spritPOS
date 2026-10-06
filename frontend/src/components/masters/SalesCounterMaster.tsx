@@ -13,7 +13,7 @@ import { toastStore } from '../common/toastStore';
 import DropdownMenu, { menuItem } from '../common/DropdownMenu';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from '../../lib/styles';
-import { api, errorText, type ApiCounter } from '../../lib/api';
+import { createMaster, deleteMaster, errorText, getSalesCounters, updateMaster, type ApiCounter } from '../../lib/api';
 import { NO_COUNTER, counterFromApi, type SalesCounter } from '../../data/salesCounters';
 import { downloadText, toCsv } from '../../lib/csv';
 
@@ -63,7 +63,7 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
   };
 
   useEffect(() => {
-    api<ApiCounter[]>('/masters/sales-counters')
+    getSalesCounters()
       .then(rows => { const list = rows.map(fromApi); setRecords(list); setIndex(0); if (list[0]) setForm(list[0]); })
       .catch(e => setError(errorText(e)));
   }, []);
@@ -108,7 +108,7 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
     if (!(await confirm(`Delete sales counter "${code}"?`))) return;
     if (!(await toastStore.defer('delete', `Sales Counter "${code}" will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
     try {
-      await api(`/masters/sales-counters/${encodeURIComponent(code)}`, { method: 'DELETE' });
+      await deleteMaster('sales-counters', code);
     } catch (e) {
       setToast({ kind: 'error', text: errorText(e) });
       return;
@@ -145,8 +145,7 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
 
     const saved = { ...form, code: form.code.trim(), name: form.name.trim(), prefix: form.prefix.trim() };
     if (!(await toastStore.defer('ok', `Sales Counter "${saved.code}" will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
-    const path = mode === 'New' ? '/masters/sales-counters' : `/masters/sales-counters/${encodeURIComponent(records[index].code)}`;
-    api(path, { method: mode === 'New' ? 'POST' : 'PUT', body: toApi(saved) })
+    (mode === 'New' ? createMaster('sales-counters', toApi(saved)) : updateMaster('sales-counters', records[index].code, toApi(saved)))
       .then(() => {
         commit(saved);
         setToast({ kind: 'ok', text: `Sales Counter "${saved.code}" saved.` });

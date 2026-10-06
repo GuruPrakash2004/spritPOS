@@ -31,3 +31,7 @@ Rpts/*
 
 
 
+
+# built bridge
+tools/rptbridge/bin/
+tools/rptbridge/obj/

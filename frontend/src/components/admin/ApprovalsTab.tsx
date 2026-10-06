@@ -6,14 +6,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Save } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, type ApiMasterApproval } from '../../lib/api';
+import { approveMasterRow, errorText, getMasterApprovals, saveMasterApprovals, type ApiMasterApproval } from '../../lib/api';
 import { panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
 
 export default function ApprovalsTab() {
   const [data, setData] = useState<ApiMasterApproval | null>(null);
   const [picked, setPicked] = useState<Set<string> | null>(null);
 
-  const load = useCallback(() => api<ApiMasterApproval>('/admin/master-approval')
+  const load = useCallback(() => getMasterApprovals()
     .then(d => { setData(d); setPicked(null); })
     .catch(e => toastStore.add('error', errorText(e))), []);
   useEffect(() => { load(); }, [load]);
@@ -24,14 +24,14 @@ export default function ApprovalsTab() {
   const save = async () => {
     const body = { masters: [...selected] };
     if (!(await toastStore.defer('ok', 'Master approvals will be saved when this closes.', 'Save cancelled. Nothing was changed.'))) return;
-    api<ApiMasterApproval>('/admin/master-approval', { method: 'PUT', body })
+    saveMasterApprovals(body)
       .then(d => { setData(d); setPicked(null); toastStore.add('ok', 'Master approvals saved.'); })
       .catch(e => toastStore.add('error', errorText(e)));
   };
 
   const approve = async (master: string, code: string) => {
     if (!(await toastStore.defer('ok', `${code} will be approved when this closes.`, 'Not approved.'))) return;
-    api(`/admin/master-approval/${encodeURIComponent(master)}/${encodeURIComponent(code)}`, { method: 'POST' })
+    approveMasterRow(master, code)
       .then(() => { toastStore.add('ok', `${code} approved.`); load(); })
       .catch(e => toastStore.add('error', errorText(e)));
   };

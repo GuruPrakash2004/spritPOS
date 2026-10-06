@@ -3,9 +3,8 @@
 // WebCrypto) as "enc:v1:<base64>", with the field it is for and a timestamp on the SERVER's clock (so a PC
 // with a wrong clock still works). The backend (app/secure_fields.py) refuses plain, old, re-used and
 // other-field values. Use it for every password field sent to the API. It complements HTTPS.
-import { ApiError } from './api';
+import { ApiError, getTransportKey } from './api';
 
-type TransportKey = { alg: string; spki: string; kid: string; server_time: number };
 /** Which field a password is for; the server accepts it only there. */
 export type SecretPurpose = 'login' | 'user' | 'current' | 'new' | 'admin' | 'db';
 
@@ -29,18 +28,14 @@ async function serverKey(): Promise<{ key: CryptoKey; offset: number }> {
   if (!globalThis.crypto?.subtle) {
     throw new ApiError('This page can only send passwords securely over HTTPS (or on localhost). Open the app with an https:// address.');
   }
-  cached ??= fetch('/api/auth/transport-key')
-    .then(res => {
-      if (!res.ok) throw new ApiError('Could not get the server key for sending the password securely.');
-      return res.json() as Promise<TransportKey>;
-    })
+  cached ??= getTransportKey()
     .then(async k => ({
       key: await crypto.subtle.importKey('spki', fromBase64(k.spki), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']),
       offset: typeof k.server_time === 'number' ? k.server_time - Date.now() : 0,   // server clock minus this PC's clock
     }))
     .catch(e => {
       cached = null;   // try again next time (server restarting, network blip)
-      throw e instanceof ApiError ? e : new ApiError('Backend is not reachable. Start it with: cd backend && .venv/bin/uvicorn app.main:app --reload --port 8001');
+      throw e instanceof ApiError ? e : new ApiError('Could not get the server key for sending the password securely.');
     });
   return cached;
 }

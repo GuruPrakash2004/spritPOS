@@ -6,7 +6,7 @@ import { LogIn } from 'lucide-react';
 import { TextField } from '../components/common/FormField';
 import { InlineError } from '../components/common/FormErrorSummary';
 import VlqmsLogo from '../components/layout/VlqmsLogo';
-import { api, errorText } from '../lib/api';
+import { centralLogin, errorText } from '../lib/api';
 import { encryptSecret } from '../lib/secureField';
 import { panel, primaryButton } from '../lib/styles';
 import type { CentralSession } from './types';
@@ -32,7 +32,7 @@ export default function CentralLogin({ onSignedIn, reason }: { onSignedIn: (s: C
     setServerError('');
     try {
       const enc = await encryptSecret(password, 'login');
-      onSignedIn(await api<CentralSession>('/auth/login', { method: 'POST', body: { user: user.trim(), password: enc } }));
+      onSignedIn(await centralLogin<CentralSession>({ user: user.trim(), password: enc }));
     } catch (err) {
       setServerError(errorText(err));
     } finally {

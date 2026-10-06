@@ -6,7 +6,7 @@
 
 import { useState, useEffect, type FormEvent } from 'react';
 import { AlertCircle, Loader2, LogIn, Moon, Sun, Wine } from 'lucide-react';
-import { api, errorText, setRememberSession, type ApiUser } from '../../lib/api';
+import { errorText, getSetupStatus, login, setRememberSession, type ApiSetupStatus, type ApiUser } from '../../lib/api';
 import { loadPasswordRules } from '../../lib/passwords';
 import { encryptSecret } from '../../lib/secureField';
 import { IMAGES } from '../../constants/images';
@@ -17,7 +17,6 @@ import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import CreateAdmin from './CreateAdmin';
 import { finYearLabel } from '../../lib/formatters';
 
-type DbState = { configured: boolean; connected: boolean; needs_setup: boolean; needs_admin?: boolean };
 const RETRY_MS = 20_000;
 
 // ─── REALISTIC WATER DROPLET FLOW & LIQUOR SPLASH DYNAMICS ───
@@ -197,8 +196,8 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
   const [remember, setRemember] = useState(false);
   useEffect(() => { loadPasswordRules().then(r => setOfferRemember(r.show_remember_me)); }, []);
   // One-time Database setup / database offline (backend routers/setup.py).
-  const [dbState, setDbState] = useState<DbState | null>(null);
-  const loadDbState = () => api<DbState>('/setup/status').then(setDbState).catch(() => setDbState(null));
+  const [dbState, setDbState] = useState<ApiSetupStatus | null>(null);
+  const loadDbState = () => getSetupStatus().then(setDbState).catch(() => setDbState(null));
   useEffect(() => { loadDbState(); }, []);
   const setup = !!dbState?.needs_setup;
   const offline = !!dbState && dbState.configured && !dbState.connected && !setup;
@@ -231,7 +230,7 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
     setRememberSession(offerRemember && remember);
     // The password leaves the browser only encrypted (lib/secureField.ts).
     encryptSecret(password, 'login')
-      .then(sealed => api<ApiUser>('/auth/login', { method: 'POST', body: { user, password: sealed } }))
+      .then(sealed => login({ user, password: sealed }))
       .then(u => onLogin(u, finYear))
       .catch(err => setError(errorText(err)))
       .finally(() => setBusy(false));

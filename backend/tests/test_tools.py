@@ -48,7 +48,7 @@ def test_changes_to_the_web_tables_are_accepted(sql, table):
     "UPDATE MstItem SET MRP = 0",                          # desktop tables are never changed
     "DELETE FROM TrnHdrSINV",
     "INSERT INTO MstItem (ItemCode) VALUES ('X')",
-    "INSERT INTO Web_SchemaVersion (Version) VALUES (9)",  # owned by tools/migrate.py
+    "INSERT INTO Web_AppRow (Kind) VALUES ('x')",          # the web app's own records
     "UPDATE other.Web_DocHeader SET Status = 'X'",
     "UPDATE w SET Status = 'X' FROM Web_DocHeader w",       # alias: the changed table isn't clear
     "UPDATE Web_DocHeader SET Status = 'X' FROM Web_DocHeader h JOIN MstItem i ON 1 = 1",
@@ -142,7 +142,7 @@ async def test_desktop_tables_are_never_changed(client, sqlserver):
     res = await client.post("/tools/sql/execute", json={"sql": "DELETE FROM MstItem"})
 
     assert res.status_code == 400
-    assert "never changed by the web app" in res.json()["detail"]
+    assert "not changed by hand-typed SQL" in res.json()["detail"]
     assert sqlserver == []
     assert sqlstore.tool_audit_rows("SQL Query Execution")[0]["ok"] is False
 

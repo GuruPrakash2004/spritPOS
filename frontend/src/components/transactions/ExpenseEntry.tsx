@@ -8,7 +8,7 @@ import Toast from '../common/Toast';
 import Kbd from '../common/Kbd';
 import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, todayIso, type ApiLedger } from '../../lib/api';
+import { errorText, getLedgers, saveExpense, todayIso, type ApiLedger } from '../../lib/api';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 type Line = { ledger: string; amount: string; narration: string };
@@ -28,7 +28,7 @@ export default function ExpenseEntry() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  useEffect(() => { api<ApiLedger[]>('/masters/ledgers').then(setLedgers).catch(e => setToast({ kind: 'error', text: errorText(e) })); }, []);
+  useEffect(() => { getLedgers().then(setLedgers).catch(e => setToast({ kind: 'error', text: errorText(e) })); }, []);
 
   // Cash and bank ledgers are where money is paid from, not expense heads (group names come from the shop's Ledger Group Master).
   const expenseLedgers = ledgers.filter(l => !/cash|bank/i.test(l.group));
@@ -40,10 +40,7 @@ export default function ExpenseEntry() {
     if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one expense line.' });
     if (filled.some(l => !(Number(l.amount) > 0))) return setToast({ kind: 'error', text: 'Every line needs an amount above zero.' });
     if (!(await toastStore.defer('ok', `Expense of ₹ ${money(total)} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
-    api<{ doc_no: string; total: number }>('/transactions/expense', {
-      method: 'POST',
-      body: { date, paid_from: paidFrom, lines: filled.map(l => ({ ledger: l.ledger, amount: Number(l.amount), narration: l.narration })) },
-    }).then(doc => {
+    saveExpense({ date, paid_from: paidFrom, lines: filled.map(l => ({ ledger: l.ledger, amount: Number(l.amount), narration: l.narration })) }).then(doc => {
       setToast({ kind: 'ok', text: `Expense ${doc.doc_no} saved — ₹ ${money(doc.total)}.` });
       setLines([blank()]);
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));

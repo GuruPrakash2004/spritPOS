@@ -7,13 +7,13 @@
 import { useEffect, useState } from 'react';
 import { Monitor, Receipt, Save } from 'lucide-react';
 import { field, label as labelBase, pageHeader, pageSub, pageTitle, panel, primaryButton, sectionTitle } from '../../lib/styles';
-import { api, errorText, type ApiCounter, type ApiCustomer } from '../../lib/api';
+import { errorText, getCustomers, getNextNumber, getSalesCounters, type ApiCustomer } from '../../lib/api';
 import { toastStore } from '../common/toastStore';
 import Kbd from '../common/Kbd';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import {
   PAYMENT_TYPES, counterFromApi,
-  type InvoiceSetup, type NextNumber, type PaymentType, type SalesCounter,
+  type InvoiceSetup, type PaymentType, type SalesCounter,
 } from '../../data/salesCounters';
 
 const LAST_COUNTER_KEY = 'vlqms_last_counter';   // this computer's till, a per-browser convenience
@@ -35,7 +35,7 @@ export default function SalesInvoiceSetup({ initial, onSubmit }: { initial: Invo
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
 
   useEffect(() => {
-    api<ApiCounter[]>('/masters/sales-counters')
+    getSalesCounters()
       .then(list => {
         const active = list.map(counterFromApi).filter(c => !c.inactive);
         setCounters(active);
@@ -43,7 +43,7 @@ export default function SalesInvoiceSetup({ initial, onSubmit }: { initial: Invo
         setTimeout(() => document.getElementById('setup-counter')?.focus(), 0);   // enabled now: Enter opens the bill
       })
       .catch(e => { setCounters([]); toastStore.add('error', errorText(e)); });
-    api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(e => toastStore.add('error', errorText(e)));
+    getCustomers().then(setCustomers).catch(e => toastStore.add('error', errorText(e)));
   }, []);
 
   const counter = counters?.find(c => c.code === counterCode);
@@ -51,7 +51,7 @@ export default function SalesInvoiceSetup({ initial, onSubmit }: { initial: Invo
   useEffect(() => {
     if (!counterCode) return;
     let live = true;
-    api<NextNumber>(`/transactions/next-number?${new URLSearchParams({ kind: 'sales_invoice', counter: counterCode })}`)
+    getNextNumber('sales_invoice', counterCode)
       .then(n => { if (live) setInvoiceNo(n.doc_no); })
       .catch(() => { if (live) setInvoiceNo(''); });
     return () => { live = false; };

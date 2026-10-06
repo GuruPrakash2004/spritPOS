@@ -10,7 +10,7 @@ import Toast from '../common/Toast';
 import Kbd from '../common/Kbd';
 import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, qs, todayIso, type ApiClosingLoad, type ApiCounter, type ApiDoc } from '../../lib/api';
+import { errorText, generateClosingStockInvoice, getSalesCounters, getSalesPersons, loadClosingStock, saveClosingStock, todayIso, type ApiClosingLoad, type ApiCounter } from '../../lib/api';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 type Row = ApiClosingLoad & { closing: string };
@@ -35,16 +35,16 @@ export default function ClosingStockEntry() {
   }, [toast]);
 
   useEffect(() => {
-    api<ApiCounter[]>('/masters/sales-counters')
+    getSalesCounters()
       .then(list => { const active = list.filter(c => !c.inactive); setCounters(active); setCounter(active[0]?.code ?? ''); })
       .catch(e => toastStore.add('error', errorText(e)));
-    api<string[]>('/sales-persons')
+    getSalesPersons()
       .then(list => { setSalesPersons(list); setSalesPerson(list[0] ?? ''); })
       .catch(e => toastStore.add('error', errorText(e)));
   }, []);
 
   const load = () => {
-    api<ApiClosingLoad[]>(`/transactions/closing-stock/load${qs({ as_on: asOn })}`)
+    loadClosingStock(asOn)
       .then(list => { setRows(list.map(r => ({ ...r, closing: '' }))); setSavedDoc(null); })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
@@ -58,10 +58,7 @@ export default function ClosingStockEntry() {
     if (!entered.length) return setToast({ kind: 'error', text: 'Enter the closing stock for at least one item.' });
     if (invalid) return setToast({ kind: 'error', text: 'Closing stock cannot be more than the opening stock.' });
     if (!(await toastStore.defer('ok', `Closing stock for ${entered.length} items will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
-    api<{ doc_no: string }>('/transactions/closing-stock', {
-      method: 'POST',
-      body: { as_on: asOn, lines: entered.map(r => ({ item_code: r.item_code, closing_qty: Number(r.closing) })) },
-    }).then(doc => {
+    saveClosingStock({ as_on: asOn, lines: entered.map(r => ({ item_code: r.item_code, closing_qty: Number(r.closing) })) }).then(doc => {
       setSavedDoc(doc.doc_no);
       setToast({ kind: 'ok', text: `Closing Stock ${doc.doc_no} saved. You can now generate the sales invoice.` });
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
@@ -70,7 +67,7 @@ export default function ClosingStockEntry() {
   const generate = async () => {
     if (!savedDoc) return;
     if (!(await toastStore.defer('ok', `Sales invoice for ${savedDoc} will be generated when this closes.`, 'Invoice not generated. Nothing was changed.'))) return;
-    api<ApiDoc>(`/transactions/closing-stock/${savedDoc}/generate-invoice`, { method: 'POST', body: { counter, salesperson: salesPerson } })
+    generateClosingStockInvoice(savedDoc, { counter, salesperson: salesPerson })
       .then(inv => {
         setGenerateOpen(false);
         setToast({ kind: 'ok', text: `Sales Invoice ${inv.doc_no} generated — ₹ ${money(inv.totals.net)}.` });

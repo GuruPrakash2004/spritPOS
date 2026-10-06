@@ -4,7 +4,7 @@ Run from backend/:  .venv/bin/uvicorn app.main:app --reload --port 8001
 On a shop PC the same process also serves the built frontend (frontend/dist, `npm run build`), so the shop
 needs no Node.js: open http://<this PC>:8001/ and the API answers under /api (serve_frontend below).
 On startup it connects to SQL Server (settings in backend/.env, written by the one-time Database setup) and
-loads the Web_ tables into the in-memory store (app/boot.py); without a database it has no data and nobody
+loads the shop's tables into the in-memory store (app/boot.py); without a database it has no data and nobody
 can sign in (the sign-in page offers the Database setup). Every successful change is saved to SQL Server by app/sqlstore.py.
 """
 import asyncio
@@ -30,7 +30,7 @@ app = FastAPI(
     title="Softvent vLQMS API",
     version="0.2.0",
     description=(
-        "FastAPI port of the legacy vLQMS desktop screens, on the shop's own SQL Server (the Web_ tables)."
+        "FastAPI port of the legacy vLQMS desktop screens, directly on the shop's own SQL Server database."
     ),
     # Every endpoint needs a login token except auth.PUBLIC_ROUTES (health, login, sign-in page data).
     dependencies=[Depends(auth.require_login)],
@@ -42,15 +42,12 @@ _write_lock = asyncio.Lock()
 WRITE_METHODS = {"POST", "PUT", "DELETE"}
 IDEMPOTENT_KEEP = 500   # replies remembered for Idempotency-Key replays
 # POSTs that change no app data and may be slow (SMTP, SQL Server reconnect): they must not hold up bills.
-# The Database setup endpoints save nothing into the store (setup runs its own copy).
+# The Database setup endpoints save nothing into the store (they only connect and load).
 # Web Sync only sends a summary to the central site (it can wait on the network for a while).
-# Testing switches (Utilities → About, the header's Test data): run one at a time like writes, but never refused
-# for a database that is offline (they are how it is reconnected) and nothing is saved after them.
-CONTROL_PATHS = {"/utilities/test-data", "/utilities/database/disconnect", "/utilities/database/reconnect"}
-# Writes refused while Test data is on (sqlstore.KEEP_IN_TEST: they would not be saved and would be undone).
-KEPT_IN_TEST = ("/admin/", "/auth/change-password", "/settings", "/masters/company", "/utilities/settings",
-                "/utilities/doc-settings", "/utilities/numbering", "/utilities/menu", "/utilities/import-fields")
-NOT_WRITES = {"/print/render", "/print/email", "/designer/refresh", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/run",
+# Connection switches (Utilities → About → Disconnect / Reconnect database): run one at a time like writes, but
+# never refused for a database that is offline (they are how it is reconnected) and nothing is saved after them.
+CONTROL_PATHS = {"/utilities/database/disconnect", "/utilities/database/reconnect"}
+NOT_WRITES = {"/print/render", "/print/dsr", "/print/stock-balance", "/print/email", "/designer/refresh", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect",
               "/utilities/web-sync"}
 
 
@@ -80,11 +77,6 @@ async def serialise_and_save_writes(request: Request, call_next):
     if request.url.path in CONTROL_PATHS:
         async with _write_lock:
             return await call_next(request)
-    if sqlstore.test_data() and request.url.path.startswith(KEPT_IN_TEST):
-        # Users, roles, rights and settings stay the shop's own in test mode and aren't saved; a change would be
-        # undone (even a password change or a deactivation) when Test data is switched off.
-        return JSONResponse({"detail": "Test data is on: users, rights, settings and the company profile can't be changed "
-                                       "now (the change would be lost). Switch Test data off first."}, status_code=409)
     async with _write_lock:
         key = _idempotency_key(request)
         body_hash = hashlib.sha256(await request.body()).hexdigest() if key else ""
@@ -100,7 +92,7 @@ async def serialise_and_save_writes(request: Request, call_next):
             return Response(saved["body"], status_code=saved["status"], media_type="application/json",
                             headers={"Idempotent-Replay": "true"})
         blocked = await run_in_threadpool(sqlstore.writes_blocked)
-        if blocked:   # the database is set up but offline, or the setup is copying: nothing may change
+        if blocked:   # the database is set up but offline: nothing may change
             return JSONResponse({"detail": blocked}, status_code=503)
         admin_audit.begin()
         response = await call_next(request)
@@ -163,15 +155,15 @@ async def serve_frontend(request: Request, call_next):
 
 
 # Registered after the write middleware so they wrap it: replayed replies get the same headers.
-# CORS_ORIGINS in .env (comma-separated) for a frontend served from another address; by default the Vite dev
-# server's. Not needed when this backend serves the frontend itself (same origin).
-CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()] or [
-    "http://localhost:5174", "http://localhost:5173", "http://localhost:5175"]
+# Cross-origin requests are allowed from anywhere (any origin, method and header): the frontend is opened from
+# another address than the backend's (its VITE_API_URL). The API uses a Bearer token, never cookies, so no
+# credentials are involved.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition", "Idempotent-Replay", "X-Page-Size"],
 )
 
 
@@ -183,7 +175,7 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin")
-    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "cross-origin")   # company images load from the frontend's page
     if request.url.path.startswith(("/auth", "/admin")):
         response.headers.setdefault("Cache-Control", "no-store")
     return response

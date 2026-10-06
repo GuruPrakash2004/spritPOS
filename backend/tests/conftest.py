@@ -58,7 +58,6 @@ def reset_store():
     auth.reset_login_failures()
     sqlstore.reset_memory()   # the audit logs (in memory without a database)
     yield
-    sqlstore._test_data = False   # the Test data switch never leaks into the next test
     sqlstore.reset_memory()
     for name, saved in snapshot.items():
         current = getattr(store, name)

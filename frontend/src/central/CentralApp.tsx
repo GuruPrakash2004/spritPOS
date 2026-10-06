@@ -8,7 +8,7 @@ import { Boxes, ClipboardList, KeyRound, LayoutDashboard, LogOut, Moon, Store, S
 import { SnackbarContainer } from '../components/common/Toast';
 import { toastStore } from '../components/common/toastStore';
 import VlqmsLogo from '../components/layout/VlqmsLogo';
-import { api, errorText, getAuthToken, setAuthUser, setSessionEndedHandler } from '../lib/api';
+import { centralMe, centralShops, errorText, getAuthToken, setAuthUser, setSessionEndedHandler } from '../lib/api';
 import { iconButton } from '../lib/styles';
 import ChangePassword from './ChangePassword';
 import CentralLogin from './CentralLogin';
@@ -54,11 +54,11 @@ export default function CentralApp() {
 
   useEffect(() => {   // after a refresh: the stored token's user
     if (!getAuthToken()) return;
-    api<CentralSession>('/auth/me').then(s => setSession(s)).catch(() => signOut()).finally(() => setRestoring(false));
+    centralMe<CentralSession>().then(s => setSession(s)).catch(() => signOut()).finally(() => setRestoring(false));
   }, [signOut]);
 
   const loadShops = useCallback(() =>
-    api<CentralShop[]>('/clients').then(s => { setShops(s); return true; })
+    centralShops<CentralShop>().then(s => { setShops(s); return true; })
       .catch(e => { toastStore.add('error', errorText(e)); return false; }), []);
   const refreshShops = async () => {
     if (!(await toastStore.defer('refresh', 'The shop list will be refreshed when this closes.', 'Refresh cancelled.'))) return;

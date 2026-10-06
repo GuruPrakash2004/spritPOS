@@ -1,6 +1,6 @@
 """One-time Database setup (app/setup_db.py, app/envfile.py, routers/setup.py) without a real SQL Server:
-the schema file, the .env writer, the connection strings, and the setup endpoints' guard (setup code while
-not set up, an Administrator afterwards; the password only encrypted, and stored only sealed)."""
+the schema file, the .env writer, the connection strings, and the setup endpoints' guard (open while not
+set up, an Administrator afterwards; the password only encrypted, and stored only sealed)."""
 import re
 
 import pytest
@@ -14,38 +14,60 @@ SCHEMA = setup_db.SCHEMA.read_text()
 CODE = re.sub(r"--[^\n]*", "", SCHEMA)
 
 
-def test_schema_copies_every_table_with_web_names_only():
-    tables = setup_db.schema_tables()
-    assert len(tables) > 250 and "MstITEM" in tables and "TrnHdrSINV" in tables and "UtlStockList" in tables
-    assert not any(t.startswith("Web_") for t in tables)
+def test_schema_creates_only_the_web_apps_own_tables():
+    names = re.findall(r"CREATE TABLE dbo\.\[?(\w+)", CODE)
+    assert sorted(names) == sorted(setup_db.WEB_TABLES)
     for batch in setup_db.batches(SCHEMA):
         code = re.sub(r"--[^\n]*", "", batch).strip()
-        if re.search(r"\bCREATE\s+(TABLE|INDEX|UNIQUE|NONCLUSTERED|CLUSTERED)\b", code, re.I):
-            assert re.match(r"IF (OBJECT_ID|NOT EXISTS)", code, re.I), code[:80]
-        if re.match(r"IF COL_LENGTH\('dbo\.Web_\w+', '\w+'\) < \d+", code):   # widening a Web_ number column
-            assert not re.search(r"\b(DROP|TRUNCATE)\s+TABLE\b", code, re.I), code[:80]
-            assert all(t.startswith("Web_") for t in re.findall(r"ALTER TABLE dbo\.\[(\w+)\]", code)), code[:80]
-            continue
+        if re.search(r"\bCREATE\s+(TABLE|INDEX)\b", code, re.I):
+            assert re.match(r"IF (OBJECT_ID|NOT EXISTS)", code, re.I), code[:80]   # guarded: safe to run twice
         assert not re.search(r"\b(ALTER|DROP|TRUNCATE)\s+TABLE\b", code, re.I), code[:80]
-    # Every table it creates, and every table its triggers write, is a Web_ table.
-    for name in re.findall(r"CREATE TABLE dbo\.\[?(\w+)", CODE):
-        assert name.startswith("Web_"), name
-    for name in re.findall(r"\b(?:INSERT INTO|UPDATE|DELETE FROM)\s+(?:dbo\.)?\[?(\w+)", CODE, re.I):
-        assert name.startswith("Web_") or name in ("t",), name
-
-
-def test_schema_holds_no_data_or_secrets():
-    inserts = re.findall(r"INSERT INTO\s+(?:dbo\.)?\[?(\w+)", CODE, re.I)
-    assert set(inserts) <= {"Web_SchemaVersion", "Web_TrnQOH"}   # the version row; the trigger's own insert
+    # It never touches a desktop table, and holds no data, server names or logins.
+    assert not re.search(r"\b(INSERT INTO|UPDATE|DELETE FROM)\b", CODE, re.I)
     assert not re.search(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", SCHEMA)
     assert "CREATE LOGIN" not in SCHEMA.upper() and "CREATE USER" not in SCHEMA.upper()
 
 
-def test_rollback_drops_only_web_tables():
-    rollback = setup_db.SCHEMA.with_name("002_web_legacy_tables.rollback.sql").read_text()
-    for name in re.findall(r"DROP TABLE dbo\.\[?(\w+)", rollback):
-        assert name.startswith("Web_"), name
+def test_a_database_that_is_not_vlqms_is_refused(monkeypatch):
+    info = {"is_vlqms": False, "missing_tables": ["MstITEM"], "stock_trigger": True, "web_tables": 0, "can_create_tables": True}
+    monkeypatch.setattr(setup_db, "check", lambda: info)
+    monkeypatch.setattr(setup_db, "create_schema", lambda: pytest.fail("must not create anything in a foreign database"))
+    with pytest.raises(setup_db.SetupError, match="MstITEM"):
+        setup_db.prepare()
 
+
+def test_a_database_without_the_stock_trigger_is_refused(monkeypatch):
+    info = {"is_vlqms": True, "missing_tables": [], "stock_trigger": False, "web_tables": 0, "can_create_tables": True}
+    monkeypatch.setattr(setup_db, "check", lambda: info)
+    with pytest.raises(setup_db.SetupError, match="trigger"):
+        setup_db.prepare()
+
+
+def test_prepare_creates_the_web_tables_once_and_needs_the_right_to(monkeypatch):
+    state = {"web_tables": 0, "can_create_tables": False, "created": 0}
+    monkeypatch.setattr(setup_db, "check", lambda: {"is_vlqms": True, "missing_tables": [], "stock_trigger": True, **state})
+    monkeypatch.setattr(setup_db, "create_schema", lambda: state.update(created=state["created"] + 1, web_tables=5))
+    with pytest.raises(setup_db.SetupError, match="can't create"):
+        setup_db.prepare()
+    state["can_create_tables"] = True
+    setup_db.prepare()
+    setup_db.prepare()   # the tables are there now: nothing is created again
+    assert state["created"] == 1
+
+
+def test_a_sealed_password_this_pc_cannot_read_means_not_set_up(monkeypatch):
+    monkeypatch.setattr(db, "DB_HOST", "server")
+    monkeypatch.setattr(db, "DB_NAME", "vLQMS")
+    monkeypatch.setattr(db, "DB_USER", "sa")
+    monkeypatch.setattr(db, "DB_PASSWORD_ENC", "sealed:v1:from-another-pc")
+    monkeypatch.setattr(db, "_password_unreadable", False)
+
+    def unreadable():
+        raise ValueError("InvalidTag")
+    monkeypatch.setattr(db, "_password", unreadable)
+    assert db.configured() is True
+    assert db.init_db() is False   # no crash at startup
+    assert db.configured() is False and boot.needs_setup() is True   # the sign-in page offers Database setup again
 
 def test_batches_split_on_go_lines_only():
     assert setup_db.batches("SELECT 'GO'\nGO\n-- only a comment\nGO\nSELECT 2") == ["SELECT 'GO'", "SELECT 2"]
@@ -73,9 +95,8 @@ def test_envfile_replaces_only_db_keys(tmp_path):
 
 @pytest.fixture
 def setup_mode(monkeypatch, tmp_path):
-    """No database set up; a known setup code; .env writes go to a temp file; no real connections."""
+    """No database set up; .env writes go to a temp file; no real connections."""
     auth.reset_login_failures()
-    monkeypatch.setitem(boot.SETUP_CODE, "code", "AB12-CD34-EF56")
     monkeypatch.setattr(envfile, "PATH", tmp_path / ".env")
     tried = []
 
@@ -84,7 +105,11 @@ def setup_mode(monkeypatch, tmp_path):
         return {"ok": True, "driver": "fake", "databases": ["vLQMSLHOUSE", "Other"]}
     monkeypatch.setattr(db, "test_connection", fake_test)
     monkeypatch.setattr(db, "reconnect", lambda: True)
-    monkeypatch.setattr(setup_db, "check", lambda: {"database": "vLQMSLHOUSE", "legacy_tables": 277})
+    monkeypatch.setattr(setup_db, "prepare", lambda: {"database": "vLQMSLHOUSE", "edition": "Express Edition"})
+    monkeypatch.setattr(setup_db, "is_ready", lambda: True)
+    loaded = []
+    monkeypatch.setattr(boot, "reload_after_setup", lambda: loaded.append(True))
+    monkeypatch.setattr(db, "_loaded_after_setup", loaded, raising=False)
     for k in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_AUTH", "DB_PASSWORD", "DB_PASSWORD_ENC"):
         monkeypatch.setattr(db, k, getattr(db, k))
     yield tried
@@ -100,30 +125,28 @@ async def test_status_is_public_and_says_setup_is_needed(anon_client):
     assert "host" not in r
 
 
-async def test_setup_code_is_required_and_locks_after_five_wrong(anon_client, setup_mode):
-    for _ in range(5):
-        r = await anon_client.post("/setup/test", json={**BODY, "setup_code": "WRONG", "password": enc("pw", "db")})
-        assert r.status_code == 403
-    r = await anon_client.post("/setup/test", json={**BODY, "setup_code": "AB12-CD34-EF56", "password": enc("pw", "db")})
-    assert r.status_code == 429
-    assert setup_mode == []
+async def test_setup_is_open_while_not_set_up(anon_client, setup_mode):
+    r = await anon_client.post("/setup/test", json={**BODY, "password": enc("pw", "db")})
+    assert r.status_code == 200
+    assert len(setup_mode) == 1
 
 
 async def test_password_must_be_encrypted_for_the_db_field(anon_client, setup_mode):
-    r = await anon_client.post("/setup/test", json={**BODY, "setup_code": "ab12-cd34-ef56", "password": "plain"})
+    r = await anon_client.post("/setup/test", json={**BODY, "password": "plain"})
     assert r.status_code in (400, 422)
-    r = await anon_client.post("/setup/test", json={**BODY, "setup_code": "ab12-cd34-ef56", "password": enc("pw", "login")})
+    r = await anon_client.post("/setup/test", json={**BODY, "password": enc("pw", "login")})
     assert r.status_code in (400, 422)
-    r = await anon_client.post("/setup/test", json={**BODY, "setup_code": "ab12-cd34-ef56", "password": enc("pw", "db")})
+    r = await anon_client.post("/setup/test", json={**BODY, "password": enc("pw", "db")})
     assert r.status_code == 200 and r.json()["databases"] == ["vLQMSLHOUSE", "Other"]
     assert setup_mode[-1] == ("localhost\\SQLEXPRESS", "", "", "sa", "pw", "sql")
 
 
 async def test_connect_saves_the_password_only_sealed(anon_client, setup_mode):
     envfile.PATH.write_text("JWT_SECRET=keep\n")
-    r = await anon_client.post("/setup/connect", json={**BODY, "setup_code": "AB12-CD34-EF56", "database": "vLQMSLHOUSE",
+    r = await anon_client.post("/setup/connect", json={**BODY, "database": "vLQMSLHOUSE",
                                                        "password": enc("S3cret!pw", "db")})
-    assert r.status_code == 200 and r.json()["legacy_tables"] == 277
+    assert r.status_code == 200 and r.json() == {"database": "vLQMSLHOUSE", "edition": "Express Edition", "ready": True}
+    assert db._loaded_after_setup == [True]   # the shop's data is loaded at once
     text = envfile.PATH.read_text()
     assert "S3cret!pw" not in text and "JWT_SECRET=keep" in text and "DB_NAME=vLQMSLHOUSE" in text
     sealed = re.search(r"^DB_PASSWORD_ENC=(.+)$", text, re.M).group(1)
@@ -131,42 +154,50 @@ async def test_connect_saves_the_password_only_sealed(anon_client, setup_mode):
     assert db.DB_NAME == "vLQMSLHOUSE" and db._password() == "S3cret!pw"
 
 
+async def test_connect_to_a_foreign_database_is_refused_and_loads_nothing(anon_client, setup_mode, monkeypatch):
+    def refuse():
+        raise setup_db.SetupError("This isn't a vLQMS database: these tables are missing: MstITEM.")
+    monkeypatch.setattr(setup_db, "prepare", refuse)
+    r = await anon_client.post("/setup/connect", json={**BODY, "database": "vLQMSLHOUSE", "password": enc("pw", "db")})
+    assert r.status_code == 400 and "isn't a vLQMS database" in r.json()["detail"]
+    assert db._loaded_after_setup == []
+
+
 async def test_connect_refuses_a_database_the_server_does_not_have(anon_client, setup_mode):
-    r = await anon_client.post("/setup/connect", json={**BODY, "setup_code": "AB12-CD34-EF56", "database": "Nope",
+    r = await anon_client.post("/setup/connect", json={**BODY, "database": "Nope",
                                                        "password": enc("pw", "db")})
     assert r.status_code == 404
     assert not envfile.PATH.exists()
 
 
 async def test_bad_server_names_are_refused(anon_client, setup_mode):
-    r = await anon_client.post("/setup/test", json={**BODY, "host": "x;Trusted_Connection=yes", "setup_code": "AB12-CD34-EF56"})
+    r = await anon_client.post("/setup/test", json={**BODY, "host": "x;Trusted_Connection=yes"})
     assert r.status_code == 422
 
 
 async def test_once_set_up_only_an_administrator_can_change_it(anon_client, client, cashier_client, setup_mode, monkeypatch):
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
     monkeypatch.setattr(sqlstore, "enabled", lambda: True)   # the database is in use
-    body = {**BODY, "setup_code": "AB12-CD34-EF56", "password": enc("pw", "db")}
+    body = {**BODY, "password": enc("pw", "db")}
     assert (await anon_client.post("/setup/test", json=body)).status_code == 401
     assert (await cashier_client.post("/setup/test", json={**body, "password": enc("pw", "db")})).status_code == 403
     assert (await client.post("/setup/test", json={**body, "password": enc("pw", "db")})).status_code == 200
 
 
-async def test_while_the_database_is_offline_the_setup_code_is_needed_again(anon_client, client, setup_mode, monkeypatch):
-    # Set up but unreachable: the app runs on sample data, so a demo Administrator must not repoint it.
+async def test_while_a_set_up_database_is_offline_setup_stays_closed(anon_client, setup_mode, monkeypatch):
+    # Set up but unreachable (a network drop): nobody may repoint the app at another server meanwhile.
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
-    body = {**BODY, "setup_code": "WRONG", "password": enc("pw", "db")}
-    assert (await client.post("/setup/test", json=body)).status_code == 403
-    assert (await client.post("/setup/test", json={**body, "setup_code": "AB12-CD34-EF56",
-                                                   "password": enc("pw", "db")})).status_code == 200
+    monkeypatch.setattr(sqlstore, "enabled", lambda: False)
+    assert (await anon_client.post("/setup/test", json={**BODY, "password": enc("pw", "db")})).status_code == 401
+    assert setup_mode == []
 
 
 async def test_odbc_values_are_escaped_and_bad_names_refused(anon_client, setup_mode):
     assert db._odbc("a}b") == "a}}b"
     for field in ("user", "host"):
-        r = await anon_client.post("/setup/test", json={**BODY, field: "sa};Trusted_Connection=yes", "setup_code": "AB12-CD34-EF56"})
+        r = await anon_client.post("/setup/test", json={**BODY, field: "sa};Trusted_Connection=yes"})
         assert r.status_code == 422, field
-    r = await anon_client.post("/setup/connect", json={**BODY, "setup_code": "AB12-CD34-EF56", "database": "x];DROP",
+    r = await anon_client.post("/setup/connect", json={**BODY, "database": "x];DROP",
                                                        "password": enc("pw", "db")})
     assert r.status_code == 422
 
@@ -176,8 +207,3 @@ async def test_writes_are_refused_while_a_set_up_database_is_offline(client, mon
     monkeypatch.setattr(db, "reconnect", lambda: False)
     res = await client.post("/masters/brands", json={"code": "ZZ", "name": "Zed"})
     assert res.status_code == 503 and "offline" in res.json()["detail"]
-
-
-async def test_progress_shows_no_private_keys(anon_client, monkeypatch):
-    monkeypatch.setattr(setup_db, "PROGRESS", {"state": "copying", "table": "MstITEM", "_beat": 1.0})
-    assert (await anon_client.get("/setup/progress")).json() == {"state": "copying", "table": "MstITEM"}

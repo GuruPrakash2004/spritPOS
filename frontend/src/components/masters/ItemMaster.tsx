@@ -6,7 +6,7 @@ import { FileDown, FileUp, Upload } from 'lucide-react';
 import MasterCrud from './MasterCrud';
 import Modal from '../common/Modal';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, type ApiItemFull } from '../../lib/api';
+import { errorText, getItems, importItems } from '../../lib/api';
 import { downloadText, parseCsv, toCsv } from '../../lib/csv';
 import { ITEM_FIELDS, ITEM_IMPORT_COLUMNS, ITEM_IMPORT_NUMERIC } from './masterConfigs';
 import { primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
@@ -33,7 +33,7 @@ export default function ItemMaster() {
     const index = new Map(header.map((h, i) => [h.trim().toUpperCase(), i]));
     const missing = ITEM_IMPORT_COLUMNS.filter(([col]) => !index.has(col.toUpperCase())).map(([col]) => col);
     if (missing.length) return setMessage(`Missing columns: ${missing.join(', ')}. Use Download Template.`);
-    const existing = new Set((await api<ApiItemFull[]>('/masters/items')).map(i => i.code));
+    const existing = new Set((await getItems()).map(i => i.code));
     const seen = new Set<string>();
     setPreview(body.map(cells => {
       const row: Record<string, string | number> = {};
@@ -56,7 +56,7 @@ export default function ItemMaster() {
     if (!good.length) return setMessage('Nothing to import: every row is a duplicate or has a problem.');
     const body = good.map(p => ({ ...p.row, short_name: p.row.short_name || p.row.code, qoh: 0, active: true }));
     if (!(await toastStore.defer('ok', `${good.length} items will be imported when this closes.`, 'Import cancelled. No items were added.'))) return;
-    api<{ added: string[]; duplicates: string[] }>('/masters/items/import', { method: 'POST', body })
+    importItems(body)
       .then(r => {
         setPreview(null);
         setReloadKey(k => k + 1);

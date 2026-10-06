@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import ItemLinesEntry from './ItemLinesEntry';
-import { api, errorText, todayIso, type ApiInvoice, type ApiSupplier } from '../../lib/api';
+import { errorText, getSuppliers, listSalesInvoices, todayIso, type ApiInvoice, type ApiSupplier } from '../../lib/api';
 import { toastStore } from '../common/toastStore';
 import { field, label } from '../../lib/styles';
 import { useDocSettings } from '../../lib/docSettings';
@@ -25,7 +25,7 @@ export function PurchaseIndent() {
   const [remarks, setRemarks] = useState('');
 
   useEffect(() => {
-    api<ApiSupplier[]>('/masters/suppliers')
+    getSuppliers()
       .then(list => { setSuppliers(list); setSupplier(s => s || list[0]?.code || ''); })
       .catch(e => toastStore.add('error', errorText(e)));
   }, []);
@@ -62,7 +62,7 @@ export function SalesReturn() {
   const [remarks, setRemarks] = useState('');
 
   useEffect(() => {
-    api<ApiInvoice[]>('/transactions/sales-invoice?status=SAVED').then(setInvoices).catch(() => undefined);
+    listSalesInvoices('SAVED').then(setInvoices).catch(() => undefined);
   }, []);
 
   const invoice = invoices.find(i => i.doc_no === against);

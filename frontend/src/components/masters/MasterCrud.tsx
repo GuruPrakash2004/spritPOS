@@ -12,7 +12,7 @@ import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
-import { api, canDo, canSeeCost, errorText, fieldRight } from '../../lib/api';
+import { canDo, canSeeCost, createMaster, deleteMaster, errorText, fieldRight, listMaster, updateMaster } from '../../lib/api';
 import { badge, field, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
 
 export type MasterField = {
@@ -59,13 +59,13 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
   const canDelete = canDo(title, 'delete');
 
   useEffect(() => {
-    api<Row[]>(`/masters/${path}`)
+    listMaster<Row>(path)
       .then(list => { setRows(list); if (list[0]) { setSelected(String(list[0].code)); setForm(list[0]); } })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
     // From allFields (the prop, stable between renders), not `fields`: that is filtered anew on every render,
     // so depending on it re-ran this effect after each load and fetched the lists in an endless loop.
     allFields.filter(f => f.optionsFrom).forEach(f => {
-      api<Row[]>(`/masters/${f.optionsFrom}`)
+      listMaster<Row>(f.optionsFrom ?? '')
         .then(list => setOptions(o => ({ ...o, [f.key]: list.map(r => String(r.code)) })))
         .catch(() => undefined);
     });
@@ -158,8 +158,8 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
     // The save waits for its popup (Cancel stops it): see .claude/rules/popups-and-errors.md.
     if (!(await toastStore.defer('ok', `${name} "${String(form.code ?? '').trim() || 'new record'}" will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     const request = mode === 'New'
-      ? api<Row>(`/masters/${path}`, { method: 'POST', body })
-      : api<Row>(`/masters/${path}/${encodeURIComponent(selected ?? '')}`, { method: 'PUT', body });
+      ? createMaster<Row>(path, body)
+      : updateMaster<Row>(path, selected ?? '', body);
     request.then(saved => {
       setRows(mode === 'New' ? [...rows, saved] : rows.map(r => (String(r.code) === selected ? saved : r)));
       select(saved);
@@ -177,7 +177,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
     }
     if (!selected || !(await confirm(`Delete "${selected}"? This can't be undone.`))) return;
     if (!(await toastStore.defer('delete', `"${selected}" will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
-    api(`/masters/${path}/${encodeURIComponent(selected)}`, { method: 'DELETE' })
+    deleteMaster(path, selected)
       .then(() => {
         const next = rows.filter(r => String(r.code) !== selected);
         setRows(next);

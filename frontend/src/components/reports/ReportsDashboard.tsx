@@ -8,7 +8,7 @@ import { Mail, Download, Eye, Plus, X, Loader2, Printer } from 'lucide-react';
 import { badge, field, fieldError, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
 import { toast } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { api, errorText, todayIso } from '../../lib/api';
+import { errorText, getCustomReportRights, listMaster, runCustomReport, todayIso } from '../../lib/api';
 import { downloadXls, type ReportColumn, type ReportRow } from '../../lib/xlsExport';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
@@ -22,9 +22,9 @@ type ActiveFilter = { on: string; val: string; param?: MasterParam; code?: strin
 
 // Filter On choices that pick a master record; the date choices use From / To instead.
 const MASTER_FILTERS = {
-  'Ledger Name': { param: 'ledger', path: '/masters/ledgers' },
-  'Supplier Name': { param: 'supplier', path: '/masters/suppliers' },
-  'Item Group': { param: 'group', path: '/masters/item-groups' },
+  'Ledger Name': { param: 'ledger', path: 'ledgers' },
+  'Supplier Name': { param: 'supplier', path: 'suppliers' },
+  'Item Group': { param: 'group', path: 'item-groups' },
 } as const;
 type MasterParam = (typeof MASTER_FILTERS)[keyof typeof MASTER_FILTERS]['param'];
 const masterFilter = (on: string) => MASTER_FILTERS[on as keyof typeof MASTER_FILTERS];
@@ -50,7 +50,7 @@ const ReportsDashboard = () => {
   useEffect(() => {
     const mf = masterFilter(filterOn);
     if (!mf || masters[filterOn]) return;
-    api<Master[]>(mf.path)
+    listMaster<Master>(mf.path)
       .then(list => setMasters(m => ({ ...m, [filterOn]: list })))
       .catch(e => toast.error(errorText(e)));
   }, [filterOn, masters]);
@@ -59,7 +59,7 @@ const ReportsDashboard = () => {
   // Only reports the server has and this user may not run are hidden ("not available yet" ones stay listed).
   const [hiddenReports, setHiddenReports] = useState<Set<string>>(new Set());
   useEffect(() => {
-    api<{ known: string[]; allowed: string[] }>('/reports/custom/allowed')
+    getCustomReportRights()
       .then(r => setHiddenReports(new Set(r.known.filter(n => !r.allowed.includes(n)))))
       .catch(() => undefined);
   }, []);
@@ -157,7 +157,7 @@ const ReportsDashboard = () => {
     if (result?.filterKey === filterKey) return result;
     setBusy(true);
     try {
-      const res = { ...(await api<ReportResult>(`/reports/custom?${filterKey}`)), filterKey };
+      const res = { ...(await runCustomReport<ReportResult>(filterKey)), filterKey };
       setResult(res);
       return res;
     } catch (e) {

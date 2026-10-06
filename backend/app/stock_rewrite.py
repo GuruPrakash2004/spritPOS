@@ -150,7 +150,7 @@ def rebuild_movements() -> dict:
     store.MOVEMENTS[store.APP_MOVEMENTS_FROM:] = moves
     for code, q in qoh.items():
         store.ITEMS[code]["qoh"] = round(q, 3)
-    sqlstore.moves_rewritten()   # the save writes the web's whole stock ledger again (Web_AppMove, Web_UtlStockList)
+    sqlstore.moves_rewritten()   # the save writes the web's whole stock ledger again (Web_AppMove, UtlStockList)
     return {"rewritten": True, "message": "Successfully re-Written Stock!", "items_changed": changed,
             "movements": len(moves), "check": check_stock()}
 
@@ -160,43 +160,43 @@ _LEGACY_CHECKS = [
     ("purchase", "Purchase", """
         SELECT i.ItemName AS item_name, i.ItemCode AS item_code, SUM(a.PQty) AS trn_stock, SUM(a.UslQty) AS sys_stock,
                SUM(a.PQty) - SUM(a.UslQty) AS diff
-        FROM (SELECT ItemID, SUM(PBQty) AS PQty, 0 AS UslQty FROM Web_TrnDtlPB GROUP BY ItemID
+        FROM (SELECT ItemID, SUM(PBQty) AS PQty, 0 AS UslQty FROM TrnDtlPB GROUP BY ItemID
               UNION ALL
-              SELECT ItemID, 0, SUM(Qty) FROM Web_UtlStockList WHERE UPPER(DocType) IN ('PB','SA','ST') GROUP BY ItemID) a
-        JOIN Web_MstItem i ON i.ItemID = a.ItemID
+              SELECT ItemID, 0, SUM(Qty) FROM UtlStockList WHERE UPPER(DocType) IN ('PB','SA','ST') GROUP BY ItemID) a
+        JOIN MstItem i ON i.ItemID = a.ItemID
         GROUP BY i.ItemID, i.ItemName, i.ItemCode HAVING SUM(a.PQty) <> SUM(a.UslQty)"""),
     ("sales_invoice", "Sales Invoice", """
         SELECT i.ItemName AS item_name, i.ItemCode AS item_code, SUM(a.PQty) AS trn_stock, SUM(a.UslQty) AS sys_stock,
                SUM(a.PQty) - SUM(a.UslQty) AS diff
-        FROM (SELECT d.ItemID, SUM(d.SInvQty) AS PQty, 0 AS UslQty FROM Web_TrnDtlSINV d
-                JOIN Web_TrnHdrSINV h ON h.SInvID = d.SInvID WHERE h.Cancelled = 'N' AND h.IsDelete = 'N' GROUP BY d.ItemID
+        FROM (SELECT d.ItemID, SUM(d.SInvQty) AS PQty, 0 AS UslQty FROM TrnDtlSINV d
+                JOIN TrnHdrSINV h ON h.SInvID = d.SInvID WHERE h.Cancelled = 'N' AND h.IsDelete = 'N' GROUP BY d.ItemID
               UNION ALL
-              SELECT ItemID, 0, SUM(Qty) FROM Web_UtlStockList WHERE UPPER(DocType) = 'INV' GROUP BY ItemID) a
-        JOIN Web_MstItem i ON i.ItemID = a.ItemID
+              SELECT ItemID, 0, SUM(Qty) FROM UtlStockList WHERE UPPER(DocType) = 'INV' GROUP BY ItemID) a
+        JOIN MstItem i ON i.ItemID = a.ItemID
         GROUP BY i.ItemID, i.ItemName, i.ItemCode HAVING SUM(a.PQty) <> SUM(a.UslQty)"""),
     ("stock_deduction", "Stock Deduction", """
         SELECT i.ItemName AS item_name, i.ItemCode AS item_code, SUM(a.PQty) AS trn_stock, SUM(a.UslQty) AS sys_stock,
                SUM(a.PQty) - SUM(a.UslQty) AS diff
-        FROM (SELECT ItemID, SUM(StkDedQty) AS PQty, 0 AS UslQty FROM Web_TrnDtlSTKDED GROUP BY ItemID
+        FROM (SELECT ItemID, SUM(StkDedQty) AS PQty, 0 AS UslQty FROM TrnDtlSTKDED GROUP BY ItemID
               UNION ALL
-              SELECT ItemID, 0, SUM(Qty) FROM Web_UtlStockList WHERE UPPER(DocType) = 'STKDED' GROUP BY ItemID) a
-        JOIN Web_MstItem i ON i.ItemID = a.ItemID
+              SELECT ItemID, 0, SUM(Qty) FROM UtlStockList WHERE UPPER(DocType) = 'STKDED' GROUP BY ItemID) a
+        JOIN MstItem i ON i.ItemID = a.ItemID
         GROUP BY i.ItemID, i.ItemName, i.ItemCode HAVING SUM(a.PQty) <> SUM(a.UslQty)"""),
     ("sales_return", "Sales Return", """
         SELECT i.ItemName AS item_name, i.ItemCode AS item_code, SUM(a.PQty) AS trn_stock, SUM(a.UslQty) AS sys_stock,
                SUM(a.PQty) - SUM(a.UslQty) AS diff
-        FROM (SELECT ItemID, SUM(SRQty) AS PQty, 0 AS UslQty FROM Web_TrnDtlSR GROUP BY ItemID
+        FROM (SELECT ItemID, SUM(SRQty) AS PQty, 0 AS UslQty FROM TrnDtlSR GROUP BY ItemID
               UNION ALL
-              SELECT ItemID, 0, SUM(Qty) FROM Web_UtlStockList WHERE UPPER(DocType) = 'SR' GROUP BY ItemID) a
-        JOIN Web_MstItem i ON i.ItemID = a.ItemID
+              SELECT ItemID, 0, SUM(Qty) FROM UtlStockList WHERE UPPER(DocType) = 'SR' GROUP BY ItemID) a
+        JOIN MstItem i ON i.ItemID = a.ItemID
         GROUP BY i.ItemID, i.ItemName, i.ItemCode HAVING SUM(a.PQty) <> SUM(a.UslQty)"""),
     ("ledger", "Ledger vs QOH", """
         SELECT i.ItemName AS item_name, i.ItemCode AS item_code, SUM(a.PQty) AS ledger_stock, SUM(a.UslQty) AS qoh,
                SUM(a.PQty) - SUM(a.UslQty) AS diff
-        FROM (SELECT ItemID, SUM(StkMultiplier * Qty) AS PQty, 0 AS UslQty FROM Web_UtlStockList GROUP BY ItemID
+        FROM (SELECT ItemID, SUM(StkMultiplier * Qty) AS PQty, 0 AS UslQty FROM UtlStockList GROUP BY ItemID
               UNION ALL
-              SELECT ItemID, 0, CLBal FROM Web_TrnQOH) a
-        JOIN Web_MstItem i ON i.ItemID = a.ItemID
+              SELECT ItemID, 0, CLBal FROM TrnQOH) a
+        JOIN MstItem i ON i.ItemID = a.ItemID
         GROUP BY i.ItemID, i.ItemName, i.ItemCode HAVING SUM(a.PQty) <> SUM(a.UslQty)"""),
 ]
 
@@ -204,7 +204,7 @@ _LEGACY_CHECKS = [
 def legacy_check() -> dict | None:
     """The desktop checks on SQL Server (read-only), or None without a connection. A tab whose table is
     missing in this database (Sales Return is optional in the desktop app) reports an empty list."""
-    if not db.is_db_available() or sqlstore.test_data():   # the shop's tables say nothing about the sample data
+    if not db.is_db_available():
         return None
     tabs = []
     for key, caption, sql in _LEGACY_CHECKS:

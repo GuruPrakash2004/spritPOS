@@ -1,4 +1,4 @@
-// About says which data the screens show, and an Administrator can disconnect the database for testing.
+// About shows the connection state, and an Administrator can disconnect the database for testing.
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,7 +7,7 @@ import { setAuthUser } from '../../lib/api'
 import About from './About'
 
 const ABOUT = { product: 'e-vLQMS ERP', software_version: '1', api_version: '0.2.0', company: 'MY SHOP', db_connected: true,
-  db_configured: true, db_disconnected_for_testing: false, data_mode: 'test', server_time: '2026-10-05T10:00:00' }
+  db_configured: true, db_disconnected_for_testing: false, server_time: '2026-10-05T10:00:00' }
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 let fetchMock: ReturnType<typeof vi.fn>
 
@@ -20,10 +20,10 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); setAuthUser('', '', '') })
 
 describe('About', () => {
-  it('says when test data is in use, and disconnects the database for an Administrator', async () => {
+  it('shows the connection, and disconnects the database for an Administrator', async () => {
     setAuthUser('ADMIN', 'Administrator', 't')
     render(<About />)
-    expect(await screen.findByText('Using test (dummy) data')).toBeInTheDocument()
+    expect(await screen.findByText('SQL Server connected')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /disconnect database/i }))
     expect(await screen.findByText('SQL Server disconnected (for testing)')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: /reconnect database/i })).toBeInTheDocument())
@@ -32,7 +32,14 @@ describe('About', () => {
   it('has no connection buttons for other roles', async () => {
     setAuthUser('RAVI', 'Cashier', 't')
     render(<About />)
-    await screen.findByText('Using test (dummy) data')
+    await screen.findByText('SQL Server connected')
     expect(screen.queryByRole('button', { name: /disconnect/i })).not.toBeInTheDocument()
+  })
+
+  it('has no test-data switch or label any more', async () => {
+    setAuthUser('ADMIN', 'Administrator', 't')
+    render(<About />)
+    await screen.findByText('SQL Server connected')
+    expect(screen.queryByText(/test \(dummy\) data|test data/i)).not.toBeInTheDocument()
   })
 })

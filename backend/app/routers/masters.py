@@ -238,7 +238,7 @@ def update_company(body: Company, admin: dict = Depends(require_admin)):
     if changed:
         admin_audit.record("Company Master", "Edited", store.COMPANY.get("name") or "Company", earlier, changed)
     changes = body.model_dump()
-    if store.FIN_YEARS:   # the financial year is the desktop's (Web_MstCompFinYear), not edited here
+    if store.FIN_YEARS:   # the financial year is the desktop's (MstCompFinYear), not edited here
         changes.update(fy_start=store.COMPANY["fy_start"], fy_end=store.COMPANY["fy_end"])
     store.COMPANY.update(changes)
     store.touch("COMPANY", "*")

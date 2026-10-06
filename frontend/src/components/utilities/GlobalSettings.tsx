@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Save, Search } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { api, errorText, type ApiSetting, type ApiSettingKind } from '../../lib/api';
+import { addGlobalSetting, errorText, getGlobalSettings, saveGlobalSetting, type ApiSetting, type ApiSettingKind } from '../../lib/api';
 import { badge, field, fieldError, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
 
 type Draft = { caption: string; value: string; hidden: boolean };
@@ -40,7 +40,7 @@ export default function GlobalSettings() {
   const [newRow, setNewRow] = useState(EMPTY_NEW);
   const [newErrors, setNewErrors] = useState<Record<string, string>>({});
 
-  const load = useCallback((all: boolean) => api<ApiSetting[]>(`/utilities/settings${all ? '?all=true' : ''}`)
+  const load = useCallback((all: boolean) => getGlobalSettings(all)
     .then(r => { setRows(r); setDrafts({}); setErrors({}); return true; })
     .catch(e => { toastStore.add('error', errorText(e)); return false; })
     .finally(() => setLoading(false)), []);
@@ -80,7 +80,7 @@ export default function GlobalSettings() {
     let saved = 0;
     try {
       for (const [code, body] of bodies) {
-        await api(`/utilities/settings/${encodeURIComponent(code)}`, { method: 'PUT', body });
+        await saveGlobalSetting(code, body);
         saved++;
       }
       toastStore.add('ok', `Data Saved Successfully! (${saved} setting${saved === 1 ? '' : 's'})`);
@@ -113,7 +113,7 @@ export default function GlobalSettings() {
     }
     const body = { ...newRow, code: newRow.code.trim(), caption: newRow.caption.trim(), group: newRow.group.trim(), value: newRow.value.trim() };
     if (!(await toastStore.defer('ok', `Setting ${body.code} will be added when this closes.`, 'Add cancelled.'))) return;
-    api<ApiSetting>('/utilities/settings', { method: 'POST', body })
+    addGlobalSetting(body)
       .then(() => { toastStore.add('ok', `Setting ${body.code} added.`); setNewRow(EMPTY_NEW); setAdding(false); load(showHidden); })
       .catch(e => toastStore.add('error', errorText(e)));
   };

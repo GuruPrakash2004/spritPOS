@@ -10,7 +10,7 @@ import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { PlusCircle, Save, Trash2, XCircle, Printer } from 'lucide-react';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, type ApiDoc, type ApiItemFull } from '../../lib/api';
+import { errorText, getItems, saveStockDocument, type ApiItemFull } from '../../lib/api';
 import { field, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader, printButton } from '../../lib/styles';
 import PrintDialog from '../print/PrintDialog';
 import { afterSavePlan, type PrintKind } from '../../lib/printing';
@@ -58,7 +58,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   }, [toast]);
 
   useEffect(() => {
-    api<ApiItemFull[]>('/masters/items').then(list => setItems(list.filter(i => i.active))).catch(e => setToast({ kind: 'error', text: errorText(e) }));
+    getItems().then(list => setItems(list.filter(i => i.active))).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   }, []);
 
   const byCode = new Map(items.map(i => [i.code, i]));
@@ -78,7 +78,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
     if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one item.' });
     if (filled.some(l => qty(l) <= 0)) return setToast({ kind: 'error', text: 'Every item needs cases or bottles.' });
     if (!(await toastStore.defer('ok', `${title} with ${filled.length} items will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
-    api<ApiDoc>(endpoint, { method: 'POST', body: buildBody(filled) })
+    saveStockDocument(endpoint, buildBody(filled))
       .then(doc => {
         setToast({ kind: 'ok', text: `${title} ${doc.doc_no} saved — ${doc.totals.qty} bottles.` });
         // The Doc Designer's default print option decides (Global Settings is the fallback).

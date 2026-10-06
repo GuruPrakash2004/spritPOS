@@ -9,13 +9,12 @@ import { useEffect, useState } from 'react';
 import { Printer, Search, Undo2, XCircle } from 'lucide-react';
 import Modal from '../common/Modal';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, qs, type ApiInvoice } from '../../lib/api';
+import { cancelSalesInvoice, deleteSalesInvoice, errorText, listSalesInvoices, reprintSalesInvoice, type ApiInvoice } from '../../lib/api';
 import { numberToWords } from '../../lib/formatters';
 import {  dangerButton, field, label, money, primaryButton, secondaryButton, tableBody, tableHead , printButton } from '../../lib/styles';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import PrintDialog from '../print/PrintDialog';
 
-const path = (no: string) => `/transactions/sales-invoice/${no}`;
 
 // Re-Print Bill: fetch a saved bill and show it in a printable layout with RPT model choices.
 export function ReprintDialog({ initialNo, onClose }: { initialNo: string; onClose: () => void }) {
@@ -27,7 +26,7 @@ export function ReprintDialog({ initialNo, onClose }: { initialNo: string; onClo
 
   const load = (billNo: string) => {
     if (!billNo.trim()) return;
-    api<{ invoice: ApiInvoice }>(`${path(billNo.trim())}/reprint`)
+    reprintSalesInvoice(billNo.trim())
       .then(r => { setInv(r.invoice); setError(''); })
       .catch(e => { setInv(null); setError(errorText(e)); });
   };
@@ -111,7 +110,7 @@ export function CancelInvoiceDialog({ initialNo, onClose, onDone }: { initialNo:
     if (remarks.trim().length < 3) return setError('A reason for cancelling is required.');
     setError('');
     if (!(await toastStore.defer('delete', `Bill ${no.trim()} will be cancelled when this closes.`, 'Bill not cancelled. Nothing was changed.'))) return;
-    api<ApiInvoice>(`${path(no.trim())}/cancel`, { method: 'POST', body: { remarks: remarks.trim() } })
+    cancelSalesInvoice(no.trim(), remarks.trim())
       .then(inv => onDone(`Bill ${inv.doc_no} cancelled — stock returned.`))
       .catch(e => setError(errorText(e)));
   };
@@ -148,13 +147,13 @@ export function HeldBillsDialog({ onClose, onRecall }: { onClose: () => void; on
   const [at, setAt] = useState(0);
 
   useEffect(() => {
-    api<ApiInvoice[]>(`/transactions/sales-invoice${qs({ status: 'HOLD' })}`).then(setBills).catch(e => setError(errorText(e)));
+    listSalesInvoices('HOLD').then(setBills).catch(e => setError(errorText(e)));
   }, []);
 
   const recall = async (inv: ApiInvoice) => {
     if (!(await toastStore.defer('ok', `Held bill ${inv.doc_no} will be recalled when this closes.`, 'Recall cancelled. The bill is still held.'))) return;
     // Held bills never moved stock, so recalling just removes the parked copy and loads its lines.
-    api(path(inv.doc_no), { method: 'DELETE' }).then(() => onRecall(inv)).catch(e => setError(errorText(e)));
+    deleteSalesInvoice(inv.doc_no).then(() => onRecall(inv)).catch(e => setError(errorText(e)));
   };
 
   return (

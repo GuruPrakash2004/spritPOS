@@ -17,7 +17,7 @@ import Modal from '../common/Modal';
 import { useConfirm } from '../common/ConfirmDialog';
 import DropdownMenu, { menuItem } from '../common/DropdownMenu';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, qs, type ApiSqlObject, type ApiSqlResult, type ApiSqlStatus, type ApiSqlTarget, type ApiSqlTop } from '../../lib/api';
+import { errorText, executeSql, getSqlDefinition, getSqlObjects, getSqlScript, getSqlStatus, getSqlTop, type ApiSqlObject, type ApiSqlResult, type ApiSqlStatus, type ApiSqlTarget, type ApiSqlTop } from '../../lib/api';
 import { downloadText, toCsv } from '../../lib/csv';
 import { downloadXls } from '../../lib/xlsExport';
 import { exportButton, field, ghostButton, iconButton, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
@@ -91,7 +91,7 @@ export default function SqlQueryExecution() {
   const connected = status !== null && serverUp;
 
   useEffect(() => {
-    api<ApiSqlStatus>('/tools/sql/status')
+    getSqlStatus()
       .then(setStatus)
       .catch(e => { setStatus({ db_connected: false, database: null, driver: null }); setError(errorText(e)); });
   }, []);
@@ -100,7 +100,7 @@ export default function SqlQueryExecution() {
   useEffect(() => {
     if (!connected) return;
     const t = window.setTimeout(() => {
-      api<ApiSqlObject[]>(`/tools/sql/objects${qs({ search: search.trim(), target })}`).then(setObjects).catch(e => setError(errorText(e)));
+      getSqlObjects(search.trim(), target).then(setObjects).catch(e => setError(errorText(e)));
     }, 250);
     return () => window.clearTimeout(t);
   }, [connected, search, target]);
@@ -118,7 +118,7 @@ export default function SqlQueryExecution() {
     setRunning(true);
     setError('');
     try {
-      const res = await api<ApiSqlResult>('/tools/sql/execute', { method: 'POST', body: { sql: query, target } });
+      const res = await executeSql(query, target);
       setResult(res);
       const next = [query, ...history.filter(h => h !== query)].slice(0, 20);
       setHistory(next);
@@ -151,8 +151,8 @@ export default function SqlQueryExecution() {
     setMenuFor(null);
     try {
       const text = kind === 'definition'
-        ? (await api<{ definition: string }>(`/tools/sql/definition${qs({ name: obj.name, schema: obj.schema, target })}`)).definition
-        : (await api<{ script: string }>(`/tools/sql/script${qs({ name: obj.name, schema: obj.schema, kind, target })}`)).script;
+        ? (await getSqlDefinition(obj, target)).definition
+        : (await getSqlScript(obj, kind, target)).script;
       setSql(text);
       setError('');
       editor.current?.focus();
@@ -167,7 +167,7 @@ export default function SqlQueryExecution() {
     if (ask && !(await toastStore.defer('refresh', `Top 200 rows of ${obj.name} will load when this closes.`, 'Loading cancelled.'))) return;
     setTop({ obj, data: top?.obj.name === obj.name ? top.data : null, loading: true });
     try {
-      const data = await api<ApiSqlTop>(`/tools/sql/top${qs({ name: obj.name, schema: obj.schema, n: 200, target })}`);
+      const data = await getSqlTop(obj, 200, target);
       setTop({ obj, data, loading: false });
     } catch (e) {
       setTop(null);

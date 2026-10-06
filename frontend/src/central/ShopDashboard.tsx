@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Search } from 'lucide-react';
 import { toastStore } from '../components/common/toastStore';
 import { InlineError } from '../components/common/FormErrorSummary';
-import { api, errorText, todayIso } from '../lib/api';
+import { centralDsr, errorText, todayIso } from '../lib/api';
 import { badge, field, fieldError, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow } from '../lib/styles';
 import { isStale, when, type CentralDsr, type CentralShop, type DsrRow } from './types';
 
@@ -50,7 +50,7 @@ export default function ShopDashboard({ shops }: { shops: CentralShop[] }) {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback((c: string, d: string) =>
-    api<CentralDsr>(`/dsr?${new URLSearchParams({ day: d, ...(c ? { client: c } : {}) })}`)
+    centralDsr<CentralDsr>(new URLSearchParams({ day: d, ...(c ? { client: c } : {}) }))
       .then(r => { setData(r); return true; })
       .catch(e => { toastStore.add('error', errorText(e)); return false; })
       .finally(() => setLoading(false)), []);

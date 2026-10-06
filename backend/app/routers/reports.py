@@ -151,7 +151,7 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
     qoh_of: dict[str, float] = {code: it["qoh"] for code, it in store.ITEMS.items()}
     first_sale: str | None = None
 
-    live = None if sqlstore.test_data() else db_store.live_sales_and_stock(start, end)
+    live = db_store.live_sales_and_stock(start, end)
     if live is not None:
         source = "live"
         sold.update(live["sold"])

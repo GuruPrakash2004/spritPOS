@@ -130,7 +130,7 @@ class FinYear(BaseModel):
 
 class CompanyOut(BaseModel):
     """The company profile as served: blank until the shop's database is loaded (no validation on the way out),
-    plus the financial years from Web_MstCompFinYear."""
+    plus the financial years from MstCompFinYear."""
     name: str = ""
     email: str = ""
     address: str = ""

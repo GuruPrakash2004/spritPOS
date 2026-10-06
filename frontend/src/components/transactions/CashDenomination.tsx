@@ -8,7 +8,7 @@ import Toast from '../common/Toast';
 import Kbd from '../common/Kbd';
 import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, qs, todayIso, type ApiDenomination, type ApiFullDsr } from '../../lib/api';
+import { errorText, getDenomination, getDsr, saveDenomination, todayIso } from '../../lib/api';
 import { field, money, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 const NOTES = [500, 200, 100, 50, 20, 10];
@@ -28,10 +28,10 @@ export default function CashDenomination() {
 
   // Load the saved count (if any) and the expected cash for the chosen day.
   useEffect(() => {
-    api<ApiDenomination | null>(`/transactions/denomination${qs({ on })}`)
+    getDenomination(on)
       .then(d => setCounts(d ? Object.fromEntries(Object.entries(d.counts).map(([k, v]) => [k, String(v)])) : {}))
       .catch(() => setCounts({}));
-    api<ApiFullDsr>(`/reports/dsr${qs({ on })}`).then(d => setExpected(typeof d?.cash_balance === "number" ? d.cash_balance : null)).catch(() => setExpected(null));
+    getDsr(on).then(d => setExpected(typeof d?.cash_balance === "number" ? d.cash_balance : null)).catch(() => setExpected(null));
   }, [on]);
 
   const n = (key: string) => Math.max(0, Math.floor(Number(counts[key]) || 0));
@@ -41,7 +41,7 @@ export default function CashDenomination() {
   const save = async () => {
     if (!(await toastStore.defer('ok', `Cash count of ₹ ${money(total)} for ${on} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     const body = { date: on, counts: Object.fromEntries([...NOTES.map(String), 'coins'].map(k => [k, n(k)])) };
-    api<ApiDenomination>('/transactions/denomination', { method: 'POST', body })
+    saveDenomination(body)
       .then(d => setToast({ kind: 'ok', text: `Cash count for ${d.date} saved — ₹ ${money(d.total)}.` }))
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };

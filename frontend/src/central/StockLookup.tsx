@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Search } from 'lucide-react';
 import { toastStore } from '../components/common/toastStore';
 import { InlineError } from '../components/common/FormErrorSummary';
-import { api, errorText } from '../lib/api';
+import { centralStock, errorText } from '../lib/api';
 import { badge, field, fieldError, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow } from '../lib/styles';
 import { isStale, when, type CentralShop, type CentralStock } from './types';
 
@@ -27,7 +27,7 @@ export default function StockLookup({ shops }: { shops: CentralShop[] }) {
     if (!(await toastStore.defer('refresh', 'Stock will be loaded when this closes.', 'Cancelled.'))) return;
     setBusy(true);
     try {
-      const res = await api<CentralStock>(`/stock?${params}`);
+      const res = await centralStock<CentralStock>(params);
       setData(res);
       toastStore.add('refresh', `${res.items.length} item${res.items.length === 1 ? '' : 's'} found.`);
     } catch (e) {

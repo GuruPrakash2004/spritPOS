@@ -4,7 +4,7 @@ frmTrnRemoveDuplicates): one item is folded into another and then removed.
 The desktop app re-points every transaction line, the stock list and QOH from the item being removed to the
 item kept (adding the two QOHs), then deletes the old item and its dependent master rows. The web app does
 the same in memory, and sqlstore.merged() does it in SQL Server's Web_ tables on the request's save (every
-Web_ table with an ITEMID, Web_TrnQOH added together, the web's ledger Web_AppMove):
+Web_ table with an ITEMID, TrnQOH added together, the web's ledger Web_AppMove):
 - every document line (web and loaded desktop bills) and every stock movement moves to the kept item;
 - base QOH (store.BASE_QOH) and QOH are added together, so Tools → Re Write Stock still balances;
 - the last purchase date keeps the later one;

@@ -135,8 +135,6 @@ def about():
         "db_connected": db.is_db_available(),
         "db_configured": db.configured(),
         "db_disconnected_for_testing": db.MANUAL_OFFLINE,
-        # "live": the shop's SQL Server; "test": the sample data (header switch); "none": nothing loaded
-        "data_mode": sqlstore.data_mode(),
         # What the Doc Designer defined (print options, screens, fields) and whether Crystal printing is set up.
         "designer": {"screens": len(store.UTL_DOCS), "print_options": len(store.UTL_OPTIONS), "fields": len(store.UTL_FIELDS)},
         "rpt_bridge": rpt_bridge.configured(),
@@ -145,24 +143,8 @@ def about():
     }
 
 
-# ─── Testing: sample data and the database connection (Administrator only) ──────
+# ─── The database connection (Administrator only) ──────────────────────────────
 # These change no shop data, so main.py runs them without the "database offline" check and saves nothing after.
-
-class TestDataIn(BaseModel):
-    on: bool
-
-
-@router.post("/test-data")
-def set_test_data(body: TestDataIn, admin: dict = Depends(require_admin)):
-    """On: the screens show the sample data and nothing is saved (company, users and settings stay the shop's).
-    Off: everything is loaded again from SQL Server."""
-    if not body.on and sqlstore.test_data() and db.configured() and not db.is_db_available():
-        raise HTTPException(409, "Reconnect the database first (About → Reconnect database): switching test data off "
-                                 "loads the live data from it.")
-    sqlstore.use_test_data(body.on)
-    logger.warning("Test data switched %s by %s", "ON" if body.on else "OFF", admin["user"])
-    return about()
-
 
 @router.post("/database/disconnect")
 def disconnect_database(admin: dict = Depends(require_admin)):
@@ -177,13 +159,12 @@ def disconnect_database(admin: dict = Depends(require_admin)):
 
 @router.post("/database/reconnect")
 def reconnect_database(admin: dict = Depends(require_admin)):
-    """Connect again and load the shop's data (in test-data mode only the connection comes back)."""
+    """Connect again and load the shop's data."""
     if not db.configured():
         raise HTTPException(409, "No database is set up")
     if not db.reconnect():
         raise HTTPException(503, "Could not connect to the database. Check that SQL Server is running and try again.")
-    if not sqlstore.test_data():
-        sqlstore.reload()
+    sqlstore.reload()
     logger.warning("Database reconnected by %s", admin["user"])
     return about()
 

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, AlertTriangle, RefreshCw, Wrench } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, type ApiRewriteCheck, type ApiRewriteResult, type ApiStockCheck, type ApiStockTab } from '../../lib/api';
+import { errorText, getRewriteStock, runRewriteStock, type ApiRewriteCheck, type ApiStockCheck, type ApiStockTab } from '../../lib/api';
 import { badge, dangerButton, pageHeader, pageSub, pageTitle, panel, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
 
 const qty = (n: number | undefined) => (n === undefined ? '' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 3 }));
@@ -80,7 +80,7 @@ export default function ReWriteStock() {
   const { confirm, dialog } = useConfirm();
 
   // Resolves true when the check loaded (the popup for a failure is shown here).
-  const load = useCallback(() => api<ApiRewriteCheck>('/tools/rewrite-stock')
+  const load = useCallback(() => getRewriteStock()
     .then(d => { setData(d); return true; })
     .catch(e => { toastStore.add('error', errorText(e)); return false; })
     .finally(() => setLoading(false)), []);
@@ -100,7 +100,7 @@ export default function ReWriteStock() {
     if (!(await toastStore.defer('refresh', 'Stock will be re-written when this closes.', 'Re-Write cancelled. Nothing was changed.'))) return;
     setWriting(true);
     try {
-      const res = await api<ApiRewriteResult>('/tools/rewrite-stock', { method: 'POST' });
+      const res = await runRewriteStock();
       toastStore.add('ok', res.rewritten ? `${res.message} ${res.items_changed ?? 0} item(s) corrected.` : res.message);
       setData(d => (d ? { ...d, web: res.check } : d));
     } catch (e) {

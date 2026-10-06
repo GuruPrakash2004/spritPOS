@@ -18,10 +18,9 @@ import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, seco
 import Toast from '../../common/Toast';
 import { toastStore } from '../../common/toastStore';
 import DropdownMenu, { menuItem } from '../../common/DropdownMenu';
-import { api, errorText, newIdempotencyKey, type ApiDoc, type ApiIndent, type ApiSupplier } from '../../../lib/api';
+import { createMaster, errorText, getNextNumber, getPurchaseIndents, getSuppliers, newIdempotencyKey, savePurchaseBill, type ApiIndent } from '../../../lib/api';
 import { loadStockItems, sellable, STOCK_ITEMS, useStockItems } from '../../../data/stockData';
 import { numberToWords } from '../../../lib/formatters';
-import type { NextNumber } from '../../../data/salesCounters';
 import {
   amt, blankRow, cell, cloneRow, field, headCell, iconButton, infoBar, isFilled,
   money, panel, pctOf, PURCHASE_TYPES, stockRow, today, type Row, type Supplier,
@@ -35,7 +34,7 @@ export default function PurchaseBill() {
   // The backend gives the PB number when the bill is saved; this is its preview (GET /transactions/next-number).
   const [pbDisplay, setPbDisplay] = useState('—');
   const loadNextNo = useCallback(() => {
-    api<NextNumber>('/transactions/next-number?kind=purchase_bill').then(n => setPbDisplay(n.doc_no)).catch(() => setPbDisplay('—'));
+    getNextNumber('purchase_bill').then(n => setPbDisplay(n.doc_no)).catch(() => setPbDisplay('—'));
   }, []);
   useEffect(() => { loadNextNo(); }, [loadNextNo]);
   const [pbDate, setPbDate] = useState(today);
@@ -107,7 +106,7 @@ export default function PurchaseBill() {
 
   // Suppliers come from Supplier Master (address, else city).
   useEffect(() => {
-    api<ApiSupplier[]>('/masters/suppliers')
+    getSuppliers()
       .then(list => setSuppliers(list.filter(x => x.active).map(x => ({
         name: x.name, address: [x.address, x.city].filter(Boolean).join(', '),
       }))))
@@ -125,7 +124,7 @@ export default function PurchaseBill() {
       setSupplierSaving(false);
       return;
     }
-    api('/masters/suppliers', { method: 'POST', body: { code, name, address } })
+    createMaster('suppliers', { code, name, address })
       .then(() => {
         setSuppliers([...suppliers, { name, address }]);
         setSupplier(name);
@@ -208,7 +207,7 @@ export default function PurchaseBill() {
   // Copy From: list saved Purchase Indents and load one's lines into this bill.
   const openCopyFrom = () => {
     setIndents(null);
-    api<ApiIndent[]>('/transactions/purchase-indent')
+    getPurchaseIndents()
       .then(setIndents)
       .catch(e => { setToast({ kind: 'error', text: errorText(e) }); setIndents([]); });
   };
@@ -278,7 +277,7 @@ export default function PurchaseBill() {
       lines: filled.map(r => ({ item_code: r.code, bottles: r.qty, rate: r.rate })),
     };
     if (!(await toastStore.defer('ok', `Purchase Bill for ${supplier} (${filled.length} items) will be saved when this closes.`, 'Save cancelled. The bill is still open.'))) return;
-    api<ApiDoc>('/transactions/purchase-bill', { method: 'POST', idempotencyKey: key, body }).then(doc => {
+    savePurchaseBill(body, key).then(doc => {
       const moved = purchaseType === 'Purchase Return' ? 'returned to the supplier' : 'added to stock';
       setToast({ kind: 'ok', text: `Purchase Bill ${doc.doc_no} saved — ${doc.totals.qty} bottles ${moved}.` });
       loadStockItems().catch(() => undefined);

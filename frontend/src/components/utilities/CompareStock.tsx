@@ -11,7 +11,7 @@ import { useState, type ChangeEvent } from 'react';
 import { FileSpreadsheet, GitCompare, Upload, Warehouse } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { api, errorText, type ApiStockSheet } from '../../lib/api';
+import { errorText, getCurrentStock } from '../../lib/api';
 import { downloadXls } from '../../lib/xlsExport';
 import { compareSheets, guessColumns, readSheet, sheetItems, type Columns, type CompareRow, type Sheet } from '../../lib/stockSheet';
 import { badge, exportButton, field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
@@ -36,7 +36,7 @@ function SidePanel({ title, side, setSide, error, setError }: { title: string; s
   };
   const useWeb = async () => {
     if (!(await toastStore.defer('refresh', "The web app's current stock will be loaded when this closes.", 'Cancelled.'))) return;
-    api<ApiStockSheet>('/utilities/compare-stock/current').then(res => {
+    getCurrentStock().then(res => {
       const sheet: Sheet = {
         name: `Web app stock now (value at ${res.basis})`,
         rows: [['Item Code', 'Item Name', 'Closing Qty', 'Value'], ...res.rows.map(r => [r.code, r.name, String(r.qty), String(r.value)])],

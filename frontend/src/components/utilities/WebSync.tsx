@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { CloudUpload, RefreshCw } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { api, errorText, todayIso, type ApiWebSync } from '../../lib/api';
+import { errorText, getWebSync, runWebSync, todayIso, type ApiWebSync } from '../../lib/api';
 import { badge, field, fieldError, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton } from '../../lib/styles';
 
 const today = todayIso;
@@ -23,7 +23,7 @@ export default function WebSync() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() =>
-    api<ApiWebSync>('/utilities/web-sync').then(s => { setStatus(s); return true; })
+    getWebSync().then(s => { setStatus(s); return true; })
       .catch(e => { toastStore.add('error', errorText(e)); return false; }), []);
 
   useEffect(() => { load(); }, [load]);
@@ -44,7 +44,7 @@ export default function WebSync() {
     if (!(await toastStore.defer('ok', `${day} and the stock will be sent to the central site when this closes.`, 'Sync cancelled. Nothing was sent.'))) return;
     setBusy(true);
     try {
-      setStatus(await api<ApiWebSync>('/utilities/web-sync', { method: 'POST', body }));
+      setStatus(await runWebSync(body));
       toastStore.add('ok', `Sent ${day} and the stock to the central site.`);
     } catch (e) {
       toastStore.add('error', errorText(e));

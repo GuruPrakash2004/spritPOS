@@ -17,7 +17,7 @@ import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { FormErrorSummary } from '../common/FormErrorSummary';
-import { api, errorText, type ApiAdminUser, type ApiRole } from '../../lib/api';
+import { createAdminUser, deleteAdminUser, deleteAdminRole, errorText, getAdminUsers, getRoles, saveAdminRole, updateAdminUser, type ApiAdminUser, type ApiRole } from '../../lib/api';
 import { ADMIN_ROLE } from '../../lib/modules';
 import { badge, label, pageHeader, pageSub, pageTitle, primaryButton, secondaryButton, dangerButton } from '../../lib/styles';
 import { MATRIX_SCREENS, type RoleDraft, draftRights, parseRoleToDraft, toggleActionDraft, toggleGroupDraft, toggleOpenDraft } from './matrixDefs';
@@ -61,8 +61,8 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
   }, []);
 
   const reload = useCallback(() => {
-    api<ApiAdminUser[]>('/admin/users').then(setUsers).catch(fail);
-    api<ApiRole[]>('/admin/roles').then(rList => {
+    getAdminUsers().then(setUsers).catch(fail);
+    getRoles().then(rList => {
       setRoles(rList);
       setRoleName(current => {
         const target = rList.find(r => r.name === current) ?? rList.find(r => r.name === 'Manager') ?? rList[0];
@@ -128,8 +128,8 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     const request = encryptSecret(body.password ?? '', 'user').then(sealed => {
       const sent = { ...body, password: sealed || null };
       return isNew
-        ? api('/admin/users', { method: 'POST', body: sent })
-        : api(`/admin/users/${encodeURIComponent(user)}`, { method: 'PUT', body: sent });
+        ? createAdminUser(sent)
+        : updateAdminUser(user, sent);
     });
     request.then(() => {
       setToast({ kind: 'ok', text: `User ${body.user} saved.` });
@@ -141,7 +141,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
   const deleteUser = async (name: string) => {
     if (!(await confirm(`Delete user ${name}? They will no longer be able to sign in.`))) return;
     if (!(await toastStore.defer('delete', `User ${name} will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
-    api(`/admin/users/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    deleteAdminUser(name)
       .then(() => { setToast({ kind: 'ok', text: `User ${name} deleted.` }); reload(); })
       .catch(fail);
   };
@@ -167,7 +167,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
 
     const body = { name, modules: [...roleDraft.modules], rights: draftRights(roleDraft) };
     if (!(await toastStore.defer('ok', `Rights for ${name} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
-    api(`/admin/roles/${encodeURIComponent(roleName || name)}`, { method: 'PUT', body })
+    saveAdminRole(roleName || name, body)
       .then(() => {
         setToast({ kind: 'ok', text: `Rights for ${name} saved, including Add/Edit/Delete. Signed-in users get the change within a minute.` });
         reload();
@@ -179,7 +179,7 @@ export default function AdminMaster({ currentUser }: { currentUser: string }) {
     if (!roleName) return;
     if (!(await confirm(`Delete role ${roleName}?`))) return;
     if (!(await toastStore.defer('delete', `Role ${roleName} will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
-    api(`/admin/roles/${encodeURIComponent(roleName)}`, { method: 'DELETE' })
+    deleteAdminRole(roleName)
       .then(() => {
         setToast({ kind: 'ok', text: `Role ${roleName} deleted.` });
         const remaining = roles.filter(r => r.name !== roleName);

@@ -2,7 +2,7 @@
 
 The Doc Designer and the desktop Utilities write the screen definitions into the `Utl*` tables; the desktop reads
 them every time it opens a screen, so a change made in the designer shows at once. The web app follows the same
-tables (their `Web_` copies, loaded into memory):
+tables directly (loaded into memory):
 
 - UtlTransactions  one row per document / master screen (DocID, DocShForm "SINV", header/detail table names, ...)
 - UtlOption        the print formats of a document: .rpt file, selection formula, parameters, copies, which one is the
@@ -23,9 +23,6 @@ from . import db, store
 
 logger = logging.getLogger("vlqms.designer")
 
-# Tables copied by refresh(). All are small configuration tables.
-CONFIG_TABLES = ["UtlTransactions", "UtlOption", "UtlOptionEmailDtls", "UtlDocDsgrFlds", "UtlMisc"]
-
 # The desktop's own short forms (UtlTransactions.DocShForm) of the documents the web app prints.
 SHORT_FORMS = {
     "sales_invoice": "SINV", "purchase_bill": "PB", "purchase_indent": "PI", "sales_return": "SR",
@@ -35,7 +32,7 @@ CLICK_ACTIONS = {"P": "preview", "D": "direct", "E": "email", "M": "multi", "": 
 
 
 def _rows(table: str) -> list[dict]:
-    return db.fetchall(f"SELECT * FROM dbo.[Web_{table}]")
+    return db.fetchall(f"SELECT * FROM dbo.[{table}]")
 
 
 def _clean(row: dict) -> dict:
@@ -49,14 +46,14 @@ def _clean(row: dict) -> dict:
 
 
 def load() -> None:
-    """Fill store.UTL_* from the Web_ copies. Missing tables or a down database leave what is there."""
+    """Fill store.UTL_* from the designer's tables. Missing tables or a down database leave what is there."""
     try:
         docs = [_clean(r) for r in _rows("UtlTransactions")]
         options = [_clean(r) for r in _rows("UtlOption")]
         emails = [_clean(r) for r in _rows("UtlOptionEmailDtls")]
         fields = [_clean(r) for r in _rows("UtlDocDsgrFlds")]
         misc = [_clean(r) for r in _rows("UtlMisc")]
-    except Exception as e:   # no database, or the setup has not made these tables yet
+    except Exception as e:   # no database, or it has no designer tables
         logger.warning("Doc Designer settings not loaded: %s", e)
         return
     store.UTL_DOCS.clear()
@@ -72,15 +69,11 @@ def load() -> None:
 
 
 def refresh() -> dict:
-    """Copy the designer's tables again from the legacy ones, then reload. Returns the rows copied per table."""
-    from . import setup_db   # here: setup_db imports this module's neighbours at start-up
-    copied = {}
-    for t in CONFIG_TABLES:
-        source, rows = setup_db.copy_table(t)
-        copied[t] = rows
-        logger.info("Doc Designer table %s: %s rows (source %s)", t, rows, source)
+    """Read the designer's tables again. Returns the rows read per table."""
     load()
-    return copied
+    return {"UtlTransactions": len(store.UTL_DOCS), "UtlOption": len(store.UTL_OPTIONS),
+            "UtlOptionEmailDtls": len(store.UTL_OPTION_EMAILS), "UtlDocDsgrFlds": len(store.UTL_FIELDS),
+            "UtlMisc": 1 if store.UTL_MISC else 0}
 
 
 def doc_for(short_form: str) -> dict | None:

@@ -21,7 +21,7 @@ export function numberToWords(amount: number): string {
   return `${words}${paisa ? ` and ${indianNumberToWords(paisa).trim()} Paise` : ''} Only`;
 }
 
-/** "01/04/2026 - 31/03/2027" from a financial year's ISO dates (Web_MstCompFinYear); '' when unknown. */
+/** "01/04/2026 - 31/03/2027" from a financial year's ISO dates (MstCompFinYear); '' when unknown. */
 export const finYearLabel = (start?: string, end?: string) => {
   const dmy = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
   return start && end ? `${dmy(start)} - ${dmy(end)}` : '';

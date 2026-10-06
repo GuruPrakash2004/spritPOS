@@ -1,5 +1,5 @@
-"""The tests' data: app/sample_data.py with the demo logins and the sample company (conftest.py installs it)."""
-from app import sample_data
+"""The tests' data: tests/sample_data.py with the demo logins and the sample company (conftest.py installs it)."""
+import sample_data
 
 
 def install() -> None:

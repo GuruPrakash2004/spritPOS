@@ -20,7 +20,8 @@ const dsr: CentralDsr = {
 
 vi.mock('../lib/api', async importOriginal => ({
   ...(await importOriginal<typeof import('../lib/api')>()),
-  api: vi.fn(async () => dsr),
+  centralDsr: vi.fn(async () => dsr),
+  centralLogin: vi.fn(),
 }))
 
 beforeEach(() => { vi.spyOn(toastStore, 'defer').mockResolvedValue(true) })
@@ -28,13 +29,13 @@ afterEach(() => vi.clearAllMocks())
 
 describe('CentralLogin', () => {
   it('shows missing fields inline and sends nothing', async () => {
-    const { api } = await import('../lib/api')
+    const { centralLogin } = await import('../lib/api')
     const user = userEvent.setup()
     render(<CentralLogin onSignedIn={() => {}} />)
     await user.click(screen.getByRole('button', { name: /sign in/i }))
     expect(screen.getByText('Enter your user name')).toBeInTheDocument()
     expect(screen.getByText('Enter your password')).toBeInTheDocument()
-    expect(api).not.toHaveBeenCalled()
+    expect(centralLogin).not.toHaveBeenCalled()
   })
 })
 

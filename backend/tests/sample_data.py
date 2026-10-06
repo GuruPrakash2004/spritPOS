@@ -1,17 +1,14 @@
-"""Sample (dummy) data: only for testing. The app itself loads everything from the shop's SQL Server
-(app/db_store.py). It is used in two places:
-- the "Test data" switch in the header (Administrator only, sqlstore.use_test_data()): install() swaps the shop's
-  business data (items, customers, bills, stock, ...) for this, keeping the real company, users and settings;
-  nothing done then is saved, and switching back reloads the live data;
-- the pytest suite (tests/conftest.py): install(with_users=True, with_company=True), which also brings the demo
-  logins ADMIN/admin (Administrator), GURU/guru (Manager), PRADEEP/pradeep and RAVI/ravi (Cashier).
+"""Sample (dummy) data: only for the pytest suite (tests/seed.py installs it through tests/conftest.py). The app itself
+never uses it: it loads everything from the shop's SQL Server (app/db_store.py). install(with_users=True,
+with_company=True) also brings the demo logins ADMIN/admin (Administrator), GURU/guru (Manager), PRADEEP/pradeep and
+RAVI/ravi (Cashier).
 """
 import copy
 from datetime import date
 
-from . import store
-from .passwords import hash_password
-from .store import DOCS, ITEMS, _seq, move_stock
+from app import store
+from app.passwords import hash_password
+from app.store import DOCS, ITEMS, _seq, move_stock
 
 _COMPANY = {
     "name": "THE LIQUOR HOUSE",

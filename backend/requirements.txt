@@ -6,3 +6,4 @@ cryptography>=42      # RSA-OAEP for passwords sent from the UI, AES-GCM for sto
 pyodbc>=5.0; sys_platform != "darwin"
 certifi>=2024.2.2   # CA certificates for SMTP TLS (app/mailer.py)
 httpx>=0.28         # Web Sync pushes to the central site (app/websync.py)
+pymupdf>=1.24   # trims the report PDF to its drawn area for the on-screen print preview (app/rpt_bridge.py)

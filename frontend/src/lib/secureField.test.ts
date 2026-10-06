@@ -27,7 +27,7 @@ describe('encryptSecret', () => {
     // Stamped on the server's clock (here an hour ahead of this PC), not the PC's.
     expect(Math.abs(plain.t - (Date.now() + 3_600_000))).toBeLessThan(5000)
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0]).toEqual(['/api/auth/transport-key'])
+    expect((fetchMock.mock.calls[0] as unknown[])[0]).toBe('/api/auth/transport-key')
   })
 
   it('leaves an empty password empty (keep the current one)', async () => {

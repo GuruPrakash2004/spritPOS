@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, type ApiFieldRights, type ApiFieldRightsAdmin, type ApiRole } from '../../lib/api';
+import { errorText, getFieldRights, saveFieldRights, type ApiFieldRights, type ApiFieldRightsAdmin, type ApiRole } from '../../lib/api';
 import { ADMIN_ROLE } from '../../lib/modules';
 import { field, label, panel, primaryButton, tableBody, tableHead } from '../../lib/styles';
 
@@ -25,7 +25,7 @@ export default function FieldRightsTab({ roles }: { roles: ApiRole[] }) {
   const [master, setMaster] = useState('items');
   const [draft, setDraft] = useState<ApiFieldRights | null>(null);
 
-  const load = useCallback(() => api<ApiFieldRightsAdmin>('/admin/field-rights')
+  const load = useCallback(() => getFieldRights()
     .then(d => { setData(d); setDraft(null); })
     .catch(e => toastStore.add('error', errorText(e))), []);
   useEffect(() => { load(); }, [load]);
@@ -42,7 +42,7 @@ export default function FieldRightsTab({ roles }: { roles: ApiRole[] }) {
     if (!role) return;
     const body = { masters: current };
     if (!(await toastStore.defer('ok', `Field rights for ${role} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
-    api(`/admin/field-rights/${encodeURIComponent(role)}`, { method: 'PUT', body })
+    saveFieldRights(role, body)
       .then(() => { toastStore.add('ok', `Field rights for ${role} saved. They apply the next time its users open a master.`); load(); })
       .catch(e => toastStore.add('error', errorText(e)));
   };

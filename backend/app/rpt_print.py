@@ -13,8 +13,9 @@ The desktop's frmUtlReportViewer.ShowRptFileFromUtlOptions / PrintInvCrpt (read 
 A document with no print option in the designer falls back to PrintInvCrpt: FMTSINV.rpt (or the .rpt the user picked
 from the FMTSINV*.rpt files), `{TRNHDRSInv.SInvID} = <id>` and the company parameters.
 
-Documents made through the web app live in the Web_ tables, so the bridge points the report's tables there
-(rpt_bridge.table_prefix); the selection formula and the report's own fields are used unchanged.
+Documents made through the web app are in the desktop's own tables, so the reports read them as they are
+(rpt_bridge.table_prefix is empty unless RPT_TABLE_PREFIX says otherwise); the selection formula and the report's
+own fields are used unchanged.
 """
 import re
 
@@ -43,14 +44,14 @@ def selection_for(short_form: str) -> str:
 
 
 def document_id(kind: str, doc_no: str) -> int:
-    """The saved document's ID in Web_TrnHdr<short form> (the report selects by it)."""
+    """The saved document's ID in TrnHdr<short form> (the report selects by it)."""
     sh = designer.SHORT_FORMS.get(kind)
     if not sh:
         raise HTTPException(422, f"'{kind}' has no print format")
     if not sqlstore.enabled():
-        raise HTTPException(409, "Nothing is saved to the database right now (Test data is on, or the database is "
-                                 "offline), so there is no saved document for Crystal Reports to print.")
-    rows = db.fetchall(f"SELECT [{sh}ID] AS id FROM dbo.[Web_TrnHdr{sh}] WHERE [{sh}NO] = ?", (doc_no,))
+        raise HTTPException(409, "Nothing is saved to the database right now (it is offline), so there is no saved "
+                                 "document for Crystal Reports to print.")
+    rows = db.fetchall(f"SELECT [{sh}ID] AS id FROM dbo.[TrnHdr{sh}] WHERE [{sh}NO] = ?", (doc_no,))
     if not rows:
         raise HTTPException(404, f"{doc_no} is not in the database yet.")
     return int(rows[0]["id"])

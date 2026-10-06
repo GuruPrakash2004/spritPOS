@@ -8,7 +8,7 @@ import { Download, Edit3, Eye, FileSpreadsheet, ImagePlus, Save, Trash2, Upload 
 import Modal from '../common/Modal';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
-import { api, errorText } from '../../lib/api';
+import { companyFileUrl, deleteCompanyFile, errorText, listCompanyFiles, updateCompanyFile, uploadCompanyFile } from '../../lib/api';
 import { downloadText, toCsv } from '../../lib/csv';
 import {  field, label, primaryButton, secondaryButton, tableBody, tableHead , exportButton } from '../../lib/styles';
 
@@ -23,7 +23,7 @@ const IMAGE_ACCEPT = '.jpg,.jpeg,.png,.webp,.gif';
 const DOC_ACCEPT = '.pdf,.xlsx,.xls,.docx,.doc,.csv,.txt,.jpg,.jpeg,.png,.webp';
 const DOC_GROUPS = ['Excise', 'Taxation', 'KSBCL', 'Licence', 'Bank', 'Other'];
 
-const contentUrl = (f: CompanyFile, download = false) => `/api/company/files/${f.id}/content${download ? '?download=true' : ''}`;
+const contentUrl = (f: CompanyFile, download = false) => companyFileUrl(f.id, download);
 const sizeText = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
 // The API takes base64 JSON, so read the file as a data URL and keep only the payload.
@@ -48,7 +48,7 @@ function useCompanyFiles(kind: 'image' | 'document') {
   }, [toast]);
 
   const reload = useCallback(() => {
-    api<CompanyFile[]>(`/company/files?kind=${kind}`).then(setFiles).catch(e => { setFiles([]); setToast({ kind: 'error', text: errorText(e) }); });
+    listCompanyFiles<CompanyFile>(kind).then(setFiles).catch(e => { setFiles([]); setToast({ kind: 'error', text: errorText(e) }); });
   }, [kind]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -58,11 +58,11 @@ function useCompanyFiles(kind: 'image' | 'document') {
     const what = d.editing ? `Details of ${d.editing.file_name} will be saved` : `${d.file?.name ?? 'The file'} will be uploaded`;
     if (!(await toastStore.defer('ok', `${what} when this closes.`, d.editing ? 'Save cancelled. Nothing was changed.' : 'Upload cancelled.'))) return;
     if (d.editing) {
-      await api(`/company/files/${d.editing.id}`, { method: 'PUT', body: { title: d.title, group: d.group, remarks: d.remarks, show_on_pos: d.show_on_pos } });
+      await updateCompanyFile(d.editing.id, { title: d.title, group: d.group, remarks: d.remarks, show_on_pos: d.show_on_pos });
       setToast({ kind: 'ok', text: 'Details updated.' });
     } else if (d.file) {
       if (d.file.size > MAX_MB * 1024 * 1024) throw new Error(`File is larger than ${MAX_MB} MB.`);
-      await api('/company/files', { method: 'POST', body: { kind, file_name: d.file.name, data: await toBase64(d.file), title: d.title, group: d.group, remarks: d.remarks } });
+      await uploadCompanyFile({ kind, file_name: d.file.name, data: await toBase64(d.file), title: d.title, group: d.group, remarks: d.remarks });
       setToast({ kind: 'ok', text: `${d.file.name} uploaded.` });
     }
     reload();
@@ -71,7 +71,7 @@ function useCompanyFiles(kind: 'image' | 'document') {
   const remove = async (f: CompanyFile) => {
     if (!(await confirm(`Delete ${f.file_name}? This cannot be undone.`))) return;
     if (!(await toastStore.defer('delete', `${f.file_name} will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
-    api(`/company/files/${f.id}`, { method: 'DELETE' })
+    deleteCompanyFile(f.id)
       .then(() => { setToast({ kind: 'ok', text: `${f.file_name} deleted.` }); reload(); })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };

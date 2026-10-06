@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FileSpreadsheet, Search } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { api, errorText, type ApiAuditRow } from '../../lib/api';
+import { errorText, getAuditLog, getAuditScreens, type ApiAuditRow } from '../../lib/api';
 import { downloadXls } from '../../lib/xlsExport';
 import { exportButton, field, fieldError, label, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead } from '../../lib/styles';
 
@@ -26,13 +26,13 @@ export default function AdminAuditLog() {
   const [dateError, setDateError] = useState('');
 
   const load = useCallback((scr: string, f: string, t: string) =>
-    api<ApiAuditRow[]>(`/utilities/audit?${new URLSearchParams({ from_date: f, to_date: t, ...(scr ? { screen: scr } : {}) })}`)
+    getAuditLog({ from_date: f, to_date: t, ...(scr ? { screen: scr } : {}) })
       .then(r => { setRows(r); return true; })
       .catch(e => { toastStore.add('error', errorText(e)); return false; })
       .finally(() => setLoading(false)), []);
 
   useEffect(() => {
-    api<string[]>('/utilities/audit/screens').then(setScreens).catch(() => undefined);
+    getAuditScreens().then(setScreens).catch(() => undefined);
     load('', weekAgo(), iso(new Date()));
   }, [load]);
 

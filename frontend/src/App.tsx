@@ -14,9 +14,8 @@ import { useEffect, useState } from 'react';
 import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard, KeyRound } from 'lucide-react';
 import ChangePasswordDialog from './components/auth/ChangePasswordDialog';
 import KeyboardShortcutsModal from './components/common/KeyboardShortcutsModal';
-import DataModeToggle from './components/layout/DataModeToggle';
 import AdminMaster from './components/admin/AdminMaster';
-import { api, getAuthToken, requestTokenFromOtherTabs, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
+import { getAuthToken, getDsr, getMe, requestTokenFromOtherTabs, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
 import { ADMIN_MASTER, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
 import { moduleForPath, pathForModule } from './lib/routes';
 import { iconButton, primaryButton } from './lib/styles';
@@ -104,7 +103,7 @@ export default function App() {
     token.then(t => {
       if (t) setAuthUser('', '', t);
       if (!getAuthToken()) { setRestoring(false); return; }
-      return api<ApiUser>('/auth/me')
+      return getMe()
       .then(me => {
         setAuthUser(me.user, me.role);
         setAuthRights(me.modules, me.rights);
@@ -122,14 +121,14 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     const check = () => {
-      api<ApiUser>('/auth/me')
+      getMe()
         .then(me => {
           setAuthRights(me.modules, me.rights);
           setFieldRights(me.field_rights);
           setSession(s => (s && (s.user.role !== me.role || s.user.modules.join() !== me.modules.join()
             || JSON.stringify(s.user.rights ?? {}) !== JSON.stringify(me.rights ?? {})
-            || !!s.user.must_change_password !== !!me.must_change_password || s.user.data_mode !== me.data_mode)
-            ? { ...s, user: { ...s.user, role: me.role, modules: me.modules, rights: me.rights, must_change_password: me.must_change_password, data_mode: me.data_mode } } : s));
+            || !!s.user.must_change_password !== !!me.must_change_password)
+            ? { ...s, user: { ...s.user, role: me.role, modules: me.modules, rights: me.rights, must_change_password: me.must_change_password } } : s));
         })
         .catch(() => undefined);   // offline: try again next time; a 401 is handled by the session handler
     };
@@ -143,7 +142,7 @@ export default function App() {
   // screen changes. The DSR needs a login token, so nothing is fetched on the sign-in page.
   useEffect(() => {
     if (!session) return;
-    api<ApiDsr>(`/reports/dsr?on=${todayIso()}`).then(setDsr).catch(() => setDsr(null));
+    getDsr(todayIso()).then(setDsr).catch(() => setDsr(null));
   }, [session, activeTab, billOpen]);
 
   // Dialogs and toasts are portalled to <body>, so the theme class lives on <html> as well.
@@ -199,7 +198,7 @@ export default function App() {
     if (activeTab === ADMIN_MASTER) return <AdminMaster currentUser={session?.user.user ?? ''} />;
     if (REPORTS[activeTab]) return <ApiReport name={activeTab} />;
     switch (activeTab) {
-      case 'Dashboard': return <Dashboard dataMode={session?.user.data_mode} />;
+      case 'Dashboard': return <Dashboard />;
       case 'Company Master': return <CompanyMaster canEditFiles={session?.user.role === ADMIN_ROLE} />;
       case 'Item Master': return <ItemMaster />;
       case 'Item Group Master': return <ItemGroupMaster />;
@@ -305,7 +304,6 @@ export default function App() {
               <Keyboard size={15} className="text-[#64283A] dark:text-[#D4A847]" />
               <span className="hidden sm:inline">Shortcuts</span>
             </button>
-            <DataModeToggle mode={user.data_mode} isAdmin={user.role === ADMIN_ROLE} />
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">

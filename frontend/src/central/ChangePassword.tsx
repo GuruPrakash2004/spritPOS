@@ -6,7 +6,7 @@ import { KeyRound } from 'lucide-react';
 import { TextField } from '../components/common/FormField';
 import { FormErrorSummary } from '../components/common/FormErrorSummary';
 import { toastStore } from '../components/common/toastStore';
-import { api, errorText } from '../lib/api';
+import { centralChangePassword, errorText } from '../lib/api';
 import { encryptSecret } from '../lib/secureField';
 import { panel, primaryButton, secondaryButton } from '../lib/styles';
 import type { CentralSession } from './types';
@@ -41,7 +41,7 @@ export default function ChangePassword({ user, temporary, onChanged, onCancel }:
     setBusy(true);
     try {
       const body = { current_password: await encryptSecret(values.current, 'current'), new_password: await encryptSecret(values.next, 'new') };
-      const session = await api<CentralSession>('/auth/change-password', { method: 'POST', body });
+      const session = await centralChangePassword<CentralSession>(body);
       toastStore.add('ok', 'Password changed.');
       onChanged(session);
     } catch (err) {

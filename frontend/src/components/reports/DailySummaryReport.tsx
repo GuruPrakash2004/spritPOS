@@ -5,9 +5,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Printer, RefreshCw } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, qs, todayIso, type ApiFullDsr } from '../../lib/api';
+import { errorText, getDsr, getDsrFormats, renderDsrPrint, todayIso, type ApiFullDsr } from '../../lib/api';
+import ReportPrintModal from '../print/ReportPrintModal';
 import {  field, money, pageSub, pageTitle, panel, secondaryButton, pageHeader , printButton } from '../../lib/styles';
-import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
 // Legacy frmRptDailySummary; fields follow Docs/WebDash.xlsx.
 export default function DailySummaryReport() {
@@ -15,15 +15,23 @@ export default function DailySummaryReport() {
   const [dsr, setDsr] = useState<ApiFullDsr | null>(null);
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [formats, setFormats] = useState<string[]>([]);
+  const [showPrint, setShowPrint] = useState(false);
 
   const load = useCallback(() => {
-    return api<ApiFullDsr>(`/reports/dsr${qs({ on })}`)
+    return getDsr(on)
       .then(d => { setDsr(d); setLoadedAt(new Date()); return true; })
       .catch(e => { toastStore.add('error', errorText(e)); return false; });
   }, [on]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Stable between renders, so the modal's preview is asked for once per format.
+  const renderOn = useCallback((rpt: string, printer?: string) => renderDsrPrint(on, rpt, printer), [on]);
+
+  useEffect(() => {
+    getDsrFormats().then(r => setFormats(r.formats)).catch(() => { /* printing says why */ });
+  }, []);
 
   // Every press fetches the report again and says so. The popup goes to toastStore directly: a <Toast>
   // with the same text as last time would not show again, so a second Refresh looked like it did nothing.
@@ -74,7 +82,7 @@ export default function DailySummaryReport() {
         <div className="flex items-end gap-2 print:hidden">
           <input type="date" value={on} onChange={e => setOn(e.target.value)} className={`${field} tabular-nums`} aria-label="Report date" />
           <button onClick={handleRefresh} disabled={refreshing} className={secondaryButton}><RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
-          <button onClick={() => setShowPrintModal(true)} disabled={!dsr?.total_bills} title={dsr?.total_bills ? undefined : 'No bills on this day: nothing to print'} className={printButton}><Printer size={14} />Print</button>
+          <button onClick={() => setShowPrint(true)} disabled={!dsr?.total_bills} title={dsr?.total_bills ? undefined : 'No bills on this day: nothing to print'} className={printButton}><Printer size={14} />Print</button>
         </div>
       </div>
 
@@ -112,12 +120,12 @@ export default function DailySummaryReport() {
         )}
       </div>
 
-      {showPrintModal && dsr && (
-        <PrintFormatSelectorModal
-          category="DSR"
-          data={dsr}
+      {showPrint && (
+        <ReportPrintModal
           title={`Daily Summary Report (${on})`}
-          onClose={() => setShowPrintModal(false)}
+          formats={formats}
+          render={renderOn}
+          onClose={() => setShowPrint(false)}
         />
       )}
     </div>

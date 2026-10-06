@@ -13,7 +13,7 @@ import { TextField } from '../common/FormField';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
-import { api, errorText, type ApiCompany } from '../../lib/api';
+import { errorText, getCompany, saveCompany, type ApiCompany } from '../../lib/api';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
 import ShopPlacePicker, { type PickedPlace } from './ShopPlacePicker';
 import { badge, field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
@@ -68,7 +68,7 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
   };
 
   useEffect(() => {
-    api<ApiCompany>('/masters/company')
+    getCompany()
       .then(profile => {
         setCompanyProfile(profile);
         setCompanyName(profile.name);
@@ -95,10 +95,7 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
     setErrors({});
     if (!(await toastStore.defer('ok', 'Company profile will be saved when this closes.', 'Save cancelled. Nothing was changed.'))) return;
     try {
-      const profile = await api<ApiCompany>('/masters/company', {
-        method: 'PUT',
-        body: { ...companyProfile, name: companyName.trim(), email: email.trim(), address: address.trim(), place_id: placeId },
-      });
+      const profile = await saveCompany({ ...companyProfile, name: companyName.trim(), email: email.trim(), address: address.trim(), place_id: placeId });
       setCompanyProfile(profile);
       setCompanyName(profile.name);
       setEmail(profile.email);

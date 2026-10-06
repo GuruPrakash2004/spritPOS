@@ -13,7 +13,7 @@ import {
   ArrowUpRight, ArrowDownRight,
   Package, Receipt, TrendingUp, Truck, Wine,
 } from 'lucide-react';
-import { api, fieldRight, qs, todayIso, type DataMode, type ApiDailySale, type ApiFullDsr, type ApiIndent, type ApiItemFull, type ApiRestockRow, type ApiStockMovement } from '../../lib/api';
+import { companyFileUrl, fieldRight, getDailySales, getDsr, getItems, getPurchaseIndents, getRestock, getStockMovement, listCompanyFiles, todayIso, type ApiDailySale, type ApiFullDsr, type ApiIndent, type ApiItemFull, type ApiRestockRow, type ApiStockMovement } from '../../lib/api';
 import { money, panel } from '../../lib/styles';
 import { IMAGES } from '../../constants/images';
 import RestockCarousel from './RestockCarousel';
@@ -37,7 +37,7 @@ const LiveBadge = ({ live }: { live: boolean }) => (
 // A panel is left out when the role's Field Level Rights hide it (Admin Master → Field rights → Dashboard).
 const shown = (panel: string) => fieldRight('dashboard', panel) !== 'hidden';
 
-export const Dashboard = ({ dataMode }: { dataMode?: DataMode }) => {
+export const Dashboard = () => {
   const { company, isOnline } = useCompanyProfile();
   const hours = useShopHours();   // Open / Closed from Google Maps, next to the Live chip
   const [dsr, setDsr] = useState<ApiFullDsr | null>(null);
@@ -49,12 +49,12 @@ export const Dashboard = ({ dataMode }: { dataMode?: DataMode }) => {
   const [storeImage, setStoreImage] = useState<string>(IMAGES.dashboard.store);
 
   useEffect(() => {
-    const loadDsr = () => api<ApiFullDsr>(`/reports/dsr${qs({ on: todayIso() })}`).then(setDsr).catch(() => setDsr(null));
-    const loadIndents = () => api<ApiIndent[]>('/transactions/purchase-indent').then(setIndents).catch(() => setIndents(null));
+    const loadDsr = () => getDsr(todayIso()).then(setDsr).catch(() => setDsr(null));
+    const loadIndents = () => getPurchaseIndents().then(setIndents).catch(() => setIndents(null));
     const loadItems = () => {
-      api<ApiItemFull[]>('/masters/items').then(setItems).catch(() => setItems(null));
+      getItems().then(setItems).catch(() => setItems(null));
       if (shown('restock')) {
-        api<ApiRestockRow[]>(`/reports/restock${qs({ days: RESTOCK_DAYS, limit: 10 })}`)
+        getRestock(RESTOCK_DAYS, 10)
           .then(setRestockRows)
           .catch(() => setRestockRows(null));
       }
@@ -63,11 +63,11 @@ export const Dashboard = ({ dataMode }: { dataMode?: DataMode }) => {
       const now = new Date();
       const from = new Date(now);
       from.setDate(now.getDate() - 6);
-      api<ApiDailySale[]>(`/reports/sales/daily${qs({ from_date: from.toISOString().slice(0, 10), to_date: now.toISOString().slice(0, 10) })}`)
+      getDailySales(from.toISOString().slice(0, 10), now.toISOString().slice(0, 10))
         .then(setDailySales)
         .catch(() => setDailySales(null));
     };
-    const loadStockMovement = () => api<ApiStockMovement>(`/reports/stock-movement${qs({ on: todayIso() })}`)
+    const loadStockMovement = () => getStockMovement(todayIso())
       .then(setStockMovement)
       .catch(() => setStockMovement(null));
 
@@ -86,10 +86,10 @@ export const Dashboard = ({ dataMode }: { dataMode?: DataMode }) => {
     window.addEventListener('focus', handleFocus);
     const itemInterval = setInterval(loadItems, 8000);
     const dashboardInterval = setInterval(loadDashboardData, 10000);
-    api<Array<{ id: string; kind: string }>>('/company/files?kind=image')
+    listCompanyFiles<{ id: string; kind: string }>('image')
       .then(files => {
         const first = files.find(f => f.kind === 'image');
-        if (first) setStoreImage("/api/company/files/" + first.id + "/content");
+        if (first) setStoreImage(companyFileUrl(first.id));
       })
       .catch(() => {});
 
@@ -404,7 +404,7 @@ export const Dashboard = ({ dataMode }: { dataMode?: DataMode }) => {
                   : 'bg-rose-500/20 border-rose-500/30 text-rose-300'
               }`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                {isOnline === false ? 'Server offline' : isOnline === null ? 'Connecting…' : dataMode === 'test' ? 'Test data' : 'Live data'}
+                {isOnline === false ? 'Server offline' : isOnline === null ? 'Connecting…' : 'Live data'}
               </span>
               {hours && (
                 <a href={hours.maps_url || undefined} target="_blank" rel="noreferrer noopener"

@@ -7,7 +7,7 @@ import { useState, type FormEvent } from 'react';
 import Modal from '../common/Modal';
 import { TextField } from '../common/FormField';
 import { toast } from '../common/toastStore';
-import { api, errorText } from '../../lib/api';
+import { emailCustomReport, errorText } from '../../lib/api';
 import { primaryButton, secondaryButton } from '../../lib/styles';
 
 export type ReportEmailRequest = {
@@ -46,7 +46,7 @@ export default function ReportEmailDialog({ request, defaultTo, onClose }: {
       setSending(false);
       return;
     }
-    api<{ sent_to: string[]; rows: number }>('/reports/custom/email', { method: 'POST', body: { ...request, to: list, message } })
+    emailCustomReport({ ...request, to: list, message })
       .then(res => {
         toast.ok(`${request.name} (${res.rows} rows) emailed to ${res.sent_to.join(', ')}`);
         onClose();

@@ -1,23 +1,23 @@
-"""Saves the web app's data in SQL Server's Web_ tables (one database, no SQLite), and loads it at startup.
+"""Saves the web app's data in the shop's own SQL Server database (the desktop vLQMS database: no copy, no
+SQLite), and loads it at startup.
 
 After every successful POST/PUT/DELETE (write middleware, main.py) save() writes what the request changed, in
 ONE SQL transaction; if that fails the request answers 503 and the in-memory store is reloaded from SQL
 Server (reload()), so memory never keeps a change the database doesn't have.
 
 What is written, compared with what was saved last (only rows that changed):
-- master rows the app changed (store.touch): the legacy-format row (Web_MstITEM, Web_MstCUST, Web_MstSUPP,
-  Web_MstITEMGROUP, Web_MstBrand, Web_MstUOM, Web_MstPKG, Web_MstUser; LEGACY_MASTERS) and the whole web row
-  (Web_AppRow: fields with no desktop column, e.g. password hashes; other masters live only there);
+- master rows the app changed (store.touch): the desktop's own row (MstITEM, MstCUST, MstSUPP, MstITEMGROUP,
+  MstBrand, MstUOM, MstPKG, MstUser, ...; LEGACY_MASTERS) and the whole web row (Web_AppRow: fields with no
+  desktop column, e.g. password hashes; other masters live only there);
 - documents made in the app (store.DOCS without "origin"): the whole document (Web_AppDoc), and saved
-  sales invoices / purchase bills also in legacy format (Web_TrnHdrSINV/Web_TrnDtlSINV,
-  Web_TrnHdrPB/Web_TrnDtlPB; cancel and remove set Cancelled / IsDelete);
-- stock movements the app made: Web_AppMove (the web's ledger) and a Web_UtlStockList row each, whose
-  trigger keeps Web_TrnQOH (a sale cancel deletes that bill's rows instead, as the desktop app does);
+  sales invoices / purchase bills also as the desktop's own rows (TrnHdrSINV/TrnDtlSINV, TrnHdrPB/TrnDtlPB;
+  cancel and remove set Cancelled / IsDelete);
+- stock movements the app made: Web_AppMove (the web's ledger) and a UtlStockList row each, whose
+  trigger keeps TrnQOH (a sale cancel deletes that bill's rows instead, as the desktop app does);
 - settings and other web state (Global Settings, rights, number series, ...): Web_AppSetting;
-- the ADMIN Audit Log: Web_UtlAdmAudit / Web_UtlAdmAuditItem (the desktop's own audit tables, copied);
+- the ADMIN Audit Log: UtlAdmAudit / UtlAdmAuditItem (the desktop's own audit tables);
   Tools runs: Web_ToolAudit.
-The first save also marks the database as used by the web app (setup_db.FIRST_WEB_WRITE), so the one-time
-copy of the old data can't overwrite it.
+Only the five Web_ tables are the web app's own (migrations/web_app_tables.sql, created by the Database setup).
 
 Without a database (tests, development away from the office) nothing is saved; the audit logs are kept in
 memory for this process only.
@@ -37,16 +37,16 @@ logger = logging.getLogger("vlqms.sqlstore")
 # Tables whose rows the app can change (store.touch). COMPANY is a single dict (key "*").
 TABLES = ("ITEMS", "ITEM_GROUPS", "UOMS", "PACKAGES", "BRANDS", "SUPPLIERS", "CUSTOMERS", "LEDGER_GROUPS",
           "LEDGERS", "COUNTERS", "SALES_PERSONS", "USERS", "ROLES", "ROLE_RIGHTS")
-# Never written: a desktop user's reversible password is re-read from Web_MstUser instead.
+# Never written: a desktop user's reversible password is re-read from MstUser instead.
 SECRET_FIELDS = ("legacy_password", "default_password")
 # Web state saved whole in Web_AppSetting (Section "state"), by name.
 SECTIONS = ("settings", "gsettings", "denominations", "seq", "security", "field_rights", "master_approval",
             "report_rights", "doc_settings", "number_series", "menu_layout", "import_fields", "merged_items",
-            "merged_item_ids", "company")
+            "merged_item_ids", "company", "print_prefs")
 MIRRORED_DOCS = ("sales_invoice", "purchase_bill")
 MOVE_DOCTYPE = {"sale": "INV", "purchase": "PB", "opening": "OP", "sales-return": "SR", "deduction": "STKDED"}
 LOCID = 1
-WEB_ROW = "WEB:"          # Particulars prefix of the Web_UtlStockList rows the web app wrote
+WEB_ROW = "WEB:"          # Particulars prefix of the UtlStockList rows the web app wrote
 # Codes and document numbers are never cut to fit a column (a cut number would point at another row).
 NO_CUT = {"sinvno", "pbno", "docno", "itemcode", "custcode", "suppcode", "itemgroupcode", "brandcode", "uomcode",
           "pkgname", "pkgcode", "usercode", "rowkey", "ledcode", "ledgroupcode", "sccode", "spcode", "scid"}
@@ -71,66 +71,8 @@ class SaveFailed(Exception):
 
 
 def enabled() -> bool:
-    """The shop's data is loaded and every change is saved to SQL Server (not in test-data mode)."""
-    return _active and db.is_db_available() and not _test_data
-
-
-# ─── Test data (the header's switch, Administrator only) ──────────────────────
-# While on, the business data is the sample data (app/sample_data.py) and nothing is saved; the company, users,
-# roles and settings stay the shop's own. Switching off reloads everything from SQL Server. Not kept over a restart.
-_test_data = False
-_live_seq: dict[str, int] = {}
-# Kept as they are when the sample data goes in: who may sign in and do what, and the shop's own settings.
-KEEP_IN_TEST = ("COMPANY", "FIN_YEARS", "USERS", "ROLES", "ROLE_RIGHTS", "FIELD_RIGHTS", "SECURITY", "MASTER_APPROVAL",
-                "REPORT_RIGHTS", "SETTINGS", "GSETTINGS", "DOC_SETTINGS", "NUMBER_SERIES", "MENU_LAYOUT",
-                "IMPORT_FIELDS")
-
-
-def test_data() -> bool:
-    return _test_data
-
-
-def data_mode() -> str:
-    """What the screens show: "test" (sample data), "live" (the shop's SQL Server) or "none" (nothing loaded)."""
-    return "test" if _test_data else "live" if enabled() else "none"
-
-
-def use_test_data(on: bool) -> None:
-    """Switch between the sample data and the shop's live data."""
-    global _test_data
-    from . import sample_data, websync
-    with websync._sync_lock, _lock:   # a Web Sync round in progress finishes first (it never reads the swap)
-        if on == _test_data:
-            return
-        if on:
-            kept = {name: copy.deepcopy(getattr(store, name)) for name in KEEP_IN_TEST}
-            _live_seq.clear()
-            _live_seq.update({k: s.value for k, s in store._seq.items()})
-            _test_data = True
-            _restore_defaults()
-            for name, value in kept.items():
-                current = getattr(store, name)
-                if isinstance(current, dict):
-                    current.clear()
-                    current.update(value)
-                else:
-                    current[:] = value
-            store.set_fin_year()
-            sample_data.install()
-            store.EDITS.clear()
-            store.AUDIT_OUT.clear()
-            store.IDEMPOTENT.clear()
-            logger.warning("Test data ON: the screens show sample data, nothing is saved")
-        else:
-            _test_data = False
-            for kind, value in _live_seq.items():   # numbers used on sample bills don't count
-                store._seq.setdefault(kind, store.Seq(value)).value = value
-            for kind in [k for k in store._seq if k not in _live_seq]:
-                store._seq[kind].value = 1
-            store.IDEMPOTENT.clear()
-            if db.configured():
-                reload()
-            logger.warning("Test data OFF: back to the shop's live data")
+    """The shop's data is loaded and every change is saved to SQL Server."""
+    return _active and db.is_db_available()
 
 
 def _now() -> str:
@@ -235,60 +177,71 @@ def _lookup(cur, table: str, id_col: str, value, *cols: str):
 def _item_values(cur, r: dict) -> dict:
     return {
         "ITEMNAME": r.get("name", ""), "ShortName": r.get("short_name") or r.get("name", ""), "HSNCode": r.get("hsn_code") or "",
-        "ITEMGroupID": _lookup(cur, "Web_MstITEMGROUP", "ITEMGROUPID", r.get("group"), "ITEMGROUPCODE", "ITEMGROUPNAME"),
+        "ITEMGroupID": _lookup(cur, "MstITEMGROUP", "ITEMGROUPID", r.get("group"), "ITEMGROUPCODE", "ITEMGROUPNAME"),
         "LiqType": r.get("liqtype") or "",
-        "UOMID": _lookup(cur, "Web_MstUOM", "UOMID", r.get("uom"), "UOMCODE", "UOMNAME"),
-        "PKGID": _lookup(cur, "Web_MstPKG", "PKGID", r.get("package"), "PKGCODE", "PKGNAME") or None,
-        "BrandID": _lookup(cur, "Web_MstBrand", "BRANDID", r.get("brand"), "BRANDCODE", "BRANDNAME"),
+        "UOMID": _lookup(cur, "MstUOM", "UOMID", r.get("uom"), "UOMCODE", "UOMNAME"),
+        "PKGID": _lookup(cur, "MstPKG", "PKGID", r.get("package"), "PKGCODE", "PKGNAME") or None,
+        "BrandID": _lookup(cur, "MstBrand", "BRANDID", r.get("brand"), "BRANDCODE", "BRANDNAME"),
         "BotPerCases": int(_num(r.get("bottles_per_case")) or 12), "MRP": _num(r.get("mrp")), "PURRATE": _num(r.get("purchase_rate")),
         "CGSTPER": _num(r.get("cgst_per")), "SGSTPER": _num(r.get("sgst_per")), "ROL": _num(r.get("rol")), "ROQ": _num(r.get("roq")),
         "InActive": _yn(not r.get("active", True)),
     }
 
 
+def _only(r: dict, spec: dict) -> dict:
+    """Desktop columns for the keys this row actually carries: {column: (key, convert)}. A column whose key the
+    loader never filled (db_store loads only some fields) is left alone, so a web edit can't blank the desktop's
+    value (City, GSTNO, e-mail, ...) or switch an inactive row back on."""
+    return {col: convert(r[key]) for col, (key, convert) in spec.items() if key in r}
+
+
+def _text(v) -> str:
+    return "" if v is None else str(v)
+
+
 def _customer_values(cur, r: dict) -> dict:
-    return {"CUSTNAME": r.get("name", ""), "MOBNO": r.get("mobile") or "", "CARDNO": r.get("loyalty_card_no") or "",
-            "SENDSMS": _yn(r.get("send_sms")), "InActive": _yn(r.get("active") is False), "GSTNO": r.get("gstin") or "",
-            "City": r.get("city") or ""}
+    return _only(r, {"CUSTNAME": ("name", _text), "MOBNO": ("mobile", _text), "CARDNO": ("loyalty_card_no", _text),
+                     "SENDSMS": ("send_sms", _yn), "InActive": ("active", lambda v: _yn(v is False)),
+                     "GSTNO": ("gstin", _text), "City": ("city", _text)})
 
 
 def _supplier_values(cur, r: dict) -> dict:
-    return {"SUPPNAME": r.get("name", ""), "SUPPAliasName": r.get("alias") or "", "BAdd1": r.get("address") or "",
-            "City": r.get("city") or "", "PinCode": r.get("pin") or "", "State": r.get("state") or "",
-            "Country": r.get("country") or "", "PHNO": r.get("phone") or "", "GSTNO": r.get("gstin") or "",
-            "InActive": _yn(r.get("active") is False)}
+    return _only(r, {"SUPPNAME": ("name", _text), "SUPPAliasName": ("alias", _text), "BAdd1": ("address", _text),
+                     "City": ("city", _text), "PinCode": ("pin", _text), "State": ("state", _text),
+                     "Country": ("country", _text), "PHNO": ("phone", _text), "GSTNO": ("gstin", _text),
+                     "InActive": ("active", lambda v: _yn(v is False))})
 
 
 def _user_values(cur, r: dict) -> dict:
-    v = {"UserName": r.get("full_name") or "", "EmailID": r.get("email") or "", "Mobileno": r.get("mobile") or "",
-         "Department": r.get("department") or "", "DOB": r.get("dob") or None, "ChkDOB": _yn(r.get("dob")),
-         "Inactive": _yn(not r.get("active", True)), "InactiveRmks": r.get("inactive_reason") or "",
-         "PwdResetDt": r.get("password_reset_on") or None}
-    if r.get("password_hash"):
-        v["LoginPwd"] = ""   # the web keeps only a hash (Web_AppRow); the desktop's reversible password goes
+    # The desktop's LoginPwd is never touched: the desktop app still signs this user in with it. The web keeps
+    # its own password only as a hash (Web_AppRow).
+    v = _only(r, {"UserName": ("full_name", _text), "EmailID": ("email", _text), "Mobileno": ("mobile", _text),
+                  "Department": ("department", _text), "InactiveRmks": ("inactive_reason", _text),
+                  "Inactive": ("active", lambda x: _yn(not x)), "PwdResetDt": ("password_reset_on", lambda x: x or None)})
+    if "dob" in r:
+        v.update(DOB=r["dob"] or None, ChkDOB=_yn(r["dob"]))
     return v
 
-
-# table: (Web_ table, ID column, code column, values(cur, row), extra columns on insert)
+# table: (desktop table, ID column, code column, values(cur, row))
 LEGACY_MASTERS = {
-    "ITEMS": ("Web_MstITEM", "ITEMID", "ITEMCODE", _item_values),
-    "CUSTOMERS": ("Web_MstCUST", "CUSTID", "CUSTCODE", _customer_values),
-    "SUPPLIERS": ("Web_MstSUPP", "SUPPID", "SUPPCODE", _supplier_values),
-    "ITEM_GROUPS": ("Web_MstITEMGROUP", "ITEMGROUPID", "ITEMGROUPCODE",
+    "ITEMS": ("MstITEM", "ITEMID", "ITEMCODE", _item_values),
+    "CUSTOMERS": ("MstCUST", "CUSTID", "CUSTCODE", _customer_values),
+    "SUPPLIERS": ("MstSUPP", "SUPPID", "SUPPCODE", _supplier_values),
+    "ITEM_GROUPS": ("MstITEMGROUP", "ITEMGROUPID", "ITEMGROUPCODE",
                     lambda cur, r: {"ITEMGROUPNAME": r.get("name", ""), "LiqItem": _yn(r.get("liquor", True)),
                                     "LOYALTY": _yn(r.get("consider_for_loyalty"))}),
-    "BRANDS": ("Web_MstBrand", "BRANDID", "BRANDCODE", lambda cur, r: {"BRANDNAME": r.get("name", "")}),
-    "UOMS": ("Web_MstUOM", "UOMID", "UOMCODE", lambda cur, r: {"UOMNAME": r.get("name", "")}),
-    "PACKAGES": ("Web_MstPKG", "PKGID", "PKGNAME", lambda cur, r: {"PKGCODE": r.get("code", ""), "LTRPERBOT": _num(r.get("litres_per_bottle"))}),
-    "USERS": ("Web_MstUser", "UserID", "UserCode", _user_values),
-    "LEDGER_GROUPS": ("Web_MstLedgroup", "LEDGROUPID", "LEDGROUPCODE", lambda cur, r: {"LEDGROUPNAME": r.get("name", ""), "InActive": "N"}),
-    "LEDGERS": ("Web_MstLed", "LEDID", "LEDCODE",
+    "BRANDS": ("MstBrand", "BRANDID", "BRANDCODE", lambda cur, r: {"BRANDNAME": r.get("name", "")}),
+    "UOMS": ("MstUOM", "UOMID", "UOMCODE", lambda cur, r: {"UOMNAME": r.get("name", "")}),
+    "PACKAGES": ("MstPKG", "PKGID", "PKGNAME", lambda cur, r: {"PKGCODE": r.get("code", ""), "LTRPERBOT": _num(r.get("litres_per_bottle"))}),
+    "USERS": ("MstUser", "UserID", "UserCode", _user_values),
+    "LEDGER_GROUPS": ("MstLedgroup", "LEDGROUPID", "LEDGROUPCODE", lambda cur, r: {"LEDGROUPNAME": r.get("name", ""), "InActive": "N"}),
+    "LEDGERS": ("MstLed", "LEDID", "LEDCODE",
                 lambda cur, r: {"LEDNAME": r.get("name", ""), "InActive": "N",
-                                "LEDGROUPID": _lookup(cur, "Web_MstLedgroup", "LEDGROUPID", r.get("group"), "LEDGROUPCODE", "LEDGROUPNAME")}),
-    "COUNTERS": ("Web_MstSC", "SCID", "SCCODE",
+                                "LEDGROUPID": _lookup(cur, "MstLedgroup", "LEDGROUPID", r.get("group"), "LEDGROUPCODE", "LEDGROUPNAME")}),
+    "COUNTERS": ("MstSC", "SCID", "SCCODE",
                  lambda cur, r: {"SCNAME": r.get("name", ""), "SYSNAME": r.get("system_name") or "",
                                  "PREFIX": r.get("prefix") or "", "InActive": _yn(r.get("inactive"))}),
-    "SALES_PERSONS": ("Web_MstSP", "SPID", "SPCODE",
+    "SALES_PERSONS": ("MstSP", "SPID", "SPCODE",
                       lambda cur, r: {"SPNAME": r.get("name", ""), "MOBNO": r.get("mobile") or "",
                                       "InActive": _yn(not r.get("active", True))}),
 }
@@ -296,9 +249,32 @@ LEGACY_MASTERS = {
 NEW_ID_FIELD = {"ITEMS": "_itemid", "COUNTERS": "_scid", "SALES_PERSONS": "_spid"}
 
 
+# Where a master's ID is used by the desktop's history: deleting the row would orphan those rows.
+IN_USE_BY = {
+    "ITEMS": [("TrnDtlSINV", "ITEMID"), ("TrnDtlPB", "ITEMID"), ("UtlStockList", "ITEMID"), ("TrnQOH", "ITEMID")],
+    "CUSTOMERS": [("TrnHdrSINV", "CUSTID")], "SUPPLIERS": [("TrnHdrPB", "SUPPID")],
+    "COUNTERS": [("TrnHdrSINV", "SCID")], "SALES_PERSONS": [("TrnHdrSINV", "SPID")],
+    "ITEM_GROUPS": [("MstITEM", "ITEMGROUPID")], "BRANDS": [("MstITEM", "BRANDID")], "UOMS": [("MstITEM", "UOMID")],
+    "PACKAGES": [("MstITEM", "PKGID")], "LEDGER_GROUPS": [("MstLed", "LEDGROUPID")],
+}
+
+
+def _check_unused(cur, table: str, id_col: str, web_table: str, code_col: str, key: str) -> None:
+    """Refuse to delete a desktop master row that old bills or stock still point at (the in-memory IN_USE check only
+    sees the latest bills). Zero balances in TrnQOH don't count."""
+    row_id = _one(cur, f"SELECT TOP 1 [{id_col}] FROM dbo.[{web_table}] WHERE [{code_col}] = ?", (key,))
+    if row_id is None:
+        return
+    for ref_table, ref_col in IN_USE_BY.get(table, []):
+        extra = " AND ISNULL([CLBal], 0) <> 0" if ref_table == "TrnQOH" else ""
+        if _one(cur, f"SELECT TOP 1 1 FROM dbo.[{ref_table}] WHERE [{ref_col}] = ?{extra}", (row_id,)):
+            raise ValueError(f"{key} is used by existing records in the database ({ref_table}) and can't be deleted: make it inactive instead")
+
+
 def _write_master(cur, table: str, key: str, row: dict | None, user: str | None) -> None:
     web_table, id_col, code_col, values = LEGACY_MASTERS[table]
     if row is None:
+        _check_unused(cur, table, id_col, web_table, code_col, key)
         cur.execute(f"DELETE FROM dbo.[{web_table}] WHERE [{code_col}] = ?", (key,))
         return
     vals = values(cur, row)
@@ -322,32 +298,32 @@ def _prefix(doc_no: str) -> str:
 
 
 def _item_ids(cur, code: str) -> tuple[int, int]:
-    """(ITEMID, UOMID) of an item by code (0, 0 when it isn't in Web_MstITEM)."""
+    """(ITEMID, UOMID) of an item by code (0, 0 when it isn't in MstITEM)."""
     it = store.ITEMS.get(code) or {}
     if it.get("_itemid"):
-        cur.execute("SELECT ITEMID, UOMID FROM dbo.Web_MstITEM WHERE ITEMID = ?", (int(it["_itemid"]),))
+        cur.execute("SELECT ITEMID, UOMID FROM dbo.MstITEM WHERE ITEMID = ?", (int(it["_itemid"]),))
     else:
-        cur.execute("SELECT TOP 1 ITEMID, UOMID FROM dbo.Web_MstITEM WHERE ITEMCODE = ?", (code,))
+        cur.execute("SELECT TOP 1 ITEMID, UOMID FROM dbo.MstITEM WHERE ITEMCODE = ?", (code,))
     r = cur.fetchone()
     return (int(r[0]), int(r[1] or 0)) if r else (0, 0)
 
 
 def _write_sales_invoice(cur, doc: dict, user: str | None) -> None:
     no, status = doc["doc_no"], doc.get("status", "SAVED")
-    sinv_id = _one(cur, "SELECT SINVID FROM dbo.Web_TrnHdrSINV WHERE SINVNO = ?", (no,))
+    sinv_id = _one(cur, "SELECT SINVID FROM dbo.TrnHdrSINV WHERE SINVNO = ?", (no,))
     flags = {"Cancelled": _yn(status in ("CANCELLED", "DELETED")), "IsDelete": _yn(status == "DELETED"),
              "CancelRmks": doc.get("cancel_remarks") or "", "ChangedBy": user or "", "ChangedOn": datetime.now()}
     if sinv_id is not None:
-        _update(cur, "Web_TrnHdrSINV", flags, "SINVID = ?", (sinv_id,))
+        _update(cur, "TrnHdrSINV", flags, "SINVID = ?", (sinv_id,))
         return
     tot, pay = doc.get("totals", {}), doc.get("payment", {})
     cust = store.CUSTOMERS.get(doc.get("customer")) or {}
     when = f"{doc['date']} {doc.get('time') or '00:00:00'}"
-    sinv_id = _insert(cur, "Web_TrnHdrSINV", {
+    sinv_id = _insert(cur, "TrnHdrSINV", {
         "SINVNO": no, "Prefix": _prefix(no), "PrintSINVNO": no, "SINVDate": doc["date"], "SINVDateTime": when,
-        "CUSTID": _lookup(cur, "Web_MstCUST", "CUSTID", doc.get("customer"), "CUSTCODE"), "PartyName": cust.get("name") or doc.get("customer") or "",
-        "SCID": (store.COUNTERS.get(doc.get("counter")) or {}).get("_scid") or doc.get("counter") or "",
-        "SPID": _lookup(cur, "Web_MstSP", "SPID", doc.get("salesperson"), "SPCODE", "SPNAME"), "LOCID": LOCID, "AddedBy": doc.get("added_by") or user or "", "AddedOn": datetime.now(),
+        "CUSTID": _lookup(cur, "MstCUST", "CUSTID", doc.get("customer"), "CUSTCODE"), "PartyName": cust.get("name") or doc.get("customer") or "",
+        "SCID": int((store.COUNTERS.get(doc.get("counter")) or {}).get("_scid") or 0),
+        "SPID": _lookup(cur, "MstSP", "SPID", doc.get("salesperson"), "SPCODE", "SPNAME"), "LOCID": LOCID, "AddedBy": doc.get("added_by") or user or "", "AddedOn": datetime.now(),
         "TOTQTY": _num(tot.get("qty")), "TOTBASICAMT": _num(tot.get("basic")), "TOTCGSTAMT": _num(tot.get("cgst")),
         "TOTSGSTAMT": _num(tot.get("sgst")), "CGST": _num(tot.get("cgst")), "SGST": _num(tot.get("sgst")),
         "TOTDISCAMT": _num(tot.get("discount")), "DISC": _num(tot.get("discount")), "TOTAMT": _num(tot.get("net")),
@@ -359,7 +335,7 @@ def _write_sales_invoice(cur, doc: dict, user: str | None) -> None:
     for n, l in enumerate(doc.get("lines", []), start=1):
         item_id, uom_id = _item_ids(cur, l["item_code"])
         amount = _num(l.get("amount"))
-        _insert(cur, "Web_TrnDtlSINV", {
+        _insert(cur, "TrnDtlSINV", {
             "SINVID": sinv_id, "SlNo": n, "ItemSlNO": n, "ITEMID": item_id, "UOMID": uom_id, "SINVQty": _num(l.get("qty")),
             "STKQty": _num(l.get("qty")), "SINVRate": _num(l.get("rate")), "SINVAmt": amount, "MRP": _num(l.get("rate")),
             "CGSTAMT": _num(l.get("cgst")), "SGSTAMT": _num(l.get("sgst")), "SINVQtyInLtrs": _num(l.get("litres")),
@@ -369,13 +345,13 @@ def _write_sales_invoice(cur, doc: dict, user: str | None) -> None:
 
 def _write_purchase_bill(cur, doc: dict, user: str | None) -> None:
     no = doc["doc_no"]
-    if _one(cur, "SELECT PBID FROM dbo.Web_TrnHdrPB WHERE PBNO = ?", (no,)) is not None:
+    if _one(cur, "SELECT PBID FROM dbo.TrnHdrPB WHERE PBNO = ?", (no,)) is not None:
         return   # purchase bills are not changed after saving
     tot = doc.get("totals", {})
     supp = store.find(store.SUPPLIERS, doc.get("supplier") or "") or {}
-    pb_id = _insert(cur, "Web_TrnHdrPB", {
+    pb_id = _insert(cur, "TrnHdrPB", {
         "PBNO": no, "Prefix": _prefix(no), "PrintPBNO": no, "PBDate": doc["date"],
-        "SUPPID": _lookup(cur, "Web_MstSUPP", "SUPPID", supp.get("code") or doc.get("supplier"), "SUPPCODE", "SUPPNAME"),
+        "SUPPID": _lookup(cur, "MstSUPP", "SUPPID", supp.get("code") or doc.get("supplier"), "SUPPCODE", "SUPPNAME"),
         "PartyName": supp.get("name") or doc.get("supplier") or "", "LOCID": LOCID, "AddedBy": user or "", "AddedOn": datetime.now(),
         "SUPPINVNO": doc.get("supplier_inv_no") or "", "SUPPINVDATE": doc.get("supplier_inv_date") or None,
         "SUPPINVVALUE": _num(doc.get("supplier_inv_value")), "PURCHASETYPE": doc.get("purchase_type") or "Purchase",
@@ -385,7 +361,7 @@ def _write_purchase_bill(cur, doc: dict, user: str | None) -> None:
     }, identity_out="PBID")
     for n, l in enumerate(doc.get("lines", []), start=1):
         item_id, uom_id = _item_ids(cur, l["item_code"])
-        _insert(cur, "Web_TrnDtlPB", {
+        _insert(cur, "TrnDtlPB", {
             "PBID": pb_id, "SlNo": n, "ItemSlNO": n, "ITEMID": item_id, "UOMID": uom_id, "PBQty": _num(l.get("qty")),
             "StkQty": _num(l.get("qty")), "PBRate": _num(l.get("rate")), "PBAmt": _num(l.get("amount")),
             "NOOFCASES": _num(l.get("cases")), "NOOFBOTTLES": _num(l.get("bottles")), "PBQtyInLtrs": _num(l.get("litres")),
@@ -402,17 +378,17 @@ def _write_move(cur, seq: int, m: dict) -> None:
     if not item_id:
         return
     if m["kind"] == "sale-cancel":   # as the desktop does: the bill's stock rows go (the trigger puts the stock back)
-        cur.execute("DELETE FROM dbo.Web_UtlStockList WHERE DocType = 'INV' AND DocNo = ? AND ItemID = ? AND StkMultiplier = -1",
+        cur.execute("DELETE FROM dbo.UtlStockList WHERE DocType = 'INV' AND DocNo = ? AND ItemID = ? AND StkMultiplier = -1",
                     (m.get("doc_no"), item_id))
         return
     doc_type = MOVE_DOCTYPE.get(m["kind"], m["kind"].upper())
     doc_id = 0
     if doc_type == "INV":
-        doc_id = _one(cur, "SELECT SINVID FROM dbo.Web_TrnHdrSINV WHERE SINVNO = ?", (m.get("doc_no"),)) or 0
+        doc_id = _one(cur, "SELECT SINVID FROM dbo.TrnHdrSINV WHERE SINVNO = ?", (m.get("doc_no"),)) or 0
     elif doc_type == "PB":
-        doc_id = _one(cur, "SELECT PBID FROM dbo.Web_TrnHdrPB WHERE PBNO = ?", (m.get("doc_no"),)) or 0
+        doc_id = _one(cur, "SELECT PBID FROM dbo.TrnHdrPB WHERE PBNO = ?", (m.get("doc_no"),)) or 0
     qty = abs(_num(m["qty"]))
-    _insert(cur, "Web_UtlStockList", {
+    _insert(cur, "UtlStockList", {
         "ItemID": item_id, "StkMultiplier": 1 if m["qty"] >= 0 else -1, "DocType": doc_type, "DocDate": m["date"],
         "DocID": doc_id, "DocNo": m.get("doc_no") or "", "Particulars": f"{WEB_ROW}{m['kind']}", "Qty": qty,
         "Rate": _num(m.get("rate")), "DocValue": round(qty * _num(m.get("rate")), 2), "LOCID": LOCID,
@@ -426,29 +402,33 @@ _pending_merges: list[tuple[str, str]] = []
 
 def merged(src: str, dst: str) -> None:
     """Merge Items moved src's documents, movements and stock to dst in memory: do the same in SQL Server on
-    this request's save (every Web_ table with an ITEMID, the stock balance, the web ledger)."""
+    this request's save (every table with an ITEMID, the stock balance, the web ledger)."""
     _pending_merges.append((src, dst))
 
 
 def _write_merge(cur, src: str, dst: str) -> None:
-    src_id = _one(cur, "SELECT TOP 1 ITEMID FROM dbo.Web_MstITEM WHERE ITEMCODE = ?", (src,))
-    dst_id = _one(cur, "SELECT TOP 1 ITEMID FROM dbo.Web_MstITEM WHERE ITEMCODE = ?", (dst,))
+    src_id = _one(cur, "SELECT TOP 1 ITEMID FROM dbo.MstITEM WHERE ITEMCODE = ?", (src,))
+    dst_id = _one(cur, "SELECT TOP 1 ITEMID FROM dbo.MstITEM WHERE ITEMCODE = ?", (dst,))
     cur.execute("UPDATE dbo.Web_AppMove SET ItemCode = ? WHERE ItemCode = ?", (dst, src))
     if src_id is None or dst_id is None:
         return
     cur.execute("""UPDATE d SET CLBal = d.CLBal + s.CLBal, OPQty = d.OPQty + s.OPQty, TrnQty = d.TrnQty + s.TrnQty
-                   FROM dbo.Web_TrnQOH d JOIN dbo.Web_TrnQOH s ON s.LOCID = d.LOCID AND s.ITEMID = ? WHERE d.ITEMID = ?""", (src_id, dst_id))
-    cur.execute("""UPDATE dbo.Web_TrnQOH SET ITEMID = ? WHERE ITEMID = ?
-                   AND NOT EXISTS (SELECT 1 FROM dbo.Web_TrnQOH q WHERE q.ITEMID = ? AND q.LOCID = Web_TrnQOH.LOCID)""", (dst_id, src_id, dst_id))
-    cur.execute("DELETE FROM dbo.Web_TrnQOH WHERE ITEMID = ?", (src_id,))
+                   FROM dbo.TrnQOH d JOIN dbo.TrnQOH s ON s.LOCID = d.LOCID AND s.ITEMID = ? WHERE d.ITEMID = ?""", (src_id, dst_id))
+    cur.execute("""UPDATE dbo.TrnQOH SET ITEMID = ? WHERE ITEMID = ?
+                   AND NOT EXISTS (SELECT 1 FROM dbo.TrnQOH q WHERE q.ITEMID = ? AND q.LOCID = TrnQOH.LOCID)""", (dst_id, src_id, dst_id))
+    cur.execute("DELETE FROM dbo.TrnQOH WHERE ITEMID = ?", (src_id,))
     tables = [r["t"] for r in db.fetchall(
         """SELECT t.name AS t FROM sys.tables t JOIN sys.columns c ON c.object_id = t.object_id
-           WHERE t.name LIKE 'Web[_]%' AND LOWER(c.name) = 'itemid' AND t.name NOT IN ('Web_MstITEM', 'Web_TrnQOH')""")]
-    # The trigger would move stock for the re-pointed ledger rows; the balance was moved above.
-    cur.execute_raw("DISABLE TRIGGER ALL ON dbo.Web_UtlStockList")
+           WHERE t.name NOT LIKE 'Web[_]%' AND LOWER(c.name) = 'itemid' AND t.name NOT IN ('MstITEM', 'TrnQOH')""")]
+    # An UPDATE trigger on UtlStockList (if the desktop has one) would move stock again for the re-pointed rows; the
+    # balance was moved above. Only those triggers are switched off, by name, and only for this transaction. The
+    # desktop's INSERT/DELETE triggers don't fire on an UPDATE.
+    update_triggers = [r["n"] for r in db.fetchall("SELECT t.name AS n FROM sys.triggers t JOIN sys.trigger_events e ON e.object_id = t.object_id WHERE t.parent_id = OBJECT_ID('dbo.UtlStockList') AND e.type_desc = 'UPDATE'")]
+    for name in update_triggers:
+        cur.execute_raw(f"DISABLE TRIGGER [{name}] ON dbo.UtlStockList")
     for t in tables:
         col = next(m["name"] for m in _meta(t).values() if m["name"].lower() == "itemid")
-        # Where ITEMID is part of a unique key (e.g. Web_MstItemUOM (ItemID, UOMID)) and the kept item already has
+        # Where ITEMID is part of a unique key (e.g. MstItemUOM (ItemID, UOMID)) and the kept item already has
         # the same row, the removed item's row goes, as the desktop drops the old item's dependent rows.
         for key in _unique_keys(t):
             if col.lower() in (k.lower() for k in key):
@@ -457,7 +437,8 @@ def _write_merge(cur, src: str, dst: str) -> None:
                 cur.execute(f"DELETE s FROM dbo.[{t}] s WHERE s.[{col}] = ? AND EXISTS "
                             f"(SELECT 1 FROM dbo.[{t}] d WHERE d.[{col}] = ? AND {same})", (src_id, dst_id))
         cur.execute(f"UPDATE dbo.[{t}] SET [{col}] = ? WHERE [{col}] = ?", (dst_id, src_id))
-    cur.execute_raw("ENABLE TRIGGER ALL ON dbo.Web_UtlStockList")
+    for name in update_triggers:
+        cur.execute_raw(f"ENABLE TRIGGER [{name}] ON dbo.UtlStockList")
 
 
 def _unique_keys(table: str) -> list[list[str]]:
@@ -477,13 +458,6 @@ def moves_rewritten() -> None:
     _rewrite_moves = True
 
 
-def _mark_used(cur, user: str | None) -> None:
-    """The web app has now saved data here: the one-time copy of the old data may no longer overwrite it."""
-    if not _one(cur, "SELECT 1 FROM dbo.Web_AppSetting WHERE Section = ? AND [Key] = ?", setup_db.FIRST_WEB_WRITE):
-        cur.execute("INSERT INTO dbo.Web_AppSetting (Section, [Key], Value) VALUES (?, ?, ?)",
-                    (*setup_db.FIRST_WEB_WRITE, _json({"at": _now(), "by": user})))
-
-
 # ─── Can a write be saved now? ───────────────────────────────────────────────
 
 def writes_blocked() -> str | None:
@@ -491,9 +465,7 @@ def writes_blocked() -> str | None:
     writes are allowed and not saved. With one set up, a write is only allowed while the data is loaded
     from it; if the connection was lost, it tries to come back (at most every RETRY_SECONDS)."""
     global _retry_at
-    if setup_db.PROGRESS.get("state") in setup_db.RUNNING:
-        return "The database setup is copying the old data. Try again when it has finished."
-    if not db.configured() or enabled() or _test_data:
+    if not db.configured() or enabled():
         return None
     if db.MANUAL_OFFLINE:
         return "Disconnected from the database for testing (Utilities → About → Reconnect). Nothing can be saved."
@@ -523,7 +495,7 @@ def _sections() -> dict:
     return {"settings": store.SETTINGS, "gsettings": store.GSETTINGS, "denominations": store.DENOMINATIONS,
             "seq": {k: s.value for k, s in store._seq.items()}, "security": store.SECURITY,
             "field_rights": store.FIELD_RIGHTS, "master_approval": store.MASTER_APPROVAL, "report_rights": store.REPORT_RIGHTS,
-            "doc_settings": store.DOC_SETTINGS, "number_series": store.NUMBER_SERIES, "menu_layout": store.MENU_LAYOUT,
+            "doc_settings": store.DOC_SETTINGS, "number_series": store.NUMBER_SERIES, "menu_layout": store.MENU_LAYOUT, "print_prefs": store.PRINT_PREFS,
             "import_fields": store.IMPORT_FIELDS, "merged_items": store.MERGED_ITEMS, "merged_item_ids": store.MERGED_ITEM_IDS,
             "company": store.COMPANY if "*" in store.EDITS.get("COMPANY", ()) else None}
 
@@ -541,7 +513,7 @@ def save(user: str | None = None) -> None:
         audit = list(store.AUDIT_OUT)
         store.AUDIT_OUT.clear()
         if not enabled():
-            if db.configured() and not _test_data:   # set up but not in use (writes_blocked() should have refused it)
+            if db.configured():   # set up but not in use (writes_blocked() should have refused it)
                 _pending_merges.clear()
                 raise SaveFailed("the database is offline")
             _memory_audit.extend(audit)
@@ -575,38 +547,49 @@ def save(user: str | None = None) -> None:
             new_moves = app_moves if rewrite else app_moves[_moves_saved:]
             if not (rows or new_docs or gone_docs or flagged or new_sections or new_moves or merges or audit or rewrite):
                 return
-            with db.transaction() as cur:
-                _mark_used(cur, user)
-                for src, dst in merges:   # first: the removed item's Web_MstITEM row goes with the rows below
-                    _write_merge(cur, src, dst)
-                for table, key, value in rows:
-                    if table in LEGACY_MASTERS:
-                        _write_master(cur, table, key, getattr(store, table).get(key), user)
-                        value = _row_value(getattr(store, table).get(key))   # may now carry the new _itemid
-                    _upsert(cur, "Web_AppRow", {"Kind": table, "RowKey": key},
-                            {"Value": value, "ChangedAt": datetime.now(), "ChangedBy": user})
-                for (kind, no), text in new_docs.items():
-                    d = docs[(kind, no)]
-                    _upsert(cur, "Web_AppDoc", {"Kind": kind, "DocNo": no},
-                            {"DocDate": d.get("date"), "Status": d.get("status"), "Value": text, "ChangedAt": datetime.now(), "ChangedBy": user})
-                    status = d.get("status", "SAVED")
-                    if kind in MIRRORED_DOCS and status != "HOLD" and _doc_status.get((kind, no)) != status:
-                        (_write_sales_invoice if kind == "sales_invoice" else _write_purchase_bill)(cur, d, user)
-                for d in flagged:
-                    _write_sales_invoice(cur, d, user)
-                for kind, no in gone_docs:
-                    cur.execute("DELETE FROM dbo.Web_AppDoc WHERE Kind = ? AND DocNo = ?", (kind, no))
-                    if kind == "sales_invoice":
-                        cur.execute("UPDATE dbo.Web_TrnHdrSINV SET Cancelled = 'Y', IsDelete = 'Y' WHERE SINVNO = ?", (no,))
-                for n, text in new_sections.items():
-                    _upsert(cur, "Web_AppSetting", {"Section": "state", "Key": n}, {"Value": text, "ChangedAt": datetime.now(), "ChangedBy": user})
-                if rewrite:   # the web's own stock rows go (the trigger takes their stock off) and are written again
-                    cur.execute("DELETE FROM dbo.Web_UtlStockList WHERE Particulars LIKE ?", (WEB_ROW + "%",))
-                    cur.execute_raw("DELETE FROM dbo.Web_AppMove")
-                for i, m in enumerate(new_moves, start=0 if rewrite else _moves_saved):
-                    _write_move(cur, i, m)
-                for e in audit:
-                    _write_audit(cur, e)
+            for attempt in (1, 2):
+                try:
+                    with db.transaction() as cur:
+                        for src, dst in merges:   # first: the removed item's MstITEM row goes with the rows below
+                            _write_merge(cur, src, dst)
+                        for table, key, value in rows:
+                            if table in LEGACY_MASTERS:
+                                _write_master(cur, table, key, getattr(store, table).get(key), user)
+                                value = _row_value(getattr(store, table).get(key))   # may now carry the new _itemid
+                            _upsert(cur, "Web_AppRow", {"Kind": table, "RowKey": key},
+                                    {"Value": value, "ChangedAt": datetime.now(), "ChangedBy": user})
+                        for (kind, no), text in new_docs.items():
+                            d = docs[(kind, no)]
+                            _upsert(cur, "Web_AppDoc", {"Kind": kind, "DocNo": no},
+                                    {"DocDate": d.get("date"), "Status": d.get("status"), "Value": text, "ChangedAt": datetime.now(), "ChangedBy": user})
+                            status = d.get("status", "SAVED")
+                            if kind in MIRRORED_DOCS and status != "HOLD" and _doc_status.get((kind, no)) != status:
+                                (_write_sales_invoice if kind == "sales_invoice" else _write_purchase_bill)(cur, d, user)
+                        for d in flagged:
+                            _write_sales_invoice(cur, d, user)
+                        for kind, no in gone_docs:
+                            cur.execute("DELETE FROM dbo.Web_AppDoc WHERE Kind = ? AND DocNo = ?", (kind, no))
+                            if kind == "sales_invoice":
+                                cur.execute("UPDATE dbo.TrnHdrSINV SET Cancelled = 'Y', IsDelete = 'Y' WHERE SINVNO = ?", (no,))
+                        for n, text in new_sections.items():
+                            _upsert(cur, "Web_AppSetting", {"Section": "state", "Key": n}, {"Value": text, "ChangedAt": datetime.now(), "ChangedBy": user})
+                        if rewrite:   # the web's own stock rows go (the trigger takes their stock off) and are written again
+                            cur.execute("DELETE FROM dbo.UtlStockList WHERE Particulars LIKE ?", (WEB_ROW + "%",))
+                            cur.execute_raw("DELETE FROM dbo.Web_AppMove")
+                        for i, m in enumerate(new_moves, start=0 if rewrite else _moves_saved):
+                            _write_move(cur, i, m)
+                        for e in audit:
+                            _write_audit(cur, e)
+                    break
+                except Exception as exc:
+                    # "Connection is busy with results for another command": the shared connection was left with
+                    # unread results; a fresh connection fixes it, so try once more before giving up.
+                    if attempt == 1 and "busy with results" in str(exc):
+                        logger.warning("Connection busy (last SQL: %s); reconnecting and retrying the save", db.last_sql())
+                        db.reconnect()
+                        continue
+                    logger.error("Failed SQL: %s", db.last_sql())
+                    raise
         except Exception as exc:
             logger.exception("Saving to SQL Server failed; reloading from it")
             raise SaveFailed(db.safe_error(exc)) from exc
@@ -633,7 +616,7 @@ def save(user: str | None = None) -> None:
 def load() -> bool:
     """Lay the web app's saved data over the legacy-format rows just loaded (db_store). True if anything was
     restored. Call after db_store.load_masters(); items' QOH then already includes the web's stock moves
-    (Web_TrnQOH), so they are taken off first and replayed, as Re Write Stock expects."""
+    (TrnQOH), so they are taken off first and replayed, as Re Write Stock expects."""
     global _active, _moves_saved, _movements_base, _rewrite_moves
     with _lock:
         _rewrite_moves = False
@@ -666,7 +649,7 @@ def load() -> bool:
             if r["Extra"]:
                 m.update(json.loads(r["Extra"]))
             moves.append(m)
-        # Web_TrnQOH already has the web's moves: take them off, so apply() can replay them onto the base.
+        # TrnQOH already has the web's moves: take them off, so apply() can replay them onto the base.
         for m in moves:   # the same item apply() adds them back to
             item = store.ITEMS.get(m["item"])
             if item is not None:
@@ -677,7 +660,7 @@ def load() -> bool:
         # Invoice numbers go on after the highest one already in the table (desktop or web), so a new web bill
         # never takes a number the old data has (SINVNO is the key; a clash would refuse the save).
         top = db.fetchall("SELECT MAX(TRY_CAST(SUBSTRING(SINVNO, CHARINDEX('-', SINVNO) + 1, 20) AS INT)) AS n "
-                          "FROM dbo.Web_TrnHdrSINV WHERE SINVNO LIKE ?", (f"{store.FY_PREFIX}/%",))
+                          "FROM dbo.TrnHdrSINV WHERE SINVNO LIKE ?", (f"{store.FY_PREFIX}/%",))
         if top and top[0]["n"]:
             seq = store._seq.setdefault("sales_invoice", store.Seq(int(top[0]["n"]) + 1))
             seq.value = max(seq.value, int(top[0]["n"]) + 1)
@@ -760,7 +743,7 @@ def apply(data: dict) -> None:
             target["qoh"] += qty
     if data.get("company"):
         saved = dict(data["company"])
-        if store.FIN_YEARS:   # the financial year is the desktop's (Web_MstCompFinYear), not a copy saved earlier
+        if store.FIN_YEARS:   # the financial year is the desktop's (MstCompFinYear), not a copy saved earlier
             saved.pop("fy_start", None)
             saved.pop("fy_end", None)
         store.COMPANY.update(saved)
@@ -779,6 +762,7 @@ def apply(data: dict) -> None:
     store.DOC_SETTINGS.update(data.get("doc_settings") or {})
     store.NUMBER_SERIES.update(data.get("number_series") or {})
     store.MENU_LAYOUT.update(data.get("menu_layout") or {})
+    store.PRINT_PREFS.update(data.get("print_prefs") or {})
     store.IMPORT_FIELDS.update(data.get("import_fields") or {})
     # 2. Documents and number series (never going backwards).
     for kind, docs in data.get("docs", {}).items():
@@ -797,17 +781,17 @@ def apply(data: dict) -> None:
         store.MOVEMENTS.append(m)
 
 
-# ─── ADMIN Audit Log (Web_UtlAdmAudit / Web_UtlAdmAuditItem) ─────────────────
+# ─── ADMIN Audit Log (UtlAdmAudit / UtlAdmAuditItem) ─────────────────
 
 def _write_audit(cur, e: dict) -> None:
     at = datetime.fromisoformat(e["at"]) if e.get("at") else datetime.now()
-    doc_id = _insert(cur, "Web_UtlAdmAudit", {
+    doc_id = _insert(cur, "UtlAdmAudit", {
         "ScreenName": e["screen"], "DAction": e["action"], "DocDate": at.date(), "DocDateTime": at, "DocSysName": "WEB",
         "SysUserName": e.get("user") or "", "MainFld": str(e.get("main_fld") or ""), "EarlierData": e.get("earlier") or "",
         "ChangedData": e.get("changed") or "",
     }, identity_out="DocID")
     for i in e.get("items", []):
-        _insert(cur, "Web_UtlAdmAuditItem", {"DocID": doc_id, "ItemCode": i.get("code") or "", "Itemname": i.get("name") or "",
+        _insert(cur, "UtlAdmAuditItem", {"DocID": doc_id, "ItemCode": i.get("code") or "", "Itemname": i.get("name") or "",
                                               "ActionStatus": i.get("status") or "", "ItemDetails": i.get("details") or ""})
 
 
@@ -818,7 +802,6 @@ def add_audit(entries: list[dict]) -> None:
         return
     try:
         with db.transaction() as cur:
-            _mark_used(cur, entries[0].get("user") if entries else None)
             for e in entries:
                 _write_audit(cur, e)
     except Exception:
@@ -833,7 +816,7 @@ def audit_rows(screen: str | None, from_at: str, to_at: str, limit: int = 5000) 
         return [{k: r.get(k) for k in ("id", "at", "screen", "action", "main_fld", "user_code", "earlier", "changed")}
                 | {"items": r.get("items", [])} for r in reversed(rows)][:limit]
     sql = (f"SELECT TOP {int(limit)} DocID, DocDateTime, ScreenName, DAction, MainFld, SysUserName, EarlierData, ChangedData "
-           "FROM dbo.Web_UtlAdmAudit WHERE DocDateTime BETWEEN ? AND ?")
+           "FROM dbo.UtlAdmAudit WHERE DocDateTime BETWEEN ? AND ?")
     args = [from_at.replace("T", " ")[:19], to_at.replace("T", " ")[:19]]
     if screen:
         sql += " AND ScreenName = ?"
@@ -843,7 +826,7 @@ def audit_rows(screen: str | None, from_at: str, to_at: str, limit: int = 5000) 
     ids = [h["DocID"] for h in heads]
     for i in range(0, len(ids), 500):
         chunk = ids[i:i + 500]
-        for r in db.fetchall(f"SELECT DocID, ItemCode, Itemname, ActionStatus, ItemDetails FROM dbo.Web_UtlAdmAuditItem "
+        for r in db.fetchall(f"SELECT DocID, ItemCode, Itemname, ActionStatus, ItemDetails FROM dbo.UtlAdmAuditItem "
                              f"WHERE DocID IN ({','.join('?' * len(chunk))})", tuple(chunk)):
             items.setdefault(r["DocID"], []).append({"code": r["ItemCode"], "name": r["Itemname"], "status": r["ActionStatus"],
                                                      "details": r["ItemDetails"]})
@@ -855,7 +838,7 @@ def audit_rows(screen: str | None, from_at: str, to_at: str, limit: int = 5000) 
 def audit_screens() -> list[str]:
     if not enabled():
         return sorted({e["screen"] for e in _memory_audit})
-    return [r["ScreenName"] for r in db.fetchall("SELECT DISTINCT ScreenName FROM dbo.Web_UtlAdmAudit ORDER BY ScreenName")]
+    return [r["ScreenName"] for r in db.fetchall("SELECT DISTINCT ScreenName FROM dbo.UtlAdmAudit ORDER BY ScreenName")]
 
 
 # ─── Tools audit (Web_ToolAudit) ─────────────────────────────────────────────
@@ -870,7 +853,6 @@ def audit_tool(user_code: str, tool: str, detail: str, ok: bool, row_count: int 
         return
     try:
         with db.transaction() as cur:
-            _mark_used(cur, user_code)
             cur.execute("INSERT INTO dbo.Web_ToolAudit (At, UserCode, Tool, Detail, Ok, RowCnt, Error) VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (datetime.now(), user_code, tool, row["detail"], 1 if ok else 0, row_count, row["message"]))
     except Exception:

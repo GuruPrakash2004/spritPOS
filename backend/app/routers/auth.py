@@ -98,10 +98,10 @@ PUBLIC_ROUTES = {
     ("GET", "/auth/login-settings"),                   # password rules and "Remember me" for the sign-in page
     ("GET", "/masters/company"),                       # company name on the sign-in page
     ("GET", "/company/files/{file_id}/content"),       # company images in <img> tags
-    # One-time Database setup on the sign-in page: they check the setup code (or an Administrator's token
-    # once the database is ready) themselves, in routers/setup.py.
-    ("GET", "/setup/status"), ("GET", "/setup/progress"),
-    ("POST", "/setup/test"), ("POST", "/setup/connect"), ("POST", "/setup/run"), ("POST", "/setup/admin"),
+    # One-time Database setup on the sign-in page: open while the database isn't ready; once it is, they
+    # check for an Administrator's token themselves, in routers/setup.py.
+    ("GET", "/setup/status"),
+    ("POST", "/setup/test"), ("POST", "/setup/connect"), ("POST", "/setup/admin"),
 }
 
 
@@ -199,8 +199,7 @@ def _session(u: dict) -> dict:
     role = u.get("role", "Cashier")
     return {"user": u["user"], "role": role, "modules": security.modules_for(u), "rights": security.rights_for_user(u),
             "field_rights": {} if role == store.ADMIN_ROLE else store.FIELD_RIGHTS.get(role, {}),
-            "must_change_password": security.password_expired(u), "company": store.COMPANY,
-            "data_mode": sqlstore.data_mode()}
+            "must_change_password": security.password_expired(u), "company": store.COMPANY}
 
 
 def _set_password(u: dict, password: str) -> None:
@@ -283,7 +282,7 @@ def transport_key():
 @router.post("/auth/login")
 def login(body: LoginIn, request: Request):
     """Authenticate user and issue a signed JWT token."""
-    if db.configured() and not (sqlstore.enabled() or sqlstore.test_data()):
+    if db.configured() and not sqlstore.enabled():
         raise HTTPException(503, "The database isn't set up yet, or it can't be reached. Sign in once it is back.")
     username = body.user.strip().upper()
     password = secure_fields.decrypt(body.password, "login")

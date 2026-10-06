@@ -5,7 +5,7 @@
 // Both are fetched once per page load (GET /settings/documents, GET /settings/menu) and default to the
 // desktop's defaults until they arrive; the server enforces the same rules.
 import { useEffect, useState } from 'react';
-import { api } from './api';
+import { getDocumentSettings, getMenuLayout } from './api';
 
 export type DocKind = 'sales_invoice' | 'purchase_bill' | 'purchase_indent' | 'sales_return' | 'stock_deduction' | 'expense' | 'closing_stock';
 export type DocSettings = {
@@ -21,7 +21,7 @@ export const DEFAULT_DOC_SETTINGS: DocSettings = {
 
 let docs: Promise<Record<string, DocSettings>> | null = null;
 export const loadDocSettings = () => {
-  docs ??= api<Record<string, DocSettings>>('/settings/documents').catch(() => { docs = null; return {}; });
+  docs ??= getDocumentSettings<DocSettings>().catch(() => { docs = null; return {}; });
   return docs;
 };
 /** Forget the cached settings (after saving them in Global Settings). */
@@ -37,4 +37,4 @@ export function useDocSettings(kind: DocKind): DocSettings {
   return s;
 }
 
-export const loadMenuLayout = () => api<MenuLayout>('/settings/menu').catch(() => ({ hidden: [], codes: {} } as MenuLayout));
+export const loadMenuLayout = () => getMenuLayout<MenuLayout>().catch(() => ({ hidden: [], codes: {} } as MenuLayout));

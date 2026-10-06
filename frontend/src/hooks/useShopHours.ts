@@ -3,14 +3,14 @@
 // Used by the Dashboard's store banner (the "Store Open / Closed" chip next to Live data).
 
 import { useEffect, useState } from 'react';
-import { api, type ApiShopHours } from '../lib/api';
+import { getCompanyHours, type ApiShopHours } from '../lib/api';
 
 const CHECK_MS = 5 * 60_000;
 
 export function useShopHours(): ApiShopHours | null {
   const [hours, setHours] = useState<ApiShopHours | null>(null);
   useEffect(() => {
-    const load = () => api<ApiShopHours>('/company/hours').then(setHours).catch(() => setHours(null));
+    const load = () => getCompanyHours().then(setHours).catch(() => setHours(null));
     load();
     const timer = setInterval(load, CHECK_MS);
     return () => clearInterval(timer);

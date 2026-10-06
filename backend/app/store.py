@@ -20,7 +20,7 @@ Key rules:
 
 from datetime import date
 
-# The shop's company profile (Web_MstComp, Web_MstCompFinYear and Company Master edits). Blank until loaded.
+# The shop's company profile (MstComp, MstCompFinYear and Company Master edits). Blank until loaded.
 COMPANY = {
     "name": "", "email": "", "address": "", "phone": "", "fax": "", "mobile": "", "website": "", "gstin": "",
     "pan": "", "cin": "", "excise_phone": "", "ksbcl_code": "", "licence_type": "", "state": "",
@@ -28,7 +28,7 @@ COMPANY = {
     "place_id": "",   # the shop on Google Maps, picked on the map in Company Master (app/shop_hours.py)
 }
 
-# Financial years (Web_MstCompFinYear): [{"start", "end", "active"}], newest first.
+# Financial years (MstCompFinYear): [{"start", "end", "active"}], newest first.
 FIN_YEARS: list[dict] = []
 
 # Masters, code -> row. All empty until db_store.load_masters() fills them from the Web_ tables.
@@ -44,7 +44,7 @@ LEDGERS: dict[str, dict] = {}
 COUNTERS: dict[str, dict] = {}
 SALES_PERSONS: dict[str, dict] = {}
 
-# App users (Web_MstUser, plus what the web app saved). Passwords are kept only as salted PBKDF2 hashes
+# App users (MstUser, plus what the web app saved). Passwords are kept only as salted PBKDF2 hashes
 # (app/passwords.py), never in plain text. "pwv" (password version) goes up on every password change, which
 # invalidates older login tokens.
 USERS: dict[str, dict] = {}
@@ -65,7 +65,7 @@ ROLES = {
     "Cashier": ["Dashboard", "Item Master", "Sales Invoice", "Sales Return", "Cash Denomination", "Closing Stock Entry", "Stock Balance Report"],
 }
 
-# What the desktop's Doc Designer stores (Web_Utl* copies; app/designer.py fills them): screens by DocID, print
+# What the desktop's Doc Designer stores (Utl* copies; app/designer.py fills them): screens by DocID, print
 # options, who they are e-mailed to, screen fields, and UtlMisc's one row of switches. Empty without a database.
 UTL_DOCS: dict[int, dict] = {}
 UTL_OPTIONS: list[dict] = []
@@ -76,7 +76,7 @@ UTL_MISC: dict = {}
 # Day-end cash counts, keyed by ISO date.
 DENOMINATIONS: dict[str, dict] = {}
 
-# When each item was last received (Web_TrnHdrPB/Web_TrnDtlPB), for Stock Ageing; purchases update it.
+# When each item was last received (TrnHdrPB/TrnDtlPB), for Stock Ageing; purchases update it.
 LAST_PURCHASE: dict[str, str] = {}
 
 SETTINGS = {
@@ -213,6 +213,7 @@ REPORT_RIGHTS: dict[str, list] = {}
 DOC_SETTINGS: dict[str, dict] = {}
 NUMBER_SERIES: dict[str, dict] = {}
 MENU_LAYOUT: dict = {"hidden": [], "codes": {}}
+PRINT_PREFS: dict[str, dict] = {}   # user code -> {document kind: the print option that user picked last}
 IMPORT_FIELDS: dict[str, list] = {"fields": []}
 
 # Items merged away (Utilities → Merge Items / Replace and Remove Duplicate items): old code -> the item it

@@ -50,6 +50,16 @@ DB_AUTH = _env("DB_AUTH", "sql").lower()
 DB_PASSWORD = _env("DB_PASSWORD")
 DB_PASSWORD_ENC = _env("DB_PASSWORD_ENC")
 DB_DRIVER_OVERRIDE = _env("DB_DRIVER")
+DB_ENGINE = _env("DB_ENGINE").lower()   # "pyodbc" or "pymssql" forces that driver; empty tries pyodbc, then pymssql
+
+
+def _connect_with_driver(*args, **kw):
+    """Connect with the driver DB_ENGINE names (empty: pyodbc first, then pymssql)."""
+    if DB_ENGINE == "pymssql":
+        return _try_pymssql(*args, **kw)
+    if DB_ENGINE == "pyodbc":
+        return _try_pyodbc(*args, **kw)
+    return _try_pyodbc(*args, **kw) or _try_pymssql(*args, **kw)
 
 
 def settings() -> dict:
@@ -57,8 +67,13 @@ def settings() -> dict:
     return {"host": DB_HOST, "port": DB_PORT, "database": DB_NAME, "user": DB_USER, "auth": DB_AUTH}
 
 
+# The sealed password can't be read on this PC (its backend/data/secret.key isn't the one that sealed it, e.g. a
+# .env copied from another machine): treated as not set up, so the sign-in page offers Database setup again.
+_password_unreadable = False
+
+
 def configured() -> bool:
-    return bool(DB_HOST and DB_NAME and (DB_USER or DB_AUTH == "windows"))
+    return bool(DB_HOST and DB_NAME and (DB_USER or DB_AUTH == "windows")) and not _password_unreadable
 
 
 def _password() -> str:
@@ -70,9 +85,10 @@ def _password() -> str:
 
 def use_settings(host: str, port: str, database: str, user: str, auth: str, password_enc: str) -> None:
     """Switch to new settings (after the setup screen saved them); call reconnect() next."""
-    global DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_AUTH, DB_PASSWORD, DB_PASSWORD_ENC
+    global DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_AUTH, DB_PASSWORD, DB_PASSWORD_ENC, _password_unreadable
     DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_AUTH = host, port, database, user, auth
     DB_PASSWORD, DB_PASSWORD_ENC = "", password_enc
+    _password_unreadable = False
 
 
 def _odbc(value: str) -> str:
@@ -117,7 +133,7 @@ def _try_pyodbc(host: str, port: str, database: str, user: str, password: str, a
             conn_str = (
                 f"DRIVER={{{drv}}};SERVER={pyodbc_server(host, port)};DATABASE={{{_odbc(database)}}};"
                 + ("Trusted_Connection=yes;" if auth == "windows" else f"UID={{{_odbc(user)}}};PWD={{{_odbc(password)}}};")
-                + f"TrustServerCertificate=yes;Encrypt=yes;Connection Timeout={login_timeout};"
+                + f"TrustServerCertificate=yes;Encrypt=yes;MARS_Connection=yes;Connection Timeout={login_timeout};"
             )
             conn = pyodbc.connect(conn_str, autocommit=False)
             return conn, drv
@@ -161,15 +177,23 @@ def _try_pymssql(host: str, port: str, database: str, user: str, password: str, 
 
 def init_db() -> bool:
     """Connect to SQL Server. Returns True if successful, False if falling back to in-memory store."""
-    global _conn, _db_available, _driver_used
+    global _conn, _db_available, _driver_used, _password_unreadable
 
     if not configured():
         logger.warning("No database set up in backend/.env — no data until the Database setup has run.")
         _db_available = False
         return False
 
-    args = (DB_HOST, DB_PORT, DB_NAME, DB_USER, _password(), DB_AUTH)
-    result = _try_pyodbc(*args) or _try_pymssql(*args)
+    try:
+        password = _password()
+    except Exception:
+        logger.warning("The saved database password can't be read on this PC (backend/data/secret.key is not the "
+                       "one that sealed it). Run the Database setup on the sign-in page again.")
+        _password_unreadable = True
+        _db_available = False
+        return False
+    args = (DB_HOST, DB_PORT, DB_NAME, DB_USER, password, DB_AUTH)
+    result = _connect_with_driver(*args)
     if result:
         _conn, _driver_used = result
         _db_available = True
@@ -185,7 +209,7 @@ def test_connection(host: str, port: str, database: str, user: str, password: st
     """Try settings from the setup screen on a connection of their own (the app's connection is untouched).
     Returns {"ok", "driver", "databases"} or {"ok": False, "error"}; the error never names the host."""
     args = (host, port, database or "master", user, password, auth)
-    result = _try_pyodbc(*args, login_timeout=6) or _try_pymssql(*args, login_timeout=6)
+    result = _connect_with_driver(*args, login_timeout=6)
     if not result:
         why = "Windows login needs the ODBC Driver for SQL Server on this Windows PC." if auth == "windows" else \
             "Could not connect. Check the server name (e.g. localhost\\SQLEXPRESS), that SQL Server is running and " \
@@ -225,14 +249,26 @@ def fetchall(sql: str, params: tuple = ()) -> list[dict]:
     conn = get_conn()
     if conn is None:
         return []
-    with _db_lock:
-        cur = conn.cursor()
-        try:
-            _user_statement(cur, sql, params, _driver_used.startswith("pymssql"))
-            cols = [d[0] for d in cur.description]
-            return [dict(zip(cols, row)) for row in cur.fetchall()]
-        finally:
-            cur.close()
+    for attempt in (1, 2):
+        with _db_lock:
+            cur = conn.cursor()
+            try:
+                _user_statement(cur, sql, params, _driver_used.startswith("pymssql"))
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+            except Exception as exc:
+                # The server dropped the connection (10053 / "Communication link failure"): reconnect, try once more.
+                if attempt == 1 and ("08S01" in str(exc) or "communication link" in str(exc).lower()):
+                    logger.warning("Connection lost during a read; reconnecting and retrying")
+                    if reconnect():
+                        conn = get_conn()
+                        continue
+                raise
+            finally:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
 
 
 def fetchone(sql: str, params: tuple = ()) -> dict | None:
@@ -278,6 +314,14 @@ def executemany(sql: str, rows: list[tuple]) -> int:
 
 # ─── Transactions (app/sqlstore.py, app/setup_db.py) ─────────────────────────
 
+_last_sql = ""
+
+
+def last_sql() -> str:
+    """The last statement a transaction ran (for the log when a save fails)."""
+    return _last_sql[:400]
+
+
 class TxCursor:
     """A cursor inside db.transaction(). SQL uses ? placeholders for both drivers (pymssql wants %s),
     and values always go in `params`, never into the SQL text."""
@@ -286,15 +330,35 @@ class TxCursor:
         self._cur = cur
         self._pymssql = pymssql
 
+    def _drain(self) -> None:
+        """Discard results the caller left unread; the driver refuses the next statement ("Connection is busy
+        with results for another command") while rows of the last one are pending."""
+        try:
+            while True:
+                if self._cur.description is not None:
+                    self._cur.fetchall()
+                if not self._cur.nextset():
+                    break
+        except Exception:   # nothing pending
+            pass
+
     def execute(self, sql: str, params: tuple = ()) -> int:
+        global _last_sql
+        _last_sql = sql
+        self._drain()
         self._cur.execute(sql.replace("?", "%s") if self._pymssql else sql, params)
         return self._cur.rowcount
 
     def fetchone(self):
-        return self._cur.fetchone()
+        """The first row; the rest of the result is discarded now, so a nested db.fetchall() (a second cursor on
+        this connection, e.g. a schema lookup) is not refused as "Connection is busy"."""
+        row = self._cur.fetchone()
+        self._drain()
+        return row
 
     def execute_raw(self, sql: str) -> int:
         """Run SQL with no parameters, exactly as written (schema scripts: a '?' or '%' stays as is)."""
+        self._drain()
         self._cur.execute(sql)
         return self._cur.rowcount
 
@@ -309,7 +373,9 @@ def transaction() -> Iterator[TxCursor]:
     with _db_lock:
         cur = conn.cursor()
         try:
-            yield TxCursor(cur, _driver_used.startswith("pymssql"))
+            tx = TxCursor(cur, _driver_used.startswith("pymssql"))
+            yield tx
+            tx._drain()
             conn.commit()
         except Exception:
             try:

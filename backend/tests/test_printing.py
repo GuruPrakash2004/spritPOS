@@ -54,7 +54,7 @@ async def test_render_builds_the_desktop_job_and_returns_the_pdf(client, rpts):
     assert route.calls[0].request.headers["X-Bridge-Key"] == "k"
     assert sent["rpt"] == "FMTSINV_GST.rpt" and sent["selection"] == "{TrnHdrSINV.SINVID} = 7"
     assert sent["parameters"] == {"compname": "THE LIQUOR HOUSE", "gstin": "29AAAAA0000A1Z5"}
-    assert sent["table_prefix"] == "Web_" and "logon" in sent
+    assert sent["table_prefix"] == "" and "logon" in sent
 
 
 async def test_a_document_with_no_print_option_uses_the_desktops_file_mode(client, rpts):

@@ -14,7 +14,8 @@ const dsr = {
 
 vi.mock('../../lib/api', async importOriginal => ({
   ...(await importOriginal<typeof import('../../lib/api')>()),
-  api: vi.fn(async () => dsr),
+  getDsr: vi.fn(async () => dsr),
+  getDsrFormats: vi.fn(async () => ({ formats: ['RptDSR.rpt'], bridge_configured: true })),
 }))
 
 afterEach(() => vi.restoreAllMocks())
@@ -25,10 +26,10 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('DailySummaryReport', () => {
   it('refreshes and says so on every press', async () => {
-    const { api } = await import('../../lib/api')
+    const { getDsr } = await import('../../lib/api')
     const popup = vi.spyOn(toastStore, 'add').mockImplementation(() => {})
     render(<DailySummaryReport />)
-    await waitFor(() => expect(api).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(getDsr).toHaveBeenCalledTimes(1))
 
     const refresh = screen.getByRole('button', { name: /refresh/i })
     await userEvent.click(refresh)
@@ -36,7 +37,7 @@ describe('DailySummaryReport', () => {
     await userEvent.click(refresh)
 
     await waitFor(() => expect(popup).toHaveBeenCalledTimes(2))
-    expect(api).toHaveBeenCalledTimes(3)
+    expect(getDsr).toHaveBeenCalledTimes(3)
     expect(popup).toHaveBeenLastCalledWith('refresh', expect.stringMatching(/refreshed/))
     expect(screen.getByText(/Updated/)).toBeInTheDocument()
   })

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Save, Search } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, type ApiReportRights } from '../../lib/api';
+import { errorText, getReportRights, saveReportRights, type ApiReportRights } from '../../lib/api';
 import { field, label, panel, primaryButton, sectionTitle } from '../../lib/styles';
 
 export default function ReportRightsTab() {
@@ -14,7 +14,7 @@ export default function ReportRightsTab() {
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState<Set<string> | null>(null);
 
-  const load = useCallback(() => api<ApiReportRights>('/admin/report-rights')
+  const load = useCallback(() => getReportRights()
     .then(d => { setData(d); setPicked(null); })
     .catch(e => toastStore.add('error', errorText(e))), []);
   useEffect(() => { load(); }, [load]);
@@ -27,7 +27,7 @@ export default function ReportRightsTab() {
     if (!current) return;
     const body = { users: [...selected] };
     if (!(await toastStore.defer('ok', `Rights for "${current}" will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
-    api(`/admin/report-rights/${encodeURIComponent(current)}`, { method: 'PUT', body })
+    saveReportRights(current, body)
       .then(() => { toastStore.add('ok', 'Report rights assigned successfully!'); load(); })
       .catch(e => toastStore.add('error', errorText(e)));
   };

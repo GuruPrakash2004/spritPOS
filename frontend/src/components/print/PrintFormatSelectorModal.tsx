@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, FileText, Printer, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
-import { api } from '../../lib/api';
+import { getRptFiles } from '../../lib/api';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import { printButton, secondaryButton } from '../../lib/styles';
 import {
@@ -69,7 +69,7 @@ export default function PrintFormatSelectorModal({
 
 	// Fetch dynamic list of RPT template files from backend /reports/rpt-files
 	useEffect(() => {
-		api<Array<RptModelDef & { rptFileName?: string }>>(`/reports/rpt-files?category=${category}`)
+		getRptFiles<RptModelDef & { rptFileName?: string }>(category)
 			.then(remoteList => {
 				if (Array.isArray(remoteList) && remoteList.length > 0) {
 					const mapped: RptModelDef[] = remoteList.map(item => {

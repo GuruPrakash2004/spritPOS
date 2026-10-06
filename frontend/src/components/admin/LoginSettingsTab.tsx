@@ -9,7 +9,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { KeyRound, Save } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { api, errorText, type ApiLoginSettings } from '../../lib/api';
+import { errorText, getLoginSettings, getSecurity, saveLoginSettings, setAdditionalAdminPassword, type ApiLoginSettings } from '../../lib/api';
 import { encryptSecret } from '../../lib/secureField';
 import { passwordProblem, setPasswordRules } from '../../lib/passwords';
 import { badge, field, fieldError, label, panel, primaryButton, sectionTitle } from '../../lib/styles';
@@ -27,8 +27,8 @@ export default function LoginSettingsTab({ currentUser }: { currentUser: string 
   const [pwErrors, setPwErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    api<ApiLoginSettings>('/admin/login-settings').then(setS).catch(e => toastStore.add('error', errorText(e)));
-    api<{ adnl_admin_set: boolean }>('/admin/security').then(r => setAdnlSet(r.adnl_admin_set)).catch(() => undefined);
+    getLoginSettings().then(setS).catch(e => toastStore.add('error', errorText(e)));
+    getSecurity().then(r => setAdnlSet(r.adnl_admin_set)).catch(() => undefined);
   }, []);
 
   const save = async () => {
@@ -40,7 +40,7 @@ export default function LoginSettingsTab({ currentUser }: { currentUser: string 
     if (Object.keys(errs).length) { document.getElementById(`ls-${Object.keys(errs)[0]}`)?.focus(); return; }
     const body = { ...s };
     if (!(await toastStore.defer('ok', 'Login settings will be saved when this closes.', 'Save cancelled. Nothing was changed.'))) return;
-    api<ApiLoginSettings>('/admin/login-settings', { method: 'PUT', body })
+    saveLoginSettings(body)
       .then(r => { setS(r); setPasswordRules(r); toastStore.add('ok', 'Login settings saved.'); })
       .catch(e => toastStore.add('error', errorText(e)));
   };
@@ -60,7 +60,7 @@ export default function LoginSettingsTab({ currentUser }: { currentUser: string 
     if (!(await toastStore.defer('ok', remove ? 'The additional ADMIN password will be removed when this closes.' : 'The additional ADMIN password will be set when this closes.', 'Cancelled. Nothing was changed.'))) return;
     try {
       const body = { current_password: await encryptSecret(current, 'current'), new_password: remove ? '' : await encryptSecret(next, 'new') };
-      const r = await api<{ adnl_admin_set: boolean }>('/admin/adnl-admin-password', { method: 'PUT', body });
+      const r = await setAdditionalAdminPassword(body);
       setAdnlSet(r.adnl_admin_set);
       setPw({ current: '', next: '', again: '' });
       toastStore.add('ok', r.adnl_admin_set ? 'Additional ADMIN password set.' : 'Additional ADMIN password removed: your own password is asked instead.');

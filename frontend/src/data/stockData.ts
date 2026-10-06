@@ -8,7 +8,7 @@
 // pickers (see sellable()).
 
 import { useEffect, useSyncExternalStore } from 'react';
-import { api, type ApiItemFull } from '../lib/api';
+import { getItems, type ApiItemFull } from '../lib/api';
 
 export type StockItem = {
   code: string; name: string; group: string; brand: string; pkg: string; cat: string;
@@ -41,7 +41,7 @@ export function mergeStockItems(rows: ApiItemFull[]): void {
 }
 
 export function loadStockItems(): Promise<StockItem[]> {
-  inFlight ??= api<ApiItemFull[]>('/masters/items')
+  inFlight ??= getItems()
     .then(rows => { mergeStockItems(rows); return STOCK_ITEMS; })
     .finally(() => { inFlight = null; });
   return inFlight;

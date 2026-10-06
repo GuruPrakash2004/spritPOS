@@ -27,11 +27,11 @@ import { useConfirm } from '../common/ConfirmDialog';
 import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, newIdempotencyKey, todayIso, type ApiCustomer, type ApiInvoice } from '../../lib/api';
+import { errorText, getCustomers, getNextNumber, getSalesPersons, getSettingValues, newIdempotencyKey, saveSalesInvoice, todayIso, type ApiCustomer, type ApiInvoice } from '../../lib/api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
 import { STOCK_ITEMS, litresPerBottle, loadStockItems, sellable, stockIndex, useStockItems } from '../../data/stockData';
 import { numberToWords } from '../../lib/formatters';
-import { PAYMENT_TYPES, type InvoiceSetup, type NextNumber, type PaymentType } from '../../data/salesCounters';
+import { PAYMENT_TYPES, type InvoiceSetup, type PaymentType } from '../../data/salesCounters';
 import PrintDialog from '../print/PrintDialog';
 import { afterSavePlan, runPrint } from '../../lib/printing';
 import { useDocSettings } from '../../lib/docSettings';
@@ -95,7 +95,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   const send = (body: object, key: string) => {
     sending.current = true;
     setBusy(true);
-    return api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body, idempotencyKey: key })
+    return saveSalesInvoice(body, key)
       .finally(() => { sending.current = false; setBusy(false); });
   };
   // One key per bill: pressing Save twice (or a retry) can't make two bills. Renewed for each new bill.
@@ -113,9 +113,9 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
 
   // Customers come from Customer Master so loyalty points are current; salespeople from the backend.
   useEffect(() => {
-    api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(e => toastStore.add('error', errorText(e)));
-    api<Record<string, string>>('/settings/values').then(v => { if (v && typeof v === 'object') setGsettings(v); }).catch(() => undefined);
-    api<string[]>('/sales-persons')
+    getCustomers().then(setCustomers).catch(e => toastStore.add('error', errorText(e)));
+    getSettingValues().then(v => { if (v && typeof v === 'object') setGsettings(v); }).catch(() => undefined);
+    getSalesPersons()
       .then(list => { setSalesPersons(list); setSalesPerson(p => (list.includes(p) ? p : list[0] ?? '')); })
       .catch(e => toastStore.add('error', errorText(e)));
   }, []);
@@ -129,7 +129,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   // Opened without a previewed number (e.g. straight from the sidebar): ask the backend for this counter's next one.
   useEffect(() => {
     if (setup.invoiceNo || !counter.code) return;
-    api<NextNumber>(`/transactions/next-number?${new URLSearchParams({ kind: 'sales_invoice', counter: counter.code })}`)
+    getNextNumber('sales_invoice', counter.code)
       .then(n => { const p = parseInvoiceNo(n.doc_no); setNumbering(p); setSeq(p.seq); })
       .catch(() => undefined);
   }, [setup.invoiceNo, counter.code]);
@@ -359,7 +359,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     // The backend numbers the bill and moves stock; show its doc no rather than the local preview.
     send(body, key).then(doc => {
       // Refresh points and stock so the next bill sees what this one earned, redeemed and sold.
-      api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(() => undefined);
+      getCustomers().then(setCustomers).catch(() => undefined);
       loadStockItems().catch(() => undefined);
       setPrevBill({ no: doc.doc_no, time: now.toLocaleTimeString('en-IN'), amount: doc.totals.net });
       setToast({ kind: 'ok', text: `Bill ${doc.doc_no} saved — ₹ ${money(doc.totals.net)}.` });

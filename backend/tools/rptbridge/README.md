@@ -29,15 +29,13 @@ It listens on `127.0.0.1` only. Run it as a Windows service or from Task Schedul
 RPT_BRIDGE_URL=http://127.0.0.1:8765
 RPT_BRIDGE_KEY=<the same text>
 RPT_FOLDER=C:\vLQMS\Rpts\        # the desktop's Reports → RptFilePath; default is backend/Rpts
-RPT_TABLE_PREFIX=Web_            # reports read the Web_ copies, where bills made on the web are saved
+RPT_TABLE_PREFIX=               # leave empty: reports read the desktop's own tables, which hold the bills made on the web too
 ```
 
 `GET /print/bridge` (and the Print dialog) shows whether it answers.
 
 ## Notes
 
-- The reports are made on the legacy tables (`TrnHdrSINV`, ...). The bridge points each table at its `Web_` copy so a bill
-  saved on the web prints. Bills made in the desktop after the Database setup copy are in the legacy tables only: set
-  `RPT_TABLE_PREFIX=` (empty) to print those, or run the Database setup copy again.
+- The reports are made on the desktop's tables (`TrnHdrSINV`, ...), and the web app saves its bills in those same tables, so a bill saved on the web prints as it is. `RPT_TABLE_PREFIX` stays empty.
 - The `showSPRpt` path (UtlMisc.InvPrintFromSP = Y: `fmtSPInvPrint.rpt` over the `mSP_PrintInv` procedure) is supported.
 - The 7 `.rpt` files that embed the desktop's SQL Server connection stay out of git; copy them by hand.

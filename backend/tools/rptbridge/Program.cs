@@ -10,7 +10,7 @@
 //
 // Job (JSON, sent by backend/app/rpt_bridge.py):
 //   rpt, folder, selection, parameters{name:value}, copies, printer, stored_proc,
-//   table_prefix ("Web_": the report's tables are read from Web_<name>), logon{server, database, user, password, integrated}
+//   table_prefix ("" = the desktop's own tables; a prefix makes the report read <prefix><name>), logon{server, database, user, password, integrated}
 // Every request needs the X-Bridge-Key header equal to the RPT_BRIDGE_KEY setting.
 using System;
 using System.Collections.Generic;
@@ -116,10 +116,31 @@ static class Program
             string selection = Str(job, "selection");
             if (selection.Length > 0) rpt.RecordSelectionFormula = selection;
             if (job.ContainsKey("parameters") && job["parameters"] is Dictionary<string, object> ps)
-                foreach (var kv in ps) rpt.SetParameterValue(kv.Key, kv.Value);
+                foreach (var kv in ps) SetValue(rpt, kv.Key, kv.Value);
             return rpt;
         }
         catch { rpt.Dispose(); throw; }
+    }
+
+    /// <summary>Give the report one of the print option's values (Doc Designer FormulasFld/FormulasVal). The desktop sets
+    /// the ones the report has: a parameter field, or else a formula field. A name the report does not define is skipped:
+    /// asking Crystal for it fails with "Invalid index" (DISP_E_BADINDEX).</summary>
+    static void SetValue(ReportDocument rpt, string name, object value)
+    {
+        string bare = name.TrimStart('@');
+        foreach (ParameterFieldDefinition p in rpt.DataDefinition.ParameterFields)
+            if (string.Equals(p.Name.TrimStart('@'), bare, StringComparison.OrdinalIgnoreCase))
+            {
+                rpt.SetParameterValue(p.Name, value);
+                return;
+            }
+        foreach (FormulaFieldDefinition f in rpt.DataDefinition.FormulaFields)
+            if (string.Equals(f.Name, bare, StringComparison.OrdinalIgnoreCase))
+            {
+                bool text = value == null || value is string;
+                f.Text = text ? "'" + (value ?? "").ToString().Replace("'", "''") + "'" : Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+                return;
+            }
     }
 
     static void Apply(ReportDocument doc, Dictionary<string, object> logon, string prefix, string storedProc, string database)
@@ -133,7 +154,7 @@ static class Program
         {
             t.ApplyLogOnInfo(info);
             if (storedProc.Length > 0) { t.Location = database + ".." + storedProc + ";1"; continue; }   // showSPRpt
-            // The report was made on the legacy tables; the web's bills are in the Web_ copies of them.
+            // The report was made on the desktop's tables, which also hold the web's bills; a prefix is only for a custom setup.
             if (prefix.Length > 0)
             {
                 string loc = t.Location;

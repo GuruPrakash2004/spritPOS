@@ -39,10 +39,10 @@ def _rows(monkeypatch, by_table: dict):
 
 def test_ledgers_counters_and_sales_persons_come_from_sql(monkeypatch):
     _rows(monkeypatch, {
-        "FROM Web_MstLed l": [{"LEDID": 7, "LEDCODE": "EB", "LEDNAME": "Electricity", "LEDGROUPCODE": "IE", "LEDGROUPNAME": "Indirect Exp"}],
-        "FROM Web_MstLedgroup": [{"LEDGROUPID": 3, "LEDGROUPCODE": "IE", "LEDGROUPNAME": "Indirect Exp"}],
-        "Web_MstSC": [{"SCID": 4, "SCCODE": "C1", "SCNAME": "Front", "SYSNAME": "PC1", "PREFIX": "F", "InActive": "N"}],
-        "Web_MstSP": [{"SPID": 9, "SPCODE": "S9", "SPNAME": "Mani", "MOBNO": "", "InActive": "N"}],
+        "FROM MstLed l": [{"LEDID": 7, "LEDCODE": "EB", "LEDNAME": "Electricity", "LEDGROUPCODE": "IE", "LEDGROUPNAME": "Indirect Exp"}],
+        "FROM MstLedgroup": [{"LEDGROUPID": 3, "LEDGROUPCODE": "IE", "LEDGROUPNAME": "Indirect Exp"}],
+        "MstSC": [{"SCID": 4, "SCCODE": "C1", "SCNAME": "Front", "SYSNAME": "PC1", "PREFIX": "F", "InActive": "N"}],
+        "MstSP": [{"SPID": 9, "SPCODE": "S9", "SPNAME": "Mani", "MOBNO": "", "InActive": "N"}],
     })
     db_store.load_ledger_groups()
     db_store.load_ledgers()
@@ -56,7 +56,7 @@ def test_ledgers_counters_and_sales_persons_come_from_sql(monkeypatch):
 
 
 def test_the_financial_year_sets_the_number_prefix(monkeypatch):
-    _rows(monkeypatch, {"Web_MstCompFinYear": [
+    _rows(monkeypatch, {"MstCompFinYear": [
         {"yrFdate": "2027-04-01 00:00:00", "yrTdate": "2028-03-31 00:00:00", "Active": "Y"},
         {"yrFdate": "2026-04-01 00:00:00", "yrTdate": "2027-03-31 00:00:00", "Active": "N"}]})
     db_store.load_fin_year()
@@ -72,7 +72,7 @@ def test_empty_tables_stay_empty(monkeypatch):
 
 
 def test_desktop_roles_decide_the_web_role(monkeypatch):
-    _rows(monkeypatch, {"Web_MstUser": [
+    _rows(monkeypatch, {"MstUser": [
         {"UserID": 1, "UserCode": "boss", "LoginPwd": "", "UserName": "Boss", "Inactive": "N", "ROLECODE": "ADM", "ROLENAME": "ADMINISTRATOR"},
         {"UserID": 2, "UserCode": "OFFICE", "LoginPwd": "", "UserName": "", "Inactive": "N", "ROLECODE": "", "ROLENAME": ""},
         {"UserID": 3, "UserCode": "KUMAR", "LoginPwd": "", "UserName": "", "Inactive": "Y", "ROLECODE": "C", "ROLENAME": "COUNTER"}]})
@@ -91,15 +91,12 @@ def no_admin(monkeypatch):
     for u in store.USERS.values():
         if u["role"] == store.ADMIN_ROLE:
             u["role"] = "Manager"
-    boot.SETUP_CODE["code"] = "AAAA-BBBB-CCCC"
     yield
-    boot.SETUP_CODE["code"] = None
 
 
 async def test_setup_creates_the_first_administrator(anon_client, no_admin):
     assert (await anon_client.get("/setup/status")).json()["needs_admin"] is True
-    body = {"setup_code": "AAAA-BBBB-CCCC", "user": "owner", "password": enc("Shop#2026", "new")}
-    assert (await anon_client.post("/setup/admin", json={**body, "setup_code": "WRONG"})).status_code == 403
+    body = {"user": "owner", "password": enc("Shop#2026", "new")}
     assert (await anon_client.post("/setup/admin", json={**body, "password": "Shop#2026"})).status_code in (400, 422)
     assert (await anon_client.post("/setup/admin", json={**body, "password": enc("short", "new")})).status_code == 422
     res = await anon_client.post("/setup/admin", json=body)
@@ -108,12 +105,12 @@ async def test_setup_creates_the_first_administrator(anon_client, no_admin):
     login = await anon_client.post("/auth/login", json={"user": "OWNER", "password": enc("Shop#2026")})
     assert login.status_code == 200 and login.json()["role"] == store.ADMIN_ROLE
     # Only while there is none
-    again = await anon_client.post("/setup/admin", json={**body, "setup_code": "AAAA-BBBB-CCCC", "password": enc("Shop#2026", "new")})
+    again = await anon_client.post("/setup/admin", json={**body, "password": enc("Shop#2026", "new")})
     assert again.status_code == 409
 
 
 async def test_setup_can_make_a_desktop_user_the_administrator(anon_client, no_admin):
-    res = await anon_client.post("/setup/admin", json={"setup_code": "AAAA-BBBB-CCCC", "user": "GURU",
+    res = await anon_client.post("/setup/admin", json={"user": "GURU",
                                                          "password": enc("Owner#2026", "new")})
     assert res.status_code == 201
     assert store.USERS["GURU"]["role"] == store.ADMIN_ROLE

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import { toastStore } from '../components/common/toastStore';
 import { InlineError } from '../components/common/FormErrorSummary';
-import { api, errorText, todayIso } from '../lib/api';
+import { centralIndents, errorText, todayIso } from '../lib/api';
 import { field, fieldError, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow } from '../lib/styles';
 import type { CentralIndent, CentralShop } from './types';
 
@@ -16,7 +16,7 @@ export default function Indents({ shops }: { shops: CentralShop[] }) {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback((c: string, d: string) =>
-    api<CentralIndent[]>(`/indents?${new URLSearchParams({ day: d, ...(c ? { client: c } : {}) })}`)
+    centralIndents<CentralIndent>(new URLSearchParams({ day: d, ...(c ? { client: c } : {}) }))
       .then(r => { setRows(r); return true; })
       .catch(e => { toastStore.add('error', errorText(e)); return false; })
       .finally(() => setLoading(false)), []);

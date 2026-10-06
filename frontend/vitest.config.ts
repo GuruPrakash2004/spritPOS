@@ -10,5 +10,9 @@ export default defineConfig(env => mergeConfig(viteConfig(env), {
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     css: false,
+    // The first test that imports the whole app (App.test.tsx) needs more than the default 5 s on a slow PC.
+    testTimeout: 20000,
+    // The tests expect the default address (/api/...), whatever frontend/.env says.
+    env: { VITE_API_URL: '', VITE_CENTRAL_API_URL: '' },
   },
 }))

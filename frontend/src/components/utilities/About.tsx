@@ -5,8 +5,8 @@
 // No licence key or registration (Key Generation is not part of the web app).
 
 import { useEffect, useState } from 'react';
-import { Database, FlaskConical, Info, PlugZap, RefreshCw, Unplug } from 'lucide-react';
-import { api, errorText, getAuthRole, type ApiAbout } from '../../lib/api';
+import { Database, Info, PlugZap, RefreshCw, Unplug } from 'lucide-react';
+import { errorText, getAbout, getAuthRole, refreshDocDesigner, setDatabaseConnection, type ApiAbout } from '../../lib/api';
 import { ADMIN_ROLE } from '../../lib/modules';
 import { badge, pageSub, pageTitle, panel, secondaryButton } from '../../lib/styles';
 import { toastStore } from '../common/toastStore';
@@ -20,19 +20,17 @@ export default function About() {
   const [busy, setBusy] = useState(false);
   const isAdmin = getAuthRole() === ADMIN_ROLE;
 
-  useEffect(() => { api<ApiAbout>('/utilities/about').then(setAbout).catch(e => setError(errorText(e))); }, []);
+  useEffect(() => { getAbout().then(setAbout).catch(e => setError(errorText(e))); }, []);
 
   // Disconnect / Reconnect the database (testing). Both wait for their popup, as every action does.
   const connection = async (action: 'disconnect' | 'reconnect') => {
     const text = action === 'disconnect'
       ? 'The database will be disconnected when this closes. Nothing can be saved and nobody new can sign in until Reconnect.'
-      : about?.data_mode === 'test'
-        ? 'The database will be reconnected when this closes (the screens keep the test data until it is switched off).'
-        : 'The database will be reconnected when this closes, and the shop\'s data loaded again.';
+      : 'The database will be reconnected when this closes, and the shop\'s data loaded again.';
     if (!(await toastStore.defer(action === 'disconnect' ? 'delete' : 'refresh', text, 'Cancelled. The connection was not changed.'))) return;
     setBusy(true);
     try {
-      const next = await api<ApiAbout>(`/utilities/database/${action}`, { method: 'POST' });
+      const next = await setDatabaseConnection(action);
       setAbout(next);
       toastStore.add(action === 'disconnect' ? 'ok' : 'refresh', action === 'disconnect' ? 'Database disconnected.' : 'Database reconnected.');
     } catch (e) {
@@ -47,8 +45,8 @@ export default function About() {
     if (!(await toastStore.defer('refresh', 'The Doc Designer settings will be read again when this closes.', 'Cancelled. Nothing was refreshed.'))) return;
     setBusy(true);
     try {
-      await api('/designer/refresh', { method: 'POST' });
-      setAbout(await api<ApiAbout>('/utilities/about'));
+      await refreshDocDesigner();
+      setAbout(await getAbout());
       toastStore.add('refresh', 'Doc Designer settings refreshed.');
     } catch (e) {
       toastStore.add('error', errorText(e));
@@ -57,14 +55,10 @@ export default function About() {
     }
   };
 
-  const dataLine = about?.data_mode === 'test' ? 'Test data (sample data, nothing is saved)'
-    : about?.data_mode === 'live' ? 'Live data from the shop\'s SQL Server' : 'No data loaded';
-
   const rows: [string, string][] = about ? [
     ['Software version', about.software_version],
     ['API version', about.api_version],
     ['Company', about.company || '—'],
-    ['Data shown', dataLine],
     ['Doc Designer', `${about.designer?.screens ?? 0} screens · ${about.designer?.print_options ?? 0} print options · ${about.designer?.fields ?? 0} fields`],
     ['Printing (Crystal)', about.rpt_bridge ? `Bridge set up · ${about.rpt_files} .rpt files` : 'Bridge not set up (RPT_BRIDGE_URL)'],
     ['Server time', new Date(about.server_time).toLocaleString('en-IN')],
@@ -94,9 +88,6 @@ export default function About() {
                 <Database size={12} />{about.db_connected ? 'SQL Server connected'
                   : about.db_disconnected_for_testing ? 'SQL Server disconnected (for testing)'
                   : about.db_configured ? 'SQL Server offline' : 'No database set up'}
-              </span>
-              <span className={badge(about.data_mode === 'test' ? 'warning' : about.data_mode === 'live' ? 'success' : 'neutral')}>
-                <FlaskConical size={12} />{about.data_mode === 'test' ? 'Using test (dummy) data' : about.data_mode === 'live' ? 'Using live SQL Server data' : 'No data'}
               </span>
             </div>
             {isAdmin && about.db_connected && (

@@ -1,7 +1,7 @@
 // Password rules for new or changed passwords, shown inline in Admin Master (Security) and Change password.
 // Same rules as backend/app/security.py password_problem(), from Admin Master (Security) → Login Settings
-// (fetched once from the public GET /auth/login-settings by loadPasswordRules()); the server checks again.
-import type { ApiLoginSettings } from './api';
+// (fetched once from the public login-settings endpoint by loadPasswordRules()); the server checks again.
+import { getPublicLoginSettings, type ApiLoginSettings } from './api';
 
 const DEFAULT: ApiLoginSettings = {
   min_length: 8, require_mix: true, require_upper: false, require_lower: false, require_digit: false,
@@ -12,8 +12,7 @@ let loading: Promise<ApiLoginSettings> | null = null;
 
 /** Load (once) and return the Login Settings; falls back to the default rules when the server can't be reached. */
 export const loadPasswordRules = (): Promise<ApiLoginSettings> => {
-  loading ??= fetch('/api/auth/login-settings')
-    .then(res => (res.ok ? res.json() as Promise<ApiLoginSettings> : DEFAULT))
+  loading ??= getPublicLoginSettings()
     .then(r => { rules = { ...DEFAULT, ...r }; return rules; })
     .catch(() => { loading = null; return rules; });
   return loading;

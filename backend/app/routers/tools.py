@@ -1,13 +1,12 @@
 """Tools menu of the desktop app (MstMenu type 6): SQL Query Execution and Re Write Stock.
 
 SQL Query Execution (legacy frmUtlSQLQueryExec, shortcut 600), Administrator only, on the vLQMS SQL Server
-database: SELECT anything; INSERT / UPDATE / DELETE only on the web app's own dbo.Web_* tables (not
-Web_SchemaVersion, which the schema scripts own). The old desktop tables are never changed. Reads run through
-db.read_only() (always rolled back), changes through db.write_statement() (committed). The web app keeps its
-data in memory, loaded from the Web_ tables at startup: a change made here shows on the screens after a
-restart, and a later edit on a screen can overwrite it. ("target" is kept in the API; "sqlserver" is the
-only database now that the web app has no local SQLite file.)
-Table changes (CREATE / ALTER / DROP) are never run here: the Web_* schema comes from backend/migrations.
+database: SELECT anything; INSERT / UPDATE / DELETE only on dbo.Web_* tables that are not the web app's own
+records (Web_AppRow, Web_AppDoc, ... are protected), so in practice this tool reads. The desktop's tables are the
+shop's live data and are never changed by hand-typed SQL. Reads run through db.read_only() (always rolled back),
+changes through db.write_statement() (committed). The web app keeps its data in memory, loaded at startup.
+("target" is kept in the API; "sqlserver" is the only database now that the web app has no local SQLite file.)
+Table changes (CREATE / ALTER / DROP) are never run here: the web app's tables come from backend/migrations.
 One statement at a time. The object explorer, Select Top 1000, View Top 200 Rows, Script Table As and
 view/procedure definitions mirror the desktop screen; object names are looked up before use, so user
 text never becomes an identifier. Every run is recorded in Web_ToolAudit (app/sqlstore.py).
@@ -148,15 +147,15 @@ def _top_level(text: str, word: str) -> bool:
 
 
 # The web app's own records and the audit trail: never changed by hand (roles and password hashes are in
-# Web_AppRow; the logs must not be edited; the setup markers guard the old data's copy).
-PROTECTED = {"web_schemaversion", "web_approw", "web_appdoc", "web_appmove", "web_appsetting", "web_setup",
-             "web_toolaudit", "web_utladmaudit", "web_utladmaudititem"}
+# Web_AppRow; the logs must not be edited). The desktop's tables are the shop's live data and are not changed
+# by hand-typed SQL either, so in practice this tool only reads.
+PROTECTED = {"web_approw", "web_appdoc", "web_appmove", "web_appsetting", "web_toolaudit"}
 
 
 def _writable(target: Target, schema: str | None, table: str) -> bool:
     if table.lower() in PROTECTED:
         return False
-    return (schema or "dbo").lower() == "dbo" and table.lower().startswith("web_") and table.lower() != "web_schemaversion"
+    return (schema or "dbo").lower() == "dbo" and table.lower().startswith("web_")
 
 
 def _check_sql(sql: str, target: Target = "sqlserver") -> Statement:
@@ -189,7 +188,7 @@ def _check_sql(sql: str, target: Target = "sqlserver") -> Statement:
         schema, table = _name(head.group(1), names), _name(head.group(2), names)
         if not _writable(target, schema, table):
             raise SqlRefused(f"{first} is allowed only on {where}; {table} can't be changed here. "
-                             "The desktop app's tables are never changed by the web app.")
+                             "The desktop's tables are not changed by hand-typed SQL.")
         rest = body[head.end():]
         if first in ("UPDATE", "DELETE") and _top_level(rest, "FROM"):
             raise SqlRefused(f"{first} with a joined FROM is not supported here: use WHERE ... IN (SELECT ...) instead.")
@@ -419,9 +418,6 @@ def sql_execute(body: SqlIn, admin: dict = Depends(require_admin)):
         sqlstore.audit_tool(admin["user"], SQL_TOOL, where + body.sql, False, message=str(exc))
         raise HTTPException(400, str(exc))
     _need(body.target)
-    if stmt.kind != "read" and sqlstore.test_data():
-        sqlstore.audit_tool(admin["user"], SQL_TOOL, where + body.sql, False, message="refused: Test data is on")
-        raise HTTPException(409, "Test data is on: changes to the database are refused until it is switched off.")
     started = time.perf_counter()
     try:
         if stmt.kind == "read":

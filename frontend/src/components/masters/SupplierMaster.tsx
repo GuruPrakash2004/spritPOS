@@ -9,7 +9,7 @@ import { TextField } from '../common/FormField';
 import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from '../../lib/styles';
 import { toast } from '../common/toastStore';
 import { FormErrorSummary } from '../common/FormErrorSummary';
-import { api, errorText, type ApiSupplier } from '../../lib/api';
+import { createMaster, errorText, getSuppliers, updateMaster, type ApiSupplier } from '../../lib/api';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 
 const BLANK: ApiSupplier = {
@@ -26,7 +26,7 @@ const SupplierMaster = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback((selectCode?: string) => api<ApiSupplier[]>('/masters/suppliers')
+  const load = useCallback((selectCode?: string) => getSuppliers()
     .then(rows => {
       setSuppliers(rows);
       const pick = rows.find(r => r.code === selectCode) ?? (selectCode === undefined ? rows[0] : undefined);
@@ -87,8 +87,8 @@ const SupplierMaster = () => {
       return;
     }
     const request = editing
-      ? api<ApiSupplier>(`/masters/suppliers/${encodeURIComponent(editing)}`, { method: 'PUT', body })
-      : api<ApiSupplier>('/masters/suppliers', { method: 'POST', body });
+      ? updateMaster<ApiSupplier>('suppliers', editing, body)
+      : createMaster<ApiSupplier>('suppliers', body);
     request
       .then(saved => { toast.ok(`Supplier "${saved.code}" saved`); return load(saved.code); })
       .catch(e => toast.error(errorText(e)))

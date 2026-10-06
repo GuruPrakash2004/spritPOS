@@ -4,7 +4,7 @@
 // notifyCompanyProfileUpdated(), which fires a window event so every mounted hook re-fetches.
 
 import { useEffect, useState } from 'react';
-import { api, type ApiCompany } from '../lib/api';
+import { getCompany, type ApiCompany } from '../lib/api';
 
 export const COMPANY_PROFILE_UPDATED = 'company-profile-updated';
 
@@ -17,7 +17,7 @@ export const useCompanyProfile = () => {
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const load = () => api<ApiCompany>('/masters/company')
+    const load = () => getCompany()
       .then(profile => {
         setCompany(profile);
         setIsOnline(true);

@@ -15,7 +15,7 @@ import { useAdminPassword } from '../common/AdminPasswordPrompt';
 import { encryptSecret } from '../../lib/secureField';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { api, errorText, type ApiItem, type ApiMergePreview } from '../../lib/api';
+import { errorText, getItems, mergeItems, previewMergeItems, type ApiItem, type ApiMergePreview } from '../../lib/api';
 import { loadStockItems } from '../../data/stockData';
 import { dangerButton, field, fieldError, label, pageHeader, pageSub, pageTitle, panel, sectionTitle } from '../../lib/styles';
 
@@ -42,7 +42,7 @@ export default function MergeItems({ mode }: { mode: Mode }) {
   const { confirm, dialog } = useConfirm();
   const { ask, dialog: passwordDialog } = useAdminPassword();
 
-  const loadItems = () => api<ApiItem[]>('/masters/items').then(setItems).catch(e => toastStore.add('error', errorText(e)));
+  const loadItems = () => getItems().then(setItems).catch(e => toastStore.add('error', errorText(e)));
   useEffect(() => { loadItems(); }, []);
 
   const choices = useMemo(() => items.filter(i => mode === 'replace' || i.active !== false), [items, mode]);
@@ -54,7 +54,7 @@ export default function MergeItems({ mode }: { mode: Mode }) {
   useEffect(() => {
     if (!fromCode || !toCode || fromCode === toCode) return;
     let live = true;
-    api<ApiMergePreview>(`/utilities/merge-items/${mode}/preview?${new URLSearchParams({ from_item: fromCode, to_item: toCode })}`)
+    previewMergeItems(mode, fromCode, toCode)
       .then(p => { if (live) setPreview(p); })
       .catch(e => { if (live) { setPreview(null); toastStore.add('error', errorText(e)); } });
     return () => { live = false; };
@@ -79,7 +79,7 @@ export default function MergeItems({ mode }: { mode: Mode }) {
     setWorking(true);
     try {
       const admin_password = await encryptSecret(password, 'admin');   // leaves the browser only encrypted
-      const res = await api<ApiMergePreview>(`/utilities/merge-items/${mode}`, { method: 'POST', body: { ...body, admin_password } });
+      const res = await mergeItems(mode, { ...body, admin_password });
       toastStore.add('ok', `${res.message} ${body.to_item} now has ${res.qoh_after} in stock.`);
       setFromText('');
       setToText('');
