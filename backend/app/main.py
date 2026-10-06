@@ -47,7 +47,7 @@ IDEMPOTENT_KEEP = 500   # replies remembered for Idempotency-Key replays
 # Connection switches (Utilities → About → Disconnect / Reconnect database): run one at a time like writes, but
 # never refused for a database that is offline (they are how it is reconnected) and nothing is saved after them.
 CONTROL_PATHS = {"/utilities/database/disconnect", "/utilities/database/reconnect"}
-NOT_WRITES = {"/print/render", "/print/dsr", "/print/stock-balance", "/print/email", "/designer/refresh", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect",
+NOT_WRITES = {"/print/render", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/email", "/designer/refresh", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect",
               "/utilities/web-sync"}
 
 

@@ -5,15 +5,17 @@
 // the backend (store.move_stock). Items come from the live catalogue (data/stockData.ts); CGST/SGST
 // are the Item Master rates (the backend applies those), so they are shown read-only.
 // Keyboard: Enter moves to the next field (Shift+Enter back); on the grid's last field it adds a row.
-// F2 item lookup (↑↓, Enter picks; the cursor goes to its PB Qty) · Alt+A add row · ⌘/Ctrl+S or F10 save (no print here) ·
+// F2 item lookup (↑↓, Enter picks; the cursor goes to its PB Qty) · Alt+A add row · ⌘/Ctrl+S or F10 save & print ·
 // Alt+X cancel the bill.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronsDown, ChevronsUp, Copy, FileInput,
-  Info, Paperclip, PlusCircle, RefreshCw, Save, Search, Settings2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
+  Info, Paperclip, PlusCircle, Printer, RefreshCw, Save, Search, Settings2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 import { useConfirm } from '../../common/ConfirmDialog';
+import PrintDialog from '../../print/PrintDialog';
+import { afterSavePlan } from '../../../lib/printing';
 import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, secondaryButton, sectionTitle, tableHead } from '../../../lib/styles';
 import Toast from '../../common/Toast';
 import { toastStore } from '../../common/toastStore';
@@ -65,6 +67,7 @@ export default function PurchaseBill() {
   const [remarks, setRemarks] = useState('');
   const [notesOpen, setNotesOpen] = useState(true);
   const { confirm, dialog } = useConfirm();
+  const [printDocNo, setPrintDocNo] = useState<string | null>(null);
   const [totalsOpen, setTotalsOpen] = useState(true);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -261,7 +264,7 @@ export default function PurchaseBill() {
     setRemarks('');
   };
 
-  const saveBill = async () => {
+  const saveBill = async (andPrint = false) => {
     const filled = rows.filter(isFilled);
     if (!supplier.trim()) return setToast({ kind: 'error', text: 'Select a supplier.' });
     if (!invNo.trim() || !invDate) return setToast({ kind: 'error', text: 'Enter the supplier Inv No and Inv Date.' });
@@ -283,6 +286,11 @@ export default function PurchaseBill() {
       loadStockItems().catch(() => undefined);
       loadNextNo();
       resetBill();
+      // The Doc Designer's default print option decides (Global Settings is the fallback); F10 prints at once.
+      afterSavePlan('purchase_bill', docSettings.after_save, andPrint).then(({ plan }) => {
+        if (plan === 'dialog' || plan === 'direct') setPrintDocNo(doc.doc_no);
+        else if (plan === 'ask') confirm(`Do you want to print Purchase Bill ${doc.doc_no}?`).then(ok => { if (ok) setPrintDocNo(doc.doc_no); });
+      });
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
@@ -296,8 +304,8 @@ export default function PurchaseBill() {
   ];
 
   useShortcuts({
-    'Mod+S': () => { void saveBill(); },
-    F10: () => { void saveBill(); },
+    'Mod+S': () => { void saveBill(false); },
+    F10: () => { void saveBill(true); },
     F2: () => setLookupOpen(true),
     'Alt+A': () => addRows(1),
     'Alt+X': () => { void cancelBill(); },
@@ -324,7 +332,8 @@ export default function PurchaseBill() {
             {headerOpen ? <ChevronsUp size={14} /> : <ChevronsDown size={14} />}{headerOpen ? 'Hide details' : 'Show details'}
           </button>
           <button onClick={cancelBill} className={secondaryButton}><XCircle size={14} />Cancel<Kbd combo="Alt+X" /></button>
-          <button onClick={saveBill} className={primaryButton}><Save size={14} />Save bill<Kbd combo="Mod+S" /></button>
+          <button onClick={() => saveBill(true)} className={secondaryButton}><Printer size={14} />Save &amp; print<Kbd combo="F10" /></button>
+          <button onClick={() => saveBill(false)} className={primaryButton}><Save size={14} />Save bill<Kbd combo="Mod+S" /></button>
         </div>
       </div>
 
@@ -536,6 +545,7 @@ export default function PurchaseBill() {
       )}
       {supplierOpen && <AddSupplierModal saving={supplierSaving} onSave={addSupplier} onClose={() => setSupplierOpen(false)} />}
       {copyOpen && <CopyFromModal indents={indents} onCopy={copyFromIndent} onClose={() => setCopyOpen(false)} />}
+      {printDocNo && <PrintDialog kind="purchase_bill" docNo={printDocNo} title={`Print Purchase Bill (${printDocNo})`} onClose={() => setPrintDocNo(null)} />}
     </div>
   );
 }

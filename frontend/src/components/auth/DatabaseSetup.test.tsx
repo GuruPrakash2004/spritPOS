@@ -55,15 +55,6 @@ describe('DatabaseSetup', () => {
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('S3cret!"')   // never in plain text
   })
 
-  it('Windows login sends no login name or password', async () => {
-    const user = userEvent.setup()
-    setup()
-    await user.click(screen.getByRole('radio', { name: 'Windows login' }))
-    expect(screen.queryByLabelText('Password')).toBeNull()
-    await user.click(screen.getByRole('button', { name: /test connection/i }))
-    await waitFor(() => expect(sent('/setup/test')[0]).toMatchObject({ auth: 'windows', user: '', password: '' }))
-  })
-
   it('shows why a database was refused and stays on the step', async () => {
     fetchMock.mockImplementation(async (url: string) => url.endsWith('/setup/connect')
       ? json({ detail: "This isn't a vLQMS database: these tables are missing: MstITEM." }, 400)

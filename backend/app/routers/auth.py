@@ -100,7 +100,7 @@ PUBLIC_ROUTES = {
     ("GET", "/company/files/{file_id}/content"),       # company images in <img> tags
     # One-time Database setup on the sign-in page: open while the database isn't ready; once it is, they
     # check for an Administrator's token themselves, in routers/setup.py.
-    ("GET", "/setup/status"),
+    ("GET", "/setup/status"), ("GET", "/setup/current"),
     ("POST", "/setup/test"), ("POST", "/setup/connect"), ("POST", "/setup/admin"),
 }
 

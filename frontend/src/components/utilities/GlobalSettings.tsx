@@ -12,6 +12,9 @@ import { Plus, RefreshCw, Save, Search } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
 import { addGlobalSetting, errorText, getGlobalSettings, saveGlobalSetting, type ApiSetting, type ApiSettingKind } from '../../lib/api';
+import PrintSettings from './PrintSettings';
+import OtherSettings from './OtherSettings';
+import DatabaseSetup from '../auth/DatabaseSetup';
 import { badge, field, fieldError, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
 
 type Draft = { caption: string; value: string; hidden: boolean };
@@ -27,7 +30,7 @@ function settingProblem(kind: ApiSettingKind, value: string): string {
 
 const EMPTY_NEW = { code: '', group: '', caption: '', value: '', kind: 'text' as ApiSettingKind };
 
-export default function GlobalSettings() {
+function SettingsGrid() {
   const [rows, setRows] = useState<ApiSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHidden, setShowHidden] = useState(false);
@@ -229,6 +232,34 @@ export default function GlobalSettings() {
           </table>
         </div>
       </section>
+    </div>
+  );
+}
+
+// Global Settings has three parts, as in the desktop (the Other Settings button at the bottom opens the rest):
+// the settings grid, Print Settings (how each document prints) and Other Settings (transaction settings, doc prefix, menu).
+type Part = 'settings' | 'print' | 'other' | 'database';
+const PARTS: [Part, string][] = [['settings', 'Settings'], ['print', 'Print Settings'], ['other', 'Other Settings'], ['database', 'Database']];
+
+export default function GlobalSettings() {
+  const [part, setPart] = useState<Part>('settings');
+  return (
+    <div className="mx-auto max-w-7xl">
+      <div role="tablist" aria-label="Global Settings" className="mb-4 flex gap-1 border-b border-[#E3D9CD] dark:border-[#2A2A2A]">
+        {PARTS.map(([id, name]) => (
+          <button key={id} role="tab" aria-selected={part === id} onClick={() => setPart(id)}
+            className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold ${part === id ? 'border-[#64283A] text-[#64283A] dark:border-[#D4A847] dark:text-[#D4A847]' : 'border-transparent text-stone-500'}`}>{name}</button>
+        ))}
+      </div>
+      {part === 'settings' && <SettingsGrid />}
+      {part === 'print' && <PrintSettings embedded />}
+      {part === 'other' && <OtherSettings embedded />}
+      {part === 'database' && (
+        <section className={`${panel} mx-auto max-w-md p-5`} aria-label="Database settings">
+          <DatabaseSetup inputClass={field} labelClass={label} change plain
+            onDone={() => { toastStore.add('ok', 'Database settings saved. The shop\'s data was loaded from the database.'); setPart('settings'); }} />
+        </section>
+      )}
     </div>
   );
 }

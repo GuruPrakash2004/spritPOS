@@ -39,14 +39,14 @@ _load_dotenv()
 
 # No defaults for host or credentials: they come from backend/.env (never committed), written by the sign-in
 # page's one-time Database setup (app/envfile.py) or by hand. DB_HOST may name an instance (localhost\SQLEXPRESS);
-# DB_PORT is optional (blank for a named instance). DB_AUTH is "sql" (DB_USER + password) or "windows"
-# (Windows login, pyodbc on Windows only). The password is DB_PASSWORD_ENC, sealed (secure_fields.seal), or a
+# DB_PORT is optional (blank for a named instance). DB_AUTH is always "sql" (DB_USER + password; Windows
+# login is not supported). The password is DB_PASSWORD_ENC, sealed (secure_fields.seal), or a
 # hand-written DB_PASSWORD.
 DB_HOST = _env("DB_HOST")
 DB_PORT = _env("DB_PORT")
 DB_NAME = _env("DB_NAME")
 DB_USER = _env("DB_USER")
-DB_AUTH = _env("DB_AUTH", "sql").lower()
+DB_AUTH = "sql"   # SQL login only
 DB_PASSWORD = _env("DB_PASSWORD")
 DB_PASSWORD_ENC = _env("DB_PASSWORD_ENC")
 DB_DRIVER_OVERRIDE = _env("DB_DRIVER")
@@ -73,7 +73,7 @@ _password_unreadable = False
 
 
 def configured() -> bool:
-    return bool(DB_HOST and DB_NAME and (DB_USER or DB_AUTH == "windows")) and not _password_unreadable
+    return bool(DB_HOST and DB_NAME and DB_USER) and not _password_unreadable
 
 
 def _password() -> str:
@@ -132,7 +132,7 @@ def _try_pyodbc(host: str, port: str, database: str, user: str, password: str, a
         try:
             conn_str = (
                 f"DRIVER={{{drv}}};SERVER={pyodbc_server(host, port)};DATABASE={{{_odbc(database)}}};"
-                + ("Trusted_Connection=yes;" if auth == "windows" else f"UID={{{_odbc(user)}}};PWD={{{_odbc(password)}}};")
+                + f"UID={{{_odbc(user)}}};PWD={{{_odbc(password)}}};"
                 + f"TrustServerCertificate=yes;Encrypt=yes;MARS_Connection=yes;Connection Timeout={login_timeout};"
             )
             conn = pyodbc.connect(conn_str, autocommit=False)
@@ -146,8 +146,6 @@ def _try_pyodbc(host: str, port: str, database: str, user: str, password: str, a
 def _try_pymssql(host: str, port: str, database: str, user: str, password: str, auth: str,
                  login_timeout: int = 8) -> Any | None:
     """Attempt connection via pymssql (pure-Python, no ODBC driver needed). SQL logins only."""
-    if auth == "windows":
-        return None
     try:
         import pymssql  # noqa: F401
     except ImportError:   # not installed, or its native library is missing
@@ -211,8 +209,7 @@ def test_connection(host: str, port: str, database: str, user: str, password: st
     args = (host, port, database or "master", user, password, auth)
     result = _connect_with_driver(*args, login_timeout=6)
     if not result:
-        why = "Windows login needs the ODBC Driver for SQL Server on this Windows PC." if auth == "windows" else \
-            "Could not connect. Check the server name (e.g. localhost\\SQLEXPRESS), that SQL Server is running and " \
+        why = "Could not connect. Check the server name (e.g. localhost\\SQLEXPRESS), that SQL Server is running and " \
             "accepts SQL logins and TCP/IP, and the login and password."
         return {"ok": False, "error": why}
     conn, driver = result

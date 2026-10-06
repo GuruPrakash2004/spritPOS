@@ -74,7 +74,7 @@ def safe_rpt_name(name: str) -> str:
 def _logon() -> dict:
     s = db.settings()
     return {"server": s["host"] + (f",{s['port']}" if s.get("port") else ""), "database": s["database"],
-            "user": s["user"], "password": db._password(), "integrated": s["auth"] == "windows"}
+            "user": s["user"], "password": db._password()}
 
 
 def _check_target() -> str:

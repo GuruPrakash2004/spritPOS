@@ -6,7 +6,7 @@ import re
 import pytest
 
 from app import boot, db, envfile, secure_fields, setup_db, sqlstore
-from app.routers import auth
+from app.routers import auth, setup as setup_router
 
 from conftest import enc
 
@@ -178,17 +178,20 @@ async def test_bad_server_names_are_refused(anon_client, setup_mode):
 async def test_once_set_up_only_an_administrator_can_change_it(anon_client, client, cashier_client, setup_mode, monkeypatch):
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
     monkeypatch.setattr(sqlstore, "enabled", lambda: True)   # the database is in use
+    monkeypatch.setattr(db, "is_db_available", lambda: True)
     body = {**BODY, "password": enc("pw", "db")}
-    assert (await anon_client.post("/setup/test", json=body)).status_code == 401
+    assert (await anon_client.post("/setup/test", json=body)).status_code == 403
     assert (await cashier_client.post("/setup/test", json={**body, "password": enc("pw", "db")})).status_code == 403
     assert (await client.post("/setup/test", json={**body, "password": enc("pw", "db")})).status_code == 200
 
 
-async def test_while_a_set_up_database_is_offline_setup_stays_closed(anon_client, setup_mode, monkeypatch):
-    # Set up but unreachable (a network drop): nobody may repoint the app at another server meanwhile.
+async def test_while_a_set_up_database_is_offline_only_the_server_pc_may_change_it(anon_client, setup_mode, monkeypatch):
+    # Set up but unreachable: nobody can sign in, so only a request from the server PC itself is accepted.
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
     monkeypatch.setattr(sqlstore, "enabled", lambda: False)
-    assert (await anon_client.post("/setup/test", json={**BODY, "password": enc("pw", "db")})).status_code == 401
+    monkeypatch.setattr(db, "is_db_available", lambda: False)
+    monkeypatch.setattr(setup_router, "LOOPBACK", set())   # a request from another PC
+    assert (await anon_client.post("/setup/test", json={**BODY, "password": enc("pw", "db")})).status_code == 403
     assert setup_mode == []
 
 

@@ -48,8 +48,21 @@ static class Program
         while (true)
         {
             var ctx = http.GetContext();
-            try { Handle(ctx); }
-            catch (Exception e) { Fail(ctx, 500, e.Message); }
+            // A report can hang inside Crystal (a format that waits for a database logon dialog nobody can answer).
+            // The request runs on a worker; past the limit the caller gets an answer and the bridge exits, so the
+            // start script (run_bridge.cmd) starts a clean one. Nothing else can use a stuck Crystal engine anyway.
+            var worker = new System.Threading.Thread(() =>
+            {
+                try { Handle(ctx); }
+                catch (Exception e) { try { Fail(ctx, 500, e.Message); } catch { } }
+            });
+            worker.IsBackground = true;
+            worker.Start();
+            if (!worker.Join(TimeSpan.FromSeconds(55)))
+            {
+                try { Fail(ctx, 504, "Crystal Reports did not finish this report (it may be waiting for a database logon). The bridge is restarting."); } catch { }
+                System.Diagnostics.Process.GetCurrentProcess().Kill();   // Environment.Exit can itself hang on a stuck Crystal thread
+            }
         }
     }
 

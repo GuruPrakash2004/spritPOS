@@ -74,7 +74,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     icon: FileText,
     shortcuts: [
       { keys: ['⌘', 'S'], description: 'Save the record, entry or bill' },
-      { keys: ['F10'], description: 'Save & print (stock entries) / save (purchase bill)' },
+      { keys: ['F10'], description: 'Save & print (stock entries and purchase bill)' },
       { keys: ['F2'], description: 'Purchase bill: item lookup (↑↓, Enter)' },
       { keys: ['Alt', 'X'], description: 'Purchase bill: cancel the bill' },
       { keys: ['Enter'], description: 'Next field (entries) / save (masters)' },

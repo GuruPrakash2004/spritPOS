@@ -9,7 +9,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 
-from .. import mailer, security, store
+from .. import custom_engine, mailer, rpt_custom, security, store
 from ..schemas import ReportEmailIn
 from .auth import get_current_user, require_module
 
@@ -265,7 +265,9 @@ REPORTS = {
 def allowed_reports(current_user: dict = Depends(get_current_user)):
     """Customised Reports this user may run (Admin Master (Security) → Report Rights): `known` is every report
     the server has, `allowed` those this user may run."""
-    return {"known": list(REPORTS), "allowed": [n for n in REPORTS if security.can_run_report(current_user, n)]}
+    known = list(dict.fromkeys(custom_engine.names() + list(REPORTS)))
+    groups = {n: (custom_engine.definition(n) or {}).get("group", "") for n in known}
+    return {"known": known, "allowed": [n for n in known if security.can_run_report(current_user, n)], "groups": groups}
 
 
 def _check_report_right(user: dict, name: str) -> None:
@@ -282,15 +284,20 @@ def run_report(name: str, from_date: date, to_date: date, ledger: list[str] = Qu
         raise HTTPException(422, "From Date cannot be after To Date")
     if (to_date - from_date).days > 3660:
         raise HTTPException(422, "Choose a period of ten years or less")
-    fn = REPORTS.get(name)
-    if not fn:
-        raise HTTPException(404, f"'{name}' is not available yet")
-    token = _filters.set({"ledger": set(ledger), "supplier": set(supplier), "group": set(group)})
+    flt = {"ledger": set(ledger), "supplier": set(supplier), "group": set(group)}
+    token = _filters.set(flt)
     try:
-        columns, rows = fn(from_date, to_date)
+        defn = custom_engine.definition(name)   # the desktop's own definition (UtlReportsCR*) comes first
+        if defn:
+            columns, rows = custom_engine.run(defn, from_date, to_date, flt)
+        elif name in REPORTS:
+            columns, rows = REPORTS[name](from_date, to_date)
+        else:
+            raise HTTPException(404, f"'{name}' is not available yet")
     finally:
         _filters.reset(token)
-    return {"name": name, "from_date": from_date, "to_date": to_date, "columns": columns, "rows": rows}
+    return {"name": name, "from_date": from_date, "to_date": to_date, "columns": columns, "rows": rows,
+            "rpt": rpt_custom.usable_file(defn) if defn else "", "group": (defn or {}).get("group", "")}
 
 
 @router.post("/email")

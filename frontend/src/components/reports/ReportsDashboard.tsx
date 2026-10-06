@@ -8,15 +8,16 @@ import { Mail, Download, Eye, Plus, X, Loader2, Printer } from 'lucide-react';
 import { badge, field, fieldError, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
 import { toast } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { errorText, getCustomReportRights, listMaster, runCustomReport, todayIso } from '../../lib/api';
+import { errorText, getCustomReportRights, listMaster, renderCustomReportPrint, runCustomReport, todayIso } from '../../lib/api';
 import { downloadXls, type ReportColumn, type ReportRow } from '../../lib/xlsExport';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import ReportPrintModal from '../print/ReportPrintModal';
 import ReportEmailDialog, { type ReportEmailRequest } from './ReportEmailDialog';
 
 const toDmy = (iso: string) => iso.split('-').reverse().join('/');
 
-type ReportResult = { name: string; from_date: string; to_date: string; columns: ReportColumn[]; rows: ReportRow[]; filterKey?: string };
+type ReportResult = { name: string; from_date: string; to_date: string; columns: ReportColumn[]; rows: ReportRow[]; filterKey?: string; rpt?: string; group?: string };
 type Master = { code: string; name: string };
 type ActiveFilter = { on: string; val: string; param?: MasterParam; code?: string };
 
@@ -58,9 +59,10 @@ const ReportsDashboard = () => {
   // Reports this user may run (Admin Master (Security) → Report rights); null until loaded = show all.
   // Only reports the server has and this user may not run are hidden ("not available yet" ones stay listed).
   const [hiddenReports, setHiddenReports] = useState<Set<string>>(new Set());
+  const [serverGroups, setServerGroups] = useState<Record<string, string>>({});
   useEffect(() => {
     getCustomReportRights()
-      .then(r => setHiddenReports(new Set(r.known.filter(n => !r.allowed.includes(n)))))
+      .then(r => { setHiddenReports(new Set(r.known.filter(n => !r.allowed.includes(n)))); setServerGroups(r.groups ?? {}); })
       .catch(() => undefined);
   }, []);
 
@@ -72,7 +74,7 @@ const ReportsDashboard = () => {
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [emailRequest, setEmailRequest] = useState<ReportEmailRequest | null>(null);
 
-  const reportCategories = [
+  const builtInCategories = [
     {
       cat: 'Expense Report',
       reports: ['Expense Ledger Report', 'Expense Report']
@@ -116,6 +118,20 @@ const ReportsDashboard = () => {
       ]
     }
   ];
+
+  // Reports the shop's database defines (the desktop's Customised Reports) are listed under their own group; a report
+  // the app has built in but the database doesn't define keeps its built-in place.
+  const reportCategories = (() => {
+    const byGroup = new Map<string, string[]>();
+    for (const [name, group] of Object.entries(serverGroups)) if (group) byGroup.set(group, [...(byGroup.get(group) ?? []), name]);
+    if (!byGroup.size) return builtInCategories;
+    const order = ['Expense Report', 'Purchase Report', 'Sales Report'];
+    const cats = [...byGroup.entries()].sort(([a], [b]) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99) || a.localeCompare(b))
+      .map(([cat, reports]) => ({ cat, reports: reports.sort((x, y) => x.localeCompare(y)) }));
+    const known = new Set(cats.flatMap(c => c.reports));
+    const extra = builtInCategories.map(c => ({ ...c, reports: c.reports.filter(n => !known.has(n) && !(n in serverGroups)) })).filter(c => c.reports.length);
+    return [...cats, ...extra];
+  })();
 
   // The period's mistake, shown under From/To (and the cursor goes to the faulty date).
   const checkPeriod = () => {
@@ -329,6 +345,17 @@ const ReportsDashboard = () => {
                   </tr>
                 )}
               </tbody>
+              {result.rows.length > 0 && result.columns.some(c => c.total) && (
+                <tfoot className="sticky bottom-0 bg-[#F5F1E9] font-semibold dark:bg-[#101010]">
+                  <tr>
+                    {result.columns.map((c, i) => (
+                      <td key={c.key} className={`px-4 py-2 ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>
+                        {c.total ? fmtCell(result.rows.reduce((sum, row) => sum + (typeof row[c.key] === 'number' ? (row[c.key] as number) : 0), 0), c) : i === 0 ? 'Total' : ''}
+                      </td>
+                    ))}
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </section>
@@ -338,7 +365,17 @@ const ReportsDashboard = () => {
         <ReportEmailDialog request={emailRequest} defaultTo={company?.email ?? ''} onClose={() => setEmailRequest(null)} />
       )}
 
-      {showPrintModal && result && (
+      {showPrintModal && result && result.rpt && (
+        <ReportPrintModal
+          title={`Print: ${result.name}`}
+          formats={[result.rpt]}
+          render={(_rpt, printer) => renderCustomReportPrint({ name: result.name, from_date: result.from_date, to_date: result.to_date,
+            ledger: filterCodes('ledger'), supplier: filterCodes('supplier'), group: filterCodes('group') }, printer)}
+          onClose={() => setShowPrintModal(false)}
+        />
+      )}
+
+      {showPrintModal && result && !result.rpt && (
         <PrintFormatSelectorModal
           category="GENERIC_REPORT"
           data={{

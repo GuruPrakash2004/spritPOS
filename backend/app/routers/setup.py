@@ -9,9 +9,12 @@ the sign-in page shows Database setup instead of the login form:
                         the desktop's tables directly) and load the shop's data
   POST /setup/admin     once the database is in use but no active user is an Administrator: make one (a desktop
                         user or a new one) with a new password; only while there is none
-While the database isn't set up these are open to anyone who can reach the sign-in page. Once it is set up
-(also while it is offline) they need an Administrator's token instead. The password arrives encrypted
-(secure_fields, purpose "db"), is never returned, and is stored only sealed.
+  GET  /setup/current   the settings in use (no password), to fill the form when they are changed later
+While the database isn't set up these are open to anyone who can reach the sign-in page. Once it is set up they need
+an Administrator's token (Global Settings → Database). The one exception is a set-up database that is OFFLINE: then
+nobody can sign in, so the sign-in page's "Database settings" works from the server PC itself (a request from this
+machine), and from anywhere with an Administrator's token. The password arrives encrypted (secure_fields, purpose
+"db"), is never returned, and is stored only sealed; leaving it blank when changing keeps the saved one.
 """
 from typing import Literal
 
@@ -28,7 +31,7 @@ router = APIRouter(prefix="/setup", tags=["Database setup"])
 class ServerIn(BaseModel):
     host: str = Field(min_length=1, max_length=200)
     port: str = Field("", max_length=5, pattern=r"^\d*$")
-    auth: Literal["sql", "windows"] = "sql"
+    auth: Literal["sql"] = "sql"
     user: str = Field("", max_length=128)
     password: str = Field("", max_length=1000)
 
@@ -42,16 +45,25 @@ class AdminIn(BaseModel):
     password: str = Field(min_length=1, max_length=1000)   # encrypted, purpose "new"
 
 
-def _guard(request: Request) -> None:
-    """Open while the database isn't set up (there are no users then); an Administrator's token otherwise, also
-    while a set-up database is offline, so nobody can repoint the app during a network drop."""
+LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
+def _guard(request: Request) -> str:
+    """Open while the database isn't set up (there are no users then); otherwise an Administrator's token. A set-up
+    database that is offline also accepts a request from this PC itself (nobody can sign in to get a token then, and
+    anyone on the network must not be able to repoint the app). Returns the signed-in user's name ('' when none)."""
     if boot.needs_setup():
-        return
+        return ""
     header = request.headers.get("authorization", "")
-    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=header[7:]) if header.lower().startswith("bearer ") else None
-    user = auth.get_current_user(creds)
-    if user.get("role") != store.ADMIN_ROLE:
-        raise HTTPException(403, "Only an Administrator can change the database")
+    if header.lower().startswith("bearer "):
+        user = auth.get_current_user(HTTPAuthorizationCredentials(scheme="Bearer", credentials=header[7:]))
+        if user.get("role") != store.ADMIN_ROLE:
+            raise HTTPException(403, "Only an Administrator can change the database")
+        return str(user["user"])
+    if not db.is_db_available() and request.client and request.client.host in LOOPBACK:
+        return ""
+    raise HTTPException(403, "Sign in as an Administrator and open Global Settings → Database. "
+                             "(While the database is offline, open this page on the server PC itself.)")
 
 
 BAD_CHARS = set(";{}=[]\r\n'\"")
@@ -66,10 +78,12 @@ def _clean(value: str, what: str) -> str:
 
 def _server(body: ServerIn) -> tuple[str, str, str, str, str]:
     host = _clean(body.host, "Server name")
-    if body.auth == "sql" and not _clean(body.user, "Login"):
+    if not _clean(body.user, "Login"):
         raise HTTPException(422, "Enter the SQL login name")
     password = secure_fields.decrypt(body.password, "db") if body.password else ""
-    return host, body.port.strip(), body.user.strip() if body.auth == "sql" else "", password or "", body.auth
+    if not password and db.configured():
+        password = db._password()   # blank = keep the saved password (changing the settings later)
+    return host, body.port.strip(), body.user.strip(), password or "", body.auth
 
 
 @router.get("/status")
@@ -78,6 +92,15 @@ def status():
         sqlstore.writes_blocked()   # set up but offline: try to come back (at most every 20 s) and load the data
     return {"configured": db.configured(), "connected": db.is_db_available(), "needs_setup": boot.needs_setup(),
             "needs_admin": boot.needs_admin()}
+
+
+@router.get("/current")
+def current(request: Request):
+    """The connection settings in use, to fill the form (never the password; `has_password` says one is saved)."""
+    _guard(request)
+    s = db.settings()
+    return {"host": s["host"], "port": s["port"] or "", "database": s["database"], "auth": s["auth"], "user": s["user"],
+            "has_password": bool(db.configured() and db._password()), "connected": db.is_db_available()}
 
 
 @router.post("/test")
@@ -89,7 +112,8 @@ def test(body: ServerIn, request: Request):
 
 @router.post("/connect")
 def connect(body: ConnectIn, request: Request):
-    _guard(request)
+    who = _guard(request)
+    before = db.settings() if db.configured() else None
     host, port, user, password, auth_kind = _server(body)
     database = _clean(body.database, "Database")
     tried = db.test_connection(host, port, "", user, password, auth_kind)
@@ -108,6 +132,10 @@ def connect(body: ConnectIn, request: Request):
     except setup_db.SetupError as exc:
         raise HTTPException(400, str(exc)) from exc
     boot.reload_after_setup()   # the shop's data, straight from this database
+    if before is not None:   # a change of settings (not the first setup): written to the ADMIN Audit Log; never the password
+        admin_audit.write_now(who or "SERVER PC", "Database settings", "Edited", database,
+                              f"database {before['database']}",
+                              f"database {database}")
     return {"database": info["database"], "edition": info["edition"], "ready": setup_db.is_ready()}
 
 

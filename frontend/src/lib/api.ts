@@ -199,6 +199,9 @@ export const getTransportKey = () => request<ApiTransportKey>('/auth/transport-k
 export const getPublicLoginSettings = () => request<ApiLoginSettings>('/auth/login-settings');
 
 export const getSetupStatus = () => request<ApiSetupStatus>('/setup/status');
+/** The connection settings in use (no password), to fill the Database settings form. */
+export type ApiSetupCurrent = { host: string; port: string; database: string; auth: 'sql'; user: string; has_password: boolean; connected: boolean };
+export const getSetupCurrent = () => request<ApiSetupCurrent>('/setup/current');
 export const setupTest = (body: ApiSetupServer) =>
   request<{ ok: boolean; databases?: string[]; error?: string; driver?: string }>('/setup/test', { method: 'POST', body });
 export const setupConnect = (body: ApiSetupServer & { database: string }) =>
@@ -278,7 +281,10 @@ export const getStockBalance = (date: string) => request<ApiStockRow[]>(`/report
 export const getReport = <T>(endpoint: string, params: Record<string, string | number | undefined> = {}) => request<T[]>(`${endpoint}${qs(params)}`);
 export const getRptFiles = <T>(category: string) => request<T[]>(`/reports/rpt-files${qs({ category })}`);
 
-export const getCustomReportRights = () => request<{ known: string[]; allowed: string[] }>('/reports/custom/allowed');
+export const getCustomReportRights = () => request<{ known: string[]; allowed: string[]; groups?: Record<string, string> }>('/reports/custom/allowed');
+/** A Customised Report through the Crystal file in its definition: the PDF (with a printer: printed there, JSON back). */
+export const renderCustomReportPrint = (body: { name: string; from_date: string; to_date: string; ledger: string[]; supplier: string[]; group: string[] }, printer = '') =>
+  requestRaw('/print/custom-report', { method: 'POST', body: { ...body, printer } });
 /** `query` is the already-built query string of the filters (without the '?'). */
 export const runCustomReport = <T>(query: string) => request<T>(`/reports/custom?${query}`);
 export const emailCustomReport = (body: unknown) => request<{ sent_to: string[]; rows: number }>('/reports/custom/email', { method: 'POST', body });
@@ -302,6 +308,35 @@ export const renderStockBalancePrint = (from_date: string, to_date: string, grou
 /** Is the Crystal Reports bridge set up and answering, and the printers of the PC it runs on. */
 export const getPrintBridge = () => request<{ configured: boolean; ok: boolean; message: string; version?: string; printers?: string[] }>('/print/bridge');
 export const emailPrint = (body: PrintRequest, to: string[]) => request<{ sent: boolean; to: string[] }>('/print/email', { method: 'POST', body: { ...body, to } });
+
+// ─── Other Settings (routers/utilities.py: /utilities/doc-settings, /numbering, /menu) ───────────────
+
+export type ApiDocSettings = {
+  after_save: 'none' | 'prompt' | 'preview'; default_format: string; allow_duplicate_items: boolean; allow_edit_date: boolean;
+  edit_days: number; allow_copy_from: boolean; update_rate_from_pb: boolean; screen: string; prints: boolean; affects_stock: boolean;
+};
+export type ApiNumbering = { kind: string; screen: string; prefix: string | null; default_prefix: string | null; next_number: number; example: string; from_counter: boolean };
+export type ApiMenuLayout = { hidden: string[]; codes: Record<string, string> };
+export const getDocSettingsAdmin = () => request<Record<string, ApiDocSettings>>('/utilities/doc-settings');
+export const saveDocSettings = (kind: string, body: Partial<ApiDocSettings>) => request<ApiDocSettings>(`/utilities/doc-settings/${kind}`, { method: 'PUT', body });
+export const getNumbering = () => request<ApiNumbering[]>('/utilities/numbering');
+export const saveNumbering = (kind: string, body: { prefix?: string; next_number?: number }) => request<ApiNumbering>(`/utilities/numbering/${kind}`, { method: 'PUT', body });
+export const getMenuAdmin = () => request<ApiMenuLayout>('/utilities/menu');
+export const saveMenuAdmin = (body: ApiMenuLayout) => request<ApiMenuLayout>('/utilities/menu', { method: 'PUT', body });
+
+// ─── Print Settings (routers/utilities.py: /utilities/print-settings) ───────────────────────────────
+
+export type ApiPrintOption = {
+  doc_id: number; order: number; name: string; rpt: string; selection: string; copies: number; default: boolean; inactive: boolean;
+  click: string; ctrl_click: string; ctrl_alt_click: string; after_save: string; printer: string; multi_rpt: boolean;
+};
+export type ApiPrintSettings = {
+  documents: { doc_id: number; name: string; short_form: string; options: ApiPrintOption[] }[];
+  clicks: Record<string, string>; after_save: Record<string, string>;
+};
+export const getPrintSettings = () => request<ApiPrintSettings>('/utilities/print-settings');
+export const savePrintOption = (docId: number, order: number, body: Partial<Omit<ApiPrintOption, 'doc_id' | 'order' | 'rpt' | 'selection' | 'multi_rpt'>>) =>
+  request<ApiPrintOption>(`/utilities/print-settings/${docId}/${order}`, { method: 'PUT', body });
 
 // ─── Admin Master (routers/auth.py: /admin/*) ──────────────────────────────────────────────────────
 
@@ -577,6 +612,10 @@ export type ApiAbout = {
   product: string; software_version: string; api_version: string; company: string; db_connected: boolean; server_time: string;
   db_configured: boolean; db_disconnected_for_testing: boolean;
   designer: { screens: number; print_options: number; fields: number }; rpt_bridge: boolean; rpt_files: number;
+  /** The database in use; shown to everyone. */
+  database: string;
+  /** Server, port, login and driver: only an Administrator gets them (never the password). */
+  connection: { server: string; port: string; database: string; auth: string; user: string; driver: string; edition: string; version: string } | null;
 };
 export type ApiDupInvoice = {
   doc_no: string; date: string; time: string; added_by: string; sales_type: string; bill_system: 'Web' | 'Desktop';
@@ -595,6 +634,6 @@ export type ApiStockSheet = { basis: string; rows: { code: string; name: string;
 
 // The sign-in page's Database setup (backend routers/setup.py).
 export type ApiSetupStatus = { configured: boolean; connected: boolean; needs_setup: boolean; needs_admin: boolean };
-export type ApiSetupServer = { host: string; port: string; auth: 'sql' | 'windows'; user: string; password: string };
+export type ApiSetupServer = { host: string; port: string; auth: 'sql'; user: string; password: string };
 // GET /auth/transport-key: the RSA public key (SPKI, base64) passwords are encrypted with, and the server's clock.
 export type ApiTransportKey = { alg: string; spki: string; kid: string; server_time: number };

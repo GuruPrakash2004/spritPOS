@@ -20,8 +20,7 @@ and the web app always see the same data. The setup only creates five small tabl
 3. Open the web app. With no database in `backend/.env`, the sign-in page shows **Database setup**:
    - **Server**: `localhost`, or `localhost\SQLEXPRESS` for a named instance. **Port**: leave it blank for
      a named instance.
-   - **SQL login** (e.g. `sa`) and password, or **Windows login**. Windows login needs Windows with the
-     ODBC Driver for SQL Server. The password is encrypted in the browser and stored sealed in
+   - **SQL login** (e.g. `sa`) and password. The password is encrypted in the browser and stored sealed in
      `backend/.env`.
    - **Test connection** lists the server's databases; pick the vLQMS one and press **Connect**. The app
      checks it is a vLQMS database, creates its five tables (this login needs the right to create tables

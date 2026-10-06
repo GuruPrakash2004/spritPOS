@@ -4,6 +4,7 @@
 - PUT  /print/preference      remember this user's last-picked option of a document
 - POST /print/dsr             the Daily Summary Report of a day through the desktop's RptDSR.rpt (+ GET /print/dsr-formats)
 - POST /print/stock-balance   the Stock Balance report of a period through the desktop's RptStkBal*.rpt (+ GET /print/stock-balance-formats)
+- POST /print/custom-report   a Customised Report through the Crystal file in its definition (UtlReportsCRHdr.RptFileName)
 - GET  /print/bridge          is the Crystal Reports bridge set up and answering
 - POST /print/render          the report as a PDF for the preview tab, or sent to the option's printer (direct print)
 - POST /print/email           the report as a PDF, e-mailed with the option's subject, text and recipients
@@ -19,7 +20,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from .. import designer, mailer, rpt_bridge, rpt_dsr, rpt_print, rpt_stock, sqlstore, store
+from .. import designer, mailer, rpt_bridge, rpt_custom, rpt_dsr, rpt_print, rpt_stock, sqlstore, store
 from .auth import get_current_user, require_admin
 
 router = APIRouter(tags=["Printing"])
@@ -143,6 +144,33 @@ async def print_stock_balance(body: StockPrintIn, user: dict = Depends(get_curre
     return Response(pdf, media_type="application/pdf", headers={
         "Content-Disposition": f'inline; filename="StockBalance_{body.from_date.isoformat()}_{body.to_date.isoformat()}.pdf"',
         "X-Page-Size": size})
+
+
+class CustomPrintIn(BaseModel):
+    name: str
+    from_date: date
+    to_date: date
+    ledger: list[str] = []
+    supplier: list[str] = []
+    group: list[str] = []
+    printer: str = ""
+    copies: int = 1
+
+
+@router.post("/print/custom-report")
+async def print_custom_report(body: CustomPrintIn, user: dict = Depends(get_current_user)):
+    """A Customised Report through the Crystal file in its definition: a PDF to preview, or (with `printer`) printed
+    directly and JSON back."""
+    from .custom_reports import _check_report_right   # the same right as running the report
+    _check_report_right(user, body.name)
+    if body.from_date > body.to_date:
+        raise HTTPException(422, "From Date cannot be after To Date")
+    flt = {"ledger": set(body.ledger), "supplier": set(body.supplier), "group": set(body.group)}
+    pdf = await run_in_threadpool(rpt_custom.render, body.name, body.from_date, body.to_date, flt, user, body.printer, body.copies)
+    if pdf is None:
+        return {"printed": True, "printer": body.printer, "copies": body.copies}
+    pdf, size = await run_in_threadpool(rpt_bridge.preview_pdf, pdf)
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": 'inline; filename="report.pdf"', "X-Page-Size": size})
 
 
 @router.get("/print/bridge")

@@ -199,6 +199,7 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
   const [dbState, setDbState] = useState<ApiSetupStatus | null>(null);
   const loadDbState = () => getSetupStatus().then(setDbState).catch(() => setDbState(null));
   useEffect(() => { loadDbState(); }, []);
+  const [editingDb, setEditingDb] = useState(false);
   const setup = !!dbState?.needs_setup;
   const offline = !!dbState && dbState.configured && !dbState.connected && !setup;
   const needsAdmin = !!dbState?.needs_admin && !setup && !offline;
@@ -347,10 +348,12 @@ export default function Login({ onLogin, notice = '' }: { onLogin: (user: ApiUse
             </div>
 
             {setup && <DatabaseSetup inputClass={inputClass} labelClass={labelClass} onDone={loadDbState} />}
-            {offline && (
+            {offline && editingDb && <DatabaseSetup inputClass={inputClass} labelClass={labelClass} change onDone={() => { setEditingDb(false); loadDbState(); }} onCancel={() => setEditingDb(false)} />}
+            {offline && !editingDb && (
               <p role="alert" className="mb-4 flex items-center gap-2 rounded-xl bg-[#9A4B45]/10 px-4 py-3 text-xs font-medium text-[#9A4B45] dark:bg-red-500/10 dark:text-red-400">
                 <AlertCircle size={14} className="shrink-0" />Database offline: the SQL Server can't be reached. Sign-in comes back when it does (checked every 20 seconds).
                 <button type="button" onClick={loadDbState} className="ml-auto font-semibold underline">Retry</button>
+                <button type="button" onClick={() => setEditingDb(true)} className="font-semibold underline">Database settings</button>
               </p>
             )}
 

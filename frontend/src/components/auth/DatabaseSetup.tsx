@@ -1,27 +1,42 @@
 // One-time Database setup on the sign-in page (backend routers/setup.py). Shown instead of the login form
 // while the backend has no database set up. The client connects the app straight to their own Microsoft SQL
 // Server database (the one their desktop vLQMS uses); nothing is copied, the app works on its tables directly:
-//   1. Server: server (localhost, localhost\SQLEXPRESS), optional port, SQL login or Windows login → Test
+//   1. Server: server (localhost, localhost\SQLEXPRESS), optional port, SQL login → Test
 //      connection lists the databases;
 //   2. Database: pick it → Connect saves the connection, creates the app's own few tables and loads the shop's
 //      data; then the login form comes back.
 // The password leaves the browser only encrypted (lib/secureField.ts, purpose "db") and is never shown again.
+// `change` mode (Global Settings → Database, and the sign-in page's Database settings while the database is offline):
+// the form starts with the settings in use, a blank password keeps the saved one, and the title says so.
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, CheckCircle2, Database, Loader2, PlugZap } from 'lucide-react';
-import { errorText, setupConnect, setupTest } from '../../lib/api';
+import { errorText, getSetupCurrent, setupConnect, setupTest } from '../../lib/api';
 import { encryptSecret } from '../../lib/secureField';
 
 type Step = 'server' | 'database';
 
-export default function DatabaseSetup({ inputClass, labelClass, onDone }: { inputClass: string; labelClass: string; onDone: () => void }) {
+export default function DatabaseSetup({ inputClass, labelClass, onDone, change = false, plain = false, onCancel }: {
+  inputClass: string; labelClass: string; onDone: () => void; change?: boolean; plain?: boolean; onCancel?: () => void;
+}) {
   const [step, setStep] = useState<Step>('server');
-  const [f, setF] = useState({ host: 'localhost', port: '', auth: 'sql' as 'sql' | 'windows', user: 'sa', password: '' });
+  const [f, setF] = useState({ host: 'localhost', port: '', auth: 'sql' as const, user: 'sa', password: '' });
   const [databases, setDatabases] = useState<string[]>([]);
   const [database, setDatabase] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [hasPassword, setHasPassword] = useState(false);
+
+  // Changing the settings: start from the ones in use (the password is never sent back).
+  useEffect(() => {
+    if (!change) return;
+    getSetupCurrent().then(c => {
+      setF({ host: c.host, port: c.port, auth: c.auth, user: c.user || 'sa', password: '' });
+      setDatabase(c.database);
+      setHasPassword(c.has_password);
+    }).catch(e => setError(errorText(e)));
+  }, [change]);
 
   const set = (k: keyof typeof f, v: string) => { setF(x => ({ ...x, [k]: v })); setErrors(e => ({ ...e, [k]: '' })); setError(''); };
 
@@ -43,7 +58,7 @@ export default function DatabaseSetup({ inputClass, labelClass, onDone }: { inpu
       const r = await setupTest(await server());
       if (!r.ok) { setError(r.error || 'Could not connect.'); return; }
       setDatabases(r.databases ?? []);
-      setDatabase(d => d || (r.databases ?? []).find(n => /lqms/i.test(n)) || r.databases?.[0] || '');
+      setDatabase(d => ((r.databases ?? []).includes(d) ? d : (r.databases ?? []).find(n => /lqms/i.test(n)) || r.databases?.[0] || ''));
       setStep('database');
     } catch (err) { setError(errorText(err)); } finally { setBusy(false); }
   };
@@ -67,33 +82,29 @@ export default function DatabaseSetup({ inputClass, labelClass, onDone }: { inpu
   );
 
   return (
-    <div className="glass-card-login animate-fadeInUp rounded-2xl border border-[#E3D9CD] p-7 shadow-[0_20px_50px_rgba(72,53,38,0.08)] dark:border-[#2A2A2A] dark:shadow-card">
+    <div className={plain ? '' : 'glass-card-login animate-fadeInUp rounded-2xl border border-[#E3D9CD] p-7 shadow-[0_20px_50px_rgba(72,53,38,0.08)] dark:border-[#2A2A2A] dark:shadow-card'}>
       <div className="mb-5 flex items-center gap-2">
         <Database size={18} className="text-[#64283A] dark:text-[#D4A847]" />
-        <h2 className="text-sm font-bold">Database setup</h2>
+        <h2 className="text-sm font-bold">{change ? 'Database settings' : 'Database setup'}</h2>
         <span className="ml-auto text-[11px] text-[#70675F] dark:text-stone-400">Step {step === 'server' ? 1 : 2} of 2</span>
       </div>
 
       {step === 'server' && (
         <form onSubmit={test} noValidate className="space-y-4">
-          <p className="text-xs text-[#70675F] dark:text-stone-400">Connect e-vLQMS ERP to this shop's SQL Server (the one the desktop vLQMS uses). This is done once.</p>
+          <p className="text-xs text-[#70675F] dark:text-stone-400">{change
+            ? 'Change the server, login or database e-vLQMS ERP uses. Test the connection, then pick the database. Back the database up first.'
+            : "Connect e-vLQMS ERP to this shop's SQL Server (the one the desktop vLQMS uses). This is done once."}</p>
           {field('host', 'Server', { placeholder: 'localhost or localhost\\SQLEXPRESS' })}
           {field('port', 'Port (optional)', { inputMode: 'numeric', placeholder: 'Blank for a named instance' })}
-          <div>
-            <span className={labelClass}>Sign in to SQL Server with</span>
-            <div className="flex gap-4 text-xs">
-              <label className="flex items-center gap-2"><input type="radio" checked={f.auth === 'sql'} onChange={() => set('auth', 'sql')} />SQL login</label>
-              <label className="flex items-center gap-2"><input type="radio" checked={f.auth === 'windows'} onChange={() => set('auth', 'windows')} />Windows login</label>
-            </div>
-          </div>
-          {f.auth === 'sql' && <>
-            {field('user', 'Login', { autoComplete: 'off' })}
-            {field('password', 'Password', { type: 'password', autoComplete: 'new-password' })}
-          </>}
+          {field('user', 'Login', { autoComplete: 'off' })}
+          {field('password', 'Password', { type: 'password', autoComplete: 'new-password', ...(change && hasPassword ? { placeholder: 'Leave blank to keep the saved password' } : {}) })}
           {error && <ErrorLine text={error} />}
-          <button type="submit" disabled={busy} className={buttonClass}>
+          <div className="flex gap-2">
+            {onCancel && <button type="button" onClick={onCancel} className="rounded-xl border border-[#DCD1C5] px-4 text-xs dark:border-[#2A2A2A]">Cancel</button>}
+            <button type="submit" disabled={busy} className={buttonClass}>
             {busy ? <Loader2 size={16} className="animate-spin" /> : <PlugZap size={16} />}{busy ? 'Testing…' : 'Test connection'}
-          </button>
+            </button>
+          </div>
         </form>
       )}
 

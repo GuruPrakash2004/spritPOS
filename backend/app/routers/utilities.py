@@ -19,8 +19,8 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, db, doc_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store, websync
-from .auth import hides_cost, require_admin, require_module
+from .. import admin_audit, db, doc_settings, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store, websync
+from .auth import get_current_user, hides_cost, require_admin, require_module
 
 router = APIRouter(prefix="/utilities", tags=["Utilities"])
 logger = logging.getLogger("vlqms.utilities")
@@ -124,10 +124,29 @@ def audit_log(from_date: date = Query(default_factory=lambda: date.today() - tim
 
 # ─── About ───────────────────────────────────────────────────────────────────
 
+def _connection_details() -> dict:
+    """What an Administrator sees under About → Database: the settings in use (never the password) and, while
+    connected, what SQL Server says about itself."""
+    s = db.settings()
+    out = {"server": s["host"], "port": s["port"] or "", "database": s["database"], "auth": "SQL login",
+           "user": s["user"], "driver": db.driver_name(), "edition": "", "version": ""}
+    if db.is_db_available():
+        try:
+            r = db.fetchone("SELECT CAST(SERVERPROPERTY('Edition') AS NVARCHAR(128)) AS edition, "
+                            "CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS version")
+            out.update(edition=(r or {}).get("edition") or "", version=(r or {}).get("version") or "")
+        except Exception:   # noqa: BLE001 - About must still open when the connection is on its way out
+            pass
+    return out
+
+
 @router.get("/about")
-def about():
+def about(current_user: dict = Depends(get_current_user)):
     from ..main import app
     return {
+        # The database name is shown to everyone who can open About; the server, port, login and driver only to an Administrator.
+        "database": db.settings()["database"] if db.configured() else "",
+        "connection": _connection_details() if current_user.get("role") == store.ADMIN_ROLE and db.configured() else None,
         "product": "e-vLQMS ERP",
         "software_version": gsettings.value("SWVersion"),
         "api_version": app.version,
@@ -154,7 +173,7 @@ def disconnect_database(admin: dict = Depends(require_admin)):
         raise HTTPException(409, "No database is set up")
     db.disconnect()
     logger.warning("Database disconnected for testing by %s", admin["user"])
-    return about()
+    return about(admin)
 
 
 @router.post("/database/reconnect")
@@ -166,7 +185,7 @@ def reconnect_database(admin: dict = Depends(require_admin)):
         raise HTTPException(503, "Could not connect to the database. Check that SQL Server is running and try again.")
     sqlstore.reload()
     logger.warning("Database reconnected by %s", admin["user"])
-    return about()
+    return about(admin)
 
 
 # ─── Remove Duplicate Invoice (711) ──────────────────────────────────────────
@@ -359,6 +378,31 @@ def save_import_fields(body: ImportFieldsIn, admin: dict = Depends(require_admin
                        ", ".join(before) or "all fields", ", ".join(store.IMPORT_FIELDS["fields"]) or "all fields")
     return {"available": available, "fields": store.IMPORT_FIELDS["fields"]}
 
+
+
+# ─── Print Settings (Other Settings → Print Settings) ───────────────────────────
+
+class PrintOptionUpdate(BaseModel):
+    name: str | None = Field(None, max_length=50)
+    copies: int | None = None
+    default: bool | None = None
+    inactive: bool | None = None
+    click: str | None = Field(None, max_length=1)
+    ctrl_click: str | None = Field(None, max_length=1)
+    ctrl_alt_click: str | None = Field(None, max_length=1)
+    after_save: str | None = Field(None, max_length=3)
+    printer: str | None = Field(None, max_length=50)
+
+
+@router.get("/print-settings", dependencies=[Depends(require_admin)])
+def print_settings_list():
+    """Every document's print options: what a click does, the prompt after saving, printer, copies, default."""
+    return print_settings.listing()
+
+
+@router.put("/print-settings/{doc_id}/{order}")
+def print_settings_save(doc_id: int, order: int, body: PrintOptionUpdate, admin: dict = Depends(require_admin)):
+    return print_settings.update(doc_id, order, body.model_dump(exclude_unset=True), admin["user"])
 
 
 # ─── Web Sync (frmModWebSync) ────────────────────────────────────────────────

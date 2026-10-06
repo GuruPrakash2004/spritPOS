@@ -10,8 +10,8 @@ const OPTIONS = {
   kind: 'sales_invoice', short_form: 'SINV', doc_id: 5, doc_name: 'Sales Invoice', designed: true, default: 'GST',
   files: [], stored_proc: false, bridge_configured: true,
   options: [
-    { name: 'Thermal', rpt: 'fmtSINV80', copies: 1, default: false, click: 'preview', ctrl_click: '', ctrl_alt_click: '', after_save: '', printer: '', multi_rpt: false },
-    { name: 'GST', rpt: 'FMTSINV_GST', copies: 2, default: true, click: 'preview', ctrl_click: '', ctrl_alt_click: '', after_save: 'P', printer: 'POS-1', multi_rpt: false },
+    { name: 'Thermal', rpt: 'fmtSINV80', copies: 1, available: true, default: false, click: 'preview', ctrl_click: '', ctrl_alt_click: '', after_save: '', printer: '', multi_rpt: false },
+    { name: 'GST', rpt: 'FMTSINV_GST', copies: 2, available: true, default: true, click: 'preview', ctrl_click: '', ctrl_alt_click: '', after_save: 'P', printer: 'POS-1', multi_rpt: false },
   ],
 }
 
@@ -26,8 +26,6 @@ describe('PrintDialog', () => {
       if (url === '/api/print/render') return new Response(new Blob(['%PDF-1.4']), { status: 200, headers: { 'Content-Type': 'application/pdf' } })
       return json({})
     }))
-    const tab = { document: { title: '' }, location: { href: '' }, close: vi.fn() } as unknown as Window
-    vi.spyOn(window, 'open').mockReturnValue(tab)
     URL.createObjectURL = vi.fn(() => 'blob:x')
     URL.revokeObjectURL = vi.fn()
 
@@ -39,10 +37,10 @@ describe('PrintDialog', () => {
     expect(screen.queryByText(/bridge is not set up/i)).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('radio', { name: /Thermal/ }))
-    await userEvent.click(screen.getByRole('button', { name: /^preview$/i }))
 
-    await waitFor(() => expect(tab.location.href).toBe('blob:x'))
-    const sent = calls.find(c => c.url === '/api/print/render')?.body as Record<string, unknown>
+    // The chosen format is laid out and shown inside the window (no separate Preview button any more).
+    await waitFor(() => expect(screen.getByTitle('Print preview')).toBeInTheDocument())
+    const sent = calls.filter(c => c.url === '/api/print/render').map(c => c.body as Record<string, unknown>).pop()
     expect(sent).toMatchObject({ kind: 'sales_invoice', doc_no: '26/S-0000001', option: 'Thermal', action: 'preview' })
   })
 

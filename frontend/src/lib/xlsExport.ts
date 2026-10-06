@@ -1,7 +1,7 @@
 // Excel export without a dependency: writes SpreadsheetML 2003 XML, which Excel and LibreOffice open
 // as a .xls workbook. Used by Customised Reports → Export XLS.
 
-export type ReportColumn = { key: string; label: string; align: 'left' | 'right' };
+export type ReportColumn = { key: string; label: string; align: 'left' | 'right'; total?: boolean };
 export type ReportRow = Record<string, string | number | null>;
 
 const esc = (v: unknown) =>

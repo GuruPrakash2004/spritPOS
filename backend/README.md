@@ -16,7 +16,7 @@ Use port **8001**, because the frontend's Vite proxy points there. uvicorn does 
 
 The web app keeps everything in the shop's own **Microsoft SQL Server** (the one the desktop vLQMS uses, usually on the same PC: `localhost` or `localhost\SQLEXPRESS`), directly in its own tables (`MstITEM`, `TrnHdrSINV`, `UtlStockList`, ...): nothing is copied, so the desktop app and the web app share the data. Only five small tables are the web app's own (`Web_AppRow`, `Web_AppDoc`, `Web_AppMove`, `Web_AppSetting`, `Web_ToolAudit`; `migrations/web_app_tables.sql`). There is no SQLite file.
 
-The first time the backend starts without `DB_*` settings, the sign-in page shows **Database setup**: enter the server, SQL login (or Windows login) and password, pick the database, and press **Connect**. The app checks it is a vLQMS database, creates its five tables and loads the data (no setup code, no copy). **Back up the database first: the web app writes to the live desktop tables.** The same can be done from the command line: `.venv/bin/python tools/setup_db.py check` / `prepare`. The runbook is [`migrations/README.md`](migrations/README.md).
+The first time the backend starts without `DB_*` settings, the sign-in page shows **Database setup**: enter the server, SQL login and password, pick the database, and press **Connect**. The app checks it is a vLQMS database, creates its five tables and loads the data (no setup code, no copy). **Back up the database first: the web app writes to the live desktop tables.** The same can be done from the command line: `.venv/bin/python tools/setup_db.py check` / `prepare`. The runbook is [`migrations/README.md`](migrations/README.md).
 
 ## Many shops: Web Sync and the central site
 
@@ -52,7 +52,7 @@ This backend also serves the built frontend (`frontend/dist`), so a shop PC need
 | `app/boot.py`, `app/setup_db.py`, `app/envfile.py`, `app/routers/setup.py` | Startup load; the one-time Database setup (`/setup/*`: status, test, connect, admin; no copy of data), the `.env` writer |
 | `app/sqlstore.py` | Saves every change straight into the desktop's tables (masters, invoices, bills, stock rows, audit) and the five `Web_` tables of its own for the rest, and loads it at startup |
 | `app/store.py` | In-memory tables, `ROLES`, `DOCS`, `MOVEMENTS`, `move_stock()`, `next_doc_no()`, `find()` |
-| `app/db.py`, `app/db_store.py` | SQL Server connection (named instance, optional port, SQL or Windows login, sealed password; `db.transaction()` for multi-statement writes) and the desktop table → store loaders |
+| `app/db.py`, `app/db_store.py` | SQL Server connection (named instance, optional port, SQL login, sealed password; `db.transaction()` for multi-statement writes) and the desktop table → store loaders |
 | `app/mailer.py` | SMTP email with an .xls attachment (Customised Reports → Email) |
 | `migrations/`, `tools/setup_db.py` | The web app's own tables (`web_app_tables.sql`) and the command-line setup |
 | `app/schemas.py` | Pydantic request/response models |

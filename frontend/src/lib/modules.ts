@@ -94,7 +94,7 @@ export const MODULE_KEYWORDS: Record<string, string> = {
   'Replace and Remove Duplicate items': '712 replace remove duplicate item items merge utilities',
   'Merge Items': '713 merge items item combine duplicate utilities',
   'Compare Stock': '714 compare stock sheet excel difference mismatch closing utilities',
-  'Global Settings': '702 ctrl+g global settings setting configuration freeze date salesperson loyalty points utilities',
+  'Global Settings': '702 ctrl+g global settings setting configuration freeze date salesperson loyalty points utilities print settings printer preview direct email prompt after save other settings transaction settings doc prefix document number menu sequence shortcut',
   'ADMIN Audit Log': 'admin audit log history changes who changed edited deleted trail utilities',
   'Web Sync': 'web sync central head office owner upload push dsr summary branches shops utilities',
   'About': 'about version softvent help',
