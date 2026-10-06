@@ -9,9 +9,20 @@
 // and InvPreview (Y: the print preview opens after every saved bill). Transaction/Print Settings for Sales Invoice
 // (lib/docSettings.ts): after save none / ask "Do you want to print the invoice..?" / preview, and the default
 // print format.
+//
+// Keyboard first (the counter rarely uses a mouse; the full list is in the Shortcuts sheet, `?`):
+//   F2 item search · F3 quick pick · F4 customer · F6 or Alt+P next payment type · F7 hold / new · F8 held bills
+//   F9 cash tendered · F10 save & print · ⌘/Ctrl+S save only · ⌘/Ctrl+P print preview
+//   Alt+R re-print · Alt+C cancel a saved invoice · Alt+X cancel this bill
+//   In the empty item search: ↑/↓ choose a line, + / − change its qty, Delete removes it, Enter edits its qty,
+//   and "3*" sets the qty for the next item. In a line: ↑/↓ move between lines, Enter or Esc back to the search.
+//   Waiting popups: Enter saves now, Esc cancels.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine, ChevronDown } from 'lucide-react';
+import Kbd from '../common/Kbd';
+import ItemSearchBox, { type ItemMatch } from './ItemSearchBox';
+import { focusField, useShortcuts } from '../../lib/keys';
 import { useConfirm } from '../common/ConfirmDialog';
 import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
 import Toast from '../common/Toast';
@@ -60,6 +71,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   const [scanQty, setScanQty] = useState('1');
   const [quickFilter, setQuickFilter] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
+  const [quickAt, setQuickAt] = useState(0);
   const [writeOff, setWriteOff] = useState('0');
   const [paymentType, setPaymentType] = useState<PaymentType>(setup.paymentType);
   const [otherPay, setOtherPay] = useState('0');
@@ -71,6 +83,20 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [printInvoiceData, setPrintInvoiceData] = useState<ApiInvoice | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
+  // From the moment a save/hold goes to the server until it answers, the bill can't change or be sent again,
+  // so a bottle scanned straight after F10 + Enter never lands on the bill being saved.
+  const sending = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const locked = () => {
+    if (sending.current) setToast({ kind: 'error', text: 'Saving the last bill. Scan again in a moment.' });
+    return sending.current;
+  };
+  const send = (body: object, key: string) => {
+    sending.current = true;
+    setBusy(true);
+    return api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body, idempotencyKey: key })
+      .finally(() => { sending.current = false; setBusy(false); });
+  };
   // One key per bill: pressing Save twice (or a retry) can't make two bills. Renewed for each new bill.
   const saveKey = useRef(newIdempotencyKey());
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -134,6 +160,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     .filter(item => `${item.brand} ${item.name} ${item.code}`.toLowerCase().includes(quickFilter.toLowerCase()));
 
   const addItem = (stock: number, qty: number, current = lines) => {
+    if (locked()) return current;
     const item = STOCK_ITEMS[stock];
     const existing = current.find(l => l.id === stock);
     const nextQty = (existing?.qty ?? 0) + qty;
@@ -149,22 +176,25 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     return next;
   };
 
-  const scan = () => {
-    const term = barcode.trim().toLowerCase();
+  const scan = (code?: string) => {
+    if (locked()) return;
+    const term = (code ?? barcode).trim().toLowerCase();
     const qty = Math.floor(Number(scanQty));
     if (!term) return;
     if (!qty || qty < 1) return setToast({ kind: 'error', text: 'Enter a quantity of at least 1.' });
     // Exact item code first (barcode scanners send the code), then a brand/name match.
     const exact = STOCK_ITEMS.findIndex(i => i.active && i.code.toLowerCase() === term);
     const stock = exact !== -1 ? exact : STOCK_ITEMS.findIndex(i => i.active && `${i.brand} ${i.name}`.toLowerCase().includes(term));
-    if (stock === -1) return setToast({ kind: 'error', text: `No item found for "${barcode}".` });
+    if (stock === -1) return setToast({ kind: 'error', text: `No item found for "${code ?? barcode}".` });
     addItem(stock, qty);
     setBarcode('');
     setScanQty('1');
     barcodeRef.current?.focus();
   };
 
-  const updateLine = (id: number, patch: Partial<Line>) => setLines(lines.map(l => {
+  const updateLine = (id: number, patch: Partial<Line>) => {
+    if (sending.current) return;
+    setLines(lines.map(l => {
     if (l.id !== id) return l;
     const next = { ...l, ...patch };
     next.qty = Math.max(0, Math.min(next.qoh, Math.floor(next.qty) || 0));
@@ -172,6 +202,77 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     next.discPct = Math.max(0, Math.min(100, next.discPct || 0));
     return next;
   }));
+  };
+
+  // A picked suggestion: straight onto the bill, or first to Qty when QTYSELINV is Y.
+  const pickItem = (item: ItemMatch) => {
+    if (qtyAfterScan) {
+      setBarcode(item.code);
+      focusField('si-qty');
+    } else {
+      scan(item.code);
+    }
+  };
+
+  const selectedIndex = lines.findIndex(l => l.id === selectedId);
+  const focusSearch = () => focusField('si-barcode');
+  const focusLineCell = (row: number, col: string) => {
+    const el = document.querySelector<HTMLInputElement>(`[data-si-row="${row}"][data-si-col="${col}"]`);
+    el?.focus();
+    el?.select();
+  };
+
+  // Keys in the empty item search work on the selected line (or the last one).
+  const searchKeys = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === '*' && /^\d+$/.test(barcode.trim())) {   // "3*" then the item: sell 3
+      e.preventDefault();
+      setScanQty(barcode.trim());
+      setBarcode('');
+      return;
+    }
+    if (barcode || !lines.length) return;
+    if (sending.current && ['+', '-', 'Delete'].includes(e.key)) { e.preventDefault(); locked(); return; }
+    const at = selectedIndex === -1 ? lines.length - 1 : selectedIndex;
+    const line = lines[at];
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = selectedIndex === -1 ? lines.length - 1 : Math.max(0, Math.min(lines.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)));
+      setSelectedId(lines[next].id);
+    } else if (e.key === '+' || e.key === '-') {
+      e.preventDefault();
+      if (e.key === '+' && line.qty + 1 > line.qoh) return setToast({ kind: 'error', text: `Only ${line.qoh} in stock for ${line.name}.` });
+      if (e.key === '-' && line.qty <= 1) return;
+      updateLine(line.id, { qty: line.qty + (e.key === '+' ? 1 : -1) });
+      setSelectedId(line.id);
+    } else if (e.key === 'Delete') {
+      e.preventDefault();
+      setLines(lines.filter(l => l.id !== line.id));
+      setSelectedId(lines[at + 1]?.id ?? lines[at - 1]?.id ?? null);
+    } else if (e.key === 'Enter') {
+      focusLineCell(at, 'qty');
+    }
+  };
+
+  // Keys inside a line's Qty / Rate / Disc % box.
+  const cellKeys = (row: number, col: string) => (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!lines[row].qty) updateLine(lines[row].id, { qty: 1 });
+      focusSearch();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = row + (e.key === 'ArrowDown' ? 1 : -1);
+      if (next >= 0 && next < lines.length) { setSelectedId(lines[next].id); focusLineCell(next, col); }
+    }
+  };
+
+  const nextPayment = (step: number) =>
+    setPaymentType(p => PAYMENT_TYPES[(PAYMENT_TYPES.indexOf(p) + step + PAYMENT_TYPES.length) % PAYMENT_TYPES.length]);
+
+  const toggleQuick = () => {
+    if (quickOpen) { setQuickOpen(false); focusSearch(); } else { setQuickOpen(true); setQuickAt(0); }
+  };
 
   const resetBill = () => {
     saveKey.current = newIdempotencyKey();
@@ -208,12 +309,14 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
 
   // Held bills are parked on the backend so any counter session can recall them.
   const holdOrNew = async () => {
+    if (locked()) return;
     if (!lines.length) return resetBill();
     // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Hold was pressed.
     const body = billBody(true);
     const key = saveKey.current;
     if (!(await toastStore.defer('ok', `Bill will be held (${lines.length} items) when this closes.`, 'Hold cancelled. The bill is still open.'))) return;
-    api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body, idempotencyKey: key })
+    if (locked()) return;
+    send(body, key)
       .then(doc => {
         setToast({ kind: 'ok', text: `Bill held as ${doc.doc_no} (${lines.length} items). Starting a new bill.` });
         resetBill();
@@ -235,6 +338,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   };
 
   const cancelBill = async () => {
+    if (locked()) return;
     if (lines.length && !(await confirm('Cancel this bill? All items will be removed.'))) return;
     resetBill();
   };
@@ -277,6 +381,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   };
 
   const saveBill = async (andPrint = false) => {
+    if (locked()) return;
     if (!lines.length) return setToast({ kind: 'error', text: 'Add at least one item before saving the bill.' });
     if (lines.some(l => !l.qty || !l.rate)) return setToast({ kind: 'error', text: 'Every item needs a quantity and a rate.' });
     if (totals.card + totals.other > totals.invoice) return setToast({ kind: 'error', text: 'Card + other payment exceeds the invoice value.' });
@@ -286,8 +391,9 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     const body = billBody(false);
     const key = saveKey.current;
     if (!(await toastStore.defer('ok', `Bill of ₹ ${money(totals.invoice)} will be saved when this closes.`, 'Save cancelled. The bill is still open.'))) return;
+    if (locked()) return;   // a second F10 whose popup closed while the first save was still going
     // The backend numbers the bill and moves stock; show its doc no rather than the local preview.
-    api<ApiInvoice>('/transactions/sales-invoice', { method: 'POST', body, idempotencyKey: key }).then(doc => {
+    send(body, key).then(doc => {
       // Refresh points and stock so the next bill sees what this one earned, redeemed and sold.
       api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(() => undefined);
       loadStockItems().catch(() => undefined);
@@ -302,6 +408,25 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
       resetBill();
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
+
+  useShortcuts({
+    F2: focusSearch,
+    F3: toggleQuick,
+    F4: () => focusField('si-party'),
+    F6: () => nextPayment(1),
+    'Shift+F6': () => nextPayment(-1),
+    'Alt+P': () => nextPayment(1),   // F6 is kept by some browsers for the address bar
+    F7: () => { void holdOrNew(); },
+    F8: () => setDialog('held'),
+    F9: () => focusField('si-collected'),
+    F10: () => { void saveBill(true); },
+    'Mod+S': () => { void saveBill(false); },
+    'Mod+P': openDraftPrint,
+    'Alt+R': () => setDialog('reprint'),
+    'Alt+C': () => setDialog('cancel'),
+    'Alt+X': () => { void cancelBill(); },
+    Escape: focusSearch,
+  });
 
   const totalRows: [string, number][] = [
     ['Basic amount', totals.basic], ['Discount', totals.disc], ['CGST', totals.cgst],
@@ -319,7 +444,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Sales invoice</h1>
-            <span className={badge('accent')}>Draft</span>
+            <span className={badge('accent')}>{busy ? 'Saving…' : 'Draft'}</span>
           </div>
           <p className="mt-0.5 text-xs tabular-nums text-stone-500 dark:text-stone-400">
             <span className="font-mono font-medium text-stone-800 dark:text-stone-200">{billNo}</span> · {now.toLocaleDateString('en-GB')} {now.toLocaleTimeString('en-IN')} · Counter <span className="font-mono">{counter.code}</span>
@@ -329,10 +454,10 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
           <span className="hidden text-xs text-stone-500 lg:inline dark:text-stone-400">
             Last bill {prevBill ? <><span className="font-mono text-stone-700 dark:text-stone-300">{prevBill.no}</span> · {prevBill.time} · <span className="tabular-nums font-medium text-stone-800 dark:text-stone-200">₹ {money(prevBill.amount)}</span></> : '—'}
           </span>
-          <button onClick={() => setDialog('held')} className={secondaryButton}><Undo2 size={14} />Held bills</button>
-          <button onClick={openDraftPrint} disabled={!lines.length} className={secondaryButton}><Printer size={14} />Print preview</button>
-          <button onClick={() => setDialog('reprint')} className={printButton}><Printer size={14} />Re-print</button>
-          <button onClick={() => setDialog('cancel')} className={`${ghostButton} hover:!text-red-600 dark:hover:!text-red-400`}><Ban size={14} />Cancel invoice</button>
+          <button onClick={() => setDialog('held')} className={secondaryButton}><Undo2 size={14} />Held bills<Kbd combo="F8" /></button>
+          <button onClick={openDraftPrint} disabled={!lines.length} className={secondaryButton}><Printer size={14} />Print preview<Kbd combo="Mod+P" /></button>
+          <button onClick={() => setDialog('reprint')} className={printButton}><Printer size={14} />Re-print<Kbd combo="Alt+R" /></button>
+          <button onClick={() => setDialog('cancel')} className={`${ghostButton} hover:!text-red-600 dark:hover:!text-red-400`}><Ban size={14} />Cancel invoice<Kbd combo="Alt+C" /></button>
           <button onClick={onClose} className={ghostButton}><DoorOpen size={14} />Close</button>
         </div>
       </div>
@@ -342,29 +467,24 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
         <div className="flex min-w-0 flex-col gap-4">
           <div className={`${panel} flex flex-wrap items-end gap-3 p-4`}>
             <div className="min-w-0 flex-1 basis-64">
-              <label htmlFor="si-barcode" className={labelClass}>Scan or search item</label>
-              <div className="relative">
-                <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                <input id="si-barcode" ref={barcodeRef} autoFocus list="si-items" value={barcode} onChange={e => setBarcode(e.target.value)} onKeyDown={e => {
-                  if (e.key !== 'Enter') return;
-                  if (qtyAfterScan && barcode.trim()) { const q = document.getElementById('si-qty') as HTMLInputElement | null; q?.focus(); q?.select(); }
-                  else scan();
-                }} className={`${field} h-10 pl-9 font-mono text-sm`} placeholder="KSBCL code or item name, then Enter" />
-              </div>
-              <datalist id="si-items">{sellable().map(i => <option key={i.code} value={i.code}>{i.brand} {i.name} {i.pkg}</option>)}</datalist>
+              <label htmlFor="si-barcode" className={labelClass}>Scan or search item <span className="font-normal text-stone-400">(F2)</span></label>
+              <ItemSearchBox id="si-barcode" ref={barcodeRef} value={barcode} onChange={setBarcode} onPick={pickItem}
+                onEnterNoMatch={() => scan()} onKeyDown={searchKeys}
+                placeholder="Barcode, item code or name, then Enter" />
             </div>
             <div className="w-20">
               <label htmlFor="si-qty" className={labelClass}>Qty</label>
-              <input id="si-qty" type="number" min={1} value={scanQty} onChange={e => setScanQty(e.target.value)} onKeyDown={e => e.key === 'Enter' && scan()} className={`${field} h-10 text-right text-sm tabular-nums`} />
+              <input id="si-qty" type="number" min={1} value={scanQty} onChange={e => setScanQty(e.target.value)} onFocus={e => e.target.select()} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (barcode.trim()) scan(); else focusSearch(); } if (e.key === 'Escape') focusSearch(); }} className={`${field} h-10 text-right text-sm tabular-nums`} />
             </div>
-            <button onClick={scan} className={`${primaryButton} h-10 px-4`}>Add</button>
+            <button onClick={() => scan()} tabIndex={-1} className={`${primaryButton} h-10 px-4`}>Add</button>
             <button
-              onClick={() => setQuickOpen(!quickOpen)}
+              onClick={toggleQuick}
+              tabIndex={-1}
               aria-expanded={quickOpen}
               aria-controls="si-quick"
               className={`${secondaryButton} h-10 ${quickOpen ? '!border-accent !bg-accent-soft !text-accent-ink' : ''}`}
             >
-              {quickOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}Quick pick
+              {quickOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}Quick pick<Kbd combo="F3" />
             </button>
           </div>
 
@@ -377,12 +497,17 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
                 </div>
                 <div className="relative border-b border-line p-2">
                   <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
-                  <input autoFocus value={quickFilter} onChange={e => setQuickFilter(e.target.value)} onKeyDown={e => e.key === 'Escape' && setQuickOpen(false)} placeholder="Filter items…" aria-label="Filter items" className={`${field} pl-8`} />
+                  <input autoFocus value={quickFilter} onChange={e => { setQuickFilter(e.target.value); setQuickAt(0); }} onKeyDown={e => {
+                    if (e.key === 'Escape') { e.preventDefault(); setQuickOpen(false); focusSearch(); }
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setQuickAt(a => Math.max(0, Math.min(quickItems.length - 1, a + (e.key === 'ArrowDown' ? 1 : -1)))); }
+                    if (e.key === 'Enter' && quickItems[quickAt]) { e.preventDefault(); addItem(quickItems[quickAt].stock, 1); }
+                  }} placeholder="Filter, ↑↓, Enter adds" aria-label="Filter items" className={`${field} pl-8`} />
                 </div>
                 <ul className="flex-1 overflow-auto p-1 text-xs">
-                  {quickItems.map(item => (
+                  {quickItems.map((item, qi) => (
                     <li key={item.code}>
-                      <button onClick={() => addItem(item.stock, 1)} className="w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-subtle">
+                      <button tabIndex={-1} onClick={() => addItem(item.stock, 1)} ref={qi === quickAt ? el => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+                        className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-subtle ${qi === quickAt ? 'bg-accent-soft' : ''}`}>
                         <span className="block truncate font-medium text-stone-900 dark:text-stone-50">{item.brand}</span>
                         <span className="mt-0.5 flex justify-between text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
                           <span>{item.pkg} · {item.clQty} in stock</span><span className="font-medium text-stone-700 dark:text-stone-300">₹ {money(item.rate)}</span>
@@ -416,7 +541,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
                       <tr><td colSpan={9} className="px-4 py-20 text-center">
                         <ScanLine size={28} className="mx-auto mb-2 text-stone-300 dark:text-stone-600" />
                         <p className="text-sm font-medium text-stone-700 dark:text-stone-200">No items on this bill</p>
-                        <p className="mt-0.5 text-xs text-stone-500">Scan a barcode or use Quick pick to add items.</p>
+                        <p className="mt-0.5 text-xs text-stone-500">Scan a barcode or type an item name and press Enter. Quick pick: F3.</p>
                       </td></tr>
                     )}
                     {lines.map((line, i) => {
@@ -426,13 +551,13 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
                           <td className="px-4 py-2 text-stone-400">{i + 1}</td>
                           <td className="px-3 py-2 font-medium text-stone-900 dark:text-stone-50">{line.name}</td>
                           <td className={`px-3 py-2 text-right ${low ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500'}`}>{line.qoh}</td>
-                          <td className="px-3 py-1.5 text-right"><input type="number" min={1} max={line.qoh} value={line.qty || ''} onChange={e => updateLine(line.id, { qty: Number(e.target.value) })} onBlur={() => line.qty || updateLine(line.id, { qty: 1 })} className={`${cellInput} font-semibold`} aria-label={`Qty for ${line.name}`} /></td>
-                          <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={line.rate || ''} onChange={e => updateLine(line.id, { rate: Number(e.target.value) })} className={`${cellInput} w-20`} aria-label={`Rate for ${line.name}`} /></td>
-                          <td className="px-3 py-1.5 text-right"><input type="number" min={0} max={100} value={line.discPct || ''} placeholder="0" onChange={e => updateLine(line.id, { discPct: Number(e.target.value) })} className={cellInput} aria-label={`Discount % for ${line.name}`} /></td>
+                          <td className="px-3 py-1.5 text-right"><input type="number" min={1} max={line.qoh} value={line.qty || ''} data-si-row={i} data-si-col="qty" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'qty')} onChange={e => updateLine(line.id, { qty: Number(e.target.value) })} onBlur={() => line.qty || updateLine(line.id, { qty: 1 })} className={`${cellInput} font-semibold`} aria-label={`Qty for ${line.name}`} /></td>
+                          <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={line.rate || ''} data-si-row={i} data-si-col="rate" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'rate')} onChange={e => updateLine(line.id, { rate: Number(e.target.value) })} className={`${cellInput} w-20`} aria-label={`Rate for ${line.name}`} /></td>
+                          <td className="px-3 py-1.5 text-right"><input type="number" min={0} max={100} value={line.discPct || ''} placeholder="0" data-si-row={i} data-si-col="disc" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'disc')} onChange={e => updateLine(line.id, { discPct: Number(e.target.value) })} className={cellInput} aria-label={`Discount % for ${line.name}`} /></td>
                           <td className="px-3 py-2 text-right text-stone-500">{money(discAmt(line))}</td>
                           <td className="px-3 py-2 text-right font-semibold text-stone-900 dark:text-stone-50">{money(gross(line) - discAmt(line))}</td>
                           <td className="px-2 py-2 text-center">
-                            <button onClick={e => { e.stopPropagation(); setLines(lines.filter(l => l.id !== line.id)); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${line.name}`}><Trash2 size={14} /></button>
+                            <button tabIndex={-1} onClick={e => { e.stopPropagation(); setLines(lines.filter(l => l.id !== line.id)); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${line.name}`}><Trash2 size={14} /></button>
                           </td>
                         </tr>
                       );
@@ -447,8 +572,9 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
                 <span>Qty <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.qty}</span></span>
                 <span>Litres <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.litres.toFixed(3)}</span></span>
                 <div className="ml-auto flex flex-wrap gap-1">
-                  <button onClick={deleteItem} disabled={!lines.length} className={ghostButton}><Trash2 size={14} />Delete item</button>
-                  <button onClick={clearItems} disabled={!lines.length} className={ghostButton}><Eraser size={14} />Clear</button>
+                  <span className="hidden text-[11px] text-stone-400 xl:inline">↑↓ line · + − qty · Del remove · 3* qty · F9 cash · F10 save</span>
+                  <button onClick={deleteItem} disabled={!lines.length} tabIndex={-1} className={ghostButton}><Trash2 size={14} />Delete item</button>
+                  <button onClick={clearItems} disabled={!lines.length} tabIndex={-1} className={ghostButton}><Eraser size={14} />Clear</button>
                 </div>
               </div>
             </div>
@@ -459,20 +585,20 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
         <aside aria-label="Bill summary" className="flex flex-col gap-4 xl:sticky xl:top-0">
           <div className={`${panel} grid grid-cols-2 gap-3 p-4`}>
             <div className="col-span-2 sm:col-span-1">
-              <label htmlFor="si-party" className={labelClass}>Customer</label>
-              <input id="si-party" list="si-parties" value={party} onChange={e => setParty(e.target.value)} className={field} placeholder="Walk-in customer" />
+              <label htmlFor="si-party" className={labelClass}>Customer <span className="font-normal text-stone-400">(F4)</span></label>
+              <input id="si-party" list="si-parties" value={party} onChange={e => setParty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); focusSearch(); } }} className={field} placeholder="Walk-in customer" />
               <datalist id="si-parties">{customers.map(c => <option key={c.code} value={c.name} />)}</datalist>
             </div>
             {customer && customer.points > 0 && (
               <div className="col-span-2 flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-xs text-accent-ink">
                 <Gift size={14} className="shrink-0" />
                 <span className="flex-1"><span className="font-semibold tabular-nums">{customer.points}</span> loyalty points</span>
-                <input type="number" min={0} max={customer.points} value={redeem} onChange={e => setRedeem(e.target.value)} placeholder="Redeem" className={`${field} w-24 py-1 text-right tabular-nums`} aria-label="Points to redeem" />
+                <input type="number" min={0} max={customer.points} value={redeem} onChange={e => setRedeem(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusField('si-collected'); } }} placeholder="Redeem" className={`${field} w-24 py-1 text-right tabular-nums`} aria-label="Points to redeem" />
               </div>
             )}
             <div className="col-span-2 sm:col-span-1">
               <label htmlFor="si-salesperson" className={labelClass}>Sales person</label>
-              <select id="si-salesperson" value={salesPerson} onChange={e => setSalesPerson(e.target.value)} className={field}>
+              <select id="si-salesperson" value={salesPerson} onChange={e => setSalesPerson(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusSearch(); } }} className={field}>
                 {!salesPersons.length && <option value="">No sales persons (Sales Person Master)</option>}
                 {salesPersons.map(p => <option key={p}>{p}</option>)}
               </select>
@@ -508,13 +634,22 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
             </details>
             <div className={payRow}>
               <label htmlFor="si-writeoff" className="whitespace-nowrap text-stone-500 dark:text-stone-400">Write-off</label>
-              <input id="si-writeoff" type="number" min={0} value={writeOff} onChange={e => setWriteOff(e.target.value)} className={`${field} w-28 py-1 text-right tabular-nums`} />
+              <input id="si-writeoff" type="number" min={0} value={writeOff} onFocus={e => e.target.select()} onChange={e => setWriteOff(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusField('si-collected'); } }} className={`${field} w-28 py-1 text-right tabular-nums`} />
             </div>
-            <div role="radiogroup" aria-label="Payment type" className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
+            <div role="radiogroup" aria-label="Payment type (F6 or Alt+P)" onKeyDown={e => {
+              if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
+                e.preventDefault();
+                const next = PAYMENT_TYPES[(PAYMENT_TYPES.indexOf(paymentType) + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1) + PAYMENT_TYPES.length) % PAYMENT_TYPES.length];
+                setPaymentType(next);
+                document.getElementById(`si-pay-${next}`)?.focus();
+              }
+            }} className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
               {PAYMENT_TYPES.map(p => (
                 <button
                   key={p}
+                  id={`si-pay-${p}`}
                   role="radio"
+                  tabIndex={paymentType === p ? 0 : -1}
                   aria-checked={paymentType === p}
                   onClick={() => setPaymentType(p)}
                   className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${paymentType === p ? 'bg-surface text-stone-900 shadow-card dark:text-stone-50' : 'text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-50'}`}
@@ -540,9 +675,9 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
               </div>
             </dl>
             <div>
-              <label htmlFor="si-collected" className={labelClass}>Cash tendered</label>
+              <label htmlFor="si-collected" className={labelClass}>Cash tendered <span className="font-normal text-stone-400">(F9 · Enter saves)</span></label>
               <div className="flex items-center gap-2">
-                <input id="si-collected" type="number" min={0} value={collected} onChange={e => setCollected(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveBill()} className={`${field} flex-1 text-right text-sm tabular-nums`} placeholder="0.00" />
+                <input id="si-collected" type="number" min={0} value={collected} onFocus={e => e.target.select()} onChange={e => setCollected(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void saveBill(); } if (e.key === 'Escape') focusSearch(); }} className={`${field} flex-1 text-right text-sm tabular-nums`} placeholder="0.00" />
                 <span className={`${badge(change < 0 ? 'danger' : 'success')} px-2 py-1.5 text-xs tabular-nums`}>
                   {change < 0 ? 'Short' : 'Change'} ₹ {money(Math.abs(change))}
                 </span>
@@ -553,18 +688,18 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
                 onClick={() => saveBill(true)}
                 className={`${printButton} h-11 w-full text-sm font-bold shadow-md hover:shadow-lg`}
               >
-                <Printer size={16} />Save & Print · ₹ {money(totals.invoice)}
+                <Printer size={16} />Save & Print · ₹ {money(totals.invoice)}<Kbd combo="F10" />
               </button>
               <button
                 onClick={() => saveBill(false)}
                 className={`${secondaryButton} h-9 w-full text-xs font-semibold`}
               >
-                <Save size={14} />Save only (No print)
+                <Save size={14} />Save only (No print)<Kbd combo="Mod+S" />
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={holdOrNew} className={secondaryButton}><PauseCircle size={14} />Hold / new</button>
-              <button onClick={cancelBill} className={`${secondaryButton} hover:!text-red-600 dark:hover:!text-red-400`}><XCircle size={14} />Cancel bill</button>
+              <button onClick={holdOrNew} className={secondaryButton}><PauseCircle size={14} />Hold / new<Kbd combo="F7" /></button>
+              <button onClick={cancelBill} className={`${secondaryButton} hover:!text-red-600 dark:hover:!text-red-400`}><XCircle size={14} />Cancel bill<Kbd combo="Alt+X" /></button>
             </div>
           </div>
         </aside>

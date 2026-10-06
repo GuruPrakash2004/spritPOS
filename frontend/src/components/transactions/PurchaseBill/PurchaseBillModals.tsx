@@ -10,18 +10,25 @@ import { field, headCell, money } from './purchaseBillData';
 export function ItemLookupModal({ filter, onFilter, onPick, onClose }: {
   filter: string; onFilter: (v: string) => void; onPick: (stock: number) => void; onClose: () => void;
 }) {
+  const [at, setAt] = useState(0);
   const lookupItems = sellable()
     .filter(item => `${item.code} ${item.brand} ${item.name}`.toLowerCase().includes(filter.toLowerCase()));
+  const current = Math.min(at, lookupItems.length - 1);
   return (
     <Modal title="Add Item" onClose={onClose} wide>
-      <input autoFocus value={filter} onChange={e => onFilter(e.target.value)} placeholder="Search code, brand or name" className={`${field} mb-3 w-full`} />
+      <input autoFocus value={filter} onChange={e => { onFilter(e.target.value); setAt(0); }} onKeyDown={e => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setAt(Math.max(0, Math.min(lookupItems.length - 1, current + (e.key === 'ArrowDown' ? 1 : -1)))); }
+        if (e.key === 'Enter' && lookupItems[current]) { e.preventDefault(); e.stopPropagation(); onPick(lookupItems[current].stock); }
+      }} placeholder="Search code, brand or name · ↑↓ choose · Enter adds" className={`${field} mb-3 w-full`} />
       <table className="w-full text-xs">
         <thead className="bg-subtle text-stone-600 dark:text-stone-300">
           <tr><th className={headCell}>Code</th><th className={headCell}>Item</th><th className={`${headCell} text-right`}>QOH</th><th className={`${headCell} text-right`}>Purchase Rate</th></tr>
         </thead>
         <tbody className="divide-y divide-line-soft">
-          {lookupItems.map(item => (
-            <tr key={item.code} onClick={() => onPick(item.stock)} className="cursor-pointer hover:bg-accent/10">
+          {lookupItems.map((item, i) => (
+            <tr key={item.code} onClick={() => onPick(item.stock)} aria-selected={i === current}
+              ref={i === current ? el => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+              className={`cursor-pointer hover:bg-accent/10 ${i === current ? 'bg-accent-soft' : ''}`}>
               <td className="px-2 py-2 font-mono">{item.code}</td>
               <td className="px-2 py-2">{item.name} <span className="text-stone-400">{item.pkg}</span></td>
               <td className="px-2 py-2 text-right tabular-nums">{item.clQty}</td>

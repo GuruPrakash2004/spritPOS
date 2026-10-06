@@ -2,6 +2,8 @@
 // - ReprintDialog: fetch a saved bill (/reprint) and print it in a chosen .rpt format.
 // - CancelInvoiceDialog: cancel with a mandatory remark (stock and points go back).
 // - HeldBillsDialog: list held bills and recall one into the invoice (onRecall).
+// Keyboard: Re-Print — type the number, Enter finds it, Enter again prints; Cancel — Enter moves to the reason,
+// Enter there cancels the bill; Held bills — ↑/↓ choose, Enter recalls. Esc closes each.
 
 import { useEffect, useState } from 'react';
 import { Printer, Search, Undo2, XCircle } from 'lucide-react';
@@ -52,11 +54,17 @@ export function ReprintDialog({ initialNo, onClose }: { initialNo: string; onClo
       <div className="mb-3 flex items-end gap-2">
         <div className="flex-1">
           <label htmlFor="rp-no" className={label}>Bill No</label>
-          <input id="rp-no" value={no} onChange={e => setNo(e.target.value)} onKeyDown={e => e.key === 'Enter' && load(no)} placeholder="Bill number" className={`${field} w-full font-mono`} />
+          <input id="rp-no" value={no} onChange={e => setNo(e.target.value)} onKeyDown={e => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            if (inv && inv.doc_no === no.trim()) setShowPrintModal(true);   // found already: Enter again prints
+            else load(no);
+          }} placeholder="Bill number" className={`${field} w-full font-mono`} />
         </div>
-        <button onClick={() => load(no)} className={secondaryButton}><Search size={14} />Find</button>
+        <button onClick={() => load(no)} tabIndex={-1} className={secondaryButton}><Search size={14} />Find</button>
       </div>
       {error && <p className="mb-2 text-red-600 dark:text-red-400">{error}</p>}
+      {inv && <p className="mb-2 text-[11px] text-stone-500">Press Enter to print this bill.</p>}
       {inv && (
         <div className="print-area rounded-lg border border-dashed border-stone-400 bg-white p-4 font-mono text-[11px] text-black">
           <div className="text-center">
@@ -127,11 +135,12 @@ export function CancelInvoiceDialog({ initialNo, onClose, onDone }: { initialNo:
       <div className="space-y-3">
         <div>
           <label htmlFor="ci-no" className={label}>Bill No<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
-          <input id="ci-no" value={no} onChange={e => setNo(e.target.value)} className={`${field} w-full font-mono`} />
+          <input id="ci-no" value={no} onChange={e => setNo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('ci-rmk')?.focus(); } }} className={`${field} w-full font-mono`} />
         </div>
         <div>
           <label htmlFor="ci-rmk" className={label}>Reason for cancelling<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
-          <textarea id="ci-rmk" rows={3} value={remarks} onChange={e => setRemarks(e.target.value)} className={`${field} w-full`} placeholder="e.g. customer returned the bottles before leaving" />
+          <textarea id="ci-rmk" rows={3} value={remarks} onChange={e => setRemarks(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); } }} className={`${field} w-full`} placeholder="e.g. customer returned the bottles before leaving" />
+          <p className="mt-1 text-[11px] text-stone-500">Enter cancels the bill · Shift+Enter for a new line</p>
         </div>
         {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
       </div>
@@ -143,6 +152,7 @@ export function CancelInvoiceDialog({ initialNo, onClose, onDone }: { initialNo:
 export function HeldBillsDialog({ onClose, onRecall }: { onClose: () => void; onRecall: (inv: ApiInvoice) => void }) {
   const [bills, setBills] = useState<ApiInvoice[] | null>(null);
   const [error, setError] = useState('');
+  const [at, setAt] = useState(0);
 
   useEffect(() => {
     api<ApiInvoice[]>(`/transactions/sales-invoice${qs({ status: 'HOLD' })}`).then(setBills).catch(e => setError(errorText(e)));
@@ -157,19 +167,24 @@ export function HeldBillsDialog({ onClose, onRecall }: { onClose: () => void; on
   return (
     <Modal title="Held Bills" onClose={onClose} wide footer={<button onClick={onClose} className={secondaryButton}>Close</button>}>
       {error && <p className="mb-2 text-red-600 dark:text-red-400">{error}</p>}
-      <table className="w-full">
+      {!!bills?.length && <p className="mb-2 text-[11px] text-stone-500">↑↓ choose a bill · Enter recalls it · Esc closes</p>}
+      <table className="w-full outline-none" tabIndex={0} data-autofocus aria-label="Held bills" onKeyDown={e => {
+        if (!bills?.length) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setAt(a => Math.max(0, Math.min(bills.length - 1, a + (e.key === 'ArrowDown' ? 1 : -1)))); }
+        if (e.key === 'Enter') { e.preventDefault(); void recall(bills[Math.min(at, bills.length - 1)]); }
+      }}>
         <thead className={tableHead}>
           <tr><th className="px-3 py-2">Held No</th><th className="px-3 py-2">Time</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2 text-right">Items</th><th className="px-3 py-2 text-right">Value</th><th className="px-3 py-2" /></tr>
         </thead>
         <tbody className={tableBody}>
-          {bills?.map(b => (
-            <tr key={b.doc_no}>
+          {bills?.map((b, i) => (
+            <tr key={b.doc_no} aria-selected={i === at} onClick={() => setAt(i)} className={i === at ? 'bg-accent-soft' : ''}>
               <td className="px-3 py-2 font-mono">{b.doc_no}</td>
               <td className="px-3 py-2 font-mono">{b.time ?? ''}</td>
               <td className="px-3 py-2">{b.customer}</td>
               <td className="px-3 py-2 text-right tabular-nums">{b.lines.length}</td>
               <td className="px-3 py-2 text-right tabular-nums">₹ {money(b.totals.net)}</td>
-              <td className="px-3 py-2 text-right"><button onClick={() => recall(b)} className={`${primaryButton} ml-auto py-1`}><Undo2 size={12} />Recall</button></td>
+              <td className="px-3 py-2 text-right"><button onClick={() => recall(b)} tabIndex={-1} className={`${primaryButton} ml-auto py-1`}><Undo2 size={12} />Recall</button></td>
             </tr>
           ))}
           {bills && !bills.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-stone-400">No held bills.</td></tr>}

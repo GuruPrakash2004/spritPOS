@@ -3,13 +3,13 @@
 
 import VlqmsLogo from './VlqmsLogo';
 
-export default function DevelopedBy({ className = '' }: { className?: string }) {
+export default function DevelopedBy({ className = '', size = 'md' }: { className?: string; size?: 'xs' | 'sm' | 'md' | 'lg' }) {
   return (
     <div className={`flex flex-col items-center gap-1.5 ${className}`}>
       <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8E847A] dark:text-stone-500">
         Designed &amp; developed by
       </span>
-      <VlqmsLogo size="xs" />
+      <VlqmsLogo size={size} />
     </div>
   );
 }

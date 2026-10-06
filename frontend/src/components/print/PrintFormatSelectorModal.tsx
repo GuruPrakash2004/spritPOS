@@ -1,8 +1,9 @@
 // Print dialog: pick a legacy .rpt format for the current document, preview it with the matching web
-// layout from print/layouts/, then print (⌘/Ctrl+P). Prints only the real data: blank fields
-// print blank (printData.ts).
+// layout from print/layouts/, then print. Prints only the real data: blank fields print blank (printData.ts).
+// Keyboard: the Print button has focus when it opens, so Enter prints; ↑/↓ choose the format; ⌘/Ctrl+P
+// prints; Esc closes (useDialogKeys keeps Tab inside and gives focus back afterwards).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, FileText, Printer, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -18,6 +19,8 @@ import {
 	saveModelPreference,
 } from './rptRegistry';
 import { BLANK_COMPANY, printData } from './printData';
+import { useDialogKeys } from '../common/useDialogKeys';
+import { isTypingTarget } from '../../lib/keys';
 import { A4GstTaxInvoiceLayout } from './layouts/A4GstTaxInvoiceLayout';
 import { A5SlipLayout } from './layouts/A5SlipLayout';
 import { AnalyticalReportLayout, type AnalyticalReportData } from './layouts/AnalyticalReportLayout';
@@ -131,17 +134,35 @@ export default function PrintFormatSelectorModal({
 		onPrinted?.();
 	}, [onPrinted, selectedModel]);
 
+	const selectModel = (model: RptModelDef) => {
+		setSelectedModelId(model.id);
+		if (!model.supportsCopies) setCopies(1);
+		if (!model.supportsWatermark) setWatermark('None');
+	};
+
+	const dialogRef = useRef<HTMLElement>(null);
+	useDialogKeys(dialogRef, onClose);
+
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === 'Escape') onClose();
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'p') {
 				event.preventDefault();
 				print();
+				return;
+			}
+			// ↑/↓ choose the format (not while a select or other field has the keys).
+			if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !isTypingTarget(event.target) && models.length) {
+				event.preventDefault();
+				const at = models.findIndex(model => model.id === selectedModel?.id);
+				const next = models[Math.min(models.length - 1, Math.max(0, at + (event.key === 'ArrowDown' ? 1 : -1)))];
+				setSelectedModelId(next.id);
+				if (!next.supportsCopies) setCopies(1);
+				if (!next.supportsWatermark) setWatermark('None');
 			}
 		};
 		window.addEventListener('keydown', onKeyDown);
 		return () => window.removeEventListener('keydown', onKeyDown);
-	}, [onClose, print]);
+	}, [print, models, selectedModel]);
 
 	const renderLayout = (isPrintPreview: boolean) => {
 		if (!selectedModel) return null;
@@ -162,11 +183,6 @@ export default function PrintFormatSelectorModal({
 		return <A4GstTaxInvoiceLayout {...props} />;
 	};
 
-	const selectModel = (model: RptModelDef) => {
-		setSelectedModelId(model.id);
-		if (!model.supportsCopies) setCopies(1);
-		if (!model.supportsWatermark) setWatermark('None');
-	};
 
 	return (
 		<>
@@ -181,7 +197,7 @@ export default function PrintFormatSelectorModal({
 			)}
 
 			<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm print:hidden sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-				<section role="dialog" aria-modal="true" aria-labelledby="print-modal-title" className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-line bg-surface text-stone-900 shadow-2xl dark:text-stone-50">
+				<section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="print-modal-title" className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-line bg-surface text-stone-900 shadow-2xl dark:text-stone-50">
 					<header className="flex items-center justify-between gap-4 border-b border-line bg-subtle/50 px-5 py-4">
 						<div className="flex min-w-0 items-center gap-3">
 							<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-white"><Printer size={18} /></span>
@@ -190,7 +206,7 @@ export default function PrintFormatSelectorModal({
 								<p className="text-xs text-stone-500 dark:text-stone-400">{models.length} formats available from backend</p>
 							</div>
 						</div>
-						<button type="button" onClick={onClose} className="rounded-md p-2 text-stone-500 hover:bg-muted" aria-label="Close print formats"><X size={18} /></button>
+						<button type="button" onClick={onClose} tabIndex={-1} title="Close (Esc)" className="rounded-md p-2 text-stone-500 hover:bg-muted" aria-label="Close print formats"><X size={18} /></button>
 					</header>
 
 					<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-12">
@@ -264,7 +280,8 @@ export default function PrintFormatSelectorModal({
 
 					<footer className="flex items-center justify-end gap-2 border-t border-line bg-surface px-4 py-3 sm:px-5">
 						<button type="button" onClick={onClose} className={secondaryButton}>Cancel</button>
-						<button type="button" onClick={print} disabled={!selectedModel} className={printButton}><Printer size={14} />Print · {selectedModel?.rptFileName}</button>
+						<span className="mr-auto hidden text-[11px] text-stone-500 sm:inline">Enter prints · ↑↓ format · Esc closes</span>
+						<button type="button" onClick={print} disabled={!selectedModel} data-autofocus className={printButton}><Printer size={14} />Print · {selectedModel?.rptFileName}</button>
 					</footer>
 				</section>
 			</div>

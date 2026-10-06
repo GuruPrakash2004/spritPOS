@@ -29,6 +29,7 @@ class Company(BaseModel):
     state: str = ""
     fy_start: str
     fy_end: str
+    place_id: str = Field("", max_length=300, pattern=r"^[A-Za-z0-9_-]*$")   # Google Maps place, picked on the map
 
     @field_validator("name", "address")
     @classmethod
@@ -146,6 +147,7 @@ class CompanyOut(BaseModel):
     state: str = ""
     fy_start: str = ""
     fy_end: str = ""
+    place_id: str = ""
     fin_years: list[FinYear] = []
 
 

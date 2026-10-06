@@ -4,6 +4,9 @@
 // Purchase Indent, and Add Supplier. Saves with POST /transactions/purchase-bill, which adds stock on
 // the backend (store.move_stock). Items come from the live catalogue (data/stockData.ts); CGST/SGST
 // are the Item Master rates (the backend applies those), so they are shown read-only.
+// Keyboard: Enter moves to the next field (Shift+Enter back); on the grid's last field it adds a row.
+// F2 item lookup (↑↓, Enter picks; the cursor goes to its PB Qty) · Alt+A add row · ⌘/Ctrl+S or F10 save (no print here) ·
+// Alt+X cancel the bill.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -25,6 +28,8 @@ import {
 } from './purchaseBillData';
 import { AddSupplierModal, CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
 import { useDocSettings } from '../../../lib/docSettings';
+import Kbd from '../../common/Kbd';
+import { enterMovesNext, useShortcuts } from '../../../lib/keys';
 
 export default function PurchaseBill() {
   // The backend gives the PB number when the bill is saved; this is its preview (GET /transactions/next-number).
@@ -223,7 +228,9 @@ export default function PurchaseBill() {
 
   const pickFromLookup = (stock: number) => {
     const row = stockRow(stock, 1);
+    let at = rows.length;
     if (selectedRow && !isFilled(selectedRow)) {
+      at = selectedIndex;
       updateRow(selectedUid, { stock, code: row.code, name: row.name, qoh: row.qoh, rate: row.rate, qty: 1 });
     } else {
       setRows([...rows, row]);
@@ -231,6 +238,12 @@ export default function PurchaseBill() {
     }
     setLookupOpen(false);
     setLookupFilter('');
+    // Straight on to the quantity of the picked item.
+    setTimeout(() => {
+      const qty = document.querySelector<HTMLInputElement>(`[aria-label="PB Qty row ${at + 1}"]`);
+      qty?.focus();
+      qty?.select();
+    }, 0);
   };
 
   const resetBill = () => {
@@ -283,10 +296,18 @@ export default function PurchaseBill() {
     ['Cess', totals.cess], ['Comp. cess', totals.compCess], ['Round off', totals.roundOff],
   ];
 
+  useShortcuts({
+    'Mod+S': () => { void saveBill(); },
+    F10: () => { void saveBill(); },
+    F2: () => setLookupOpen(true),
+    'Alt+A': () => addRows(1),
+    'Alt+X': () => { void cancelBill(); },
+  });
+
   const sep = <span className="mx-1 h-5 w-px bg-line" aria-hidden="true" />;
 
   return (
-    <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
+    <div className="mx-auto flex max-w-[1600px] flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {dialog}
 
@@ -303,8 +324,8 @@ export default function PurchaseBill() {
           <button onClick={() => setHeaderOpen(!headerOpen)} className={ghostButton} aria-expanded={headerOpen}>
             {headerOpen ? <ChevronsUp size={14} /> : <ChevronsDown size={14} />}{headerOpen ? 'Hide details' : 'Show details'}
           </button>
-          <button onClick={cancelBill} className={secondaryButton}><XCircle size={14} />Cancel</button>
-          <button onClick={saveBill} className={primaryButton}><Save size={14} />Save bill</button>
+          <button onClick={cancelBill} className={secondaryButton}><XCircle size={14} />Cancel<Kbd combo="Alt+X" /></button>
+          <button onClick={saveBill} className={primaryButton}><Save size={14} />Save bill<Kbd combo="Mod+S" /></button>
         </div>
       </div>
 
@@ -377,11 +398,11 @@ export default function PurchaseBill() {
       )}
 
       {/* Line items */}
-      <section aria-label="Line items" className={`${panel} overflow-hidden`}>
+      <section aria-label="Line items" className={`${panel} overflow-hidden`} onKeyDown={e => enterMovesNext(e, () => addRows(1))}>
         <div className="flex flex-wrap items-center gap-1 border-b border-line px-3 py-2">
-          <button onClick={() => setLookupOpen(true)} className={`${primaryButton} mr-2`}><PlusCircle size={14} />Add item</button>
+          <button onClick={() => setLookupOpen(true)} className={`${primaryButton} mr-2`}><PlusCircle size={14} />Add item<Kbd combo="F2" /></button>
           <div className="relative flex items-center">
-            <button onClick={() => addRows(1)} className={iconButton} title="Add blank row" aria-label="Add blank row"><PlusCircle size={16} /></button>
+            <button onClick={() => addRows(1)} className={iconButton} title="Add blank row (Alt+A)" aria-label="Add blank row"><PlusCircle size={16} /></button>
             <button ref={addMenuRef} onClick={() => setAddMenuOpen(!addMenuOpen)} className={`${iconButton} w-6`} aria-label="More add options" aria-expanded={addMenuOpen} aria-haspopup="menu"><ChevronDown size={14} /></button>
             <DropdownMenu anchorRef={addMenuRef} open={addMenuOpen} onClose={closeAddMenu} align="start" width={192}>
               <button role="menuitem" onClick={() => addRows(1)} className={menuItem}>Add single item</button>
@@ -431,7 +452,7 @@ export default function PurchaseBill() {
             </thead>
             <tbody className="divide-y divide-line-soft tabular-nums">
               {rows.map((row, i) => (
-                <tr key={row.uid} onClick={() => setSelectedUid(row.uid)} aria-selected={row.uid === selectedUid} className={`transition-colors ${row.uid === selectedUid ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
+                <tr key={row.uid} onClick={() => setSelectedUid(row.uid)} onFocus={() => setSelectedUid(row.uid)} aria-selected={row.uid === selectedUid} className={`transition-colors ${row.uid === selectedUid ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
                   <td className="py-1 pl-4 pr-2 text-stone-400">{i + 1}</td>
                   <td className="px-1 py-1"><input list="pb-codes" value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={`${cell} font-mono`} aria-label={`Item code row ${i + 1}`} /></td>
                   <td className="px-1 py-1"><input list="pb-names" value={row.name} onChange={e => setItem(row.uid, 'name', e.target.value)} className={`${cell} font-medium text-stone-900 dark:text-stone-50`} aria-label={`Item name row ${i + 1}`} /></td>

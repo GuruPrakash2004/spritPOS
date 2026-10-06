@@ -15,6 +15,7 @@ import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { api, errorText, type ApiCompany } from '../../lib/api';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
+import ShopPlacePicker, { type PickedPlace } from './ShopPlacePicker';
 import { badge, field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
 
 
@@ -52,6 +53,9 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
+  // The shop on Google Maps (picked on the map below the address) and what was just picked, to offer its address.
+  const [placeId, setPlaceId] = useState('');
+  const [picked, setPicked] = useState<PickedPlace | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
@@ -70,6 +74,7 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
         setCompanyName(profile.name);
         setEmail(profile.email);
         setAddress(profile.address);
+        setPlaceId(profile.place_id ?? '');
       })
       .catch(error => setToast({ kind: 'error', text: errorText(error) }));
   }, []);
@@ -92,12 +97,14 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
     try {
       const profile = await api<ApiCompany>('/masters/company', {
         method: 'PUT',
-        body: { ...companyProfile, name: companyName.trim(), email: email.trim(), address: address.trim() },
+        body: { ...companyProfile, name: companyName.trim(), email: email.trim(), address: address.trim(), place_id: placeId },
       });
       setCompanyProfile(profile);
       setCompanyName(profile.name);
       setEmail(profile.email);
       setAddress(profile.address);
+      setPlaceId(profile.place_id ?? '');
+      setPicked(null);
       notifyCompanyProfileUpdated();
       setToast({ kind: 'ok', text: 'Company profile updated successfully.' });
     } catch (error) {
@@ -203,6 +210,23 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
                   className={`${field} ${errors['co-address'] ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`}
                 />
                 <InlineError id="co-address-err" message={errors['co-address']} />
+              </div>
+              <div className="md:col-span-2">
+                <span className={label}>Shop on Google Maps</span>
+                <p className="mb-2 text-[11px] text-stone-500 dark:text-stone-400">
+                  Search for the shop and pick it: the Dashboard's Store Open / Closed then follows that listing's opening hours. Save to keep it.
+                </p>
+                <ShopPlacePicker placeId={placeId} readOnly={!canEditFiles || !companyProfile}
+                  onPick={place => { setPlaceId(place.id); setPicked(place); }} />
+                {picked && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-stone-600 dark:text-stone-300">Picked <strong>{picked.name}</strong>{picked.address ? ` · ${picked.address}` : ''}</span>
+                    {picked.address && picked.address !== address && (
+                      <button type="button" className={secondaryButton} onClick={() => setAddress(picked.address)}>Use this address</button>
+                    )}
+                  </div>
+                )}
+                {!picked && placeId && <p className="mt-1 text-[11px] text-stone-500">A place is saved for the shop.</p>}
               </div>
             </div>
           </div>

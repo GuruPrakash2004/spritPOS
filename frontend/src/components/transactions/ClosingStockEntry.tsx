@@ -1,11 +1,14 @@
 // Closing Stock Entry (legacy frmTrnCloseStk): load items with their opening qty for the As-on Date,
 // enter the physical closing stock, and the difference becomes the day's sales
 // (Sales Qty = OP − Closing). Save, then Generate Sales Invoice for that quantity.
+// Keyboard: Enter moves to the next field (Shift+Enter back); ⌘/Ctrl+S saves.
 
 import { useEffect, useState } from 'react';
 import { Download, FileOutput, Save } from 'lucide-react';
 import Modal from '../common/Modal';
 import Toast from '../common/Toast';
+import Kbd from '../common/Kbd';
+import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
 import { api, errorText, qs, todayIso, type ApiClosingLoad, type ApiCounter, type ApiDoc } from '../../lib/api';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
@@ -76,8 +79,10 @@ export default function ClosingStockEntry() {
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
+  useShortcuts({ 'Mod+S': () => { void save(); } });
+
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
+    <div className="mx-auto flex max-w-6xl flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       <div className={pageHeader}>
         <div>
@@ -90,7 +95,7 @@ export default function ClosingStockEntry() {
             <input id="cse-date" type="date" value={asOn} onChange={e => setAsOn(e.target.value)} className={`${field} tabular-nums`} />
           </div>
           <button onClick={load} className={secondaryButton}><Download size={14} />Load Items</button>
-          <button onClick={save} disabled={!rows.length || Boolean(savedDoc)} className={primaryButton}><Save size={14} />Save</button>
+          <button onClick={save} disabled={!rows.length || Boolean(savedDoc)} className={primaryButton}><Save size={14} />Save<Kbd combo="Mod+S" /></button>
           <button onClick={() => setGenerateOpen(true)} disabled={!savedDoc} className={primaryButton}><FileOutput size={14} />Generate Sales Invoice</button>
         </div>
       </div>

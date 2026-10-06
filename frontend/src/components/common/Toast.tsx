@@ -13,6 +13,24 @@ import RunwayLoader from '../ui/runway-loader';
 export function SnackbarContainer() {
   const items = useSyncExternalStore(toastStore.subscribe, toastStore.getSnapshot, toastStore.getSnapshot);
 
+  // A waiting popup takes Enter (do it now) and Esc (cancel) before any screen or dialog sees the key.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || (e.key !== 'Enter' && e.key !== 'Escape')) return;
+      const waiting = toastStore.newestPending();
+      if (!waiting) return;
+      // Enter in a search box with text in it is a scan or a search, not an answer to the popup.
+      const t = e.target as HTMLInputElement | null;
+      if (e.key === 'Enter' && t?.getAttribute?.('role') === 'combobox' && t.value?.trim()) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.key === 'Enter') toastStore.runNow(waiting.id);
+      else toastStore.cancel(waiting.id);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
   if (!items.length) return null;
 
   return createPortal(
@@ -93,6 +111,9 @@ export function SnackbarContainer() {
                   : ''
               }`}>
                 {item.text}
+                {item.pending && !item.leaving && (
+                  <span className="mt-0.5 block text-[10.5px] font-normal opacity-70">Enter: do it now · Esc: cancel</span>
+                )}
               </div>
 
               {/* Waiting popup: the action runs when it closes unless Cancel is pressed */}
@@ -100,6 +121,7 @@ export function SnackbarContainer() {
                 <button
                   type="button"
                   onClick={() => toastStore.cancel(item.id)}
+                  title="Cancel (Esc)"
                   className="shrink-0 rounded-md border border-current/30 px-2 py-0.5 text-[11px] font-semibold hover:bg-black/5 dark:hover:bg-white/10"
                 >
                   Cancel

@@ -1,17 +1,24 @@
 // Sales Invoice step 1: choose the counter (Sales Counter Master), payment type and customer (Customer Master).
 // The invoice number shown is the backend's preview for that counter (GET /transactions/next-number); the real
 // number is given when the bill is saved. App.tsx keeps the result as `invoiceDraft` and then opens SalesInvoice.
+// Fast from the keyboard: the counter used last on this computer is chosen again, the customer starts as the
+// walk-in CASH customer, and Enter in any field opens the bill.
 
 import { useEffect, useState } from 'react';
 import { Monitor, Receipt, Save } from 'lucide-react';
 import { field, label as labelBase, pageHeader, pageSub, pageTitle, panel, primaryButton, sectionTitle } from '../../lib/styles';
 import { api, errorText, type ApiCounter, type ApiCustomer } from '../../lib/api';
 import { toastStore } from '../common/toastStore';
+import Kbd from '../common/Kbd';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import {
   PAYMENT_TYPES, counterFromApi,
   type InvoiceSetup, type NextNumber, type PaymentType, type SalesCounter,
 } from '../../data/salesCounters';
+
+const LAST_COUNTER_KEY = 'vlqms_last_counter';   // this computer's till, a per-browser convenience
+const readLastCounter = () => { try { return localStorage.getItem(LAST_COUNTER_KEY) || ''; } catch { return ''; } };
+const WALK_IN = 'CASH';
 
 const errorBorder = '!border-red-500 !ring-2 !ring-red-500/20 animate-shake';
 
@@ -21,10 +28,10 @@ const FIELD_IDS: Record<FieldKey, string> = { counter: 'setup-counter', customer
 export default function SalesInvoiceSetup({ initial, onSubmit }: { initial: InvoiceSetup; onSubmit: (setup: InvoiceSetup) => void }) {
   const [counters, setCounters] = useState<SalesCounter[] | null>(null);
   const [customers, setCustomers] = useState<ApiCustomer[]>([]);
-  const [counterCode, setCounterCode] = useState(initial.counter.code);
+  const [counterCode, setCounterCode] = useState(initial.counter.code || readLastCounter());
   const [invoiceNo, setInvoiceNo] = useState('');
   const [paymentType, setPaymentType] = useState<PaymentType>(initial.paymentType);
-  const [customer, setCustomer] = useState(initial.customer);
+  const [customer, setCustomer] = useState(initial.customer || WALK_IN);
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
 
   useEffect(() => {
@@ -33,6 +40,7 @@ export default function SalesInvoiceSetup({ initial, onSubmit }: { initial: Invo
         const active = list.map(counterFromApi).filter(c => !c.inactive);
         setCounters(active);
         setCounterCode(code => (active.some(c => c.code === code) ? code : active[0]?.code ?? ''));
+        setTimeout(() => document.getElementById('setup-counter')?.focus(), 0);   // enabled now: Enter opens the bill
       })
       .catch(e => { setCounters([]); toastStore.add('error', errorText(e)); });
     api<ApiCustomer[]>('/masters/customers').then(setCustomers).catch(e => toastStore.add('error', errorText(e)));
@@ -56,6 +64,7 @@ export default function SalesInvoiceSetup({ initial, onSubmit }: { initial: Invo
     setErrors(found);
     const first = (Object.keys(FIELD_IDS) as FieldKey[]).find(k => found[k]);
     if (first) return document.getElementById(FIELD_IDS[first])?.focus();
+    try { localStorage.setItem(LAST_COUNTER_KEY, counter!.code); } catch { /* storage blocked */ }
     onSubmit({ counter: counter!, invoiceNo, paymentType, customer: customer.trim() });
   };
 
@@ -64,14 +73,16 @@ export default function SalesInvoiceSetup({ initial, onSubmit }: { initial: Invo
       <div className={`${pageHeader} mb-5`}>
         <div>
           <h1 className={pageTitle}>New sales bill</h1>
-          <p className={pageSub}>Choose the sales counter and the invoice details, then open the bill.</p>
+          <p className={pageSub}>Choose the sales counter and the invoice details, then press Enter to open the bill.</p>
         </div>
       </div>
 
       <FormErrorSummary errors={Object.fromEntries(Object.entries(errors).filter(([, m]) => m)) as Record<string, string>}
         onFocusField={k => document.getElementById(FIELD_IDS[k as FieldKey])?.focus()} />
 
-      <div className={`${panel} divide-y divide-line`}>
+      <div className={`${panel} divide-y divide-line`} onKeyDown={e => {
+        if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); handleSave(); }
+      }}>
         <section className="grid gap-6 p-6 md:grid-cols-[200px_minmax(0,1fr)]">
           <div>
             <h2 className={`${sectionTitle} flex items-center gap-2`}><Monitor size={16} className="text-stone-400" />Sales counter</h2>
@@ -128,7 +139,7 @@ export default function SalesInvoiceSetup({ initial, onSubmit }: { initial: Invo
         </section>
 
         <div className="flex justify-end bg-subtle/60 px-6 py-4">
-          <button onClick={handleSave} className={primaryButton}><Save size={14} />Open bill</button>
+          <button onClick={handleSave} className={primaryButton}><Save size={14} />Open bill<Kbd combo="Enter" /></button>
         </div>
       </div>
     </div>

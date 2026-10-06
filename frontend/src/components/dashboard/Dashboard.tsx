@@ -18,6 +18,7 @@ import { money, panel } from '../../lib/styles';
 import { IMAGES } from '../../constants/images';
 import RestockCarousel from './RestockCarousel';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
+import { useShopHours } from '../../hooks/useShopHours';
 
 // Sales window (days) for the restock analysis.
 const RESTOCK_DAYS = 15;
@@ -38,6 +39,7 @@ const shown = (panel: string) => fieldRight('dashboard', panel) !== 'hidden';
 
 export const Dashboard = ({ dataMode }: { dataMode?: DataMode }) => {
   const { company, isOnline } = useCompanyProfile();
+  const hours = useShopHours();   // Open / Closed from Google Maps, next to the Live chip
   const [dsr, setDsr] = useState<ApiFullDsr | null>(null);
   const [dailySales, setDailySales] = useState<ApiDailySale[] | null>(null);
   const [stockMovement, setStockMovement] = useState<ApiStockMovement | null>(null);
@@ -404,6 +406,19 @@ export const Dashboard = ({ dataMode }: { dataMode?: DataMode }) => {
                 <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
                 {isOnline === false ? 'Server offline' : isOnline === null ? 'Connecting…' : dataMode === 'test' ? 'Test data' : 'Live data'}
               </span>
+              {hours && (
+                <a href={hours.maps_url || undefined} target="_blank" rel="noreferrer noopener"
+                  title={hours.place ? `${hours.place} on Google Maps` : 'Opening hours from Google Maps'}
+                  className={`inline-flex items-center gap-1.5 rounded-full backdrop-blur px-3.5 py-1.5 border font-semibold ${
+                    hours.open_now
+                      ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+                      : 'bg-rose-500/20 border-rose-500/30 text-rose-300'
+                  }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${hours.open_now ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+                  {hours.open_now ? 'Store Open' : 'Store Closed'}
+                  {hours.today && <span className="font-medium opacity-80">· {hours.today}</span>}
+                </a>
+              )}
             </div>
           </div>
         </div>

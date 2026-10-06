@@ -1,8 +1,12 @@
 // Shared item-line grid (cases + bottles → qty, rate, amount, litres) for the stock transactions:
 // Purchase Indent, Sales Return, Stock Deduction. The screen supplies its own header fields and turns
 // the lines into the request body.
+// Keyboard: Enter moves to the next field (Shift+Enter back) and, on the last field, adds a row; Alt+A adds a
+// row; ⌘/Ctrl+S saves; F10 saves and prints.
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import Kbd from '../common/Kbd';
+import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { PlusCircle, Save, Trash2, XCircle, Printer } from 'lucide-react';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
@@ -35,6 +39,16 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   // Print Settings for this document: print after save (none / ask / preview) and the default format.
   const docSettings = useDocSettings(endpoint.replace('/transactions/', '').replace(/-/g, '_') as DocKind);
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const gridRef = useRef<HTMLTableSectionElement>(null);
+  const focusRow = useRef<number | null>(null);   // a row just added gets the cursor in its item box
+
+  useEffect(() => {
+    if (focusRow.current === null) return;
+    gridRef.current?.querySelector<HTMLElement>(`[aria-label="Item row ${focusRow.current + 1}"]`)?.focus();
+    focusRow.current = null;
+  }, [lines.length]);
+
+  const addRow = () => { focusRow.current = lines.length; setLines([...lines, blankLine()]); };
 
   useEffect(() => {
     if (!toast) return;
@@ -123,8 +137,14 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
+  useShortcuts({
+    'Mod+S': () => { void save(false); },
+    F10: () => { void save(true); },
+    'Alt+A': addRow,
+  });
+
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
+    <div className="mx-auto flex max-w-6xl flex-col gap-4" onKeyDown={e => enterMovesNext(e, addRow)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {confirmDialog}
       <div className={pageHeader}>
@@ -133,8 +153,8 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
           <p className={pageSub}>{subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => save(true)} className={printButton}><Printer size={14} />Save & Print</button>
-          <button onClick={() => save(false)} className={primaryButton}><Save size={14} />Save</button>
+          <button onClick={() => save(true)} className={printButton}><Printer size={14} />Save & Print<Kbd combo="F10" /></button>
+          <button onClick={() => save(false)} className={primaryButton}><Save size={14} />Save<Kbd combo="Mod+S" /></button>
           <button onClick={previewPrint} disabled={!filled.length} className={secondaryButton}><Printer size={14} />Print Preview</button>
           <button onClick={() => setLines([blankLine()])} className={secondaryButton}><XCircle size={14} />Clear</button>
         </div>
@@ -152,7 +172,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
               <th className="px-3 py-2 text-right">{rateLabel}</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2" />
             </tr>
           </thead>
-          <tbody className={`${tableBody} tabular-nums`}>
+          <tbody ref={gridRef} className={`${tableBody} tabular-nums`}>
             {lines.map((l, i) => {
               const item = byCode.get(l.item_code);
               return (
@@ -171,7 +191,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
                   <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={l.rate || ''} onChange={e => update(i, { rate: Math.max(0, Number(e.target.value) || 0) })} className={`${field} w-24 py-0.5 text-right`} aria-label={`Rate row ${i + 1}`} /></td>
                   <td className="px-3 py-1.5 text-right">{money(qty(l) * l.rate)}</td>
                   <td className="px-3 py-1.5 text-center">
-                    <button onClick={() => setLines(lines.length > 1 ? lines.filter((_, x) => x !== i) : [blankLine()])} className="text-stone-400 hover:text-red-500" aria-label={`Remove row ${i + 1}`}><Trash2 size={13} /></button>
+                    <button onClick={() => setLines(lines.length > 1 ? lines.filter((_, x) => x !== i) : [blankLine()])} tabIndex={-1} className="text-stone-400 hover:text-red-500" aria-label={`Remove row ${i + 1}`}><Trash2 size={13} /></button>
                   </td>
                 </tr>
               );
@@ -180,7 +200,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
         </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2">
-          <button onClick={() => setLines([...lines, blankLine()])} className={secondaryButton}><PlusCircle size={14} />Add Row</button>
+          <button onClick={addRow} className={secondaryButton}><PlusCircle size={14} />Add Row<Kbd combo="Alt+A" /></button>
           <span className="text-sm font-bold text-accent-ink">{filled.length} items • ₹ {money(total)}</span>
         </div>
       </div>

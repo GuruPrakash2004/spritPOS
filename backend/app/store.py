@@ -25,6 +25,7 @@ COMPANY = {
     "name": "", "email": "", "address": "", "phone": "", "fax": "", "mobile": "", "website": "", "gstin": "",
     "pan": "", "cin": "", "excise_phone": "", "ksbcl_code": "", "licence_type": "", "state": "",
     "fy_start": "", "fy_end": "",
+    "place_id": "",   # the shop on Google Maps, picked on the map in Company Master (app/shop_hours.py)
 }
 
 # Financial years (Web_MstCompFinYear): [{"start", "end", "active"}], newest first.

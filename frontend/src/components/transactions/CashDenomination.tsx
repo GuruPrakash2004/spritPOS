@@ -1,9 +1,12 @@
 // Cash Denomination (legacy frmUtlDenom): count notes and coins in the drawer at day end and compare
 // the total with the DSR cash balance. Saved per date via /transactions/denomination.
+// Keyboard: Enter moves to the next field (Shift+Enter back); ⌘/Ctrl+S saves.
 
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import Toast from '../common/Toast';
+import Kbd from '../common/Kbd';
+import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
 import { api, errorText, qs, todayIso, type ApiDenomination, type ApiFullDsr } from '../../lib/api';
 import { field, money, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
@@ -43,8 +46,10 @@ export default function CashDenomination() {
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
+  useShortcuts({ 'Mod+S': () => { void save(); } });
+
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+    <div className="mx-auto flex max-w-3xl flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       <div className={pageHeader}>
         <div>
@@ -53,7 +58,7 @@ export default function CashDenomination() {
         </div>
         <div className="flex items-end gap-2">
           <input type="date" value={on} onChange={e => setOn(e.target.value)} className={`${field} tabular-nums`} aria-label="Date" />
-          <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
+          <button onClick={save} className={primaryButton}><Save size={14} />Save<Kbd combo="Mod+S" /></button>
         </div>
       </div>
 

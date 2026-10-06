@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
-from . import admin_audit, boot, db, gsettings, sqlstore, store
+from . import admin_audit, boot, db, gsettings, shop_hours, sqlstore, store
 from .routers import auth, company_files, custom_reports, masters, reports, setup, tools, transactions, utilities
 from .schemas import SettingsIn
 
@@ -177,11 +177,12 @@ app.add_middleware(
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    """Browser hardening headers on every response (no sniffing, no framing, no referrer leaks)."""
+    """Browser hardening headers on every response (no sniffing, no framing, no referrer leaks). The referrer is
+    the site's origin only (never a path): a Google Maps browser key restricted to this site needs it."""
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Referrer-Policy", "strict-origin")
     response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
     if request.url.path.startswith(("/auth", "/admin")):
         response.headers.setdefault("Cache-Control", "no-store")
@@ -227,6 +228,12 @@ def update_settings(body: SettingsIn, admin: dict = Depends(auth.require_admin))
         if changed:
             admin_audit.record("Global Settings", "Edited", section, earlier, changed)
     return store.SETTINGS
+
+
+@app.get("/company/hours", tags=["Company Master"])
+def company_hours():
+    """Whether the shop is open now, from its opening hours on Google Maps (app/shop_hours.py; the Dashboard's store banner)."""
+    return shop_hours.status()
 
 
 @app.get("/sales-persons", tags=["Sales Invoice"])

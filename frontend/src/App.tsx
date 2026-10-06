@@ -18,6 +18,8 @@ import AdminMaster from './components/admin/AdminMaster';
 import { api, getAuthToken, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
 import { ADMIN_MASTER, ADMIN_PATH, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
 import { iconButton, primaryButton } from './lib/styles';
+import { isTypingTarget, useShortcuts } from './lib/keys';
+import { useConfirm } from './components/common/ConfirmDialog';
 import CashDenomination from './components/transactions/CashDenomination';
 import ClosingStockEntry from './components/transactions/ClosingStockEntry';
 import CompanyMaster from './components/masters/CompanyMaster';
@@ -58,6 +60,8 @@ import { useCompanyProfile } from './hooks/useCompanyProfile';
 // Per-tab memory for a page refresh (sessionStorage; cleared when the tab closes).
 const FY_KEY = 'vlqms_fin_year';
 const TAB_KEY = 'vlqms_active_tab';
+// Screens whose unsaved rows Alt+B would throw away.
+const ENTRY_SCREENS = ['Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Cash Denomination'];
 const SESSION_CHECK_MS = 60_000;
 const readSaved = (key: string) => { try { return sessionStorage.getItem(key) || ''; } catch { return ''; } };
 const writeSaved = (key: string, value: string) => { try { sessionStorage.setItem(key, value); } catch { /* storage blocked */ } };
@@ -71,6 +75,7 @@ export default function App() {
   });
   const [billOpen, setBillOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [changingPassword, setChangingPassword] = useState(false);
   const [dsr, setDsr] = useState<ApiDsr | null>(null);
   const [session, setSession] = useState<{ user: ApiUser; finYear: string } | null>(null);
@@ -159,6 +164,20 @@ export default function App() {
     setBillOpen(false);
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
+
+  // App-wide keys: `?` shows the shortcuts sheet (not while typing); Alt+B starts a new sales bill from any screen,
+  // asking first when it would leave an entry screen (its unsaved rows would be lost).
+  useShortcuts({
+    'Shift+?': e => { if (!isTypingTarget(e.target)) setShowShortcuts(true); },
+    '?': e => { if (!isTypingTarget(e.target)) setShowShortcuts(true); },
+    'Alt+B': () => {
+      if (!session || !canOpen(session.user.modules, session.user.role, 'Sales Invoice')) return;
+      if (activeTab === 'Sales Invoice' && billOpen) return;   // already billing: F7 starts a new bill
+      if (!ENTRY_SCREENS.includes(activeTab)) return openModule('Sales Invoice');
+      confirm(`Leave ${activeTab} for a new sales bill? Anything not saved there is lost.`)
+        .then(ok => { if (ok) openModule('Sales Invoice'); });
+    },
+  }, !!session);
 
   // Sales Invoice is two steps: the setup form collects counter + invoice details, then the bill screen opens.
   const openInvoiceSetup = (counter: SalesCounter) => {
@@ -334,6 +353,7 @@ export default function App() {
       {user.must_change_password && <ChangePasswordDialog forced user={user.user}
         onClose={() => setSession(s => (s ? { ...s, user: { ...s.user, must_change_password: false } } : s))} />}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {confirmDialog}
     </div>
   );
 }

@@ -14,6 +14,8 @@
 // closes (countdown ends or ✕), false if Cancel was pressed. Pattern:
 //   if (!(await toast.later('ok', 'Bill will be saved when this closes.'))) return;
 //   ...then call the API.
+// Keyboard (counter staff rarely use the mouse): while a waiting popup shows, Enter runs its action now and
+// Esc cancels it (the newest one first); Toast.tsx listens for these keys before any screen does.
 
 export type ToastKind = 'ok' | 'error' | 'delete' | 'refresh' | 'backup';
 
@@ -192,6 +194,17 @@ class ToastStore {
     this.cancelled.set(item.id, cancelledText);
     this.push(item);
     return result;
+  }
+
+  // The newest waiting popup still on screen, if any (Enter / Esc act on it).
+  newestPending(): ToastItem | undefined {
+    return [...this.items].reverse().find(i => i.pending && !i.leaving && this.waiting.has(i.id));
+  }
+
+  // Run a waiting popup's action now instead of at the end of the countdown.
+  runNow(id: string) {
+    this.settle(id, true);
+    this.remove(id);
   }
 
   // Cancel a waiting popup: its action does not run.

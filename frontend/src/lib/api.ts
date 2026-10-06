@@ -207,6 +207,7 @@ export type ApiCompany = {
   gstin: string; pan: string; cin: string; excise_phone: string; ksbcl_code: string;
   licence_type: string; state: string; fy_start: string; fy_end: string;
   fin_years?: { start: string; end: string; active: boolean }[];   // from GET /masters/company (Web_MstCompFinYear)
+  place_id?: string;   // the shop on Google Maps, picked in Company Master (the Dashboard's Store Open / Closed)
 };
 
 // Add/Edit/Delete ticks per module (Admin Master). A module with no entry has full rights.
@@ -341,6 +342,9 @@ export type ApiAuditRow = {
   id: number | string; at: string; screen: string; action: string; main_fld: string; user_code: string | null;
   earlier: string; changed: string; items: ApiAuditItem[];
 };
+// GET /company/hours: Open / Closed from the shop's opening hours on Google Maps (open_now null when unknown).
+export type ApiShopHours = { configured: boolean; open_now: boolean | null; today: string; place: string; maps_url: string; error: string | null };
+
 // What the screens show: the shop's SQL Server ("live"), the sample data of the Test data switch ("test"), or nothing.
 export type DataMode = 'live' | 'test' | 'none';
 export type ApiAbout = {

@@ -35,3 +35,14 @@ describe('Dashboard field rights', () => {
     expect(screen.getByText('Sales, last 7 days')).toBeInTheDocument()
   })
 })
+
+describe('Dashboard store banner', () => {
+  it('shows Store Open with today\'s hours next to the Live chip', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => String(url).includes('/company/hours')
+      ? json({ configured: true, open_now: true, today: '10:00 AM – 10:30 PM', place: 'My Shop', maps_url: 'https://maps.google.com/?cid=1', error: null })
+      : new Response('{"detail":"x"}', { status: 500, headers: { 'Content-Type': 'application/json' } })))
+    render(<Dashboard />)
+    expect(await screen.findByText('Store Open')).toBeInTheDocument()
+    expect(screen.getByText('· 10:00 AM – 10:30 PM')).toBeInTheDocument()
+  })
+})

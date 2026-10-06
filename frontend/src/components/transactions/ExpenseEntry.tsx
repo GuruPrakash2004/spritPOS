@@ -1,9 +1,12 @@
 // Expense Entry: post amounts against ledgers from Ledger Master, paid from Cash or Bank.
 // Cash expenses reduce the DSR cash balance. POST /transactions/expense.
+// Keyboard: Enter moves to the next field (Shift+Enter back), and on the last one adds a row; ⌘/Ctrl+S saves.
 
 import { useEffect, useState } from 'react';
 import { PlusCircle, Save, Trash2 } from 'lucide-react';
 import Toast from '../common/Toast';
+import Kbd from '../common/Kbd';
+import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
 import { api, errorText, todayIso, type ApiLedger } from '../../lib/api';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
@@ -46,15 +49,17 @@ export default function ExpenseEntry() {
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
+  useShortcuts({ 'Mod+S': () => { void save(); } });
+
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-4">
+    <div className="mx-auto flex max-w-5xl flex-col gap-4" onKeyDown={e => enterMovesNext(e, () => setLines(ls => [...ls, blank()]))}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       <div className={pageHeader}>
         <div>
           <h1 className={pageTitle}>Expense Entry</h1>
           <p className={pageSub}>Shop expenses posted against ledgers.</p>
         </div>
-        <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
+        <button onClick={save} className={primaryButton}><Save size={14} />Save<Kbd combo="Mod+S" /></button>
       </div>
 
       <div className={`${panel} flex flex-wrap items-end gap-3 px-5 py-3`}>

@@ -20,6 +20,8 @@ interface VlqmsLogoProps {
 
 // Logo height per size; the width follows the logo's 3:1 proportions.
 const HEIGHT = { xs: 'h-7', sm: 'h-9', md: 'h-11', lg: 'h-16' } as const;
+// The product name's size when it is shown alone (textOnly): the sidebar uses sm, the sign-in page md.
+const TEXT_ONLY = { xs: 'text-xl', sm: 'text-[26px]', md: 'text-4xl', lg: 'text-5xl' } as const;
 
 export const VlqmsLogo: React.FC<VlqmsLogoProps> = ({ size = 'md', showText = false, textOnly = false, className = '', onDark = false }) => {
   const img = `${HEIGHT[size]} w-auto select-none`;
@@ -36,8 +38,8 @@ export const VlqmsLogo: React.FC<VlqmsLogoProps> = ({ size = 'md', showText = fa
 
       {(showText || textOnly) && (
         <div className={`leading-tight ${textOnly ? '' : 'border-l pl-2.5 '}${onDark ? 'border-white/25' : 'border-[#D8CCBE] dark:border-[#2A2A2A]'}`}>
-          <div className={`${textOnly ? (size === 'sm' || size === 'xs' ? 'text-lg' : 'text-2xl') : 'text-sm'} font-extrabold tracking-tight ${onDark ? 'text-[#E8C36A]' : 'text-[#64283A] dark:text-[#E8C36A]'}`}>e-vLQMS</div>
-          <div className={`text-[9px] font-bold uppercase tracking-[0.18em] ${onDark ? 'text-stone-200/80' : 'text-[#966B24] dark:text-[#D4A847]'}`}>ERP</div>
+          <div className={`${textOnly ? TEXT_ONLY[size] : 'text-sm'} font-extrabold tracking-tight ${onDark ? 'text-[#E8C36A]' : 'text-[#64283A] dark:text-[#E8C36A]'}`}>e-vLQMS</div>
+          <div className={`${textOnly ? 'text-[11px]' : 'text-[9px]'} font-bold uppercase tracking-[0.18em] ${onDark ? 'text-stone-200/80' : 'text-[#966B24] dark:text-[#D4A847]'}`}>ERP</div>
         </div>
       )}
     </div>

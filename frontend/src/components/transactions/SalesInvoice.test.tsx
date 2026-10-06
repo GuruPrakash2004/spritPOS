@@ -1,5 +1,5 @@
 // Tests for Sales Invoice: live items (not the old 8 samples), no demo lines, real stock limits,
-// rupee rounding, and printing the bill the server saved.
+// rupee rounding, printing the bill the server saved, and billing from the keyboard alone.
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -45,7 +45,7 @@ async function scan(user: ReturnType<typeof userEvent.setup>, code: string, qty 
   const qtyBox = screen.getByLabelText('Qty')
   await user.clear(qtyBox)
   await user.type(qtyBox, qty)
-  await user.type(screen.getByLabelText('Scan or search item'), `${code}{Enter}`)
+  await user.type(screen.getByLabelText(/scan or search item/i), `${code}{Enter}`)
 }
 
 // Actions wait for their popup (toastStore.defer); here it closes at once so the request goes out.
@@ -111,5 +111,73 @@ describe('SalesInvoice', () => {
     await scan(user, 'VIN-750')
 
     expect(screen.getByText('No items on this bill')).toBeInTheDocument()
+  })
+
+  it('adds an item by name from the suggestions with ↓ and Enter', async () => {
+    const user = userEvent.setup()
+    render(<SalesInvoice setup={setup} onClose={() => {}} />)
+    await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+
+    await user.type(screen.getByLabelText(/scan or search item/i), 'blenders')
+    expect(screen.getByRole('option', { name: /Blender's Pride/ })).toBeInTheDocument()
+    await user.keyboard('{ArrowDown}{Enter}')
+
+    expect(screen.getByText(/BLENDERS PRIDE RARE WHISKY 750ml/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/scan or search item/i)).toHaveValue('')
+  })
+
+  it('takes "3*" as the quantity, then + / − and Delete on the line', async () => {
+    const user = userEvent.setup()
+    render(<SalesInvoice setup={setup} onClose={() => {}} />)
+    await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+    const search = screen.getByLabelText(/scan or search item/i)
+
+    await user.type(search, '3*BLND-750{Enter}')
+    const qty = screen.getByLabelText(/qty for blenders/i)
+    expect(qty).toHaveValue(3)
+
+    await user.type(search, '++-')
+    expect(qty).toHaveValue(4)
+    await user.keyboard('{Delete}')
+    expect(screen.getByText('No items on this bill')).toBeInTheDocument()
+  })
+
+  it('saves with Ctrl+S and with Enter in Cash tendered', async () => {
+    const user = userEvent.setup()
+    render(<SalesInvoice setup={setup} onClose={() => {}} />)
+    await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+
+    await scan(user, 'BLND-750')
+    await user.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(posts()).toHaveLength(1))
+
+    await scan(user, 'BLND-750')
+    await user.keyboard('{F9}')
+    expect(screen.getByLabelText(/cash tendered/i)).toHaveFocus()
+    await user.keyboard('2000{Enter}')
+    await waitFor(() => expect(posts()).toHaveLength(2))
+  })
+
+  it('keeps the bill locked while it is being saved, so a quick scan is not lost', async () => {
+    const user = userEvent.setup()
+    let answer: (r: Response) => void = () => {}
+    render(<SalesInvoice setup={setup} onClose={() => {}} />)
+    await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Promise<Response>(r => { answer = r })
+      if (url.startsWith('/api/masters/items')) return json([ITEM])
+      return json([])
+    })
+
+    await scan(user, 'BLND-750')
+    await user.keyboard('{F10}')
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    await user.type(screen.getByLabelText(/scan or search item/i), 'BLND-750{Enter}')
+
+    expect(screen.getByLabelText(/qty for blenders/i)).toHaveValue(1)   // not 2: the scan waits
+    expect(screen.getByLabelText(/scan or search item/i)).toHaveValue('BLND-750')   // kept to scan again
+    await user.keyboard('{F10}')
+    expect(posts()).toHaveLength(1)
+    answer(json({ doc_no: '26/c10-0083718', status: 'SAVED', totals: { net: 1235, qty: 1 }, lines: [] }, 201))
   })
 })
