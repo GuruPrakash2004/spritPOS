@@ -5,7 +5,7 @@
 // No licence key or registration (Key Generation is not part of the web app).
 
 import { useEffect, useState } from 'react';
-import { Database, FlaskConical, Info, PlugZap, Unplug } from 'lucide-react';
+import { Database, FlaskConical, Info, PlugZap, RefreshCw, Unplug } from 'lucide-react';
 import { api, errorText, getAuthRole, type ApiAbout } from '../../lib/api';
 import { ADMIN_ROLE } from '../../lib/modules';
 import { badge, pageSub, pageTitle, panel, secondaryButton } from '../../lib/styles';
@@ -42,6 +42,21 @@ export default function About() {
     }
   };
 
+  // Read the Doc Designer's latest print options and screens (it writes them into the database, not into this app).
+  const refreshDesigner = async () => {
+    if (!(await toastStore.defer('refresh', 'The Doc Designer settings will be read again when this closes.', 'Cancelled. Nothing was refreshed.'))) return;
+    setBusy(true);
+    try {
+      await api('/designer/refresh', { method: 'POST' });
+      setAbout(await api<ApiAbout>('/utilities/about'));
+      toastStore.add('refresh', 'Doc Designer settings refreshed.');
+    } catch (e) {
+      toastStore.add('error', errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const dataLine = about?.data_mode === 'test' ? 'Test data (sample data, nothing is saved)'
     : about?.data_mode === 'live' ? 'Live data from the shop\'s SQL Server' : 'No data loaded';
 
@@ -50,6 +65,8 @@ export default function About() {
     ['API version', about.api_version],
     ['Company', about.company || '—'],
     ['Data shown', dataLine],
+    ['Doc Designer', `${about.designer?.screens ?? 0} screens · ${about.designer?.print_options ?? 0} print options · ${about.designer?.fields ?? 0} fields`],
+    ['Printing (Crystal)', about.rpt_bridge ? `Bridge set up · ${about.rpt_files} .rpt files` : 'Bridge not set up (RPT_BRIDGE_URL)'],
     ['Server time', new Date(about.server_time).toLocaleString('en-IN')],
   ] : [];
 
@@ -82,6 +99,9 @@ export default function About() {
                 <FlaskConical size={12} />{about.data_mode === 'test' ? 'Using test (dummy) data' : about.data_mode === 'live' ? 'Using live SQL Server data' : 'No data'}
               </span>
             </div>
+            {isAdmin && about.db_connected && (
+              <button className={secondaryButton} disabled={busy} onClick={refreshDesigner}><RefreshCw size={14} />Refresh from Doc Designer</button>
+            )}
             {isAdmin && about.db_configured && (
               <div className="flex flex-col items-center gap-1.5">
                 {about.db_connected

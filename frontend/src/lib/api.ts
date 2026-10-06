@@ -44,6 +44,25 @@ export const setAuthToken = (token: string) => {
 
 export const getAuthToken = () => authToken;
 
+// A screen opened in a new browser tab starts with an empty sessionStorage. The tabs that are already signed in
+// hand their token over through a BroadcastChannel (same browser and site only), so the biller does not sign in
+// again for every tab. The token is never written anywhere else, so closing all tabs still ends the session.
+const TAB_CHANNEL = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('vlqms_session');
+if (TAB_CHANNEL) {
+  TAB_CHANNEL.onmessage = e => {
+    if (e.data?.type === 'need-token' && authToken) TAB_CHANNEL.postMessage({ type: 'token', token: authToken });
+  };
+}
+/** Ask the other open tabs for their sign-in token (resolves with '' when none answers in time). */
+export const requestTokenFromOtherTabs = (waitMs = 400): Promise<string> => new Promise(resolve => {
+  if (!TAB_CHANNEL) return resolve('');
+  const done = (token: string) => { clearTimeout(timer); TAB_CHANNEL.removeEventListener('message', onMsg); resolve(token); };
+  const onMsg = (e: MessageEvent) => { if (e.data?.type === 'token' && e.data.token) done(String(e.data.token)); };
+  const timer = setTimeout(() => done(''), waitMs);
+  TAB_CHANNEL.addEventListener('message', onMsg);
+  TAB_CHANNEL.postMessage({ type: 'need-token' });
+});
+
 // Called by App.tsx after login (and with empty strings on logout). Every later api() call sends these.
 export const setAuthUser = (user: string, role: string = '', token?: string) => {
   authUser = user;
@@ -111,6 +130,26 @@ function failed(res: Response, path: string, data: { detail?: unknown } | null):
   const message = Array.isArray(detail) ? detail.map((d: { msg: string }) => d.msg).join('; ') : detail as string | undefined;
   if (res.status === 401 && path !== '/auth/login' && authToken) onSessionEnded?.(message || 'Please log in again.');
   throw new ApiError(message || `Request failed (${res.status})`);
+}
+
+// A request whose answer is not always JSON (a PDF for a print preview, or JSON when it was sent to a printer). The
+// caller reads the Response; a failure is thrown as ApiError like api().
+export async function apiFetch(path: string, init?: { method?: string; body?: unknown }): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      method: init?.method ?? 'GET',
+      headers: {
+        ...(init?.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: init?.body === undefined ? undefined : JSON.stringify(init.body),
+    });
+  } catch {
+    throw new ApiError('Backend is not reachable. Start it with: cd backend && .venv/bin/uvicorn app.main:app --reload --port 8001');
+  }
+  if (!res.ok) failed(res, path, await res.json().catch(() => null));
+  return res;
 }
 
 // Download a file the backend builds (e.g. '/admin/backup'): fetched with the login token, then handed
@@ -350,6 +389,7 @@ export type DataMode = 'live' | 'test' | 'none';
 export type ApiAbout = {
   product: string; software_version: string; api_version: string; company: string; db_connected: boolean; server_time: string;
   db_configured: boolean; db_disconnected_for_testing: boolean; data_mode: DataMode;
+  designer: { screens: number; print_options: number; fields: number }; rpt_bridge: boolean; rpt_files: number;
 };
 export type ApiDupInvoice = {
   doc_no: string; date: string; time: string; added_by: string; sales_type: string; bill_system: 'Web' | 'Desktop';

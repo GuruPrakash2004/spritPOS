@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ADMIN_MASTER, MODULE_GROUPS } from '../../lib/modules';
+import { isPlainClick, pathForModule } from '../../lib/routes';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 
 interface SidebarProps {
@@ -23,9 +24,11 @@ interface SidebarProps {
   canOpen: (moduleName: string) => boolean;
 }
 
-const SidebarItem = ({ icon, label, onClick, active }: { icon: ReactNode; label: string; onClick: () => void; active: boolean }) => (
-  <button
-    onClick={onClick}
+// A real link: a plain click switches screen in this tab; middle-click or Ctrl/Cmd-click opens it in a new tab.
+const SidebarItem = ({ icon, label, href, onClick, active }: { icon: ReactNode; label: string; href: string; onClick: () => void; active: boolean }) => (
+  <a
+    href={href}
+    onClick={e => { if (isPlainClick(e)) { e.preventDefault(); onClick(); } }}
     aria-current={active ? 'page' : undefined}
     className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-all duration-200 ${
       active
@@ -39,7 +42,7 @@ const SidebarItem = ({ icon, label, onClick, active }: { icon: ReactNode; label:
         : 'text-[#8E847A] dark:text-stone-500'
     }`}>{icon}</span>
     <span className="truncate">{label}</span>
-  </button>
+  </a>
 );
 
 const REPORT_ITEMS = ['Stock Ledger', 'Stock Ageing', 'Profit Margin', 'Hourly Sales', 'Daily Sales', 'Brand-wise Sales', 'Day-wise Litres', 'Stock in Litres', 'Stock Level / Reorder'];
@@ -47,7 +50,7 @@ const REPORT_ITEMS = ['Stock Ledger', 'Stock Ageing', 'Profit Margin', 'Hourly S
 export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user, canOpen }: SidebarProps) {
   const { company, isOnline } = useCompanyProfile();
   const item = (icon: ReactNode, name: string, label = name) => (canOpen(name)
-    ? <SidebarItem key={name} icon={icon} label={label} onClick={() => onOpenModule(name)} active={activeTab === name} />
+    ? <SidebarItem key={name} icon={icon} label={label} href={pathForModule(name)} onClick={() => onOpenModule(name)} active={activeTab === name} />
     : null);
   const heading = (text: string, names: string[]) => (names.some(canOpen)
     ? <div className="px-2.5 pb-1 pt-5 text-[10px] font-bold tracking-[0.15em] text-[#B08A45] dark:text-stone-500 uppercase">{text}</div>

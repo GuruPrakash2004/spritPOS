@@ -65,6 +65,14 @@ ROLES = {
     "Cashier": ["Dashboard", "Item Master", "Sales Invoice", "Sales Return", "Cash Denomination", "Closing Stock Entry", "Stock Balance Report"],
 }
 
+# What the desktop's Doc Designer stores (Web_Utl* copies; app/designer.py fills them): screens by DocID, print
+# options, who they are e-mailed to, screen fields, and UtlMisc's one row of switches. Empty without a database.
+UTL_DOCS: dict[int, dict] = {}
+UTL_OPTIONS: list[dict] = []
+UTL_OPTION_EMAILS: list[dict] = []
+UTL_FIELDS: list[dict] = []
+UTL_MISC: dict = {}
+
 # Day-end cash counts, keyed by ISO date.
 DENOMINATIONS: dict[str, dict] = {}
 

@@ -13,6 +13,8 @@ beforeEach(() => {
   vi.resetModules()   // api.ts reads the saved token when it is first imported
   sessionStorage.clear()
   localStorage.clear()
+  window.history.replaceState(null, '', '/')
+  vi.stubGlobal('BroadcastChannel', undefined)   // no other tabs to hand a token over (they would leak between tests)
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -22,9 +24,9 @@ async function renderApp() {
 }
 
 describe('page refresh', () => {
-  it('signs the user back in and reopens their screen', async () => {
+  it('signs the user back in and reopens the screen the address names', async () => {
     sessionStorage.setItem('vlqms_jwt_token', 'still-valid')
-    sessionStorage.setItem('vlqms_active_tab', 'Cash Denomination')
+    window.history.replaceState(null, '', '/cash-denomination')   // each screen has its own address
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url.startsWith('/api/auth/me')) return json(ME)
       if (url.startsWith('/api/masters/company')) return json(COMPANY)

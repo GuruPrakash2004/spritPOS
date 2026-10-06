@@ -59,7 +59,7 @@ def _tls_context() -> ssl.SSLContext:
 
 
 def send(to: list[str], subject: str, text: str, file_name: str, attachment: bytes,
-         company_email: str = "", company_name: str = "") -> None:
+         company_email: str = "", company_name: str = "", subtype: str = "vnd.ms-excel") -> None:
     """Send one message; raises on any SMTP error (the caller turns it into a 502)."""
     address = company_email.strip() or _env("SMTP_FROM") or _env("SMTP_USER")
     msg = EmailMessage()
@@ -68,7 +68,7 @@ def send(to: list[str], subject: str, text: str, file_name: str, attachment: byt
     if company_email.strip():
         msg["Reply-To"] = company_email.strip()
     msg.set_content(text)
-    msg.add_attachment(attachment, maintype="application", subtype="vnd.ms-excel", filename=file_name)
+    msg.add_attachment(attachment, maintype="application", subtype=subtype, filename=file_name)
 
     host, port = _env("SMTP_HOST"), int(_env("SMTP_PORT", "587") or 587)
     security = _env("SMTP_SECURITY", "starttls").lower()

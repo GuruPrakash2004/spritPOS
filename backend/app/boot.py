@@ -12,7 +12,7 @@ import logging
 import secrets
 import threading
 
-from . import db, db_store, setup_db, sqlstore, store, websync
+from . import db, db_store, designer, setup_db, sqlstore, store, websync
 
 logger = logging.getLogger("vlqms.boot")
 
@@ -47,6 +47,7 @@ def load_data() -> None:
     ok = db.init_db() and setup_db.is_ready()
     if ok:
         db_store.load_masters()
+        designer.load()   # print options and screen fields from the Doc Designer's tables
     elif db.is_db_available():
         logger.warning("The database has no Web_ tables yet: no data until the Database setup has run")
     elif db.configured():
@@ -63,6 +64,11 @@ def load_data() -> None:
 
 
 def _load_history_then_sync() -> None:
+    try:
+        designer.refresh()   # the Doc Designer may have changed the print options since the last start
+    except Exception as e:
+        logger.warning("Doc Designer settings not refreshed from the legacy tables: %s", e)
+        designer.load()   # the refresh may have stopped after emptying a table: read what is there
     db_store.load_transactions()
     websync.start()
 

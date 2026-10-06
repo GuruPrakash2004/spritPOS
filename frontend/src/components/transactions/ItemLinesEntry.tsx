@@ -10,10 +10,10 @@ import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { PlusCircle, Save, Trash2, XCircle, Printer } from 'lucide-react';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
-import { api, errorText, type ApiDoc, type ApiItemFull, type ApiInvoice } from '../../lib/api';
+import { api, errorText, type ApiDoc, type ApiItemFull } from '../../lib/api';
 import { field, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader, printButton } from '../../lib/styles';
-import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
-import { type DocumentCategory } from '../print/rptRegistry';
+import PrintDialog from '../print/PrintDialog';
+import { afterSavePlan, type PrintKind } from '../../lib/printing';
 import { useConfirm } from '../common/ConfirmDialog';
 import { useDocSettings, type DocKind } from '../../lib/docSettings';
 
@@ -35,9 +35,10 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   const [items, setItems] = useState<ApiItemFull[]>([]);
   const [lines, setLines] = useState<EntryLine[]>([blankLine()]);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
-  const [printDoc, setPrintDoc] = useState<ApiInvoice | null>(null);
+  const [printDocNo, setPrintDocNo] = useState<string | null>(null);
   // Print Settings for this document: print after save (none / ask / preview) and the default format.
-  const docSettings = useDocSettings(endpoint.replace('/transactions/', '').replace(/-/g, '_') as DocKind);
+  const kind = endpoint.replace('/transactions/', '').replace(/-/g, '_') as DocKind & PrintKind;
+  const docSettings = useDocSettings(kind);
   const { confirm, dialog: confirmDialog } = useConfirm();
   const gridRef = useRef<HTMLTableSectionElement>(null);
   const focusRow = useRef<number | null>(null);   // a row just added gets the cursor in its item box
@@ -73,55 +74,6 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
     return next;
   }));
 
-  const category: DocumentCategory = title.includes('Indent')
-    ? 'PURCHASE_INDENT'
-    : title.includes('Return')
-    ? 'SALES_RETURN'
-    : title.includes('Deduction')
-    ? 'STOCK_DEDUCTION'
-    : 'PURCHASE_BILL';
-
-  const makeDoc = (docNo: string): ApiInvoice => ({
-    doc_no: docNo,
-    date: new Date().toISOString().slice(0, 10),
-    time: new Date().toLocaleTimeString('en-IN'),
-    counter: 'Main Store',
-    customer: title,
-    salesperson: 'Store Manager',
-    status: 'SAVED',
-    lines: filled.map(l => {
-      const it = byCode.get(l.item_code);
-      const q = qty(l);
-      return {
-        item_code: l.item_code,
-        item_name: it?.name || l.item_code,
-        cases: l.cases,
-        bottles: l.bottles,
-        qty: q,
-        rate: l.rate,
-        amount: q * l.rate,
-        litres: q * 0.75,
-      };
-    }),
-    totals: {
-      qty: filled.reduce((acc, l) => acc + qty(l), 0),
-      litres: 0,
-      basic: total,
-      cgst: 0,
-      sgst: 0,
-      discount: 0,
-      points_redeemed: 0,
-      points_earned: 0,
-      net: total,
-    },
-    payment: { cash: total, card: 0, upi: 0, credit: 0 },
-  });
-
-  const previewPrint = () => {
-    if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one item to preview print.' });
-    setPrintDoc(makeDoc('DRAFT-01'));
-  };
-
   const save = async (andPrint = false) => {
     if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one item.' });
     if (filled.some(l => qty(l) <= 0)) return setToast({ kind: 'error', text: 'Every item needs cases or bottles.' });
@@ -129,9 +81,11 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
     api<ApiDoc>(endpoint, { method: 'POST', body: buildBody(filled) })
       .then(doc => {
         setToast({ kind: 'ok', text: `${title} ${doc.doc_no} saved — ${doc.totals.qty} bottles.` });
-        const printable = makeDoc(doc.doc_no);   // built now: the lines are cleared below
-        if (andPrint || docSettings.after_save === 'preview') setPrintDoc(printable);
-        else if (docSettings.after_save === 'prompt') confirm(`Do you want to print ${title} ${doc.doc_no}?`).then(ok => { if (ok) setPrintDoc(printable); });
+        // The Doc Designer's default print option decides (Global Settings is the fallback).
+        afterSavePlan(kind, docSettings.after_save, andPrint).then(({ plan }) => {
+          if (plan === 'dialog' || plan === 'direct') setPrintDocNo(doc.doc_no);
+          else if (plan === 'ask') confirm(`Do you want to print ${title} ${doc.doc_no}?`).then(ok => { if (ok) setPrintDocNo(doc.doc_no); });
+        });
         setLines([blankLine()]);
       })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
@@ -155,7 +109,6 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
         <div className="flex flex-wrap gap-2">
           <button onClick={() => save(true)} className={printButton}><Printer size={14} />Save & Print<Kbd combo="F10" /></button>
           <button onClick={() => save(false)} className={primaryButton}><Save size={14} />Save<Kbd combo="Mod+S" /></button>
-          <button onClick={previewPrint} disabled={!filled.length} className={secondaryButton}><Printer size={14} />Print Preview</button>
           <button onClick={() => setLines([blankLine()])} className={secondaryButton}><XCircle size={14} />Clear</button>
         </div>
       </div>
@@ -205,15 +158,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
         </div>
       </div>
 
-      {printDoc && (
-        <PrintFormatSelectorModal
-          category={category}
-          data={printDoc}
-          initialModelId={docSettings.default_format || undefined}
-          title={`Print ${title} (${printDoc.doc_no})`}
-          onClose={() => setPrintDoc(null)}
-        />
-      )}
+      {printDocNo && <PrintDialog kind={kind} docNo={printDocNo} title={`Print ${title} (${printDocNo})`} onClose={() => setPrintDocNo(null)} />}
     </div>
   );
 }

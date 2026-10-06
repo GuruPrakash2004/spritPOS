@@ -12,7 +12,7 @@
 //
 // Keyboard first (the counter rarely uses a mouse; the full list is in the Shortcuts sheet, `?`):
 //   F2 item search · F3 quick pick · F4 customer · F6 or Alt+P next payment type · F7 hold / new · F8 held bills
-//   F9 cash tendered · F10 save & print · ⌘/Ctrl+S save only · ⌘/Ctrl+P print preview
+//   F9 cash tendered · F10 save & print · ⌘/Ctrl+S save only
 //   Alt+R re-print · Alt+C cancel a saved invoice · Alt+X cancel this bill
 //   In the empty item search: ↑/↓ choose a line, + / − change its qty, Delete removes it, Enter edits its qty,
 //   and "3*" sets the qty for the next item. In a line: ↑/↓ move between lines, Enter or Esc back to the search.
@@ -32,7 +32,8 @@ import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvo
 import { STOCK_ITEMS, litresPerBottle, loadStockItems, sellable, stockIndex, useStockItems } from '../../data/stockData';
 import { numberToWords } from '../../lib/formatters';
 import { PAYMENT_TYPES, type InvoiceSetup, type NextNumber, type PaymentType } from '../../data/salesCounters';
-import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import PrintDialog from '../print/PrintDialog';
+import { afterSavePlan, runPrint } from '../../lib/printing';
 import { useDocSettings } from '../../lib/docSettings';
 
 type Line = { id: number; name: string; qoh: number; qty: number; rate: number; discPct: number };
@@ -81,7 +82,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
   const [redeem, setRedeem] = useState('');
   const [dialog, setDialog] = useState<'reprint' | 'cancel' | 'held' | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
-  const [printInvoiceData, setPrintInvoiceData] = useState<ApiInvoice | null>(null);
+  const [printDocNo, setPrintDocNo] = useState<string | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
   // From the moment a save/hold goes to the server until it answers, the bill can't change or be sent again,
   // so a bottle scanned straight after F10 + Enter never lands on the bill being saved.
@@ -343,43 +344,6 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     resetBill();
   };
 
-  const buildCurrentInvoice = (docNo: string): ApiInvoice => ({
-    doc_no: docNo,
-    date: todayIso(),
-    time: now.toLocaleTimeString('en-IN'),
-    counter: setup.counter.name || setup.counter.code,
-    customer: party || 'CASH',
-    salesperson: salesPerson,
-    status: 'SAVED',
-    lines: lines.map(l => ({
-      item_code: STOCK_ITEMS[l.id]?.code || `ITM${l.id}`,
-      item_name: STOCK_ITEMS[l.id]?.name || l.name,
-      cases: 0,
-      bottles: l.qty,
-      qty: l.qty,
-      rate: l.rate,
-      amount: l.qty * l.rate,
-      litres: l.qty * (STOCK_ITEMS[l.id] ? litresPerBottle(STOCK_ITEMS[l.id].pkg) : 0),
-    })),
-    totals: {
-      qty: totals.qty,
-      litres: totals.litres,
-      basic: totals.basic,
-      cgst: totals.cgst,
-      sgst: totals.sgst,
-      discount: totals.disc,
-      points_redeemed: totals.points,
-      points_earned: Math.round(totals.invoice / 100),
-      net: totals.invoice,
-    },
-    payment: { cash: totals.cash, card: totals.card, upi: totals.other, credit: 0 },
-  });
-
-  const openDraftPrint = () => {
-    if (!lines.length) return setToast({ kind: 'error', text: 'Add items to preview bill.' });
-    setPrintInvoiceData(buildCurrentInvoice(billNo));
-  };
-
   const saveBill = async (andPrint = false) => {
     if (locked()) return;
     if (!lines.length) return setToast({ kind: 'error', text: 'Add at least one item before saving the bill.' });
@@ -400,8 +364,17 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
       setPrevBill({ no: doc.doc_no, time: now.toLocaleTimeString('en-IN'), amount: doc.totals.net });
       setToast({ kind: 'ok', text: `Bill ${doc.doc_no} saved — ₹ ${money(doc.totals.net)}.` });
       // Print the bill exactly as the server saved it (number, totals, points).
-      if (andPrint || gsettings.InvPreview?.toUpperCase() === 'Y' || docSettings.after_save === 'preview') setPrintInvoiceData(doc);
-      else if (docSettings.after_save === 'prompt') confirm('Do you want to print the invoice..?').then(ok => { if (ok) setPrintInvoiceData(doc); });
+      // What printing follows a save comes from the Doc Designer's default print option (Global Settings is the fallback).
+      const fallback = gsettings.InvPreview?.toUpperCase() === 'Y' ? 'preview' : docSettings.after_save;
+      afterSavePlan('sales_invoice', fallback, andPrint).then(({ plan, option }) => {
+        if (plan === 'dialog') setPrintDocNo(doc.doc_no);
+        else if (plan === 'ask') confirm('Do you want to print the invoice..?').then(ok => { if (ok) setPrintDocNo(doc.doc_no); });
+        else if (plan === 'direct' && option) {
+          runPrint({ kind: 'sales_invoice', doc_no: doc.doc_no, option: option.name, action: 'direct' })
+            .then(r => setToast({ kind: 'ok', text: r.text }))
+            .catch(e => setToast({ kind: 'error', text: errorText(e) }));
+        }
+      });
       const given = parseInvoiceNo(doc.doc_no);   // the next preview follows the number the server gave
       setNumbering(given);
       setSeq(given.seq + 1);
@@ -421,7 +394,6 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
     F9: () => focusField('si-collected'),
     F10: () => { void saveBill(true); },
     'Mod+S': () => { void saveBill(false); },
-    'Mod+P': openDraftPrint,
     'Alt+R': () => setDialog('reprint'),
     'Alt+C': () => setDialog('cancel'),
     'Alt+X': () => { void cancelBill(); },
@@ -455,7 +427,6 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
             Last bill {prevBill ? <><span className="font-mono text-stone-700 dark:text-stone-300">{prevBill.no}</span> · {prevBill.time} · <span className="tabular-nums font-medium text-stone-800 dark:text-stone-200">₹ {money(prevBill.amount)}</span></> : '—'}
           </span>
           <button onClick={() => setDialog('held')} className={secondaryButton}><Undo2 size={14} />Held bills<Kbd combo="F8" /></button>
-          <button onClick={openDraftPrint} disabled={!lines.length} className={secondaryButton}><Printer size={14} />Print preview<Kbd combo="Mod+P" /></button>
           <button onClick={() => setDialog('reprint')} className={printButton}><Printer size={14} />Re-print<Kbd combo="Alt+R" /></button>
           <button onClick={() => setDialog('cancel')} className={`${ghostButton} hover:!text-red-600 dark:hover:!text-red-400`}><Ban size={14} />Cancel invoice<Kbd combo="Alt+C" /></button>
           <button onClick={onClose} className={ghostButton}><DoorOpen size={14} />Close</button>
@@ -715,15 +686,7 @@ export default function SalesInvoice({ setup, onClose }: { setup: InvoiceSetup; 
       )}
       {dialog === 'held' && <HeldBillsDialog onClose={() => setDialog(null)} onRecall={recall} />}
 
-      {printInvoiceData && (
-        <PrintFormatSelectorModal
-          category="SALES_INVOICE"
-          data={printInvoiceData}
-          initialModelId={docSettings.default_format || undefined}
-          title={`Print Sales Invoice (${printInvoiceData.doc_no})`}
-          onClose={() => setPrintInvoiceData(null)}
-        />
-      )}
+      {printDocNo && <PrintDialog kind="sales_invoice" docNo={printDocNo} title={`Print Sales Invoice (${printDocNo})`} onClose={() => setPrintDocNo(null)} />}
     </div>
   );
 }

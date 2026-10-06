@@ -13,22 +13,14 @@ import { toastStore } from '../common/toastStore';
 import DropdownMenu, { menuItem } from '../common/DropdownMenu';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { badge, field, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle } from '../../lib/styles';
-import { api, errorText, todayIso, type ApiCounter, type ApiInvoice } from '../../lib/api';
+import { api, errorText, type ApiCounter } from '../../lib/api';
 import { NO_COUNTER, counterFromApi, type SalesCounter } from '../../data/salesCounters';
 import { downloadText, toCsv } from '../../lib/csv';
-import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 
 const fromApi = counterFromApi;
 const toApi = (c: SalesCounter): ApiCounter => ({ code: c.code, name: c.name, system_name: c.systemName, prefix: c.prefix, inactive: c.inactive });
 
 const EMPTY_COUNTER: SalesCounter = NO_COUNTER;
-
-// "Print bill format": the counter's bill layout with no lines, to check how it prints.
-const blankBill = (c: SalesCounter): ApiInvoice => ({
-  doc_no: '', date: todayIso(), time: '', counter: c.name || c.code, customer: '', salesperson: '', status: 'SAVED', lines: [],
-  totals: { qty: 0, litres: 0, basic: 0, cgst: 0, sgst: 0, discount: 0, points_redeemed: 0, points_earned: 0, net: 0 },
-  payment: { cash: 0, card: 0, upi: 0, credit: 0 },
-});
 
 type Mode = 'View' | 'New' | 'Edit';
 
@@ -47,14 +39,8 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useRef<HTMLButtonElement>(null);
   const closeOptions = useCallback(() => setOptionsOpen(false), []);
-  const [showPrintModal, setShowPrintModal] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const { confirm, dialog } = useConfirm();
-
-  const handlePrintList = () => {
-    setOptionsOpen(false);
-    setShowPrintModal(true);
-  };
 
   const handleExportExcel = async () => {
     setOptionsOpen(false);
@@ -199,7 +185,6 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
         <div className="flex flex-wrap items-center gap-2">
           <button ref={optionsRef} onClick={() => setOptionsOpen(!optionsOpen)} aria-expanded={optionsOpen} aria-haspopup="menu" aria-label="More options" className={iconButton}><MoreHorizontal size={16} /></button>
           <DropdownMenu anchorRef={optionsRef} open={optionsOpen} onClose={closeOptions}>
-            <button type="button" role="menuitem" onClick={handlePrintList} className={menuItem}>Print List</button>
             <button type="button" role="menuitem" onClick={handleExportExcel} className={menuItem}>Export to Excel</button>
             <button type="button" role="menuitem" onClick={handleAuditTrail} className={menuItem}>Audit Trail</button>
           </DropdownMenu>
@@ -304,14 +289,6 @@ export default function SalesCounterMaster({ onSave }: { onSave: (counter: Sales
         </section>
       </div>
 
-      {showPrintModal && (
-        <PrintFormatSelectorModal
-          category="SALES_INVOICE"
-          data={blankBill(records[index] || form)}
-          title={`Print Bill Format (${(records[index] || form).name || (records[index] || form).code || 'Counter'})`}
-          onClose={() => setShowPrintModal(false)}
-        />
-      )}
     </div>
   );
 }

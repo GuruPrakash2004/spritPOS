@@ -13,7 +13,7 @@ import { api, errorText, qs, type ApiInvoice } from '../../lib/api';
 import { numberToWords } from '../../lib/formatters';
 import {  dangerButton, field, label, money, primaryButton, secondaryButton, tableBody, tableHead , printButton } from '../../lib/styles';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
-import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import PrintDialog from '../print/PrintDialog';
 
 const path = (no: string) => `/transactions/sales-invoice/${no}`;
 
@@ -95,14 +95,7 @@ export function ReprintDialog({ initialNo, onClose }: { initialNo: string; onClo
         </div>
       )}
     </Modal>
-    {showPrintModal && inv && (
-      <PrintFormatSelectorModal
-        category="SALES_INVOICE"
-        data={inv}
-        title={`Print Invoice ${inv.doc_no}`}
-        onClose={() => setShowPrintModal(false)}
-      />
-    )}
+    {showPrintModal && inv && <PrintDialog kind="sales_invoice" docNo={inv.doc_no} title={`Print Invoice ${inv.doc_no}`} onClose={() => setShowPrintModal(false)} />}
   </>
   );
 }

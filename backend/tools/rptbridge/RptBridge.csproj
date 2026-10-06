@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Builds on Windows (dotnet build -c Release, or Visual Studio). Crystal Reports' .NET runtime is 32/64-bit
+       specific: build for the same bitness as the Crystal runtime installed on the PC (see README.md). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>RptBridge</AssemblyName>
+    <!-- The folder with the CrystalDecisions DLLs: the desktop vLQMS folder already has them. -->
+    <CrystalDir Condition="'$(CrystalDir)' == ''">C:\vLQMS\</CrystalDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="CrystalDecisions.CrystalReports.Engine"><HintPath>$(CrystalDir)CrystalDecisions.CrystalReports.Engine.dll</HintPath></Reference>
+    <Reference Include="CrystalDecisions.Shared"><HintPath>$(CrystalDir)CrystalDecisions.Shared.dll</HintPath></Reference>
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+</Project>

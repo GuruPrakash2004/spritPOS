@@ -2,7 +2,8 @@
 //
 // - Shows <Login /> until a user signs in, then the header, <Sidebar /> and the active screen.
 // - There is no router library: `activeTab` holds a module name (see lib/modules.ts) and
-//   renderContent() switches on it. The only real URL is /adminMaster (Admin Master).
+//   renderContent() switches on it. Every module has its own URL (lib/routes.ts: /sales-invoice, /item-master, ...),
+//   kept in step with `activeTab` through the History API, so a screen can be opened in another browser tab.
 // - A module name that is a key of REPORTS (reports/reportDefs.ts) renders through <ApiReport />.
 // - Sales Invoice is two steps: <SalesInvoiceSetup /> fills `invoiceDraft`, then <SalesInvoice /> opens.
 // - To add a screen: add its name to MODULE_GROUPS/MODULE_KEYWORDS, the Sidebar, MATRIX_SCREENS,
@@ -15,8 +16,9 @@ import ChangePasswordDialog from './components/auth/ChangePasswordDialog';
 import KeyboardShortcutsModal from './components/common/KeyboardShortcutsModal';
 import DataModeToggle from './components/layout/DataModeToggle';
 import AdminMaster from './components/admin/AdminMaster';
-import { api, getAuthToken, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
-import { ADMIN_MASTER, ADMIN_PATH, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
+import { api, getAuthToken, requestTokenFromOtherTabs, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
+import { ADMIN_MASTER, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
+import { moduleForPath, pathForModule } from './lib/routes';
 import { iconButton, primaryButton } from './lib/styles';
 import { isTypingTarget, useShortcuts } from './lib/keys';
 import { useConfirm } from './components/common/ConfirmDialog';
@@ -59,7 +61,6 @@ import { useCompanyProfile } from './hooks/useCompanyProfile';
 
 // Per-tab memory for a page refresh (sessionStorage; cleared when the tab closes).
 const FY_KEY = 'vlqms_fin_year';
-const TAB_KEY = 'vlqms_active_tab';
 // Screens whose unsaved rows Alt+B would throw away.
 const ENTRY_SCREENS = ['Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Cash Denomination'];
 const SESSION_CHECK_MS = 60_000;
@@ -68,7 +69,7 @@ const writeSaved = (key: string, value: string) => { try { sessionStorage.setIte
 
 export default function App() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('Dashboard');
+  const [activeTab, setActiveTab] = useState(() => moduleForPath(window.location.pathname));
   const [darkMode, setDarkMode] = useState(false);
   const [invoiceDraft, setInvoiceDraft] = useState<InvoiceSetup>({
     counter: NO_COUNTER, invoiceNo: '', paymentType: 'CASH', customer: '',
@@ -96,20 +97,23 @@ export default function App() {
 
   // After a page refresh the tab still holds the login token: check it with the server and restore
   // the session (and the screen the user was on) instead of showing the sign-in page again.
-  const [restoring, setRestoring] = useState(() => !!getAuthToken());
+  const [restoring, setRestoring] = useState(true);
   useEffect(() => {
-    if (!getAuthToken()) return;
-    api<ApiUser>('/auth/me')
+    // A new tab has no token yet: ask the tabs that are already open before showing the sign-in page.
+    const token = getAuthToken() ? Promise.resolve('') : requestTokenFromOtherTabs();
+    token.then(t => {
+      if (t) setAuthUser('', '', t);
+      if (!getAuthToken()) { setRestoring(false); return; }
+      return api<ApiUser>('/auth/me')
       .then(me => {
         setAuthUser(me.user, me.role);
         setAuthRights(me.modules, me.rights);
         setFieldRights(me.field_rights);
         setSession({ user: me, finYear: readSaved(FY_KEY) });
-        const tab = readSaved(TAB_KEY);
-        if (tab && (tab === 'Dashboard' || canOpen(me.modules, me.role, tab))) setActiveTab(tab);
       })
       .catch(() => undefined)   // a 401 already sent us to the sign-in page with the reason
       .finally(() => setRestoring(false));
+    });
   }, []);
 
   // Session check every minute and when the window regains focus: an expired token, a password change
@@ -135,9 +139,6 @@ export default function App() {
     return () => { clearInterval(timer); window.removeEventListener('focus', onFocus); };
   }, [session]);
 
-  // Remember the open screen for the next refresh.
-  useEffect(() => { if (session) writeSaved(TAB_KEY, activeTab); }, [session, activeTab]);
-
   // Refresh the footer's bill count / today's sales from the backend DSR after login and whenever the
   // screen changes. The DSR needs a login token, so nothing is fetched on the sign-in page.
   useEffect(() => {
@@ -152,13 +153,13 @@ export default function App() {
   }, [darkMode]);
 
   useEffect(() => {
-    const onPop = () => setActiveTab(window.location.pathname === ADMIN_PATH ? ADMIN_MASTER : 'Dashboard');
+    const onPop = () => { setActiveTab(moduleForPath(window.location.pathname)); setBillOpen(false); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
   const openModule = (moduleName: string) => {
-    const path = moduleName === ADMIN_MASTER ? ADMIN_PATH : '/';
+    const path = pathForModule(moduleName);
     if (window.location.pathname !== path) window.history.pushState(null, '', path);
     setActiveTab(moduleName);
     setBillOpen(false);
@@ -257,10 +258,11 @@ export default function App() {
     setAuthRights(user.modules, user.rights);
     setFieldRights(user.field_rights);
     setSession({ user, finYear });
-    if (window.location.pathname === ADMIN_PATH) {
-      window.history.replaceState(null, '', '/');
-    }
-    setActiveTab('Dashboard');
+    // Land on the screen the address names (a bookmark or a new tab) when this user may open it, else the Dashboard.
+    const wanted = moduleForPath(window.location.pathname);
+    const first = canOpen(user.modules, user.role, wanted) ? wanted : 'Dashboard';
+    window.history.replaceState(null, '', pathForModule(first));
+    setActiveTab(first);
   }} />;
   const { user, finYear } = session;
   const moduleGroup = activeTab === ADMIN_MASTER ? 'Administration'
@@ -322,7 +324,7 @@ export default function App() {
                 <div className="text-[11px] text-[#70675F] dark:text-stone-400">{user.role}</div>
               </div>
               <button onClick={() => setChangingPassword(true)} className={`${iconButton} print:hidden`} title="Change my password" aria-label="Change my password"><KeyRound size={16} /></button>
-              <button onClick={() => { setSession(null); setAuthUser('', '', ''); setBillOpen(false); setActiveTab('Dashboard'); writeSaved(TAB_KEY, ''); }} className={`${iconButton} hover:text-[#9A4B45] print:hidden dark:hover:text-red-400`} title="Log out" aria-label="Log out"><LogOut size={16} /></button>
+              <button onClick={() => { setSession(null); setAuthUser('', '', ''); setBillOpen(false); setActiveTab('Dashboard'); window.history.replaceState(null, '', '/'); }} className={`${iconButton} hover:text-[#9A4B45] print:hidden dark:hover:text-red-400`} title="Log out" aria-label="Log out"><LogOut size={16} /></button>
             </div>
           </div>
         </header>

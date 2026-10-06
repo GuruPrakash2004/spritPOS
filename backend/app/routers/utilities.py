@@ -19,7 +19,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, db, doc_settings, duplicate_invoices, gsettings, item_merge, security, sqlstore, store, websync
+from .. import admin_audit, db, doc_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store, websync
 from .auth import hides_cost, require_admin, require_module
 
 router = APIRouter(prefix="/utilities", tags=["Utilities"])
@@ -137,6 +137,10 @@ def about():
         "db_disconnected_for_testing": db.MANUAL_OFFLINE,
         # "live": the shop's SQL Server; "test": the sample data (header switch); "none": nothing loaded
         "data_mode": sqlstore.data_mode(),
+        # What the Doc Designer defined (print options, screens, fields) and whether Crystal printing is set up.
+        "designer": {"screens": len(store.UTL_DOCS), "print_options": len(store.UTL_OPTIONS), "fields": len(store.UTL_FIELDS)},
+        "rpt_bridge": rpt_bridge.configured(),
+        "rpt_files": len(rpt_bridge.rpt_files()),
         "server_time": datetime.now().isoformat(timespec="seconds"),
     }
 

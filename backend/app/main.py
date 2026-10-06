@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from . import admin_audit, boot, db, gsettings, shop_hours, sqlstore, store
-from .routers import auth, company_files, custom_reports, masters, reports, setup, tools, transactions, utilities
+from .routers import auth, company_files, custom_reports, masters, printing, reports, setup, tools, transactions, utilities
 from .schemas import SettingsIn
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -50,7 +50,7 @@ CONTROL_PATHS = {"/utilities/test-data", "/utilities/database/disconnect", "/uti
 # Writes refused while Test data is on (sqlstore.KEEP_IN_TEST: they would not be saved and would be undone).
 KEPT_IN_TEST = ("/admin/", "/auth/change-password", "/settings", "/masters/company", "/utilities/settings",
                 "/utilities/doc-settings", "/utilities/numbering", "/utilities/menu", "/utilities/import-fields")
-NOT_WRITES = {"/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/run",
+NOT_WRITES = {"/print/render", "/print/email", "/designer/refresh", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/run",
               "/utilities/web-sync"}
 
 
@@ -199,6 +199,7 @@ app.include_router(custom_reports.router)
 app.include_router(tools.router)
 app.include_router(utilities.router)
 app.include_router(utilities.values_router)
+app.include_router(printing.router)
 app.include_router(setup.router)
 
 

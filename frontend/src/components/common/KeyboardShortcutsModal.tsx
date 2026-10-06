@@ -27,7 +27,6 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['F9'], description: 'Cash tendered (Enter saves)' },
       { keys: ['F10'], description: 'Save & print' },
       { keys: ['⌘', 'S'], description: 'Save only (no print)' },
-      { keys: ['⌘', 'P'], description: 'Print preview of this bill' },
       { keys: ['F7'], description: 'Hold this bill / start a new one' },
       { keys: ['F8'], description: 'Held bills (↑↓, Enter recalls)' },
       { keys: ['Alt', 'R'], description: 'Re-print a saved bill' },
