@@ -1,7 +1,7 @@
 """Starts the Crystal Reports bridge together with the backend (Windows, bridge on this PC).
 
-On startup, if RPT_BRIDGE_URL points at this PC (127.0.0.1 / localhost), RPT_BRIDGE_KEY is set and the built
-tools/rptbridge/bin/RptBridge.exe exists, a small supervisor thread runs the bridge on the URL's port with that key,
+On startup, on Windows with the built tools/rptbridge/bin/RptBridge.exe, a small supervisor thread runs the bridge on
+127.0.0.1:8765 (or the port of RPT_BRIDGE_URL when one is set) with a key made up at start (or RPT_BRIDGE_KEY),
 and starts it again whenever it exits (it exits by itself when a report hangs, see tools/rptbridge/Program.cs). If a
 bridge already answers on that port (started by hand or as a service) nothing is started. The bridge is stopped when
 the backend stops. RPT_BRIDGE_AUTOSTART=0 turns this off (e.g. when the bridge runs as its own Windows service).
@@ -20,7 +20,7 @@ import httpx
 from . import rpt_bridge
 
 logger = logging.getLogger("vlqms.bridge")
-EXE = Path(__file__).resolve().parents[1] / "tools" / "rptbridge" / "bin" / "RptBridge.exe"
+EXE = rpt_bridge.EXE
 
 _stop = threading.Event()
 _proc: subprocess.Popen | None = None
@@ -46,14 +46,14 @@ def should_start() -> int | None:
     """The port to start the bridge on, or None when it should not be started from here."""
     if sys.platform != "win32" or os.environ.get("RPT_BRIDGE_AUTOSTART", "1") == "0":
         return None
-    if not rpt_bridge.configured() or not rpt_bridge._env("RPT_BRIDGE_KEY") or not EXE.exists():
+    if not rpt_bridge.configured() or not EXE.exists():
         return None
     return _port()
 
 
 def _supervise(port: int) -> None:
     global _proc
-    env = {**os.environ, "RPT_BRIDGE_KEY": rpt_bridge._env("RPT_BRIDGE_KEY")}
+    env = {**os.environ, "RPT_BRIDGE_KEY": rpt_bridge.key()}
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     while not _stop.is_set():
         try:

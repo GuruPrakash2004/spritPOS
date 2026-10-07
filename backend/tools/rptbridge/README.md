@@ -17,22 +17,17 @@ invoice against the desktop's print of the same bill before relying on it.
 
 ## Run
 
+Nothing to set. The backend starts `RptBridge.exe` by itself (`app/bridge_launcher.py`) on 127.0.0.1:8765 with a key it makes up at each start, restarts it if it exits, and stops it with the backend. `RPT_BRIDGE_URL` and `RPT_BRIDGE_KEY` in `backend/.env` are needed only for a bridge you start yourself:
+
 ```
 set RPT_BRIDGE_KEY=<long random text>
 RptBridge.exe 8765
 ```
-It listens on `127.0.0.1` only. Run it as a Windows service or from Task Scheduler at start-up (e.g. with NSSM).
-
-## Starts with the backend
-With `RPT_BRIDGE_URL` pointing at this PC and `RPT_BRIDGE_KEY` set (see below), the backend starts the bridge itself
-(`app/bridge_launcher.py`), restarts it when it exits and stops it with the backend, so `run_bridge.cmd` is only needed
-when the backend is not on the same PC or `RPT_BRIDGE_AUTOSTART=0`.
+(`run_bridge.cmd` keeps that running; then put the same URL and key in `backend/.env`; `RPT_BRIDGE_AUTOSTART=0` stops the backend starting its own.) It listens on `127.0.0.1` only.
 
 ## backend/.env
 
 ```
-RPT_BRIDGE_URL=http://127.0.0.1:8765
-RPT_BRIDGE_KEY=<the same text>
 RPT_FOLDER=C:\vLQMS\Rpts\        # the desktop's Reports → RptFilePath; default is backend/Rpts
 RPT_TABLE_PREFIX=               # leave empty: reports read the desktop's own tables, which hold the bills made on the web too
 ```

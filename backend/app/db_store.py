@@ -212,6 +212,28 @@ def load_brands() -> None:
     logger.info("Loaded %d brands from DB", len(store.BRANDS))
 
 
+def load_simple_masters() -> None:
+    """The simple masters of master_specs.py (groups, states, currencies, locations, taxes, banks, holidays)."""
+    from .master_specs import SPECS
+    for sp in SPECS:
+        cols = [sp["id"], sp["code"], sp["name"]] + [c for _f, c, _k in sp["extras"]] + ([] if sp.get("plain") else ["InActive"])
+        rows = db.fetchall(f"SELECT {', '.join(cols)} FROM {sp['table']} WHERE {sp['id']} > 0")
+        target = getattr(store, sp["store"])
+        target.clear()
+        for r in rows:
+            raw = r.get(sp["code"])
+            code = raw.date().isoformat() if sp.get("date_code") and hasattr(raw, "date") else _s(raw)
+            if not code or code == "-":
+                continue
+            row = {"code": code, "name": _s(r.get(sp["name"]))}
+            for f, c, kind in sp["extras"]:
+                row[f] = float(r.get(c) or 0) if kind == "num" else _s(r.get(c))
+            if not sp.get("plain"):
+                row["active"] = _s(r.get("InActive")).upper() != "Y"
+            target[code] = row
+        logger.info("Loaded %d rows of %s", len(target), sp["table"])
+
+
 def load_uoms() -> None:
     rows = db.fetchall("""
         SELECT UOMID, UOMCODE, UOMNAME, InActive
@@ -602,7 +624,7 @@ def load_masters() -> None:
     """Load all master tables from SQL Server (runs in < 0.2s)."""
     for fn in (load_company, load_fin_year, load_item_groups, load_brands, load_uoms, load_packages, load_items,
                load_customers, load_suppliers, load_ledger_groups, load_ledgers, load_counters, load_sales_persons,
-               load_last_purchase, load_users):
+               load_simple_masters, load_last_purchase, load_users):
         try:
             fn()
         except Exception as e:

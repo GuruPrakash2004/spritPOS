@@ -10,6 +10,7 @@ can sign in (the sign-in page offers the Database setup). Every successful chang
 import asyncio
 import hashlib
 import logging
+import mimetypes
 import os
 from pathlib import Path
 
@@ -120,6 +121,10 @@ async def serialise_and_save_writes(request: Request, call_next):
 # Registered before CORS and the security headers, so the pages get the same headers as the API. Its API calls go
 # to /api/...: the prefix is taken off here, as the Vite dev server's proxy does.
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+# Python reads MIME types from the Windows registry, where .js can be text/plain, and browsers refuse module scripts
+# served that way. Pin the types the built frontend needs.
+for _ext, _type in ((".js", "text/javascript"), (".mjs", "text/javascript"), (".css", "text/css"), (".svg", "image/svg+xml")):
+    mimetypes.add_type(_type, _ext)
 API_PAGES = {"/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"}   # the API's own pages stay the API's
 
 
@@ -169,12 +174,10 @@ app.add_middleware(
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    """Browser hardening headers on every response (no sniffing, no framing, no referrer leaks). The referrer is
-    the site's origin only (never a path): a Google Maps browser key restricted to this site needs it."""
+    """Browser hardening headers on every response (no sniffing, no framing)."""
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Referrer-Policy", "strict-origin")
     response.headers.setdefault("Cross-Origin-Resource-Policy", "cross-origin")   # company images load from the frontend's page
     if request.url.path.startswith(("/auth", "/admin")):
         response.headers.setdefault("Cache-Control", "no-store")
@@ -231,7 +234,7 @@ def update_settings(body: SettingsIn, admin: dict = Depends(auth.require_admin))
 
 @app.get("/company/hours", tags=["Company Master"])
 def company_hours():
-    """Whether the shop is open now, from its opening hours on Google Maps (app/shop_hours.py; the Dashboard's store banner)."""
+    """Whether the shop is open now: Karnataka liquor-shop hours, closed on Holiday Master dates (app/shop_hours.py; the Dashboard's store banner)."""
     return shop_hours.status()
 
 

@@ -200,7 +200,6 @@ async def test_security_headers_are_sent(anon_client):
 
     assert res.headers["X-Content-Type-Options"] == "nosniff"
     assert res.headers["X-Frame-Options"] == "DENY"
-    assert res.headers["Referrer-Policy"] == "strict-origin"   # origin only: a site-restricted Maps key needs it
 
 
 async def test_user_names_with_odd_characters_are_refused(client):

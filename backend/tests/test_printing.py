@@ -6,7 +6,7 @@ import httpx
 import pytest
 import respx
 
-from app import rpt_print, store
+from app import rpt_bridge, rpt_print, store
 
 BRIDGE = "http://127.0.0.1:8765"
 
@@ -93,6 +93,7 @@ async def test_missing_rpt_and_missing_bridge_are_clear_errors(client, rpts, mon
     r = await client.post("/print/render", json={"kind": "sales_invoice", "doc_no": "x"})
     assert r.status_code == 404 and "NoSuchFile.rpt" in r.json()["detail"]
     monkeypatch.delenv("RPT_BRIDGE_URL")
+    monkeypatch.setattr(rpt_bridge, "local_bridge", lambda: False)   # no bridge built on this PC
     r = await client.post("/print/render", json={"kind": "sales_invoice", "doc_no": "x", "option": "Std"})
     assert r.status_code == 503 and "bridge" in r.json()["detail"].lower()
 

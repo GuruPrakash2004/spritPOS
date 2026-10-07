@@ -762,9 +762,9 @@ input[type='date']::-webkit-date-and-time-value { text-align: left; }
   animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Popups (common/Toast.tsx). Only transform and opacity animate, so the GPU does the work.
+/* Popups (common/Toast.jsx). Only transform and opacity animate, so the GPU does the work.
    Large screens: quick. Below lg (1024 px): a longer, softer glide in and out.
-   The exit times match TOAST_EXIT_MS / TOAST_EXIT_SMALL_MS in toastStore.ts. */
+   The exit times match TOAST_EXIT_MS / TOAST_EXIT_SMALL_MS in toastStore.js. */
 @keyframes toastEnter {
   from { opacity: 0; transform: translate3d(24px, 0, 0); }
   to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }

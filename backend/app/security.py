@@ -30,7 +30,7 @@ DEFAULT_LOGIN = {
 }
 
 # Dashboard panels a role can be kept from seeing (Field Level Rights, document "dashboard"; only Hidden applies).
-# The keys are the frontend's (Dashboard.tsx); restock and stock_movement are also refused by their endpoints.
+# The keys are the frontend's (Dashboard.jsx); restock and stock_movement are also refused by their endpoints.
 DASHBOARD = "dashboard"
 DASHBOARD_PANELS = {
     "hero": "Welcome banner", "kpis": "Key figures (today's sales, bills, stock)", "restock": "Restock immediately",
@@ -62,7 +62,7 @@ def _models(schemas) -> dict:
     return {"items": schemas.Item, "item-groups": schemas.ItemGroup, "uoms": schemas.Uom, "packages": schemas.Package,
             "brands": schemas.Brand, "suppliers": schemas.Supplier, "customers": schemas.Customer,
             "ledger-groups": schemas.LedgerGroup, "ledgers": schemas.Ledger, "sales-counters": schemas.SalesCounter,
-            "sales-persons": schemas.SalesPerson}
+            "sales-persons": schemas.SalesPerson} | schemas.SIMPLE_MODELS
 
 
 def master_fields() -> dict[str, list[str]]:
@@ -71,15 +71,18 @@ def master_fields() -> dict[str, list[str]]:
     models = {"items": schemas.Item, "item-groups": schemas.ItemGroup, "uoms": schemas.Uom, "packages": schemas.Package,
               "brands": schemas.Brand, "suppliers": schemas.Supplier, "customers": schemas.Customer,
               "ledger-groups": schemas.LedgerGroup, "ledgers": schemas.Ledger, "sales-counters": schemas.SalesCounter,
-              "sales-persons": schemas.SalesPerson}
+              "sales-persons": schemas.SalesPerson} | schemas.SIMPLE_MODELS
     out = {path: [f for f in m.model_fields if f not in ("code", "authorised")] for path, m in models.items()}
     return out | {DASHBOARD: list(DASHBOARD_PANELS)}
 
 
+from .master_specs import SPECS as _SPECS  # noqa: E402
+
 # Master path -> store table name.
 TABLES = {"items": "ITEMS", "customers": "CUSTOMERS", "suppliers": "SUPPLIERS", "item-groups": "ITEM_GROUPS",
           "brands": "BRANDS", "uoms": "UOMS", "packages": "PACKAGES", "ledgers": "LEDGERS",
-          "ledger-groups": "LEDGER_GROUPS", "sales-counters": "COUNTERS", "sales-persons": "SALES_PERSONS"}
+          "ledger-groups": "LEDGER_GROUPS", "sales-counters": "COUNTERS", "sales-persons": "SALES_PERSONS",
+          **{s["path"]: s["store"] for s in _SPECS}}
 
 # Masters whose rows can need approval, and the documents that refuse unapproved rows.
 # Only these are offered: rows waiting for approval can't be used on documents (items, customers, suppliers);

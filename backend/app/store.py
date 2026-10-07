@@ -25,7 +25,7 @@ COMPANY = {
     "name": "", "email": "", "address": "", "phone": "", "fax": "", "mobile": "", "website": "", "gstin": "",
     "pan": "", "cin": "", "excise_phone": "", "ksbcl_code": "", "licence_type": "", "state": "",
     "fy_start": "", "fy_end": "",
-    "place_id": "",   # the shop on Google Maps, picked on the map in Company Master (app/shop_hours.py)
+    "map_embed": "",   # the shop's Google Maps embed link, shown as a frame in Company Master (no API, no key)
 }
 
 # Financial years (MstCompFinYear): [{"start", "end", "active"}], newest first.
@@ -36,6 +36,11 @@ ITEM_GROUPS: dict[str, dict] = {}
 UOMS: dict[str, dict] = {}
 PACKAGES: dict[str, dict] = {}
 BRANDS: dict[str, dict] = {}
+# The simple masters described in master_specs.py (supplier/customer groups, states, currencies, ...).
+from .master_specs import SPECS as _MASTER_SPECS  # noqa: E402
+for _s in _MASTER_SPECS:
+    globals()[_s["store"]] = {}
+
 ITEMS: dict[str, dict] = {}
 SUPPLIERS: dict[str, dict] = {}
 CUSTOMERS: dict[str, dict] = {}
@@ -57,10 +62,13 @@ ROLES = {
     "Manager": [
         "Dashboard", "Item Master", "Price List Maintenance", "Item Group Master", "UOM Master", "Supplier Master",
         "Customer Master", "Ledger Master", "Ledger Group Master", "Sales Person Master", "Package Master", "Brand Master",
+        "Supplier Group Master", "Customer Group Master", "State Master", "Currency Master", "Location Master", "Tax Master",
+        "Bank Master", "Holiday Master",
         "Purchase Bill", "Sales Invoice", "Expense Entry", "Stock Deduction", "Purchase Indent", "Sales Return",
         "Closing Stock Entry", "Cash Denomination", "Daily Summary Report", "Stock Balance Report", "Stock Ledger",
         "Stock Ageing", "Profit Margin", "Hourly Sales", "Daily Sales", "Brand-wise Sales", "Day-wise Litres",
         "Stock in Litres", "Stock Level / Reorder", "Reports Dashboard",
+        "Package-wise Sales", "Package-wise Purchase", "Loyalty Report", "Excise Stock",
     ],
     "Cashier": ["Dashboard", "Item Master", "Sales Invoice", "Sales Return", "Cash Denomination", "Closing Stock Entry", "Stock Balance Report"],
 }

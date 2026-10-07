@@ -1,0 +1,172 @@
+// Closing Stock Entry (legacy frmTrnCloseStk): load items with their opening qty for the As-on Date,
+// enter the physical closing stock, and the difference becomes the day's sales
+// (Sales Qty = OP − Closing). Save, then Generate Sales Invoice for that quantity.
+// Keyboard: Enter moves to the next field (Shift+Enter back); ⌘/Ctrl+S saves.
+
+import { useEffect, useState } from 'react';
+import { Download, FileOutput, Save } from 'lucide-react';
+import Modal from '../common/Modal';
+import Toast from '../common/Toast';
+import Kbd from '../common/Kbd';
+import { enterMovesNext, useShortcuts } from '../../lib/keys';
+import { toastStore } from '../common/toastStore';
+import { errorText, generateClosingStockInvoice, getSalesCounters, getSalesPersons, loadClosingStock, saveClosingStock, todayIso, } from '../../lib/api';
+import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
+
+
+
+// Legacy frmTrnCloseStk: load liquor items with their opening balance for the As-on Date, enter the physical
+// closing stock, and the difference becomes the day's sales (Sales Qty = OP − Closing).
+export default function ClosingStockEntry() {
+  const [asOn, setAsOn] = useState(todayIso());
+  const [rows, setRows] = useState([]);
+  const [savedDoc, setSavedDoc] = useState(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [counters, setCounters] = useState([]);
+  const [counter, setCounter] = useState('');
+  const [salesPersons, setSalesPersons] = useState([]);
+  const [salesPerson, setSalesPerson] = useState('');
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    getSalesCounters()
+      .then(list => { const active = list.filter(c => !c.inactive); setCounters(active); setCounter(active[0]?.code ?? ''); })
+      .catch(e => toastStore.add('error', errorText(e)));
+    getSalesPersons()
+      .then(list => { setSalesPersons(list); setSalesPerson(list[0] ?? ''); })
+      .catch(e => toastStore.add('error', errorText(e)));
+  }, []);
+
+  const load = () => {
+    loadClosingStock(asOn)
+      .then(list => { setRows(list.map(r => ({ ...r, closing: '' }))); setSavedDoc(null); })
+      .catch(e => setToast({ kind: 'error', text: errorText(e) }));
+  };
+
+  const salesQty = (r) => (r.closing === '' ? 0 : r.op_qty - Number(r.closing));
+  const entered = rows.filter(r => r.closing !== '');
+  const invalid = entered.some(r => salesQty(r) < 0 || Number(r.closing) < 0);
+  const totalSales = entered.reduce((acc, r) => acc + salesQty(r) * r.mrp, 0);
+
+  const save = async () => {
+    if (!entered.length) return setToast({ kind: 'error', text: 'Enter the closing stock for at least one item.' });
+    if (invalid) return setToast({ kind: 'error', text: 'Closing stock cannot be more than the opening stock.' });
+    if (!(await toastStore.defer('ok', `Closing stock for ${entered.length} items will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
+    saveClosingStock({ as_on: asOn, lines: entered.map(r => ({ item_code: r.item_code, closing_qty: Number(r.closing) })) }).then(doc => {
+      setSavedDoc(doc.doc_no);
+      setToast({ kind: 'ok', text: `Closing Stock ${doc.doc_no} saved. You can now generate the sales invoice.` });
+    }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
+  };
+
+  const generate = async () => {
+    if (!savedDoc) return;
+    if (!(await toastStore.defer('ok', `Sales invoice for ${savedDoc} will be generated when this closes.`, 'Invoice not generated. Nothing was changed.'))) return;
+    generateClosingStockInvoice(savedDoc, { counter, salesperson: salesPerson })
+      .then(inv => {
+        setGenerateOpen(false);
+        setToast({ kind: 'ok', text: `Sales Invoice ${inv.doc_no} generated — ₹ ${money(inv.totals.net)}.` });
+        load();
+      })
+      .catch(e => setToast({ kind: 'error', text: errorText(e) }));
+  };
+
+  useShortcuts({ 'Mod+S': () => { void save(); } });
+
+  return (
+    <div className="mx-auto flex max-w-6xl flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
+      {toast && <Toast kind={toast.kind} text={toast.text} />}
+      <div className={pageHeader}>
+        <div>
+          <h1 className={pageTitle}>Closing Stock Entry</h1>
+          <p className={pageSub}>Enter the physical closing stock; the difference from opening is billed as the day's sales.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label htmlFor="cse-date" className={label}>As-on Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
+            <input id="cse-date" type="date" value={asOn} onChange={e => setAsOn(e.target.value)} className={`${field} tabular-nums`} />
+          </div>
+          <button onClick={load} className={secondaryButton}><Download size={14} />Load Items</button>
+          <button onClick={save} disabled={!rows.length || Boolean(savedDoc)} className={primaryButton}><Save size={14} />Save<Kbd combo="Mod+S" /></button>
+          <button onClick={() => setGenerateOpen(true)} disabled={!savedDoc} className={primaryButton}><FileOutput size={14} />Generate Sales Invoice</button>
+        </div>
+      </div>
+
+      <div className={`${panel} max-h-[560px] overflow-auto`}>
+        <table className="w-full text-xs">
+          <thead className={tableHead}>
+            <tr>
+              <th className="px-3 py-2">Sl</th><th className="px-3 py-2">Item</th><th className="px-3 py-2">Pkg</th>
+              <th className="px-3 py-2 text-right">OP Qty</th><th className="px-3 py-2 text-right">Closing Qty</th>
+              <th className="px-3 py-2 text-right">Sales Qty</th><th className="px-3 py-2 text-right">MRP</th><th className="px-3 py-2 text-right">Sales Value</th>
+            </tr>
+          </thead>
+          <tbody className={`${tableBody} tabular-nums`}>
+            {!rows.length && <tr><td colSpan={8} className="px-3 py-12 text-center font-sans text-stone-400">Pick the As-on Date and press Load Items.</td></tr>}
+            {rows.map((r, i) => {
+              const sq = salesQty(r);
+              return (
+                <tr key={r.item_code}>
+                  <td className="px-3 py-1.5 font-sans text-stone-400">{i + 1}</td>
+                  <td className="px-3 py-1.5 font-sans font-medium text-stone-900 dark:text-stone-100">{r.item_name}</td>
+                  <td className="px-3 py-1.5 text-stone-500">{r.package}</td>
+                  <td className="px-3 py-1.5 text-right text-stone-500">{r.op_qty}</td>
+                  <td className="px-3 py-1.5 text-right">
+                    <input
+                      type="number" min={0} max={r.op_qty} value={r.closing} disabled={Boolean(savedDoc)}
+                      onChange={e => setRows(rows.map(x => (x.item_code === r.item_code ? { ...x, closing: e.target.value } : x)))}
+                      className={`${field} w-20 py-0.5 text-right`} aria-label={`Closing qty for ${r.item_name}`}
+                    />
+                  </td>
+                  <td className={`px-3 py-1.5 text-right font-bold ${sq < 0 ? 'text-red-600 dark:text-red-400' : 'text-stone-900 dark:text-stone-100'}`}>{r.closing === '' ? '—' : sq}</td>
+                  <td className="px-3 py-1.5 text-right">{money(r.mrp)}</td>
+                  <td className="px-3 py-1.5 text-right">{r.closing === '' ? '—' : money(sq * r.mrp)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {rows.length > 0 && (
+        <div className={`${panel} flex flex-wrap justify-between gap-3 px-5 py-3 text-sm font-bold text-stone-700 dark:text-stone-200`}>
+          <span>{entered.length} of {rows.length} items entered{savedDoc && <span className="ml-3 font-mono text-emerald-600 dark:text-emerald-400">Saved as {savedDoc}</span>}</span>
+          <span className="text-accent-ink">Sales Value: ₹ {money(totalSales)}</span>
+        </div>
+      )}
+
+      {generateOpen && (
+        <Modal
+          title="Generate Sales Invoice"
+          onClose={() => setGenerateOpen(false)}
+          footer={<>
+            <button onClick={() => setGenerateOpen(false)} className={secondaryButton}>Cancel</button>
+            <button onClick={generate} disabled={!counter} className={primaryButton}><FileOutput size={14} />Generate</button>
+          </>}
+        >
+          <p className="mb-3 text-stone-600 dark:text-stone-300">One sales invoice will be raised for the computed sales quantities of <span className="font-mono">{savedDoc}</span>.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="cse-counter" className={label}>Counter</label>
+              <select id="cse-counter" value={counter} onChange={e => setCounter(e.target.value)} className={`${field} w-full`}>
+                {counters.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="cse-sp" className={label}>Sales Person</label>
+              <select id="cse-sp" value={salesPerson} onChange={e => setSalesPerson(e.target.value)} className={`${field} w-full`}>
+                {!salesPersons.length && <option value="">No sales persons (Sales Person Master)</option>}
+                {salesPersons.map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}

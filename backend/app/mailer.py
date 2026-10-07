@@ -7,7 +7,7 @@ The From address is the Company Master email (with the company name), then SMTP_
 Most providers (Gmail included) only send as the account you log in with or a verified "Send mail as"
 alias of it, so SMTP_USER should be the company mailbox. Replies go to the company email either way.
 Without SMTP_HOST, configured() is False and the endpoint says email isn't set up.
-The workbook is SpreadsheetML 2003, the same format as the browser's Export XLS (frontend/src/lib/xlsExport.ts).
+The workbook is SpreadsheetML 2003, the same format as the browser's Export XLS (frontend/src/lib/xlsExport.js).
 """
 import os
 import smtplib

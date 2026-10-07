@@ -31,12 +31,13 @@ import time
 from datetime import datetime
 
 from . import db, gsettings, setup_db, store
+from .master_specs import SPECS as _SPECS
 
 logger = logging.getLogger("vlqms.sqlstore")
 
 # Tables whose rows the app can change (store.touch). COMPANY is a single dict (key "*").
 TABLES = ("ITEMS", "ITEM_GROUPS", "UOMS", "PACKAGES", "BRANDS", "SUPPLIERS", "CUSTOMERS", "LEDGER_GROUPS",
-          "LEDGERS", "COUNTERS", "SALES_PERSONS", "USERS", "ROLES", "ROLE_RIGHTS")
+          "LEDGERS", "COUNTERS", "SALES_PERSONS", "USERS", "ROLES", "ROLE_RIGHTS") + tuple(_s["store"] for _s in _SPECS)
 # Never written: a desktop user's reversible password is re-read from MstUser instead.
 SECRET_FIELDS = ("legacy_password", "default_password")
 # Web state saved whole in Web_AppSetting (Section "state"), by name.
@@ -245,6 +246,22 @@ LEGACY_MASTERS = {
                       lambda cur, r: {"SPNAME": r.get("name", ""), "MOBNO": r.get("mobile") or "",
                                       "InActive": _yn(not r.get("active", True))}),
 }
+
+
+def _simple_values(sp: dict):
+    """Column values of a simple master (master_specs.py) from its row."""
+    def values(cur, r: dict) -> dict:
+        v = {sp["name"]: r.get("name", "")}
+        for f, col, kind in sp["extras"]:
+            v[col] = _num(r.get(f)) if kind == "num" else _text(r.get(f))
+        if not sp.get("plain"):
+            v["InActive"] = _yn(not r.get("active", True))
+        return v
+    return values
+
+
+for _sp in _SPECS:
+    LEGACY_MASTERS[_sp["store"]] = (_sp["table"], _sp["id"], _sp["code"], _simple_values(_sp))
 # The desktop ID a new row got, kept on the row (bills refer to items, counters and sales persons by ID).
 NEW_ID_FIELD = {"ITEMS": "_itemid", "COUNTERS": "_scid", "SALES_PERSONS": "_spid"}
 
@@ -257,6 +274,8 @@ IN_USE_BY = {
     "ITEM_GROUPS": [("MstITEM", "ITEMGROUPID")], "BRANDS": [("MstITEM", "BRANDID")], "UOMS": [("MstITEM", "UOMID")],
     "PACKAGES": [("MstITEM", "PKGID")], "LEDGER_GROUPS": [("MstLed", "LEDGROUPID")],
 }
+for _sp in _SPECS:
+    IN_USE_BY[_sp["store"]] = list(_sp["used_by"])
 
 
 def _check_unused(cur, table: str, id_col: str, web_table: str, code_col: str, key: str) -> None:

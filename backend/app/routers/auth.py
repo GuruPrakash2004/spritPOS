@@ -13,7 +13,7 @@
 - require_login is applied to the whole app in main.py: every endpoint needs a valid token except
   the few in PUBLIC_ROUTES that the sign-in page (or an <img> tag, which can't send a token) uses.
 - require_module("Sales Invoice", ...) guards the write endpoints: the caller's role must have one
-  of those modules (the same names as the sidebar, store.ROLES and frontend lib/modules.ts).
+  of those modules (the same names as the sidebar, store.ROLES and frontend lib/modules.js).
 - /admin/users and /admin/roles are Administrator-only. Users and roles live in
   store.USERS / store.ROLES, so changes are lost on restart.
 - JWT_SECRET comes from backend/.env; never hard-code secrets or passwords here.

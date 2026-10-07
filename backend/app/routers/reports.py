@@ -8,7 +8,7 @@ backend/Rpts/. Stock figures are computed from store.MOVEMENTS, so they only inc
 movements made through store.move_stock().
 
 The frontend renders most of these through REPORTS in
-frontend/src/components/reports/reportDefs.ts.
+frontend/src/components/reports/reportDefs.js.
 """
 import math
 from collections import defaultdict
@@ -501,3 +501,67 @@ def list_rpt_files(category: str | None = None):
             })
     return files
 
+
+
+# ─── Package-wise sales / purchase, Loyalty and Excise Stock (legacy frmRptSalesPkgwise, frmRptSPurPkgwise, frmRptLoyalty,
+# frmRptExciseStk) ───────────────────────────────────────────────────────────────
+
+@router.get("/sales/package-wise")
+def package_wise_sales(from_date: date, to_date: date):
+    """Sales by bottle size (package): bottles, litres and amount."""
+    _check_range(from_date, to_date)
+    pk = defaultdict(lambda: {"qty": 0, "litres": 0.0, "amount": 0.0})
+    for inv in _saved_invoices(from_date, to_date):
+        for l in inv["lines"]:
+            p = pk[_item(l["item_code"])["package"] or "-"]
+            p["qty"] += l["qty"]
+            p["litres"] = round(p["litres"] + l["litres"], 3)
+            p["amount"] = round(p["amount"] + l["amount"], 2)
+    return sorted(({"package": k, **v} for k, v in pk.items()), key=lambda r: -r["litres"])
+
+
+@router.get("/purchase/package-wise")
+def package_wise_purchase(from_date: date, to_date: date, current_user: dict = Depends(get_current_user)):
+    """Purchases (net of purchase returns) by bottle size. The amount is at cost, so it is hidden from roles without cost access."""
+    _check_range(from_date, to_date)
+    pk = defaultdict(lambda: {"qty": 0, "litres": 0.0, "amount": 0.0})
+    for bill in store.DOCS["purchase_bill"].values():
+        if not from_date.isoformat() <= bill["date"] <= to_date.isoformat():
+            continue
+        sign = -1 if bill.get("purchase_type") == "Purchase Return" else 1
+        for l in bill["lines"]:
+            p = pk[_item(l["item_code"])["package"] or "-"]
+            p["qty"] += sign * l["qty"]
+            p["litres"] = round(p["litres"] + sign * l["litres"], 3)
+            p["amount"] = round(p["amount"] + sign * l["amount"], 2)
+    hide = hides_cost(current_user)
+    return sorted(({"package": k, **v, **({"amount": None} if hide else {})} for k, v in pk.items()), key=lambda r: -r["litres"])
+
+
+@router.get("/loyalty")
+def loyalty_report(from_date: date, to_date: date):
+    """Loyalty points per customer: balance now, and what the saved bills of the period earned and redeemed."""
+    _check_range(from_date, to_date)
+    earned, redeemed = defaultdict(float), defaultdict(float)
+    for inv in _saved_invoices(from_date, to_date):
+        earned[inv["customer"]] += inv["totals"].get("points_earned", 0)
+        redeemed[inv["customer"]] += inv["totals"].get("points_redeemed", 0)
+    rows = []
+    for c in store.CUSTOMERS.values():
+        if c["code"] == "CASH" or not (c.get("points") or earned[c["code"]] or redeemed[c["code"]]):
+            continue
+        rows.append({"customer": c["code"], "name": c["name"], "mobile": c.get("mobile", ""), "card_no": c.get("loyalty_card_no", ""),
+                     "earned": round(earned[c["code"]], 2), "redeemed": round(redeemed[c["code"]], 2), "balance": round(c.get("points") or 0, 2)})
+    return sorted(rows, key=lambda r: -r["balance"])
+
+
+@router.get("/excise-stock")
+def excise_stock(on: date):
+    """Closing stock in bottles and litres by liquor type and bottle size (the excise stock statement)."""
+    grid = defaultdict(lambda: {"qty": 0, "litres": 0.0})
+    for r in stock_balance(on, on):
+        it = _item(r["item_code"])
+        g = grid[(it["liqtype"] or "Other", it["package"] or "-")]
+        g["qty"] += r["cl_qty"]
+        g["litres"] = round(g["litres"] + r["cl_litres"], 3)
+    return [{"liqtype": t, "package": p, **v} for (t, p), v in sorted(grid.items()) if v["qty"]]

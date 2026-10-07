@@ -1,0 +1,64 @@
+// Tests for the API client: token header, error text, and ending the session on a 401.
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ApiError, companyFileUrl, getDenomination, getItems, login, qs, setAuthUser, setSessionEndedHandler } from './api'
+
+const reply = (status, body) =>
+  vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  setSessionEndedHandler(null)
+  setAuthUser('', '', '')
+})
+
+describe('the backend functions', () => {
+  it('sends the login token and no X-User header', async () => {
+    const fetchMock = reply(200, [])
+    vi.stubGlobal('fetch', fetchMock)
+    setAuthUser('RAVI', 'Cashier', 'tok-123')
+
+    await getItems()
+
+    const headers = (fetchMock.mock.calls[0] )[1].headers 
+    expect(headers.Authorization).toBe('Bearer tok-123')
+    expect(headers['X-User']).toBeUndefined()
+  })
+
+  it('turns FastAPI validation errors into one readable message', async () => {
+    vi.stubGlobal('fetch', reply(422, { detail: [{ msg: 'Counts cannot be negative' }, { msg: 'Unknown note' }] }))
+
+    await expect(getDenomination('2026-10-01')).rejects.toThrow('Counts cannot be negative; Unknown note')
+  })
+
+  it('ends the session on a 401 once logged in', async () => {
+    vi.stubGlobal('fetch', reply(401, { detail: 'Your session has expired. Please log in again.' }))
+    const ended = vi.fn()
+    setSessionEndedHandler(ended)
+    setAuthUser('RAVI', 'Cashier', 'tok-123')
+
+    await expect(getItems()).rejects.toBeInstanceOf(ApiError)
+    expect(ended).toHaveBeenCalledWith('Your session has expired. Please log in again.')
+  })
+
+  it('does not end a session for a wrong password at login', async () => {
+    vi.stubGlobal('fetch', reply(401, { detail: 'Invalid user name or password' }))
+    const ended = vi.fn()
+    setSessionEndedHandler(ended)
+
+    await expect(login({ user: 'RAVI', password: 'x' })).rejects.toThrow('Invalid user name or password')
+    expect(ended).not.toHaveBeenCalled()
+  })
+
+  it('calls /api/<path> on its own address when VITE_API_URL is empty', async () => {
+    const fetchMock = reply(200, [])
+    vi.stubGlobal('fetch', fetchMock)
+    await getItems()
+    expect((fetchMock.mock.calls[0] )[0]).toBe('/api/masters/items')
+    expect(companyFileUrl(7)).toBe('/api/company/files/7/content')
+    expect(companyFileUrl(7, true)).toBe('/api/company/files/7/content?download=true')
+  })
+
+  it('qs() drops empty values', () => {
+    expect(qs({ a: 1, b: '', c: undefined, d: 'x y' })).toBe('?a=1&d=x+y')
+  })
+})

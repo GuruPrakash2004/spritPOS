@@ -5,7 +5,6 @@
       "Bash(npm run build:*)",
       "Bash(npm run lint:*)",
       "Bash(npm run dev:*)",
-      "Bash(npx tsc:*)",
       "Bash(npx eslint:*)",
       "Bash(.venv/bin/uvicorn:*)",
       "Bash(.venv/bin/pip install:*)",

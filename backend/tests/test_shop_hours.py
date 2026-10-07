@@ -1,83 +1,56 @@
-"""The footer's Open / Closed from Google Maps (app/shop_hours.py): the shop is searched by company name + address,
-and whether it is open is worked out from its weekly hours in the shop's time zone. No real call is made (respx)."""
-from datetime import datetime, timezone
-
-import httpx
-import pytest
+"""The Dashboard's Open / Closed (app/shop_hours.py): Karnataka retail liquor hours, closed on Holiday Master dates, no
+Google call. The map shown in Company Master is the iframe the owner pastes (Company.map_embed)."""
+from datetime import datetime, timedelta, timezone
 
 from app import shop_hours, store
 
-# Mon-Sat 10:00-22:30, Sunday closed; India (UTC+5:30).
-PERIODS = [{"open": {"day": d, "hour": 10, "minute": 0}, "close": {"day": d, "hour": 22, "minute": 30}} for d in range(1, 7)]
-PLACE = {"places": [{"id": "x", "displayName": {"text": "My Shop"}, "googleMapsUri": "https://maps.google.com/?cid=1",
-                     "utcOffsetMinutes": 330, "businessStatus": "OPERATIONAL",
-                     "regularOpeningHours": {"periods": PERIODS, "weekdayDescriptions": [
-                         f"{d}: 10:00 AM – 10:30 PM" for d in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")]
-                         + ["Sunday: Closed"]}}]}
-
-
-@pytest.fixture(autouse=True)
-def _fresh(monkeypatch):
-    shop_hours.reset()
-    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-key")
-    yield
-    shop_hours.reset()
-
 
 def _utc(local: str) -> datetime:   # a time in India, as UTC
-    return datetime.fromisoformat(local).replace(tzinfo=timezone.utc) - __import__("datetime").timedelta(minutes=330)
+    return datetime.fromisoformat(local).replace(tzinfo=timezone.utc) - timedelta(minutes=330)
 
 
-def test_open_and_closed_from_the_weekly_hours(block_network):
-    route = block_network.post(shop_hours.SEARCH_URL).mock(return_value=httpx.Response(200, json=PLACE))
-    assert shop_hours.status(_utc("2026-10-05T11:00"))["open_now"] is True      # Monday 11:00
-    late = shop_hours.status(_utc("2026-10-05T22:45"))                           # Monday 22:45
-    assert late["open_now"] is False and late["today"] == "10:00 AM – 10:30 PM"
-    assert shop_hours.status(_utc("2026-10-04T12:00"))["open_now"] is False     # Sunday
-    assert route.call_count == 1   # looked up once, then worked out from the cached hours
-    sent = route.calls[0].request
-    assert sent.headers["X-Goog-Api-Key"] == "test-key"
-    assert store.COMPANY["address"] in sent.content.decode()
+def test_open_between_ten_and_ten_every_day():
+    for day in ("2026-10-05", "2026-10-04"):   # a Monday and a Sunday
+        assert shop_hours.status(_utc(f"{day}T10:00"))["open_now"] is True
+        assert shop_hours.status(_utc(f"{day}T21:59"))["open_now"] is True
+        assert shop_hours.status(_utc(f"{day}T09:59"))["open_now"] is False
+        assert shop_hours.status(_utc(f"{day}T22:30"))["open_now"] is False
+    out = shop_hours.status(_utc("2026-10-05T12:00"))
+    assert out["today"] == "10:00 AM – 10:30 PM" and out["configured"] is True and out["error"] is None
 
 
-def test_hours_past_midnight():
-    periods = [{"open": {"day": 5, "hour": 18, "minute": 0}, "close": {"day": 6, "hour": 2, "minute": 0}}]   # Fri 18:00-Sat 02:00
-    assert shop_hours.open_now(periods, datetime(2026, 10, 10, 1, 0))      # Saturday 01:00
-    assert not shop_hours.open_now(periods, datetime(2026, 10, 10, 3, 0))
-    assert shop_hours.open_now([{"open": {"day": 0, "hour": 0, "minute": 0}}], datetime(2026, 10, 10, 3, 0))   # 24 hours
+def test_closed_all_day_on_a_holiday(monkeypatch):
+    monkeypatch.setitem(store.HOLIDAYS, "2026-10-05", {"code": "2026-10-05", "name": "Gandhi Jayanti"})
+    out = shop_hours.status(_utc("2026-10-05T12:00"))
+    assert out["open_now"] is False and out["holiday"] == "Gandhi Jayanti" and "Gandhi Jayanti" in out["today"]
+    assert shop_hours.status(_utc("2026-10-06T12:00"))["open_now"] is True
 
 
-def test_without_a_key_nothing_is_asked(block_network, monkeypatch):
-    monkeypatch.delenv("GOOGLE_MAPS_API_KEY")
-    out = shop_hours.status()
-    assert out["configured"] is False and out["open_now"] is None
+def test_the_timings_can_be_changed_in_env(monkeypatch):
+    monkeypatch.setenv("SHOP_OPEN_TIME", "09:00")
+    monkeypatch.setenv("SHOP_CLOSE_TIME", "23:30")
+    assert shop_hours.status(_utc("2026-10-05T09:00"))["open_now"] is True
+    assert shop_hours.status(_utc("2026-10-05T23:29"))["open_now"] is True
+    assert shop_hours.status(_utc("2026-10-05T23:30"))["open_now"] is False
+    monkeypatch.setenv("SHOP_OPEN_TIME", "nonsense")
+    assert shop_hours.hours()[0].hour == 10   # an unreadable value falls back to the default
 
 
-def test_a_refused_key_is_reported_not_raised(block_network):
-    block_network.post(shop_hours.SEARCH_URL).mock(return_value=httpx.Response(403, json={"error": {"message": "API key not valid"}}))
-    out = shop_hours.status()
-    assert out["open_now"] is None and "API key not valid" in out["error"]
-
-
-async def test_endpoint_needs_a_login_and_hides_the_key(anon_client, client, block_network):
-    block_network.post(shop_hours.SEARCH_URL).mock(return_value=httpx.Response(200, json=PLACE))
-    assert (await anon_client.get("/company/hours")).status_code == 401
+async def test_company_hours_endpoint(client):
     res = await client.get("/company/hours")
-    assert res.status_code == 200 and "test-key" not in res.text and res.json()["place"] == "My Shop"
+    assert res.status_code == 200 and res.json()["open_now"] in (True, False)
 
 
-def test_the_place_picked_on_the_map_is_used(block_network, monkeypatch):
-    monkeypatch.setitem(store.COMPANY, "place_id", "ChIJabc-123")
-    route = block_network.get(shop_hours.DETAILS_URL + "ChIJabc-123").mock(return_value=httpx.Response(200, json=PLACE["places"][0]))
-    out = shop_hours.status(_utc("2026-10-05T11:00"))
-    assert out["open_now"] is True and out["place"] == "My Shop"
-    assert route.called and "places." not in route.calls[0].request.headers["X-Goog-FieldMask"]
+EMBED = "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3888"
 
 
-async def test_company_saves_the_picked_place(client):
-    body = {**(await client.get("/masters/company")).json(), "place_id": "ChIJabc-123"}
-    body.pop("fin_years")
-    res = await client.put("/masters/company", json=body)
-    assert res.status_code == 200 and res.json()["place_id"] == "ChIJabc-123"
-    bad = await client.put("/masters/company", json={**body, "place_id": "x/../y"})
-    assert bad.status_code == 422
+async def test_the_map_is_kept_as_the_pasted_frame_link(client):
+    body = {**(await client.get("/masters/company")).json()}
+    body.pop("fin_years", None)
+    iframe = f'<iframe src="{EMBED}" width="600" height="450" style="border:0;" loading="lazy"></iframe>'
+    res = await client.put("/masters/company", json={**body, "map_embed": iframe})
+    assert res.status_code == 200 and res.json()["map_embed"] == EMBED
+    assert (await client.put("/masters/company", json={**body, "map_embed": EMBED})).json()["map_embed"] == EMBED
+    other = await client.put("/masters/company", json={**body, "map_embed": "https://evil.example.com/maps/embed"})
+    assert other.status_code == 422
+    assert (await client.put("/masters/company", json={**body, "map_embed": ""})).json()["map_embed"] == ""

@@ -1,7 +1,7 @@
 """Pydantic request/response models for every endpoint.
 
 The master models (Company, Item, ItemGroup, ...) are also the field lists of the React
-master screens: frontend/src/components/masters/masterConfigs.ts mirrors them, so change
+master screens: frontend/src/components/masters/masterConfigs.js mirrors them, so change
 both together. Models ending in "In" are request bodies for transactions and admin calls.
 """
 from datetime import date as date_type
@@ -29,7 +29,22 @@ class Company(BaseModel):
     state: str = ""
     fy_start: str
     fy_end: str
-    place_id: str = Field("", max_length=300, pattern=r"^[A-Za-z0-9_-]*$")   # Google Maps place, picked on the map
+    map_embed: str = Field("", max_length=2000)   # the shop's Google Maps embed (an <iframe> or its link), shown as a frame
+
+    @field_validator("map_embed")
+    @classmethod
+    def map_embed_link(cls, value: str) -> str:
+        """An <iframe> pasted from Google Maps (Share → Embed a map) or its link; only the link is kept, and only Google Maps
+        links are accepted, so the frame can't show another site."""
+        import re as _re
+        value = (value or "").strip()
+        if not value:
+            return ""
+        m = _re.search(r'src\s*=\s*["\']([^"\']+)["\']', value)
+        link = (m.group(1) if m else value).strip().replace("&amp;", "&")
+        if not _re.match(r"^https://(www\.google\.com/maps|maps\.google\.com|www\.google\.co\.in/maps)(/|\?)", link):
+            raise ValueError("Paste the Google Maps embed code (Share → Embed a map) or its https://www.google.com/maps/embed link")
+        return link
 
     @field_validator("name", "address")
     @classmethod
@@ -93,6 +108,24 @@ class Package(MasterRow):
     litres_per_bottle: float   # above 0 on save (masters._clean); desktop rows may hold 0
 
 
+def _simple_models() -> dict:
+    """One request model per simple master described in master_specs.py (code, name, its extra columns, active)."""
+    from pydantic import create_model
+    from .master_specs import SPECS
+    out = {}
+    for sp in SPECS:
+        fields = {"code": (str, ...), "name": (str, ...)}
+        for f, _col, kind in sp["extras"]:
+            fields[f] = (float, 0.0) if kind == "num" else (str, "")
+        if not sp.get("plain"):
+            fields["active"] = (bool, True)
+        out[sp["path"]] = create_model("Master_" + sp["path"].replace("-", "_"), __base__=MasterRow, **fields)
+    return out
+
+
+SIMPLE_MODELS = _simple_models()
+
+
 class Brand(MasterRow):
     code: str
     name: str
@@ -147,7 +180,7 @@ class CompanyOut(BaseModel):
     state: str = ""
     fy_start: str = ""
     fy_end: str = ""
-    place_id: str = ""
+    map_embed: str = ""
     fin_years: list[FinYear] = []
 
 
@@ -182,6 +215,13 @@ class PriceUpdate(BaseModel):
     item_codes: list[str] | None = None
     column: Literal["mrp", "purchase_rate"] = "mrp"
     change_by: float = Field(description="Amount to add (negative to reduce)")
+
+
+class BulkItemUpdate(BaseModel):
+    """Bulk Master Update (legacy frmUtlBulkUpdate): set one Item Master field to one value on many items."""
+    item_codes: list[str] = Field(min_length=1, max_length=5000)
+    field: Literal["hsn_code", "brand", "liqtype", "bottles_per_case", "mrp", "purchase_rate", "rol", "roq"]
+    value: str | float | int
 
 
 # ---------- Transactions ----------

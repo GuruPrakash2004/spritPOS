@@ -8,8 +8,9 @@ JSON {"v": <secret>, "t": <epoch ms>, "f": <purpose>}:
 - each value is accepted once (a captured value can't be sent again);
 - "f" ties it to one field (login, current, new, user, ...), so a captured current password can't be used as a
   login password.
-The API refuses plain passwords (REQUIRE_ENCRYPTED; the tests encrypt with conftest.enc()). This complements
-HTTPS; it doesn't replace it.
+The API also accepts a plain password (REQUIRE_ENCRYPTED is off), because a browser opened over plain http://
+from another PC has no WebCrypto and sends it as typed; the tests still encrypt with conftest.enc().
+This complements HTTPS; it doesn't replace it.
 
 At rest: user passwords are never stored, only PBKDF2 hashes (app/passwords.py). Other secrets the app must
 be able to read back (the SQL Server password saved from Utilities → Database Connectivity) are sealed with
@@ -35,7 +36,7 @@ from fastapi import HTTPException
 PREFIX = "enc:v1:"
 SEALED = "sealed:v1:"
 MAX_AGE_SECONDS = 300
-REQUIRE_ENCRYPTED = True
+REQUIRE_ENCRYPTED = False   # plain passwords are accepted: a browser on plain http:// (LAN) has no WebCrypto, so it sends them as typed
 
 KEY_DIR = Path(__file__).resolve().parents[1] / "data"
 _lock = threading.Lock()
@@ -105,7 +106,7 @@ def hashes_digest(data: bytes) -> bytes:
 
 
 def encrypt_for_server(secret: str, purpose: str) -> str:
-    """What the browser does (lib/secureField.ts); used by the tests."""
+    """What the browser does (lib/secureField.js); used by the tests."""
     payload = json.dumps({"v": secret, "t": int(time.time() * 1000), "f": purpose}).encode()
     ct = _private_key().public_key().encrypt(payload, padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),
                                                                   algorithm=hashes.SHA256(), label=None))

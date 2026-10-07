@@ -24,6 +24,8 @@ dist/
 dist-ssr/
 *.local
 
+oraclejdk-27
+
 # OS & Editor
 .DS_Store
 .idea/
@@ -65,3 +67,5 @@ backend/uploads/
 # Crystal Reports bridge shared secret
 backend/tools/rptbridge/*.key
 backend/tools/rptbridge/bridgekey*.txt
+f
+App/

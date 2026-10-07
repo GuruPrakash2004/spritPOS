@@ -6,16 +6,19 @@ desktop vLQMS loads the .rpt with the Crystal runtime, logs it on to SQL Server,
 the parameters, and previews, prints or exports it. The bridge (tools/rptbridge/, a small Windows program that uses
 the same CrystalDecisions DLLs as the desktop exe) does exactly that for the web app and hands back a PDF.
 
-Settings in backend/.env (never committed):
-    RPT_BRIDGE_URL        e.g. http://127.0.0.1:8765  (the bridge runs on the shop PC next to this backend)
-    RPT_BRIDGE_KEY        shared secret the bridge expects in X-Bridge-Key
+Nothing has to be set up for the bridge: on Windows, when tools/rptbridge/bin/RptBridge.exe exists, the backend starts it
+itself (app/bridge_launcher.py) on 127.0.0.1:8765 with a key it makes up at start, and prints through it. The only setting
+that matters is where the .rpt files are:
     RPT_FOLDER            where the .rpt files are (default backend/Rpts; the desktop's Reports → RptFilePath)
+Optional, for a bridge you run yourself: RPT_BRIDGE_URL and RPT_BRIDGE_KEY (both must then match what you started it with).
     RPT_TABLE_PREFIX      prefix of the table names the reports read (default none: the desktop's own tables,
                           which hold the bills made on the web too)
     RPT_BRIDGE_ALLOW_REMOTE=1   allow a bridge that is not on this PC (the database logon is sent to it)
 """
 import os
 import re
+import secrets
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -33,8 +36,22 @@ def _env(key: str, default: str = "") -> str:
     return os.environ.get(key, default).strip()
 
 
+EXE = Path(__file__).resolve().parents[1] / "tools" / "rptbridge" / "bin" / "RptBridge.exe"
+DEFAULT_URL = "http://127.0.0.1:8765"
+_AUTO_KEY = secrets.token_urlsafe(32)   # made up at every start; the launcher gives it to the bridge it starts
+
+
+def local_bridge() -> bool:
+    """Whether this PC can run its own bridge (Windows, with the built exe): then nothing needs configuring."""
+    return sys.platform == "win32" and EXE.exists()
+
+
 def url() -> str:
-    return _env("RPT_BRIDGE_URL").rstrip("/")
+    return (_env("RPT_BRIDGE_URL") or (DEFAULT_URL if local_bridge() else "")).rstrip("/")
+
+
+def key() -> str:
+    return _env("RPT_BRIDGE_KEY") or _AUTO_KEY
 
 
 def configured() -> bool:
@@ -80,11 +97,11 @@ def _logon() -> dict:
 def _check_target() -> str:
     base = url()
     if not base:
-        raise HTTPException(503, "Printing needs the Crystal Reports bridge (RPT_BRIDGE_URL in backend/.env). "
-                                 "See backend/tools/rptbridge/README.md.")
+        raise HTTPException(503, "Printing needs the Crystal Reports bridge: build tools/rptbridge/bin/RptBridge.exe on this "
+                                 "Windows PC (see backend/tools/rptbridge/README.md); the backend then starts it by itself.")
     host = urlparse(base).hostname or ""
     if host not in LOOPBACK and _env("RPT_BRIDGE_ALLOW_REMOTE") != "1":
-        raise HTTPException(503, "RPT_BRIDGE_URL must point at this PC (the database logon is sent to the bridge). "
+        raise HTTPException(503, "The bridge must run on this PC (the database logon is sent to it). "
                                  "Set RPT_BRIDGE_ALLOW_REMOTE=1 to allow another PC.")
     return base
 
@@ -96,7 +113,7 @@ def _call(path: str, job: dict | None, method: str = "POST") -> httpx.Response:
         body = {**job, "rpt": safe_rpt_name(job["rpt"]), "folder": str(folder()), "table_prefix": table_prefix(),
                 "logon": _logon()}
     try:
-        r = httpx.request(method, base + path, json=body, headers={"X-Bridge-Key": _env("RPT_BRIDGE_KEY")}, timeout=TIMEOUT)
+        r = httpx.request(method, base + path, json=body, headers={"X-Bridge-Key": key()}, timeout=TIMEOUT)
     except httpx.HTTPError as e:
         raise HTTPException(503, f"The Crystal Reports bridge can't be reached ({e.__class__.__name__}). Is it running?")
     if r.status_code >= 400:
@@ -157,7 +174,7 @@ def print_direct(job: dict) -> None:
 def status() -> dict:
     """For the Print dialog and About: is the bridge set up and answering?"""
     if not configured():
-        return {"configured": False, "ok": False, "message": "RPT_BRIDGE_URL is not set in backend/.env"}
+        return {"configured": False, "ok": False, "message": "The Crystal Reports bridge is not built on this PC (tools/rptbridge/bin/RptBridge.exe)"}
     try:
         r = _call("/health", None, "GET")
         return {"configured": True, "ok": True, "message": "", **{k: v for k, v in r.json().items() if k in ("version", "printers")}}

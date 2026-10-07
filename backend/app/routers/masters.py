@@ -18,8 +18,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from .. import admin_audit, gsettings, security, store
+from ..master_specs import SPECS
+from ..schemas import SIMPLE_MODELS
 from ..schemas import (
-    Brand, Company, CompanyOut, Customer, Item, ItemGroup, Ledger, LedgerGroup, Package, PriceUpdate, SalesCounter, SalesPerson, Supplier, Uom,
+    Brand, Company, CompanyOut, Customer, Item, ItemGroup, Ledger, LedgerGroup, Package, PriceUpdate, BulkItemUpdate, SalesCounter, SalesPerson, Supplier, Uom,
 )
 from .auth import can_see_cost, get_current_user, hides_cost, require_admin, require_right
 
@@ -42,6 +44,7 @@ def _item_in_use(code: str) -> bool:
 
 # master path -> function(code) returning why the record is in use, or None.
 IN_USE: dict[str, Callable[[str], str | None]] = {
+    **{sp["path"]: (lambda c: None) for sp in SPECS},   # the simple masters: sqlstore checks the desktop's tables on delete
     "items": lambda c: "it is on bills or has stock movements; mark it inactive instead" if _item_in_use(c) else None,
     "item-groups": lambda c: "items belong to this group" if any(i["group"] == c for i in store.ITEMS.values()) else None,
     "uoms": lambda c: "items use this UOM" if any(i["uom"] == c for i in store.ITEMS.values()) else None,
@@ -114,6 +117,13 @@ def _clean(path: str, body: BaseModel, table: dict) -> BaseModel:
         raise HTTPException(422, "Bill prefix cannot be blank")
     elif path == "customers" and body.points < 0:
         raise HTTPException(422, "Points cannot be negative")
+    elif path == "holidays":
+        try:
+            date.fromisoformat(body.code)
+        except ValueError:
+            raise HTTPException(422, "The holiday's date must be a valid date (yyyy-mm-dd)")
+    elif path == "taxes" and not all(0 <= v <= 100 for v in (body.cgst_per, body.sgst_per, body.igst_per)):
+        raise HTTPException(422, "Tax percentages must be between 0 and 100")
     elif path == "packages" and body.litres_per_bottle <= 0:
         raise HTTPException(422, "Litres per bottle must be more than 0")
     return body
@@ -268,6 +278,51 @@ def bulk_update_rates(body: PriceUpdate, current_user: dict = Depends(get_curren
     return [_shown("items", i, current_user) for i in targets]
 
 
+# Fields Bulk Master Update can set (the desktop's UtlItemBulkUpdate lists these as HSNCode, BrandID, LiqType, BotPerCases, MRP,
+# PURRATE, ROL, ROQ); its other entries (min/max level, KSBCL names, ...) have no field in the web Item Master.
+BULK_FIELDS = {"hsn_code": str, "brand": str, "liqtype": str, "bottles_per_case": int, "mrp": float, "purchase_rate": float,
+               "rol": int, "roq": int}
+
+
+@router.post("/items/bulk-update", tags=["Bulk Master Update"], dependencies=[Depends(require_right("edit", "Bulk Master Update"))])
+def bulk_update_items(body: BulkItemUpdate, current_user: dict = Depends(get_current_user)):
+    """Set one field to one value on the chosen items. Follows Admin Master (Security): a field that is read-only for the
+    role is refused, cost needs cost access, changed rows of a master that needs approval wait for it again, and each
+    change goes to the ADMIN Audit Log. Nothing changes unless every chosen item passes."""
+    kind = BULK_FIELDS[body.field]
+    if security.field_rights(current_user, "items").get(body.field):
+        raise HTTPException(403, f"You may not change {body.field.replace('_', ' ')} (Field Level Rights for your role)")
+    if body.field == "purchase_rate" and not can_see_cost(current_user):
+        raise HTTPException(403, "You may not change the purchase rate (no cost access for your role)")
+    try:
+        value = kind(float(body.value)) if kind in (int, float) else str(body.value).strip()
+    except (TypeError, ValueError):
+        raise HTTPException(422, f"'{body.value}' is not a valid value for {body.field.replace('_', ' ')}")
+    if kind in (int, float) and value < 0:
+        raise HTTPException(422, "The value cannot be negative")
+    if body.field == "bottles_per_case" and value < 1:
+        raise HTTPException(422, "Bottles per case must be at least 1")
+    if body.field == "brand" and value not in store.BRANDS:
+        raise HTTPException(422, f"Unknown brand '{value}'")
+    if isinstance(value, str) and len(value) > 40:
+        raise HTTPException(422, "The value must be 40 characters or fewer")
+    missing = [c for c in dict.fromkeys(body.item_codes) if c not in store.ITEMS]
+    if missing:
+        raise HTTPException(404, f"Unknown item(s): {', '.join(missing[:5])}")
+    targets = [store.ITEMS[c] for c in dict.fromkeys(body.item_codes)]
+    if body.field in ("mrp", "purchase_rate"):   # the margin rule is checked on every row before any is changed
+        for i in targets:
+            _check_margin({**i, body.field: value})
+    for i in targets:
+        old = i.get(body.field)
+        i[body.field] = value
+        security.mark_approval(current_user, "items", i)
+        i["changed_by"] = current_user["user"]
+        store.touch("ITEMS", i["code"])
+        admin_audit.record("Bulk Master Update", "Edited", i["code"], f"{body.field}: {old}", f"{body.field}: {value}")
+    return {"changed": len(targets), "field": body.field, "value": value}
+
+
 @router.post("/items/import", tags=["Item Master"], dependencies=[Depends(require_right("add", "Item Master"))])
 def import_items(rows: list[Item], overwrite: bool = False, current_user: dict = Depends(get_current_user)):
     """Import Item from Excel: existing codes are skipped (reported as duplicates) unless overwrite=true.
@@ -333,4 +388,6 @@ crud("customers", store.CUSTOMERS, Customer, "Customer Master", ("Customer Maste
 crud("ledger-groups", store.LEDGER_GROUPS, LedgerGroup, "Ledger Group Master", ("Ledger Group Master",), "LEDGER_GROUPS")
 crud("ledgers", store.LEDGERS, Ledger, "Ledger Master", ("Ledger Master",), "LEDGERS")
 crud("sales-counters", store.COUNTERS, SalesCounter, "Sales Counter Master", ("Sales Counter Master",), "COUNTERS")
+for _sp in SPECS:   # the simple masters described in master_specs.py
+    crud(_sp["path"], getattr(store, _sp["store"]), SIMPLE_MODELS[_sp["path"]], _sp["title"], (_sp["title"],), _sp["store"])
 crud("sales-persons", store.SALES_PERSONS, SalesPerson, "Sales Person Master", ("Sales Person Master",), "SALES_PERSONS")
