@@ -10,6 +10,8 @@ export function usePdfPreview(key: string, load: () => Promise<Response>) {
   const [error, setError] = useState('');
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 
+  // Fetching on a key change legitimately starts by resetting the preview state.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!key) { setUrl(''); return; }
     let live = true;
@@ -30,6 +32,7 @@ export function usePdfPreview(key: string, load: () => Promise<Response>) {
     // `load` is rebuilt on every render by the callers; the preview is asked for again only when the key changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return { url, loading, error, size };
 }

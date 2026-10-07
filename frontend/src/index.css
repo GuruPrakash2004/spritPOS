@@ -204,6 +204,23 @@ body {
 
 input[type='checkbox'], input[type='radio'] { accent-color: var(--ds-accent); }
 
+/* Dark mode legibility: dark-on-dark text classes written for the light theme (muted greys, near-black ink, the
+   burgundy accent) are lifted to readable tones. Anything that sets its own dark:text-* colour, or its own
+   background, is left alone. Placed in the utilities layer so it competes with the utilities by order. */
+@layer utilities {
+	:where(.dark) :is(.text-stone-500, .text-stone-600, .text-\[\#70675F\], .text-\[\#8E8378\], .text-\[\#A69D94\]):not([class*="dark:text-"]) {
+		color: #BDB5AB;
+	}
+	:where(.dark) :is(.text-stone-700, .text-stone-800, .text-stone-900, .text-\[\#29231F\], .text-black):not([class*="dark:text-"]):not([class*="bg-"]) {
+		color: #F5F0E8;
+	}
+	:where(.dark) :is(.text-\[\#64283A\], .text-\[\#542030\]):not([class*="dark:text-"]):not([class*="bg-"]) {
+		color: #E8C36A;
+	}
+	:where(.dark) :where(input, textarea)::placeholder { color: #A8A29E; }
+	:where(.dark) :is(th, td, label, legend, caption):not([class*="text-"]) { color: #E8DFD0; }
+}
+
 /* ────────────────────────────────────────────────
    GLASSMORPHISM
    ──────────────────────────────────────────────── */
@@ -749,30 +766,30 @@ input[type='date']::-webkit-date-and-time-value { text-align: left; }
    Large screens: quick. Below lg (1024 px): a longer, softer glide in and out.
    The exit times match TOAST_EXIT_MS / TOAST_EXIT_SMALL_MS in toastStore.ts. */
 @keyframes toastEnter {
-  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.96); }
+  from { opacity: 0; transform: translate3d(24px, 0, 0); }
   to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
 @keyframes toastEnterSoft {
-  0%   { opacity: 0; transform: translate3d(0, 28px, 0) scale(0.94); }
+  0%   { opacity: 0; transform: translate3d(40px, 0, 0); }
   60%  { opacity: 1; }
   100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
 @keyframes toastExit {
   from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-  to   { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.97); }
+  to   { opacity: 0; transform: translate3d(24px, 0, 0); }
 }
 .toast-card {
   will-change: transform, opacity;
   backface-visibility: hidden;
 }
 .toast-enter {
-  animation: toastEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: toastEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .toast-card.animate-shake {
   animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 .toast-card.toast-leaving {
-  animation: toastExit 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+  animation: toastExit 0.16s cubic-bezier(0.4, 0, 1, 1) both;
   pointer-events: none;
 }
 @media (max-width: 1023.98px) {

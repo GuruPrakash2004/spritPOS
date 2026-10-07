@@ -13,13 +13,14 @@ import { SnackbarContainer } from './components/common/Toast';
 import { useEffect, useState } from 'react';
 import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard, KeyRound } from 'lucide-react';
 import ChangePasswordDialog from './components/auth/ChangePasswordDialog';
+import ScreenBoundary from './components/common/ScreenBoundary';
 import KeyboardShortcutsModal from './components/common/KeyboardShortcutsModal';
 import AdminMaster from './components/admin/AdminMaster';
 import { getAuthToken, getDsr, getMe, requestTokenFromOtherTabs, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, type ApiDsr, type ApiUser } from './lib/api';
 import { ADMIN_MASTER, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
 import { moduleForPath, pathForModule } from './lib/routes';
 import { iconButton, primaryButton } from './lib/styles';
-import { isTypingTarget, useShortcuts } from './lib/keys';
+import { isTypingTarget, useAdvanceAfterSelect, useShortcuts } from './lib/keys';
 import { useConfirm } from './components/common/ConfirmDialog';
 import CashDenomination from './components/transactions/CashDenomination';
 import ClosingStockEntry from './components/transactions/ClosingStockEntry';
@@ -167,6 +168,13 @@ export default function App() {
 
   // App-wide keys: `?` shows the shortcuts sheet (not while typing); Alt+B starts a new sales bill from any screen,
   // asking first when it would leave an entry screen (its unsaved rows would be lost).
+  useAdvanceAfterSelect();
+  // Once signed in, warm up Google's map script in the background so Company Master opens with the map ready.
+  useEffect(() => {
+    if (!session) return;
+    const t = window.setTimeout(() => { import('./components/masters/ShopPlacePicker').then(m => m.prefetchMaps()).catch(() => {}); }, 1500);
+    return () => window.clearTimeout(t);
+  }, [session]);
   useShortcuts({
     'Shift+?': e => { if (!isTypingTarget(e.target)) setShowShortcuts(true); },
     '?': e => { if (!isTypingTarget(e.target)) setShowShortcuts(true); },
@@ -297,12 +305,11 @@ export default function App() {
             </div>
             <button
               onClick={() => setShowShortcuts(true)}
-                className="hidden lg:inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#E3D9CD] bg-[#FFFCF7] px-2.5 text-xs font-medium text-[#70675F] hover:bg-[#F3EEE6] hover:text-[#29231F] transition-all duration-180 active:scale-[0.98] dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-300 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-100 shrink-0 shadow-2xs"
+                className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#E3D9CD] bg-[#FFFCF7] text-xs font-medium text-[#70675F] hover:bg-[#F3EEE6] hover:text-[#29231F] transition-all duration-180 active:scale-[0.98] dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-300 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-100 shrink-0 shadow-2xs"
               title="Keyboard Shortcuts (Press ?)"
               aria-label="Show keyboard shortcuts"
             >
-              <Keyboard size={15} className="text-[#64283A] dark:text-[#D4A847]" />
-              <span className="hidden sm:inline">Shortcuts</span>
+              <Keyboard size={14} className="text-[#64283A] dark:text-[#D4A847]" />
             </button>
           </div>
 
@@ -328,7 +335,7 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-auto p-4 sm:p-6 bg-[#F5F1E9] dark:bg-[#0A0A0A]">
-          {renderContent()}
+          <ScreenBoundary key={activeTab} onHome={() => openModule('Dashboard')}>{renderContent()}</ScreenBoundary>
         </main>
 
         <footer className="flex h-9 shrink-0 items-center justify-between gap-4 border-t px-4 text-[11px] sm:px-6 print:hidden

@@ -1,6 +1,5 @@
-// About shows the connection state, and an Administrator can disconnect the database for testing.
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+// About shows the connection state (there is no Disconnect button).
+import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toastStore } from '../common/toastStore'
 import { setAuthUser } from '../../lib/api'
@@ -20,13 +19,11 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); setAuthUser('', '', '') })
 
 describe('About', () => {
-  it('shows the connection, and disconnects the database for an Administrator', async () => {
+  it('shows the connection, and has no disconnect button even for an Administrator', async () => {
     setAuthUser('ADMIN', 'Administrator', 't')
     render(<About />)
     expect(await screen.findByText('SQL Server connected')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /disconnect database/i }))
-    expect(await screen.findByText('SQL Server disconnected (for testing)')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: /reconnect database/i })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /disconnect|reconnect/i })).not.toBeInTheDocument()
   })
 
   it('has no connection buttons for other roles', async () => {

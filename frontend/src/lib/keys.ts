@@ -109,3 +109,36 @@ export function enterMovesNext(e: ReactKeyboardEvent<HTMLElement>, onLast?: () =
     }, 0);
   }
 }
+
+// Move to the next field of the same form/dialog/screen (after a pick, so the cashier never reaches for the mouse).
+export function advanceFrom(el: HTMLElement) {
+  const root = (el.closest('form, [role="dialog"], main, section') as HTMLElement | null) ?? document.body;
+  const list = fieldsIn(root);
+  const next = list[list.indexOf(el) + 1];
+  if (!next) return;
+  next.focus();
+  if (next instanceof HTMLInputElement && next.type !== 'date') next.select();
+}
+
+// Picking an option in a drop-down (<select>) with the mouse, or Enter, moves straight to the next field.
+// Arrow keys and typing letters change a closed drop-down one value at a time, so those never jump.
+// A field can opt out with data-advance="off". Mounted once in App.tsx.
+export function useAdvanceAfterSelect() {
+  useEffect(() => {
+    let lastKey = '';
+    const onKey = (e: KeyboardEvent) => { lastKey = e.key; };
+    const onPointer = () => { lastKey = ''; };
+    const onChange = (e: Event) => {
+      const el = e.target;
+      if (!(el instanceof HTMLSelectElement) || el.multiple || el.dataset.advance === 'off') return;
+      const stepping = lastKey.startsWith('Arrow') || (lastKey.length === 1 && lastKey !== ' ') || ['Home', 'End', 'PageUp', 'PageDown'].includes(lastKey);
+      lastKey = '';
+      if (stepping) return;
+      setTimeout(() => advanceFrom(el), 0);
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('pointerdown', onPointer, true);
+    document.addEventListener('change', onChange, true);
+    return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('pointerdown', onPointer, true); document.removeEventListener('change', onChange, true); };
+  }, []);
+}

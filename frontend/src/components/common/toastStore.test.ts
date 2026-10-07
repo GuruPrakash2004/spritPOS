@@ -1,4 +1,4 @@
-// Popup timing: 2.5 s on large screens (1024 px and up), 3.2 s on smaller ones, waiting popups included.
+// Popup timing: 1.5 s on large screens (1024 px and up), 2 s on smaller ones, waiting popups included.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LARGE_SCREEN_QUERY, TOAST_DURATION_MS, toastDuration, toastStore } from './toastStore'
 
@@ -9,14 +9,14 @@ const screenIsLarge = (large: boolean) =>
 afterEach(() => vi.restoreAllMocks())
 
 describe('toastDuration', () => {
-  it('is 2.5 s on a large screen', () => {
+  it('is 1.5 s on a large screen', () => {
     screenIsLarge(true)
-    expect(toastDuration()).toBe(2500)
+    expect(toastDuration()).toBe(1500)
   })
 
-  it('is 3.2 s on a medium or small screen', () => {
+  it('is 2 s on a medium or small screen', () => {
     screenIsLarge(false)
-    expect(toastDuration()).toBe(3200)
+    expect(toastDuration()).toBe(2000)
   })
 })
 

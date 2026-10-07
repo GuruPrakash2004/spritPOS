@@ -23,6 +23,11 @@ RptBridge.exe 8765
 ```
 It listens on `127.0.0.1` only. Run it as a Windows service or from Task Scheduler at start-up (e.g. with NSSM).
 
+## Starts with the backend
+With `RPT_BRIDGE_URL` pointing at this PC and `RPT_BRIDGE_KEY` set (see below), the backend starts the bridge itself
+(`app/bridge_launcher.py`), restarts it when it exits and stops it with the backend, so `run_bridge.cmd` is only needed
+when the backend is not on the same PC or `RPT_BRIDGE_AUTOSTART=0`.
+
 ## backend/.env
 
 ```

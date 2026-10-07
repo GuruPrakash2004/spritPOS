@@ -35,7 +35,7 @@ export default function PrintDialog({ kind, docNo, title, onClose }: {
   const [emailing, setEmailing] = useState(false);
   const [to, setTo] = useState('');
   const [printers, setPrinters] = useState<string[]>([]);
-  const [printer, setPrinter] = useState('');
+  const [picked, setPicked] = useState<{ key: string; value: string } | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const mainRef = useRef<HTMLButtonElement>(null);
 
@@ -57,10 +57,9 @@ export default function PrintDialog({ kind, docNo, title, onClose }: {
   const current = choices.find(c => c.key === chosen);
   const target = (c: Choice | undefined) => (c?.option ? { option: c.option.name } : { rpt: c?.rpt });
 
-  // The printer for Print directly: the option's own (Doc Designer), else the one picked last on this PC.
-  useEffect(() => {
-    setPrinter(current?.option?.printer || savedPrinter());
-  }, [current?.option?.printer, current?.key]);
+  // The printer for Print directly: the one picked for this format, else the option's own (Doc Designer), else the one picked last on this PC.
+  const printer = picked && picked.key === current?.key ? picked.value : (current?.option?.printer || savedPrinter());
+  const setPrinter = (value: string) => setPicked({ key: current?.key ?? '', value });
 
   const ready = !!current && !!info?.bridge_configured && current.option?.available !== false;
   const { url, loading, error: previewError, size } = usePdfPreview(

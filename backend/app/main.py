@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
-from . import admin_audit, boot, db, gsettings, shop_hours, sqlstore, store
+from . import admin_audit, boot, bridge_launcher, db, gsettings, shop_hours, sqlstore, store
 from .routers import auth, company_files, custom_reports, masters, printing, reports, setup, tools, transactions, utilities
 from .schemas import SettingsIn
 
@@ -199,6 +199,12 @@ app.include_router(setup.router)
 def startup_event():
     """Connect to SQL Server (if set up) and load the data into the in-memory store (app/boot.py)."""
     boot.load_data()
+    bridge_launcher.start()   # the Crystal Reports bridge runs whenever the backend does (Windows, bridge on this PC)
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    bridge_launcher.stop()
 
 
 @app.get("/", tags=["Health"])

@@ -1,4 +1,4 @@
-// Renders popups from toastStore at the bottom centre of the screen.
+// Renders popups from toastStore at the top right of the screen, stacked downwards.
 //
 // - <SnackbarContainer />: mounted once in App.tsx; draws the stacked cards with a countdown bar.
 // - <Toast kind text />: legacy per-screen API. Rendering it just forwards the message to toastStore,
@@ -8,7 +8,6 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertCircle, Trash2, X, RefreshCw, DatabaseBackup } from 'lucide-react';
 import { toastStore, type ToastKind } from './toastStore';
-import RunwayLoader from '../ui/runway-loader';
 
 export function SnackbarContainer() {
   const items = useSyncExternalStore(toastStore.subscribe, toastStore.getSnapshot, toastStore.getSnapshot);
@@ -37,7 +36,7 @@ export function SnackbarContainer() {
     <div
       role="region"
       aria-label="Notifications"
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex flex-col-reverse items-center gap-3 pointer-events-none w-full max-w-md px-4"
+      className="fixed right-4 top-4 z-[1000] flex w-full max-w-sm flex-col items-stretch gap-2 pointer-events-none px-0"
     >
       {items.map(item => {
         const isDelete = item.kind === 'delete' || /\b(delete|deleted|deletion|removed)\b/i.test(item.text);
@@ -50,14 +49,8 @@ export function SnackbarContainer() {
           ? Math.min(100, Math.max(0, ((item.duration - item.remaining) / item.duration) * 100))
           : 100;
 
-        // Colors: gold for refresh, metallic blue for backup, red for delete/error, green for save/success
-        const loaderColor: 'green' | 'red' | 'blue' | 'gold' = isRefresh
-          ? 'gold'
-          : isBackup
-          ? 'blue'
-          : isDelete || isError
-          ? 'red'
-          : 'green';
+        // Thin countdown bar and left stripe: green for success, red for errors and deletes, amber refresh, blue backup.
+        const stripe = isDelete || isError ? 'bg-red-500' : isRefresh ? 'bg-[#D4A847]' : isBackup ? 'bg-blue-500' : 'bg-emerald-500';
 
         return (
           <div
@@ -65,25 +58,9 @@ export function SnackbarContainer() {
             role={isError || isDelete ? 'alert' : 'status'}
             onMouseEnter={() => toastStore.setPaused(item.id, true)}
             onMouseLeave={() => toastStore.setPaused(item.id, false)}
-            className={`toast-card ${item.leaving ? 'toast-leaving' : 'toast-enter'} group relative flex w-full flex-col overflow-hidden rounded-2xl border shadow-2xl p-3.5 text-xs pointer-events-auto transition-colors duration-200 ${
-              isDelete || isError
-                ? 'border-red-500/40 bg-[#FFF8F7] text-red-950 dark:border-red-500/50 dark:bg-[#1A0E0E] dark:text-red-100 shadow-[0_12px_32px_-4px_rgba(220,38,38,0.28)]'
-                : isRefresh
-                ? 'border-[#D4A847]/45 bg-[#FFFDF9] text-amber-950 dark:border-[#D4A847]/40 dark:bg-[#18140E] dark:text-amber-100 shadow-[0_12px_32px_-4px_rgba(212,168,71,0.28)]'
-                : isBackup
-                ? 'border-blue-500/40 bg-[#F8FAFF] text-blue-950 dark:border-blue-500/45 dark:bg-[#0E1526] dark:text-blue-100 shadow-[0_12px_32px_-4px_rgba(59,130,246,0.28)]'
-                : 'border-[#E3D9CD] bg-[#FFFCF7] text-stone-800 dark:bg-[#141414] dark:border-[#2A2A2A] dark:text-stone-100'
-            } ${item.shakeKey > 0 ? 'animate-shake' : ''}`}
-            style={{
-              boxShadow: isDelete || isError
-                ? '0 12px 32px -4px rgba(220, 38, 38, 0.28), 0 4px 12px rgba(0, 0, 0, 0.1)'
-                : isRefresh
-                ? '0 12px 32px -4px rgba(212, 168, 71, 0.28), 0 4px 12px rgba(0, 0, 0, 0.1)'
-                : isBackup
-                ? '0 12px 32px -4px rgba(59, 130, 246, 0.28), 0 4px 12px rgba(0, 0, 0, 0.1)'
-                : '0 12px 32px -4px rgba(0, 0, 0, 0.22), 0 4px 12px rgba(0, 0, 0, 0.08)',
-            }}
+            className={`toast-card ${item.leaving ? 'toast-leaving' : 'toast-enter'} group relative flex w-full flex-col overflow-hidden rounded-xl border border-line bg-surface p-3.5 pl-5 text-xs shadow-2xl pointer-events-auto dark:border-[#2A2A2A] dark:bg-[#141414] ${item.shakeKey > 0 ? 'animate-shake' : ''}`}
           >
+            <span aria-hidden className={`absolute inset-y-0 left-0 w-1.5 ${stripe}`} />
             {/* Top Row: Icon, Message, Close Button */}
             <div className="flex items-center gap-2.5">
               <div className="shrink-0">
@@ -147,15 +124,9 @@ export function SnackbarContainer() {
               </button>
             </div>
 
-            {/* Truck Runway Animation Track with Dynamic Theme Color (Green/Red/Gold/Blue) */}
             {item.duration > 0 && (
-              <div className="mt-1.5 w-full px-1">
-                <RunwayLoader
-                  compact={true}
-                  vehicle="truck"
-                  color={loaderColor}
-                  progress={elapsedPct}
-                />
+              <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+                <div className={`h-full ${stripe}`} style={{ width: `${elapsedPct}%` }} />
               </div>
             )}
           </div>

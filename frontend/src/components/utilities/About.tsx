@@ -1,12 +1,12 @@
 // About (legacy frmUtlAbout, at the root of the desktop menu): product, software version (Global Settings →
 // SWVersion), API version, company, database connection, which data the screens show (live SQL Server or the Test
 // data switch's sample data) and the "Designed & developed by" credit. An Administrator can Disconnect the database
-// (to test the app without it; the settings are kept) and Reconnect it.
+
 // No licence key or registration (Key Generation is not part of the web app).
 
 import { useEffect, useState } from 'react';
-import { Database, Eye, EyeOff, Info, PlugZap, RefreshCw, Unplug } from 'lucide-react';
-import { errorText, getAbout, getAuthRole, refreshDocDesigner, setDatabaseConnection, type ApiAbout } from '../../lib/api';
+import { Database, Eye, EyeOff, Info, RefreshCw } from 'lucide-react';
+import { errorText, getAbout, getAuthRole, refreshDocDesigner, type ApiAbout } from '../../lib/api';
 import { ADMIN_ROLE } from '../../lib/modules';
 import { badge, pageSub, pageTitle, panel, secondaryButton } from '../../lib/styles';
 import { toastStore } from '../common/toastStore';
@@ -24,24 +24,6 @@ export default function About() {
   const isAdmin = getAuthRole() === ADMIN_ROLE;
 
   useEffect(() => { getAbout().then(setAbout).catch(e => setError(errorText(e))); }, []);
-
-  // Disconnect / Reconnect the database (testing). Both wait for their popup, as every action does.
-  const connection = async (action: 'disconnect' | 'reconnect') => {
-    const text = action === 'disconnect'
-      ? 'The database will be disconnected when this closes. Nothing can be saved and nobody new can sign in until Reconnect.'
-      : 'The database will be reconnected when this closes, and the shop\'s data loaded again.';
-    if (!(await toastStore.defer(action === 'disconnect' ? 'delete' : 'refresh', text, 'Cancelled. The connection was not changed.'))) return;
-    setBusy(true);
-    try {
-      const next = await setDatabaseConnection(action);
-      setAbout(next);
-      toastStore.add(action === 'disconnect' ? 'ok' : 'refresh', action === 'disconnect' ? 'Database disconnected.' : 'Database reconnected.');
-    } catch (e) {
-      toastStore.add('error', errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   // Read the Doc Designer's latest print options and screens (it writes them into the database, not into this app).
   const refreshDesigner = async () => {
@@ -126,14 +108,6 @@ export default function About() {
             </div>
             {isAdmin && about.db_connected && (
               <button className={secondaryButton} disabled={busy} onClick={refreshDesigner}><RefreshCw size={14} />Refresh from Doc Designer</button>
-            )}
-            {isAdmin && about.db_configured && (
-              <div className="flex flex-col items-center gap-1.5">
-                {about.db_connected
-                  ? <button className={secondaryButton} disabled={busy} onClick={() => connection('disconnect')}><Unplug size={14} />Disconnect database</button>
-                  : <button className={secondaryButton} disabled={busy} onClick={() => connection('reconnect')}><PlugZap size={14} />Reconnect database</button>}
-                <p className="text-[11px] text-stone-500">For testing: the connection settings are kept; a restart also reconnects.</p>
-              </div>
             )}
           </>
         )}

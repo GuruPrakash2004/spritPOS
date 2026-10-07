@@ -2,7 +2,7 @@
 //
 // Call showToast(kind, text) or toast.ok/error(...) from anywhere; <SnackbarContainer /> in App.tsx
 // renders them. Rules (see .claude/rules/popups-and-errors.md):
-// - every popup closes after toastDuration(): 2.5 s on large screens (lg, 1024 px wide and up), 3.2 s on
+// - every popup closes after toastDuration(): 1.5 s on large screens (lg, 1024 px wide and up), 2 s on
 //   smaller ones; hovering pauses the countdown;
 // - the same message again shakes the existing card and shows ×2, ×3 instead of stacking;
 // - at most 3 cards are shown.
@@ -19,8 +19,8 @@
 
 export type ToastKind = 'ok' | 'error' | 'delete' | 'refresh' | 'backup';
 
-export const TOAST_DURATION_MS = 3200;          // phones, tablets and smaller laptops
-export const TOAST_DURATION_LARGE_MS = 2500;    // large screens
+export const TOAST_DURATION_MS = 2000;          // phones, tablets and smaller laptops
+export const TOAST_DURATION_LARGE_MS = 1500;    // large screens
 export const LARGE_SCREEN_QUERY = '(min-width: 1024px)';   // Tailwind's lg breakpoint
 
 // How long a new popup stays, by the screen width when it opens.
@@ -29,7 +29,7 @@ export const toastDuration = () =>
 
 // How long a closing card animates out before it is removed (matches toastExit in index.css):
 // a softer, slower exit below lg.
-export const TOAST_EXIT_MS = 220;
+export const TOAST_EXIT_MS = 160;
 export const TOAST_EXIT_SMALL_MS = 380;
 const exitDuration = () =>
   typeof window !== 'undefined' && window.matchMedia?.(LARGE_SCREEN_QUERY).matches ? TOAST_EXIT_MS : TOAST_EXIT_SMALL_MS;
@@ -40,7 +40,7 @@ export interface ToastItem {
   text: string;
   count: number;
   shakeKey: number;
-  duration: number; // toastDuration(): 2500 on large screens, 3200 below
+  duration: number; // toastDuration(): 1500 on large screens, 2000 below
   remaining: number;
   paused: boolean;
   leaving: boolean; // playing its exit animation; removed when it ends

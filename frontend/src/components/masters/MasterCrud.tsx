@@ -6,6 +6,8 @@
 // Keyboard: Enter/⌘S save, Esc cancel, ⌘N/Alt+N new, ↑/↓ move between fields.
 // Cashiers cannot delete items (hidden here and refused with 403 by the backend).
 
+import Pager from '../common/Pager';
+import { usePage } from '../common/usePage';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Edit3, FilePlus, Save, Search, Trash2, X } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
@@ -74,6 +76,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
   const readOnly = mode === 'View';
   const listFields = fields.filter(f => f.showInList !== false).slice(0, 4);
   const visible = rows.filter(r => `${r.code} ${r.name ?? ''}`.toLowerCase().includes(filter.toLowerCase()));
+  const pager = usePage(visible);
 
   const select = (row: Row) => {
     setSelected(String(row.code));
@@ -341,7 +344,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
                 <tr>{listFields.map((f, i) => <th key={f.key} className={`px-4 py-2.5 ${f.type === 'number' ? 'text-right' : ''} ${i > 1 ? 'hidden sm:table-cell' : ''}`}>{f.label}</th>)}</tr>
               </thead>
               <tbody className={tableBody}>
-                {visible.map(r => {
+                {pager.slice.map(r => {
                   const isSel = String(r.code) === selected;
                   return (
                     <tr
@@ -365,6 +368,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
               </tbody>
             </table>
           </div>
+          <Pager p={pager} />
         </section>
 
         <section aria-label="Record details" className={`${panel} self-start`}>

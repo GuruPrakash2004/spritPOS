@@ -3,8 +3,11 @@
 // whatever a test rendered so the next test starts with an empty document.
 // Also fills in browser APIs that jsdom doesn't implement.
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach } from 'vitest'
+
+// The full suite loads the machine; the default 1 s wait made App.test flaky.
+configure({ asyncUtilTimeout: 5000 })
 
 afterEach(() => {
   cleanup()

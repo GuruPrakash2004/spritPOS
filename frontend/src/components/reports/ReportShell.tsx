@@ -1,6 +1,8 @@
 // Shared frame for the table-driven reports: filter row → Run → table with totals, Print and Export CSV.
 // Filters map to query params: on → `on`, range → `from_date`/`to_date`, item → `item_code`, months → `months`.
 
+import Pager from '../common/Pager';
+import { usePage } from '../common/usePage';
 import { useEffect, useState } from 'react';
 import { FileDown, Play, Printer } from 'lucide-react';
 import { errorText, getItems, getReport, todayIso, type ApiItem } from '../../lib/api';
@@ -48,6 +50,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
   const format = (c: ReportColumn, v: string | number | undefined) =>
     v === undefined || v === '' ? '—' : c.kind === 'money' ? money(Number(v)) : String(v);
 
+  const pager = usePage(rows ?? []);
   const totals = columns.map(c => (c.total && rows ? rows.reduce((acc, r) => acc + (Number(r[c.key]) || 0), 0) : null));
 
   const exportCsv = () => {
@@ -106,8 +109,8 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
             {error && <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-red-600 dark:text-red-400">{error}</td></tr>}
             {!rows && !error && <tr><td colSpan={columns.length} className="px-4 py-14 text-center text-stone-500">Choose the filters above and run the report.</td></tr>}
             {rows && !rows.length && <tr><td colSpan={columns.length} className="px-4 py-14 text-center text-stone-500">No data for these filters.</td></tr>}
-            {rows?.map((r, i) => (
-              <tr key={i} className={tableRow}>
+            {rows && pager.slice.map((r, i) => (
+              <tr key={pager.from + i} className={tableRow}>
                 {columns.map((c, ci) => (
                   <td key={c.key} className={`px-4 py-2 ${num(c) ? 'text-right tabular-nums text-stone-700 dark:text-stone-200' : ci === 0 ? 'font-medium text-stone-900 dark:text-stone-50' : 'text-stone-600 dark:text-stone-300'}`}>{format(c, r[c.key])}</td>
                 ))}
@@ -126,6 +129,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
             </tfoot>
           )}
         </table>
+        <Pager p={pager} />
       </div>
 
       {showPrintModal && (

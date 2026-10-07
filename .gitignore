@@ -42,3 +42,26 @@ backend/data/
 
 # avoid .exe
 /App/
+
+# Local-only notes and settings
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Test / build caches
+.pytest_cache/
+.vitest/
+coverage/
+*.tsbuildinfo
+
+# Uploaded company files and the web app's keys/data: local to each server, never committed
+backend/uploads/
+
+# Certificates and private keys
+*.pem
+*.key
+*.pfx
+!frontend/public/**/*.pem
+
+# Crystal Reports bridge shared secret
+backend/tools/rptbridge/*.key
+backend/tools/rptbridge/bridgekey*.txt

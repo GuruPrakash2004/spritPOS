@@ -3,7 +3,7 @@
 // notifyCompanyProfileUpdated() so the header, login page and prints refresh.
 // All data is in the shop's SQL Server (Web_ tables), which is backed up by SQL Server itself.
 
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import { 
   Building2, ShieldCheck, Calendar, Image as ImageIcon,
   FolderArchive, Save, Plus,
@@ -15,9 +15,13 @@ import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { errorText, getCompany, saveCompany, type ApiCompany } from '../../lib/api';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
-import ShopPlacePicker, { type PickedPlace } from './ShopPlacePicker';
+import type { PickedPlace } from './ShopPlacePicker';
 import { badge, field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
 
+// The map (Google's script and the place picker) is the heavy part of this screen: it is its own chunk, fetched in the
+// background and started only after the form is on screen, so the profile appears at once.
+const ShopPlacePicker = lazy(() => import('./ShopPlacePicker'));
+const MapPlaceholder = () => <div className="h-72 animate-pulse rounded-xl border border-line bg-subtle" aria-label="Loading map" />;
 
 const TABS = [
   { id: 'Company Info', icon: Building2 },
@@ -47,15 +51,24 @@ const NOT_YET = {
   newYear: 'Creating a new financial year isn\'t available in the web app yet. Use the desktop app (Create Financial Year).',
 };
 
+// The last profile loaded, so the screen opens filled in at once and is refreshed from the server behind it.
+let lastProfile: ApiCompany | null = null;
+
 const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
   const [tab, setTab] = useState<string>('Company Info');
-  const [companyProfile, setCompanyProfile] = useState<ApiCompany | null>(null);
-  const [companyName, setCompanyName] = useState('');
-  const [email, setEmail] = useState('');
-  const [address, setAddress] = useState('');
+  const [companyProfile, setCompanyProfile] = useState<ApiCompany | null>(lastProfile);
+  const [companyName, setCompanyName] = useState(lastProfile?.name ?? '');
+  const [email, setEmail] = useState(lastProfile?.email ?? '');
+  const [address, setAddress] = useState(lastProfile?.address ?? '');
   // The shop on Google Maps (picked on the map below the address) and what was just picked, to offer its address.
-  const [placeId, setPlaceId] = useState('');
+  const [placeId, setPlaceId] = useState(lastProfile?.place_id ?? '');
   const [picked, setPicked] = useState<PickedPlace | null>(null);
+  const [mapWanted, setMapWanted] = useState(false);
+  // Start the map after the first paint (and once the profile is here), never before.
+  useEffect(() => {
+    const t = window.setTimeout(() => setMapWanted(true), 300);
+    return () => window.clearTimeout(t);
+  }, []);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
@@ -70,6 +83,7 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
   useEffect(() => {
     getCompany()
       .then(profile => {
+        lastProfile = profile;
         setCompanyProfile(profile);
         setCompanyName(profile.name);
         setEmail(profile.email);
@@ -96,6 +110,7 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
     if (!(await toastStore.defer('ok', 'Company profile will be saved when this closes.', 'Save cancelled. Nothing was changed.'))) return;
     try {
       const profile = await saveCompany({ ...companyProfile, name: companyName.trim(), email: email.trim(), address: address.trim(), place_id: placeId });
+      lastProfile = profile;
       setCompanyProfile(profile);
       setCompanyName(profile.name);
       setEmail(profile.email);
@@ -213,8 +228,10 @@ const CompanyMaster = ({ canEditFiles }: { canEditFiles: boolean }) => {
                 <p className="mb-2 text-[11px] text-stone-500 dark:text-stone-400">
                   Search for the shop and pick it: the Dashboard's Store Open / Closed then follows that listing's opening hours. Save to keep it.
                 </p>
-                <ShopPlacePicker placeId={placeId} readOnly={!canEditFiles || !companyProfile}
+                {mapWanted && companyProfile ? <Suspense fallback={<MapPlaceholder />}>
+                <ShopPlacePicker placeId={placeId} query={`${companyName} ${address}`} readOnly={!canEditFiles || !companyProfile}
                   onPick={place => { setPlaceId(place.id); setPicked(place); }} />
+                </Suspense> : <MapPlaceholder />}
                 {picked && (
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-stone-600 dark:text-stone-300">Picked <strong>{picked.name}</strong>{picked.address ? ` · ${picked.address}` : ''}</span>

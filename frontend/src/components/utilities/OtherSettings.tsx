@@ -57,6 +57,8 @@ function TransactionSettings() {
     .then(a => { setAll(a); setKind(k => k || Object.keys(a)[0] || ''); })
     .catch(e => toastStore.add('error', errorText(e))), []);
   useEffect(() => { load(); }, [load]);
+  // The edit copy restarts whenever another document or freshly loaded settings are chosen.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setDraft(all && kind ? { ...all[kind] } : null); setError(''); }, [all, kind]);
 
   if (!all || !draft) return <p className="text-xs text-stone-500">Loading…</p>;
