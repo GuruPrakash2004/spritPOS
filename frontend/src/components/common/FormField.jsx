@@ -20,6 +20,8 @@ export function TextField({
   hasError = false,
   errorMessage,
   onChange,
+  inputMode,
+  maxLength,
 }
 
 
@@ -48,6 +50,8 @@ export function TextField({
         defaultValue={defaultValue}
         placeholder={placeholder}
         onChange={onChange}
+        inputMode={inputMode}
+        maxLength={maxLength}
         required={required}
         readOnly={readOnly}
         aria-invalid={hasError}

@@ -4,7 +4,9 @@
 // changes in the web app. Values are edited in the grid and saved together (Save waits for its popup);
 // mistakes (Y/N, numbers, dates) are shown under the value. "Show hidden settings" lists rows hidden with the
 // Hide tick. Add setting creates a row of your own (Fld Code + Fld Caption), as in the desktop screen.
-// SMTP rows come from backend/.env on the server and are read-only; the SMTP password is never shown.
+// SMTP rows (host, port, security, mail ID, from address, password) are edited right in the grid and saved to backend/.env
+// with the others; the password is encrypted in the browser, stored sealed and never shown. The Email (SMTP) tab does the
+// same with a Test connection button.
 // Administrator only (backend: /utilities/settings).
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -12,7 +14,9 @@ import { Plus, RefreshCw, Save, Search } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
 import { addGlobalSetting, errorText, getGlobalSettings, saveGlobalSetting, } from '../../lib/api';
+import { encryptSecret } from '../../lib/secureField';
 import PrintSettings from './PrintSettings';
+import SmtpSetting from '../common/SmtpSetting';
 import OtherSettings from './OtherSettings';
 import DatabaseSetup from '../auth/DatabaseSetup';
 import { badge, field, fieldError, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
@@ -77,7 +81,11 @@ function SettingsGrid() {
       return;
     }
     if (!changed.length) return toastStore.add('ok', 'Nothing to save.');
-    const bodies = changed.map(([code, d]) => [code, { caption: d.caption.trim(), value: d.value.trim(), hidden: d.hidden }] );
+    // The SMTP password is encrypted in the browser before it is sent (never shown again).
+    const bodies = await Promise.all(changed.map(async ([code, d]) => [code, {
+      caption: d.caption.trim(), hidden: d.hidden,
+      value: rows.find(x => x.code === code).kind === 'secret' ? await encryptSecret(d.value, 'smtp') : d.value.trim(),
+    }]));
     if (!(await toastStore.defer('ok', `${bodies.length} setting(s) will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     setSaving(true);
     let saved = 0;
@@ -131,6 +139,10 @@ function SettingsGrid() {
           <option value="Y">Y</option><option value="N">N</option>
         </select>
       );
+    }
+    if (r.kind === 'secret') {
+      return <input {...common} type="password" autoComplete="new-password" placeholder={r.saved ? 'saved · leave blank to keep' : 'not set'}
+        value={d.value} onChange={e => edit(r, { value: e.target.value })} className={cls} />;
     }
     return <input {...common} type={r.kind === 'date' ? 'date' : 'text'} inputMode={r.kind === 'number' ? 'decimal' : undefined}
       value={d.value} onChange={e => edit(r, { value: e.target.value })} className={cls} />;
@@ -198,7 +210,7 @@ function SettingsGrid() {
           </label>
         </div>
         <div className="max-h-[65vh] overflow-auto">
-          <table className="min-w-full text-xs">
+          <table className="w-full min-w-[860px] text-xs">
             <thead>
               <tr>
                 {['Set Group', 'Fld Code', 'Fld Caption', 'Value', 'What it changes', 'Hide'].map(h => <th key={h} className={`${tableHead} px-3 py-2`}>{h}</th>)}
@@ -212,17 +224,18 @@ function SettingsGrid() {
                     <td className="px-3 py-2 text-stone-500">{r.group}</td>
                     <td className="px-3 py-2 font-mono">{r.code}</td>
                     <td className="px-3 py-2">
-                      <input aria-label={`Caption of ${r.code}`} value={d.caption} disabled={r.readonly} onChange={e => edit(r, { caption: e.target.value })} className={field} />
+                      <input aria-label={`Caption of ${r.code}`} value={d.caption} disabled={r.readonly || r.source === 'env'} onChange={e => edit(r, { caption: e.target.value })} className={field} />
                       {r.remarks && <p className="mt-1 text-[11px] text-stone-500">{r.remarks}</p>}
                     </td>
                     <td className="w-48 px-3 py-2">{valueInput(r)}<InlineError message={errors[r.code]} /></td>
                     <td className="px-3 py-2 text-[11px] text-stone-600 dark:text-stone-300">
                       {r.source === 'custom' ? <span className={badge('neutral')}>Your own setting</span>
+                        : r.source === 'env' ? <><span className={badge('neutral')}>Saved in backend/.env</span>{r.effect && <div className="mt-1">{r.effect}</div>}</>
                         : r.readonly ? <span className={badge('neutral')}>Set in backend/.env</span> : r.effect}
                       {r.readonly && r.effect && <div className="mt-1">{r.effect}</div>}
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <input type="checkbox" aria-label={`Hide ${r.code}`} checked={d.hidden} disabled={r.readonly} onChange={e => edit(r, { hidden: e.target.checked })} />
+                      <input type="checkbox" aria-label={`Hide ${r.code}`} checked={d.hidden} disabled={r.readonly || r.source === 'env'} onChange={e => edit(r, { hidden: e.target.checked })} />
                     </td>
                   </tr>
                 );
@@ -239,13 +252,13 @@ function SettingsGrid() {
 // Global Settings has three parts, as in the desktop (the Other Settings button at the bottom opens the rest):
 // the settings grid, Print Settings (how each document prints) and Other Settings (transaction settings, doc prefix, menu).
 
-const PARTS = [['settings', 'Settings'], ['print', 'Print Settings'], ['other', 'Other Settings'], ['database', 'Database']];
+const PARTS = [['settings', 'Settings'], ['print', 'Print Settings'], ['other', 'Other Settings'], ['smtp', 'Email (SMTP)'], ['database', 'Database']];
 
 export default function GlobalSettings() {
   const [part, setPart] = useState('settings');
   return (
     <div className="mx-auto max-w-7xl">
-      <div role="tablist" aria-label="Global Settings" className="mb-4 flex gap-1 border-b border-[#E3D9CD] dark:border-[#2A2A2A]">
+      <div role="tablist" aria-label="Global Settings" className="mb-4 flex gap-1 overflow-x-auto whitespace-nowrap border-b border-[#E3D9CD] dark:border-[#2A2A2A]">
         {PARTS.map(([id, name]) => (
           <button key={id} role="tab" aria-selected={part === id} onClick={() => setPart(id)}
             className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold ${part === id ? 'border-[#64283A] text-[#64283A] dark:border-[#D4A847] dark:text-[#D4A847]' : 'border-transparent text-stone-500'}`}>{name}</button>
@@ -254,6 +267,11 @@ export default function GlobalSettings() {
       {part === 'settings' && <SettingsGrid />}
       {part === 'print' && <PrintSettings embedded />}
       {part === 'other' && <OtherSettings embedded />}
+      {part === 'smtp' && (
+        <section className={`${panel} mx-auto max-w-xl p-5`} aria-label="Email (SMTP) settings">
+          <SmtpSetting inputClass={field} captionClass={label} plain />
+        </section>
+      )}
       {part === 'database' && (
         <section className={`${panel} mx-auto max-w-md p-5`} aria-label="Database settings">
           <DatabaseSetup inputClass={field} labelClass={label} change plain

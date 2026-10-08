@@ -16,6 +16,7 @@ import PrintDialog from '../print/PrintDialog';
 import { afterSavePlan, } from '../../lib/printing';
 import { useConfirm } from '../common/ConfirmDialog';
 import { useDocSettings, } from '../../lib/docSettings';
+import WithHistory from './DocHistoryPanel';
 
  
 
@@ -98,6 +99,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   });
 
   return (
+    <WithHistory kind={kind} title="documents">
     <div className="mx-auto flex max-w-6xl flex-col gap-4" onKeyDown={e => enterMovesNext(e, addRow)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {confirmDialog}
@@ -160,5 +162,6 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
 
       {printDocNo && <PrintDialog kind={kind} docNo={printDocNo} title={`Print ${title} (${printDocNo})`} onClose={() => setPrintDocNo(null)} />}
     </div>
+    </WithHistory>
   );
 }

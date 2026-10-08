@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { Printer, Search, Undo2, XCircle } from 'lucide-react';
 import Modal from '../common/Modal';
 import { toastStore } from '../common/toastStore';
-import { cancelSalesInvoice, deleteSalesInvoice, errorText, listSalesInvoices, reprintSalesInvoice, } from '../../lib/api';
+import { cancelSalesInvoice, errorText, listSalesInvoices, reprintSalesInvoice, } from '../../lib/api';
 import { numberToWords } from '../../lib/formatters';
 import {  dangerButton, field, label, money, primaryButton, secondaryButton, tableBody, tableHead , printButton } from '../../lib/styles';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
@@ -146,14 +146,13 @@ export function HeldBillsDialog({ onClose, onRecall }) {
   const [error, setError] = useState('');
   const [at, setAt] = useState(0);
 
-  useEffect(() => {
-    listSalesInvoices('HOLD').then(setBills).catch(e => setError(errorText(e)));
-  }, []);
+  const load = () => listSalesInvoices('HOLD').then(list => { setBills(list); setAt(0); }).catch(e => setError(errorText(e)));
+  useEffect(() => { void load(); }, []);
 
   const recall = async (inv) => {
     if (!(await toastStore.defer('ok', `Held bill ${inv.doc_no} will be recalled when this closes.`, 'Recall cancelled. The bill is still held.'))) return;
-    // Held bills never moved stock, so recalling just removes the parked copy and loads its lines.
-    deleteSalesInvoice(inv.doc_no).then(() => onRecall(inv)).catch(e => setError(errorText(e)));
+    // Held bills never moved stock. The screen holds the bill being made (if any), removes this parked copy and loads its lines.
+    try { await onRecall(inv); } catch (e) { setError(errorText(e)); void load(); }
   };
 
   return (
@@ -166,13 +165,13 @@ export function HeldBillsDialog({ onClose, onRecall }) {
         if (e.key === 'Enter') { e.preventDefault(); void recall(bills[Math.min(at, bills.length - 1)]); }
       }}>
         <thead className={tableHead}>
-          <tr><th className="px-3 py-2">Held No</th><th className="px-3 py-2">Time</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2 text-right">Items</th><th className="px-3 py-2 text-right">Value</th><th className="px-3 py-2" /></tr>
+          <tr><th className="px-3 py-2">Held No</th><th className="hidden px-3 py-2 sm:table-cell">Time</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2 text-right">Items</th><th className="px-3 py-2 text-right">Value</th><th className="px-3 py-2" /></tr>
         </thead>
         <tbody className={tableBody}>
           {bills?.map((b, i) => (
             <tr key={b.doc_no} aria-selected={i === at} onClick={() => setAt(i)} className={i === at ? 'bg-accent-soft' : ''}>
               <td className="px-3 py-2 font-mono">{b.doc_no}</td>
-              <td className="px-3 py-2 font-mono">{b.time ?? ''}</td>
+              <td className="hidden px-3 py-2 font-mono sm:table-cell">{b.time ?? ''}</td>
               <td className="px-3 py-2">{b.customer}</td>
               <td className="px-3 py-2 text-right tabular-nums">{b.lines.length}</td>
               <td className="px-3 py-2 text-right tabular-nums">₹ {money(b.totals.net)}</td>

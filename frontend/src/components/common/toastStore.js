@@ -2,7 +2,7 @@
 //
 // Call showToast(kind, text) or toast.ok/error(...) from anywhere; <SnackbarContainer /> in App.jsx
 // renders them. Rules (see .claude/rules/popups-and-errors.md):
-// - every popup closes after toastDuration(): 1.5 s on large screens (lg, 1024 px wide and up), 2 s on
+// - routine popups (ok, refresh, backup) close after 0.5 s on large screens (0.8 s on smaller ones); every error popup stays 2 s on any screen; deletes after toastDuration(): 1.5 s on large screens (lg, 1024 px wide and up), 2 s on
 //   smaller ones; hovering pauses the countdown;
 // - the same message again shakes the existing card and shows ×2, ×3 instead of stacking;
 // - at most 3 cards are shown.
@@ -23,14 +23,25 @@ export const TOAST_DURATION_MS = 2000;          // phones, tablets and smaller l
 export const TOAST_DURATION_LARGE_MS = 1500;    // large screens
 export const LARGE_SCREEN_QUERY = '(min-width: 1024px)';   // Tailwind's lg breakpoint
 
-// How long a new popup stays, by the screen width when it opens.
-export const toastDuration = () =>
-  typeof window !== 'undefined' && window.matchMedia?.(LARGE_SCREEN_QUERY).matches ? TOAST_DURATION_LARGE_MS : TOAST_DURATION_MS;
+// Routine popups (saves, refreshes, backups, plain notices) are quick so billing is never held up; errors and deletes
+// (cancel bill, remove, delete) stay at the slower time above so they can be read and cancelled.
+export const TOAST_FAST_MS = 800;               // phones, tablets and smaller laptops
+export const TOAST_FAST_LARGE_MS = 500;         // large screens
+export const TOAST_ERROR_MS = 2000;             // every error popup (a failed request, a 500, ...), on any screen
+const SLOW_KINDS = new Set(['error', 'delete', 'warning']);
+
+// How long a new popup stays, by its kind and the screen width when it opens. No kind means the slower time.
+export const toastDuration = (kind) => {
+  const large = typeof window !== 'undefined' && window.matchMedia?.(LARGE_SCREEN_QUERY).matches;
+  if (kind === 'error') return TOAST_ERROR_MS;
+  if (kind && !SLOW_KINDS.has(kind)) return large ? TOAST_FAST_LARGE_MS : TOAST_FAST_MS;
+  return large ? TOAST_DURATION_LARGE_MS : TOAST_DURATION_MS;
+};
 
 // How long a closing card animates out before it is removed (matches toastExit in index.css):
 // a softer, slower exit below lg.
 export const TOAST_EXIT_MS = 160;
-export const TOAST_EXIT_SMALL_MS = 380;
+export const TOAST_EXIT_SMALL_MS = 200;
 const exitDuration = () =>
   typeof window !== 'undefined' && window.matchMedia?.(LARGE_SCREEN_QUERY).matches ? TOAST_EXIT_MS : TOAST_EXIT_SMALL_MS;
 
@@ -123,7 +134,7 @@ class ToastStore {
 
     // Every popup (success or error) closes automatically after toastDuration().
     const isError = kind === 'error' || /\b(already exists|error|failed|invalid|required)\b/i.test(cleanText);
-    const duration = toastDuration();
+    const duration = toastDuration(isError ? 'error' : kind);
 
     // Check if an existing toast matches (one already closing counts as gone)
     const existingIndex = this.items.findIndex(i => i.text === cleanText && i.kind === kind && !i.leaving);
@@ -183,7 +194,7 @@ class ToastStore {
       this.emit();
       return Promise.resolve(false);
     }
-    const duration = toastDuration();
+    const duration = toastDuration(kind);
     const item = {
       id: `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       kind, text: cleanText, count: 1, shakeKey: 0,

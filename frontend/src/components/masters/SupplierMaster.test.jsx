@@ -73,13 +73,14 @@ describe('SupplierMaster', () => {
     await user.click(screen.getByRole('button', { name: 'New' }))
     await user.type(screen.getByLabelText(/supplier code/i), 'ABC')
     await user.type(screen.getByLabelText(/supplier name/i), 'ABC TRADERS')
+    await user.type(screen.getByLabelText(/gstin/i), '29abcde1234f1z5')   // mandatory, kept in capitals
     await user.click(screen.getByRole('button', { name: /save supplier/i }))
 
     await waitFor(() => expect(writes()).toHaveLength(1))
     const [url, init] = writes()[0]
     expect(url).toBe('/api/masters/suppliers')
     expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body)).toMatchObject({ code: 'ABC', name: 'ABC TRADERS', country: 'INDIA' })
+    expect(JSON.parse(init.body)).toMatchObject({ code: 'ABC', name: 'ABC TRADERS', country: 'INDIA', gstin: '29ABCDE1234F1Z5' })
   })
 
   it('shows inline errors and sends nothing when code or name is missing', async () => {

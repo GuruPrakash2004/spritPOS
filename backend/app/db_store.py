@@ -390,18 +390,49 @@ def _add_loaded(docs: dict, bills: dict) -> None:
         docs[no] = b
 
 
+def _recent_sinv_numbers(limit: int) -> list[str] | None:
+    """The numbers of the latest `limit` desktop-made bills of this financial year, found through the SINVNO index.
+    SINVNO is the table's clustered key and SINVID has no index, so `TOP n ... ORDER BY SINVID DESC` reads the whole
+    700,000-row table (557 MB, 25 s on a cold cache) and, with the one shared connection, holds up every request
+    meanwhile. Here each bill series ('26/SR-', '26/C1-', ...) of the year gives its last `limit` numbers by index seek,
+    and the newest `limit` by SINVID among them are kept. None when that can't be done (the caller reads the old way)."""
+    prefix = f"{store.FY_PREFIX}/"
+    if not store.FY_PREFIX:
+        return None
+    try:
+        series = [r["pre"] for r in db.fetchall(
+            "SELECT LEFT(SINVNO, CHARINDEX('-', SINVNO)) AS pre FROM TrnHdrSINV WITH (NOLOCK) "
+            "WHERE SINVNO LIKE CAST(? AS VARCHAR(20)) AND CHARINDEX('-', SINVNO) > 0 GROUP BY LEFT(SINVNO, CHARINDEX('-', SINVNO))",
+            (prefix + "%",)) if r["pre"]]
+        found: list[tuple[int, str]] = []
+        for pre in series:
+            for r in db.fetchall(
+                    f"SELECT TOP {int(limit)} SINVID, SINVNO FROM TrnHdrSINV WITH (NOLOCK) WHERE SINVNO LIKE CAST(? AS VARCHAR(30)) "
+                    "AND Cancelled = 'N' AND ISNULL(BILLSYSTEM, '') <> 'WEB' ORDER BY SINVNO DESC", (pre + "%",)):
+                found.append((int(r["SINVID"]), _s(r["SINVNO"])))
+        found.sort(reverse=True)
+        return [no for _, no in found[:limit]] or None
+    except Exception as e:   # noqa: BLE001 - the slow query below still gives the same bills
+        logger.warning("Latest bills by index failed (%s); reading them the slow way", e)
+        return None
+
+
 def load_sales_invoices(limit: int = 200) -> None:
     """Load the most recent sales invoices into DOCS['sales_invoice'] fast."""
-    rows = db.fetchall(f"""
-        WITH RecentHdr AS (
-            SELECT TOP {limit}
+    numbers = _recent_sinv_numbers(limit)
+    if numbers:
+        in_list = ", ".join("'" + n.replace("'", "''") + "'" for n in numbers)   # literals: the index is used (see above)
+        recent = f"SELECT SINVID, SINVNO, SINVDate, CUSTID, TOTAMT, CASHAMT, CARDAMT, TOTQTY, SPID, SCID, AddedBy, Cancelled, SINVTime FROM TrnHdrSINV WITH (NOLOCK) WHERE SINVNO IN ({in_list})"
+    else:
+        recent = f"""SELECT TOP {limit}
                 SINVID, SINVNO, SINVDate, CUSTID,
                 TOTAMT, CASHAMT, CARDAMT, TOTQTY,
                 SPID, SCID, AddedBy, Cancelled, SINVTime
             FROM TrnHdrSINV WITH (NOLOCK)
             WHERE Cancelled = 'N' AND ISNULL(BILLSYSTEM, '') <> 'WEB'   -- web bills come whole from Web_AppDoc
-            ORDER BY SINVID DESC
-        )
+            ORDER BY SINVID DESC"""
+    rows = db.fetchall(f"""
+        WITH RecentHdr AS ({recent})
         SELECT
             h.SINVID, h.SINVNO, h.SINVDate, h.CUSTID,
             h.TOTAMT, h.CASHAMT, h.CARDAMT, h.TOTQTY,
@@ -622,14 +653,18 @@ def live_sales_and_stock(start: date, end: date) -> dict | None:
 
 def load_masters() -> None:
     """Load all master tables from SQL Server (runs in < 0.2s)."""
+    t_all = time.perf_counter()
     for fn in (load_company, load_fin_year, load_item_groups, load_brands, load_uoms, load_packages, load_items,
                load_customers, load_suppliers, load_ledger_groups, load_ledgers, load_counters, load_sales_persons,
                load_simple_masters, load_last_purchase, load_users):
+        t0 = time.perf_counter()
         try:
             fn()
         except Exception as e:
             logger.error("%s failed: %s", fn.__name__, e)
-    logger.info("Master data loaded: %d items, %d users, %d suppliers", len(store.ITEMS), len(store.USERS), len(store.SUPPLIERS))
+        if time.perf_counter() - t0 > 0.5:
+            logger.info("  %s took %.1fs", fn.__name__, time.perf_counter() - t0)
+    logger.info("Master data loaded in %.1fs: %d items, %d users, %d suppliers", time.perf_counter() - t_all, len(store.ITEMS), len(store.USERS), len(store.SUPPLIERS))
     # Movements before this index were there before the load (none: the store starts empty); later ones are the app's.
     store.DB_BASE_MOVEMENTS = len(store.MOVEMENTS)
     store.mark_app_start()

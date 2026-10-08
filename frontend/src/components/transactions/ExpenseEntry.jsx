@@ -9,6 +9,7 @@ import Kbd from '../common/Kbd';
 import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
 import { errorText, getLedgers, saveExpense, todayIso, } from '../../lib/api';
+import WithHistory from './DocHistoryPanel';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 
@@ -49,6 +50,7 @@ export default function ExpenseEntry() {
   useShortcuts({ 'Mod+S': () => { void save(); } });
 
   return (
+    <WithHistory kind="expense" title="expenses">
     <div className="mx-auto flex max-w-5xl flex-col gap-4" onKeyDown={e => enterMovesNext(e, () => setLines(ls => [...ls, blank()]))}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       <div className={pageHeader}>
@@ -98,5 +100,6 @@ export default function ExpenseEntry() {
         </div>
       </div>
     </div>
+    </WithHistory>
   );
 }

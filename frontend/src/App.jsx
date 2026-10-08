@@ -67,11 +67,19 @@ const FY_KEY = 'vlqms_fin_year';
 // Screens whose unsaved rows Alt+B would throw away.
 const ENTRY_SCREENS = ['Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Cash Denomination'];
 const SESSION_CHECK_MS = 60_000;
+// Whether the left navigation is a narrow icon rail (a per-browser convenience, so localStorage).
+const NAV_COLLAPSED_KEY = 'vlqms_nav_collapsed';
+// Billing screens start with the rail so the item grid gets the width.
+const BILLING_SCREENS = ['Sales Invoice', 'Purchase Bill'];
+const readNavCollapsed = () => { try { return localStorage.getItem(NAV_COLLAPSED_KEY) === '1'; } catch { return false; } };
+const writeNavCollapsed = (on) => { try { localStorage.setItem(NAV_COLLAPSED_KEY, on ? '1' : '0'); } catch { /* storage blocked */ } };
 const readSaved = (key) => { try { return sessionStorage.getItem(key) || ''; } catch { return ''; } };
 const writeSaved = (key, value) => { try { sessionStorage.setItem(key, value); } catch { /* storage blocked */ } };
 
 export default function App() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(() => readNavCollapsed() || BILLING_SCREENS.includes(moduleForPath(window.location.pathname)));
+  const toggleNav = () => setNavCollapsed(c => { writeNavCollapsed(!c); return !c; });
   const [activeTab, setActiveTab] = useState(() => moduleForPath(window.location.pathname));
   const [darkMode, setDarkMode] = useState(false);
   const [invoiceDraft, setInvoiceDraft] = useState({
@@ -166,6 +174,7 @@ export default function App() {
     if (window.location.pathname !== path) window.history.pushState(null, '', path);
     setActiveTab(moduleName);
     setBillOpen(false);
+    if (BILLING_SCREENS.includes(moduleName)) setNavCollapsed(true);   // not saved: only the toggle sets the preference
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
@@ -173,6 +182,7 @@ export default function App() {
   // asking first when it would leave an entry screen (its unsaved rows would be lost).
   useAdvanceAfterSelect();
   useShortcuts({
+    'Mod+B': e => { e.preventDefault(); toggleNav(); },
     'Shift+?': e => { if (!isTypingTarget(e.target)) setShowShortcuts(true); },
     '?': e => { if (!isTypingTarget(e.target)) setShowShortcuts(true); },
     'Alt+B': () => {
@@ -281,7 +291,7 @@ export default function App() {
 
   return (
     <div className={`app-shell flex h-screen overflow-hidden font-sans ${darkMode ? 'dark bg-[#0A0A0A] text-stone-100' : 'bg-[#F5F1E9] text-[#29231F]'}`}>
-      <Sidebar isOpen={isSidebarOpen} activeTab={activeTab} onClose={() => setSidebarOpen(false)} onOpenModule={openModule} user={user.user} canOpen={name => canOpen(user.modules, user.role, name)} />
+      <Sidebar isOpen={isSidebarOpen} collapsed={navCollapsed} onToggleCollapse={toggleNav} activeTab={activeTab} onClose={() => setSidebarOpen(false)} onOpenModule={openModule} user={user.user} canOpen={name => canOpen(user.modules, user.role, name)} />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* z-20 so the search results drop down over the workspace. */}
@@ -336,7 +346,9 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-auto p-4 sm:p-6 bg-[#F5F1E9] dark:bg-[#0A0A0A]">
-          <ScreenBoundary key={activeTab} onHome={() => openModule('Dashboard')}>{renderContent()}</ScreenBoundary>
+          <div key={activeTab} className="screen-enter">
+            <ScreenBoundary onHome={() => openModule('Dashboard')}>{renderContent()}</ScreenBoundary>
+          </div>
         </main>
 
         <footer className="flex h-9 shrink-0 items-center justify-between gap-4 border-t px-4 text-[11px] sm:px-6 print:hidden

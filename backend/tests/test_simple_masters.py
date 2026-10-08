@@ -10,7 +10,7 @@ BODIES = {
     "currencies": {"code": "INR", "name": "Rupees", "decimals": "2"},
     "locations": {"code": "GODOWN", "name": "Godown"},
     "taxes": {"code": "GST18", "name": "GST 18", "tax_type": "LOCAL", "cgst_per": 9, "sgst_per": 9, "igst_per": 0},
-    "banks": {"code": "SBI", "name": "State Bank", "ifsc": "SBIN0000001", "account_no": "123"},
+    "banks": {"code": "SBI", "name": "State Bank", "display": "SBI", "ifsc": "SBIN0000001", "account_no": "123456789012"},
     "holidays": {"code": "2026-01-26", "name": "Republic Day"},
 }
 

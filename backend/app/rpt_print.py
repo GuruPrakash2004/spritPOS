@@ -17,19 +17,38 @@ Documents made through the web app are in the desktop's own tables, so the repor
 (rpt_bridge.table_prefix is empty unless RPT_TABLE_PREFIX says otherwise); the selection formula and the report's
 own fields are used unchanged.
 """
+import logging
 import re
 
 from fastapi import HTTPException
 
 from . import db, designer, rpt_bridge, sqlstore, store
 
+log = logging.getLogger("uvicorn.error")
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 OPERATORS = {"=", "<>", ">", "<", ">=", "<=", "like", "LIKE"}
 # PrintInvCrpt's parameters, from MstComp: parameter name -> MstComp column.
 COMPANY_PARAMS = {"compname": "CompName", "add1": "Address1", "add2": "Address2", "add3": "Address3",
-                  "add4": "Address4", "gstin": "GSTNO", "phno": "PHNO"}
-COMPANY_FALLBACK = {"CompName": "name", "Address1": "address", "GSTNO": "gstin", "PHNO": "phone"}
+                  "add4": "Address4", "gstin": "GSTNO", "phno": "TELNO", "email": "EMAIL"}
+# MstComp column (any spelling a print option may use) -> Company Master value, used when the column can't be read
+# or is blank. The phone is TELNO in MstComp (db_store.load_masters), not PHNO.
+COMPANY_FALLBACK = {"CompName": "name", "Address1": "address", "GSTNO": "gstin", "GSTIN": "gstin",
+                    "TELNO": "phone", "PHNO": "phone", "PHONE": "phone", "MOBNO": "mobile",
+                    "EMAIL": "email", "EMAILID": "email", "WEB": "website", "PANNO": "pan", "CINNO": "cin"}
+_COMPANY_FALLBACK_UPPER = {k.upper(): v for k, v in COMPANY_FALLBACK.items()}
 DEFAULT_INVOICE_RPT = "FMTSINV.rpt"
+
+
+def company_values() -> dict[str, str]:
+    """The shop's details under every parameter name an invoice format may use (PrintInvCrpt's names first). The bridge
+    skips a name the report doesn't define, so extra spellings cost nothing."""
+    base = {n: scalar("MstComp", c) for n, c in COMPANY_PARAMS.items()}
+    for alias, src in (("emailid", "email"), ("email_id", "email"), ("mailid", "email"), ("emailaddress", "email"),
+                       ("phone", "phno"), ("telno", "phno"), ("phoneno", "phno"), ("gstno", "gstin"),
+                       ("gstinno", "gstin"), ("companyname", "compname"), ("address1", "add1"), ("address2", "add2"),
+                       ("address3", "add3"), ("address4", "add4")):
+        base[alias] = base.get(src, "")
+    return base
 
 
 def header_table(short_form: str) -> str:
@@ -61,11 +80,17 @@ def scalar(table: str, field: str) -> str:
     """`Select field from table` on the web's copy of a legacy table (first row), as the desktop's formulas do."""
     if not IDENT.match(table) or not IDENT.match(field):
         return ""
+    company = table.lower() == "mstcomp"
+    key = _COMPANY_FALLBACK_UPPER.get(field.upper()) if company else None
+    from_company = str(store.COMPANY.get(key, "") or "").strip() if key else ""
     if not sqlstore.enabled():
-        key = COMPANY_FALLBACK.get(field)
-        return str(store.COMPANY.get(key, "")) if table.lower() == "mstcomp" and key else ""
-    rows = db.fetchall(f"SELECT TOP 1 [{field}] AS v FROM dbo.[{rpt_bridge.table_prefix()}{table}]")
-    return "" if not rows or rows[0]["v"] is None else str(rows[0]["v"]).strip()
+        return from_company
+    try:
+        rows = db.fetchall(f"SELECT TOP 1 [{field}] AS v FROM dbo.[{rpt_bridge.table_prefix()}{table}]")
+    except Exception:   # noqa: BLE001 - a column this database doesn't have (e.g. PHNO for TELNO) must not blank the print
+        return from_company
+    value = "" if not rows or rows[0]["v"] is None else str(rows[0]["v"]).strip()
+    return value or from_company
 
 
 def parameters(fields: str, values: str) -> dict[str, str]:
@@ -133,10 +158,17 @@ def build(kind: str, doc_no: str, option_name: str = "", click: str = "N", fallb
     action_code = {"N": option.get("ClickOperation"), "C": option.get("CtrlClickOperation"),
                    "A": option.get("CtrlAltClickOperation")}.get(click, "")
     action = designer.CLICK_ACTIONS.get(str(action_code or "").strip(), "") or "preview"
+    params = parameters(option.get("FormulasFld"), option.get("FormulasVal"))
+    if kind == "sales_invoice":   # the print option may map too little (or blank): fill in the shop's details the way PrintInvCrpt does
+        have = {k.lower().lstrip("@"): v for k, v in params.items()}
+        for name, value in company_values().items():
+            if not str(have.get(name, "")).strip() and value:
+                params[name] = value
+    log.info("print %s %s: %s %s", kind, doc_no, rpt, {k: (v if len(str(v)) < 40 else str(v)[:40] + "…") for k, v in params.items()})
     return {
         "rpt": rpt,
         "selection": f"{sel} {doc_id}" if sel else "",
-        "parameters": parameters(option.get("FormulasFld"), option.get("FormulasVal")),
+        "parameters": params,
         "copies": max(1, int(float(option.get("NoOfCopies") or 1))),
         "printer": str(option.get("DirectPrinterName") or "").strip(),
         "action": action, "option": str(option.get("OptionName") or ""), "stored_proc": "",

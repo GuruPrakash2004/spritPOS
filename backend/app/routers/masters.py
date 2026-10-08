@@ -17,7 +17,7 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .. import admin_audit, gsettings, security, store
+from .. import admin_audit, gsettings, security, store, validation
 from ..master_specs import SPECS
 from ..schemas import SIMPLE_MODELS
 from ..schemas import (
@@ -109,6 +109,9 @@ def _clean(path: str, body: BaseModel, table: dict) -> BaseModel:
         body.name = body.name.strip()
         if not body.name:
             raise HTTPException(422, "Name cannot be blank")
+    for key, value in validation.check(body.model_dump()).items():   # mobile / phone / PIN / GSTIN / PAN / HSN / e-mail / tax %
+        if hasattr(body, key):
+            setattr(body, key, value)
     if path == "items":
         _check_item(body)
     elif path == "ledgers" and body.group not in store.LEDGER_GROUPS:
@@ -124,6 +127,12 @@ def _clean(path: str, body: BaseModel, table: dict) -> BaseModel:
             raise HTTPException(422, "The holiday's date must be a valid date (yyyy-mm-dd)")
     elif path == "taxes" and not all(0 <= v <= 100 for v in (body.cgst_per, body.sgst_per, body.igst_per)):
         raise HTTPException(422, "Tax percentages must be between 0 and 100")
+    elif path == "suppliers" and not body.gstin.strip():
+        raise HTTPException(422, "GSTIN is mandatory for a supplier")   # the desktop Supplier Master marks GSTNO mandatory
+    elif path == "taxes" and not body.tax_type.strip():
+        raise HTTPException(422, "Tax Type is mandatory")
+    elif path == "banks" and not body.display.strip():
+        raise HTTPException(422, "Display Name in Invoice is mandatory")
     elif path == "packages" and body.litres_per_bottle <= 0:
         raise HTTPException(422, "Litres per bottle must be more than 0")
     return body
@@ -244,6 +253,8 @@ def get_company():
 
 @router.put("/company", response_model=CompanyOut, tags=["Company Master"])
 def update_company(body: Company, admin: dict = Depends(require_admin)):
+    for key, value in validation.check(body.model_dump()).items():
+        setattr(body, key, value)
     earlier, changed = admin_audit.diff(store.COMPANY, {**store.COMPANY, **body.model_dump()})
     if changed:
         admin_audit.record("Company Master", "Edited", store.COMPANY.get("name") or "Company", earlier, changed)

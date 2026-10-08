@@ -1,7 +1,8 @@
 """Sends a report by email as an .xls attachment (Customised Reports → Email).
 
 SMTP settings come only from backend/.env (never committed):
-    SMTP_HOST, SMTP_PORT (default 587), SMTP_USER, SMTP_PASSWORD,
+    SMTP_HOST, SMTP_PORT (default 587), SMTP_USER, SMTP_PASSWORD (or SMTP_PASSWORD_ENC, the same sealed: what the sign-in
+    page's Email (SMTP) settings write, routers/setup.py),
     SMTP_FROM, SMTP_SECURITY = starttls (default) | ssl | none
 The From address is the Company Master email (with the company name), then SMTP_FROM, then SMTP_USER.
 Most providers (Gmail included) only send as the account you log in with or a verified "Send mail as"
@@ -17,10 +18,33 @@ from email.utils import formataddr
 from xml.sax.saxutils import escape
 
 from . import db  # noqa: F401  (importing db loads backend/.env)
+from . import secure_fields
 
 
 def _env(key: str, default: str = "") -> str:
     return os.environ.get(key, default).strip()
+
+
+def password() -> str:
+    """The SMTP password: the sealed one saved from the sign-in page's settings, else a hand-written SMTP_PASSWORD."""
+    sealed = _env("SMTP_PASSWORD_ENC")
+    if sealed:
+        try:
+            return secure_fields.unseal(sealed)
+        except Exception:
+            return ""
+    return _env("SMTP_PASSWORD")
+
+
+def check(host: str, port: int, security: str, user: str, pw: str) -> None:
+    """Connect (and sign in when a user is given) without sending anything; raises on any SMTP / network error."""
+    context = _tls_context()
+    server = smtplib.SMTP_SSL(host, port, timeout=15, context=context) if security == "ssl" else smtplib.SMTP(host, port, timeout=15)
+    with server:
+        if security == "starttls":
+            server.starttls(context=context)
+        if user:
+            server.login(user, pw)
 
 
 def configured() -> bool:
@@ -81,5 +105,5 @@ def send(to: list[str], subject: str, text: str, file_name: str, attachment: byt
         if security == "starttls":
             server.starttls(context=context)
         if _env("SMTP_USER"):
-            server.login(_env("SMTP_USER"), _env("SMTP_PASSWORD"))
+            server.login(_env("SMTP_USER"), password())
         server.send_message(msg)

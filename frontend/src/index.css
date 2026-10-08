@@ -490,6 +490,44 @@ table, .tabular-nums { font-variant-numeric: tabular-nums; }
 	*, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
+/* ────────────────────────────────────────────────
+   SMOOTHNESS POLISH
+   Short, opacity/colour-only motion so a keyboard biller is never kept waiting: nothing here delays focus or input.
+   ──────────────────────────────────────────────── */
+
+/* Screen switch: the new screen eases in (opacity only, no layout shift). */
+@keyframes screenIn { from { opacity: 0; } to { opacity: 1; } }
+.screen-enter { animation: screenIn 0.16s ease-out both; }
+
+/* Controls glide between hover / focus / pressed states instead of snapping. */
+button, a, select, input, textarea, [role='button'], [role='tab'], [role='menuitem'] {
+	transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+	            box-shadow 0.18s ease, opacity 0.15s ease;
+}
+button:not(:disabled):active, [role='button']:active { transform: scale(0.98); }
+button:disabled { cursor: not-allowed; }
+
+/* Table rows follow the pointer / arrow-key highlight smoothly. */
+tbody tr { transition: background-color 0.12s ease; }
+
+/* Light/dark switch cross-fades the big surfaces. */
+body, .app-shell, header, main, footer, aside { transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease; }
+
+/* Quiet, thin scrollbars in the app's own palette; the page keeps its width when a scrollbar appears. */
+* { scrollbar-width: thin; scrollbar-color: var(--ds-line-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--ds-line-strong); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--gold); background-clip: content-box; }
+main { scrollbar-gutter: stable; overscroll-behavior: contain; }
+html { scroll-behavior: smooth; }
+
+::selection { background: var(--ds-accent-soft); color: inherit; }
+
+/* Skeleton placeholder for data that is still loading (use instead of an empty gap or a jumping layout). */
+@keyframes skeletonPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+.skeleton { background: var(--ds-muted); border-radius: 0.5rem; animation: skeletonPulse 1.2s ease-in-out infinite; }
+
 @media print {
   @page { margin: 0; }
   body { padding: 10mm; }
@@ -794,10 +832,10 @@ input[type='date']::-webkit-date-and-time-value { text-align: left; }
 }
 @media (max-width: 1023.98px) {
   .toast-enter {
-    animation: toastEnterSoft 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: toastEnterSoft 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
   .toast-card.toast-leaving {
-    animation: toastExit 0.38s cubic-bezier(0.55, 0, 0.45, 1) both;
+    animation: toastExit 0.2s cubic-bezier(0.55, 0, 0.45, 1) both;
   }
 }
 @media (prefers-reduced-motion: reduce) {

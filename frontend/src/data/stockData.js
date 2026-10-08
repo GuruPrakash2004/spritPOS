@@ -25,6 +25,7 @@ const toStockItem = (i) => ({
   code: i.code, name: i.name, group: i.group, brand: i.brand, pkg: i.package, cat: i.liqtype,
   clQty: i.qoh, rate: i.mrp, purchaseRate: i.purchase_rate ?? 0, cgstPct: i.cgst_per ?? 0, sgstPct: i.sgst_per ?? 0,
   active: i.active ?? true,
+  shortName: i.short_name ?? '', hotKey: i.hot_key ?? '', bottlesPerCase: i.bottles_per_case ?? 1, rol: i.rol ?? 0, roq: i.roq ?? 0,
 });
 
 // Merge a fresh item list into STOCK_ITEMS without moving existing entries.
@@ -46,6 +47,9 @@ export function loadStockItems() {
     .finally(() => { inFlight = null; });
   return inFlight;
 }
+
+// Changes whenever the catalogue is (re)loaded, so a cached search can tell it is stale.
+export const stockVersion = () => version;
 
 // Index of the item with this code, or -1.
 export const stockIndex = (code) => STOCK_ITEMS.findIndex(i => i.code === code);

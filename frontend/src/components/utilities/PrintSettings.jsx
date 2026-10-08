@@ -9,6 +9,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Save } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
+import RptFolderSetting from '../common/RptFolderSetting';
+import SmtpSetting from '../common/SmtpSetting';
+import ServerPrinterSetting from '../common/ServerPrinterSetting';
 import { InlineError } from '../common/FormErrorSummary';
 import { errorText, getPrintBridge, getPrintSettings, savePrintOption, } from '../../lib/api';
 import { badge, field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton } from '../../lib/styles';
@@ -88,6 +91,10 @@ export default function PrintSettings({ embedded = false }) {
         </div>
         <button onClick={load} className={secondaryButton}><RefreshCw size={14} />Reload</button>
       </div>
+
+      <div className={`${panel} mb-5 p-4`}><RptFolderSetting plain /></div>
+      <div className={`${panel} mb-5 p-4`}><ServerPrinterSetting plain /></div>
+      <div className={`${panel} mb-5 p-4`}><SmtpSetting plain /></div>
 
       {loading && <p className="text-xs text-stone-500">Loading…</p>}
       {data && !data.documents.length && (

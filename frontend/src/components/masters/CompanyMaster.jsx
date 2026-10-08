@@ -4,6 +4,7 @@
 // All data is in the shop's SQL Server (Web_ tables), which is backed up by SQL Server itself.
 
 import { useState, useEffect } from 'react';
+import { FIELD_RULES, cleanInput, fieldProblem } from '../../lib/validation';
 import { 
   Building2, ShieldCheck, Calendar, Image as ImageIcon,
   FolderArchive, Save, Plus,
@@ -91,10 +92,16 @@ const CompanyMaster = ({ canEditFiles }) => {
     if (!address.trim()) errs['co-address'] = 'Enter the registered premises address';
     if (!email.trim()) errs['co-email'] = 'Enter the email address';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs['co-email'] = 'Enter a valid email address';
+    // Tel / mobile / excise phone: exactly 10 digits; GSTIN and PAN in their patterns (lib/validation.js, same as the server).
+    for (const f of EXTRA_FIELDS) {
+      const wrong = fieldProblem(f.key, companyProfile[f.key]);
+      if (wrong) errs[f.id] = wrong;
+    }
 
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
-      focusField(Object.keys(errs)[0]);
+      const first = Object.keys(errs)[0];
+      if (EXTRA_FIELDS.some(f => f.id === first)) { setTab('Additional Fields'); setTimeout(() => focusField(first), 60); } else focusField(first);
       return;
     }
     setErrors({});
@@ -235,7 +242,15 @@ const CompanyMaster = ({ canEditFiles }) => {
                 placeholder={f.placeholder}
                 className={f.mono ? 'font-mono' : ''}
                 readOnly={!canEditFiles || !companyProfile}
-                onChange={e => setCompanyProfile(profile => profile ? { ...profile, [f.key]: e.target.value } : profile)}
+                hasError={!!errors[f.id]}
+                errorMessage={errors[f.id]}
+                inputMode={FIELD_RULES[f.key]?.digits ? 'numeric' : undefined}
+                maxLength={FIELD_RULES[f.key]?.max}
+                onChange={e => {
+                  const value = cleanInput(f.key, e.target.value);   // digits only for phone numbers, capitals for GSTIN / PAN
+                  setCompanyProfile(profile => profile ? { ...profile, [f.key]: value } : profile);
+                  if (errors[f.id]) setErrors(prev => { const n = { ...prev }; delete n[f.id]; return n; });
+                }}
               />
             ))}
           </div>

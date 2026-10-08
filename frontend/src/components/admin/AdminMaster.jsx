@@ -9,6 +9,7 @@
 // A role's modules and its Add/Edit/Delete ticks are saved and enforced by the server.
 
 import { useCallback, useEffect, useState, useRef } from 'react';
+import { fieldProblem } from '../../lib/validation';
 import {
   FilePlus, KeyRound, Save, Trash2, Users, X,
   Eye, Edit3, TextCursorInput, BadgeCheck, FileBarChart, LockKeyhole,
@@ -102,6 +103,7 @@ export default function AdminMaster({ currentUser }) {
     const { user, password, role, active, isNew, full_name, email, mobile, department, dob, password_reset_on, inactive_reason } = userForm;
     const errors = {};
     if (email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) errors.email = 'EmailID is not valid!!';
+    if (fieldProblem('mobile', mobile)) errors.mobile = fieldProblem('mobile', mobile);
     if (!active && !inactive_reason.trim()) errors.inactive_reason = 'Enter why this user is inactive';
     if (dob && dob > new Date().toISOString().slice(0, 10)) errors.dob = 'Not a valid DOB';
 

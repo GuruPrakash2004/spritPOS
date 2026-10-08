@@ -14,7 +14,7 @@ _COMPANY = {
     "name": "THE LIQUOR HOUSE",
     "email": "theliquorhouse28@gmail.com",
     "address": "Byatarayanapura, Bangalore-92, Karnataka",
-    "phone": "080-26793693",
+    "phone": "8026793693",
     "fax": "",
     "mobile": "9480697887",
     "website": "https://theliquorhouse.in",

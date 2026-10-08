@@ -58,12 +58,18 @@ _HIDDEN = {"PointsAlertAbove"}
 # Highest value a number setting may take (the older /settings API caps points_per_rupee at 1 too).
 MAX = {"PointsForOneRs": 1, "MinBillForPoints": 10_000_000, "PurSellVarPer": 1000, "PointsAlertAbove": 10_000_000}
 
-# SMTP: read-only, from backend/.env (app/mailer.py). The password is never shown.
+# SMTP: rows of the grid that read and write backend/.env (app/mailer.py, saved through routers/setup.py). The password row
+# is write-only: it is never shown, a blank keeps the saved one, and it is stored sealed (SMTP_PASSWORD_ENC).
 _ENV_ROWS = [
     ("SMTPHostName", "SMTP Host Name", "SMTP_HOST"),
     ("SMTPServerPort", "SMTP Server Port", "SMTP_PORT"),
+    ("SMTPSecurity", "SMTP Security", "SMTP_SECURITY"),
     ("SMTPMailID", "SMTP Mail ID", "SMTP_USER"),
+    ("SMTPFromID", "SMTP From Address", "SMTP_FROM"),
 ]
+SMTP_PASSWORD_CODE = "SMTPPassword"
+# grid row code -> field of routers/setup.SmtpIn
+SMTP_FIELDS = {"SMTPHostName": "host", "SMTPServerPort": "port", "SMTPSecurity": "security", "SMTPMailID": "user", "SMTPFromID": "from_address"}
 
 # Older store.SETTINGS[section][field] <-> row code, with the value type.
 LEGACY_MAP = {
@@ -187,9 +193,15 @@ def env_rows() -> list[dict]:
         v = os.environ.get(key, "").strip()
         if key == "SMTP_PORT" and not v and os.environ.get("SMTP_HOST"):
             v = "587"
+        if key == "SMTP_SECURITY" and not v and os.environ.get("SMTP_HOST"):
+            v = "starttls"
         rows.append({"code": code, "group": "SMTP", "caption": caption, "value": v, "kind": "text",
-                     "remarks": "Set in backend/.env on the server (SMTP password is never shown here).",
-                     "effect": "Customised Reports → Email.", "hidden": False, "source": "env", "readonly": True})
+                     "remarks": "Used to e-mail reports. Edit the value and Save; the Email (SMTP) tab can also test the connection.",
+                     "effect": "Customised Reports → Email.", "hidden": False, "source": "env", "readonly": False})
+    rows.append({"code": SMTP_PASSWORD_CODE, "group": "SMTP", "caption": "SMTP Password", "value": "", "kind": "secret",
+                 "remarks": "Never shown. Type a new one to change it; leave blank to keep the saved one.",
+                 "effect": "Customised Reports → Email.", "hidden": False, "source": "env", "readonly": False,
+                 "saved": bool(os.environ.get("SMTP_PASSWORD_ENC") or os.environ.get("SMTP_PASSWORD"))})
     return rows
 
 

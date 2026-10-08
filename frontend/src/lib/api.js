@@ -138,10 +138,20 @@ async function send(path, init) {
 // document (backend main.py). Use one key per draft.
 async function request(path, init = {}) {
   const res = await send(path, init);
-  if (res.status === 204) return undefined ;
+  if (res.status === 204) { announceDocChange(path, init, res); return undefined; }
   const data = await res.json().catch(() => null);
   if (!res.ok) failed(res, path, data);
+  announceDocChange(path, init, res);
   return data ;
+}
+
+/** Sent on `window` after a document is saved, cancelled or deleted (any write under /transactions/), so lists such as the
+ *  screens' History column can refresh themselves. */
+export const DOCS_CHANGED = 'vlqms-docs-changed';
+function announceDocChange(path, init, res) {
+  if (res.ok && init.method && init.method !== 'GET' && path.startsWith('/transactions/') && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(DOCS_CHANGED));
+  }
 }
 
 // A request whose answer is not always JSON (a PDF for a print preview, or JSON when it was sent to a printer).
@@ -202,6 +212,17 @@ export const getSetupStatus = () => request('/setup/status');
 /** The connection settings in use (no password), to fill the Database settings form. */
  
 export const getSetupCurrent = () => request('/setup/current');
+/** Where the .rpt print formats are read from (RPT_FOLDER), and what is in that folder. Same access as the database settings. */
+export const getRptFolder = () => request('/setup/rpt-folder');
+/** Save the .rpt folder on the server (blank = the default, backend/Rpts); it is used at once. */
+export const saveRptFolder = (folder) => request('/setup/rpt-folder', { method: 'POST', body: { folder } });
+/** The printer all direct prints use on the server (blank = each document's own), and the printers the server can see. */
+export const getPrintPrinter = () => request('/setup/print-printer');
+export const savePrintPrinter = (printer) => request('/setup/print-printer', { method: 'POST', body: { printer } });
+/** The e-mail (SMTP) settings (no password: only whether one is saved), saved, and a connection test (nothing is sent). */
+export const getSmtp = () => request('/setup/smtp');
+export const saveSmtp = (body) => request('/setup/smtp', { method: 'POST', body });
+export const testSmtp = (body) => request('/setup/smtp/test', { method: 'POST', body });
 export const setupTest = (body) =>
   request('/setup/test', { method: 'POST', body });
 export const setupConnect = (body) =>
@@ -258,6 +279,8 @@ export const cancelSalesInvoice = (docNo, remarks) =>
 /** Remove a held bill (recalling it deletes the hold). */
 export const deleteSalesInvoice = (docNo) => request(salesInvoicePath(docNo), { method: 'DELETE' });
 
+/** The documents of one kind (sales_invoice, purchase_bill, purchase_indent, sales_return, stock_deduction, expense, closing_stock). */
+export const listDocuments = (kind, params = {}) => request(`/transactions/${kind.replaceAll('_', '-')}${qs(params)}`);
 export const getPurchaseIndents = () => request('/transactions/purchase-indent');
 export const savePurchaseBill = (body, idempotencyKey) =>
   request('/transactions/purchase-bill', { method: 'POST', body, idempotencyKey });

@@ -22,7 +22,8 @@ async def test_settings_grid_lists_rows_with_their_effect_and_smtp_without_passw
     rows = (await client.get("/utilities/settings")).json()
     by = {r["code"]: r for r in rows}
     assert by["SPID"]["value"] == "Y" and by["SPID"]["effect"]
-    assert by["SMTPHostName"]["value"] == "smtp.example.test" and by["SMTPHostName"]["readonly"]
+    assert by["SMTPHostName"]["value"] == "smtp.example.test" and not by["SMTPHostName"]["readonly"]
+    assert by["SMTPPassword"]["value"] == "" and by["SMTPPassword"]["saved"]
     assert "never-shown" not in str(rows)
     assert "PointsAlertAbove" not in by                     # hidden row
     assert "PointsAlertAbove" in {r["code"] for r in (await client.get("/utilities/settings?all=true")).json()}
@@ -48,7 +49,6 @@ async def test_setting_values_are_checked_by_type(client):
     assert (await client.put("/utilities/settings/SPID", json={"caption": "c", "value": "maybe"})).status_code == 422
     assert (await client.put("/utilities/settings/PointsForOneRs", json={"caption": "c", "value": "abc"})).status_code == 422
     assert (await client.put("/utilities/settings/FreezeDate", json={"caption": "c", "value": "31-12-2025"})).status_code == 422
-    assert (await client.put("/utilities/settings/SMTPHostName", json={"caption": "c", "value": "x"})).status_code == 409
 
 
 async def test_freeze_date_blocks_documents_on_or_before_it(client):
@@ -352,3 +352,28 @@ async def test_destructive_utilities_need_the_admin_password(client):
     res = await client.post("/utilities/merge-items/merge", json={"from_item": "RC-750", "to_item": "VIN-750", "admin_password": enc("Extra#123", "admin")})
     assert res.status_code == 200
     assert "Extra#123" not in str((await client.get("/utilities/audit")).json())
+
+
+async def test_smtp_rows_of_the_grid_are_edited_and_saved_to_env(client, monkeypatch, tmp_path):
+    """The SMTP rows write backend/.env like the Email (SMTP) tab; the password is encrypted, sealed and never listed."""
+    from app import envfile, mailer
+    from tests.conftest import enc
+    monkeypatch.setattr(envfile, "PATH", tmp_path / ".env")
+    for key in ("SMTP_HOST", "SMTP_PORT", "SMTP_SECURITY", "SMTP_USER", "SMTP_FROM", "SMTP_PASSWORD", "SMTP_PASSWORD_ENC"):
+        monkeypatch.delenv(key, raising=False)
+    put = lambda code, value: client.put(f"/utilities/settings/{code}", json={"caption": "c", "value": value})
+    assert (await put("SMTPHostName", "smtp.example.com")).json()["value"] == "smtp.example.com"
+    assert (await put("SMTPServerPort", "465")).status_code == 200
+    assert (await put("SMTPSecurity", "ssl")).status_code == 200
+    assert (await put("SMTPMailID", "shop@example.com")).status_code == 200
+    r = await put("SMTPPassword", enc("S3cret!pw", "smtp"))
+    assert r.status_code == 200 and r.json()["value"] == "" and r.json()["saved"]
+    assert mailer.password() == "S3cret!pw" and mailer.configured()
+    text = (tmp_path / ".env").read_text()
+    assert "SMTP_HOST=smtp.example.com" in text and "SMTP_PORT=465" in text and "S3cret" not in text
+    rows = (await client.get("/utilities/settings")).json()
+    assert {r["code"]: r["value"] for r in rows}["SMTPServerPort"] == "465" and "S3cret" not in str(rows)
+    assert (await put("SMTPServerPort", "99999")).status_code == 422
+    assert (await put("SMTPSecurity", "weird")).status_code == 422
+    assert (await put("SMTPFromID", "not-an-email")).status_code == 422
+    assert (await put("SMTPPassword", "")).status_code == 200 and mailer.password() == "S3cret!pw"   # blank keeps it

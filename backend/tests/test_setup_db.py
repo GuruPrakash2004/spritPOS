@@ -179,6 +179,7 @@ async def test_once_set_up_only_an_administrator_can_change_it(anon_client, clie
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
     monkeypatch.setattr(sqlstore, "enabled", lambda: True)   # the database is in use
     monkeypatch.setattr(db, "is_db_available", lambda: True)
+    monkeypatch.setattr(setup_router, "LOOPBACK", set())   # a request from another PC
     body = {**BODY, "password": enc("pw", "db")}
     assert (await anon_client.post("/setup/test", json=body)).status_code == 403
     assert (await cashier_client.post("/setup/test", json={**body, "password": enc("pw", "db")})).status_code == 403
@@ -210,3 +211,102 @@ async def test_writes_are_refused_while_a_set_up_database_is_offline(client, mon
     monkeypatch.setattr(db, "reconnect", lambda: False)
     res = await client.post("/masters/brands", json={"code": "ZZ", "name": "Zed"})
     assert res.status_code == 503 and "offline" in res.json()["detail"]
+
+
+async def test_the_server_pc_itself_may_open_the_settings_from_the_sign_in_page(anon_client, setup_mode, monkeypatch):
+    monkeypatch.setattr(boot, "needs_setup", lambda: False)
+    monkeypatch.setattr(db, "is_db_available", lambda: True)
+    assert (await anon_client.get("/setup/rpt-folder")).status_code == 200   # the test client counts as the server PC
+    monkeypatch.setattr(setup_router, "LOOPBACK", set())
+    assert (await anon_client.get("/setup/rpt-folder")).status_code == 403
+
+
+async def test_the_rpt_folder_is_saved_checked_and_used_at_once(client, monkeypatch, tmp_path):
+    from app import rpt_bridge
+    monkeypatch.setattr(boot, "needs_setup", lambda: False)   # set up: an Administrator's token is checked
+    monkeypatch.setattr(envfile, "PATH", tmp_path / ".env")
+    monkeypatch.delenv("RPT_FOLDER", raising=False)
+    (tmp_path / "a.rpt").write_bytes(b"x")
+    (tmp_path / "b.RPT").write_bytes(b"x")
+    r = await client.post("/setup/rpt-folder", json={"folder": str(tmp_path)})
+    assert r.status_code == 200 and r.json()["count"] == 2 and r.json()["exists"]
+    assert rpt_bridge.folder() == tmp_path and "RPT_FOLDER=" in (tmp_path / ".env").read_text()
+    assert (await client.post("/setup/rpt-folder", json={"folder": str(tmp_path / "nope")})).status_code == 422
+    assert (await client.post("/setup/rpt-folder", json={"folder": "a;b"})).status_code == 422
+    r = await client.post("/setup/rpt-folder", json={"folder": ""})   # blank = the default folder again
+    assert r.status_code == 200 and rpt_bridge.folder() == rpt_bridge.DEFAULT_FOLDER
+
+
+async def test_a_cashier_cannot_change_the_rpt_folder(cashier_client, monkeypatch):
+    monkeypatch.setattr(boot, "needs_setup", lambda: False)
+    monkeypatch.setattr(setup_router, "LOOPBACK", set())
+    assert (await cashier_client.post("/setup/rpt-folder", json={"folder": ""})).status_code == 403
+
+
+async def test_smtp_settings_are_saved_sealed_and_used_at_once(client, monkeypatch, tmp_path):
+    from app import mailer, secure_fields
+    from tests.conftest import enc
+    monkeypatch.setattr(boot, "needs_setup", lambda: False)
+    monkeypatch.setattr(envfile, "PATH", tmp_path / ".env")
+    for key in ("SMTP_HOST", "SMTP_PORT", "SMTP_SECURITY", "SMTP_USER", "SMTP_FROM", "SMTP_PASSWORD", "SMTP_PASSWORD_ENC"):
+        monkeypatch.delenv(key, raising=False)
+    body = {"host": "smtp.example.com", "port": "465", "security": "ssl", "user": "shop@example.com",
+            "from_address": "shop@example.com", "password": enc("S3cret!pw", "smtp")}
+    r = await client.post("/setup/smtp", json=body)
+    assert r.status_code == 200 and r.json()["configured"] and r.json()["has_password"] and "password" not in r.json()
+    assert mailer.password() == "S3cret!pw" and mailer.configured()
+    text = (tmp_path / ".env").read_text()
+    assert "SMTP_HOST=smtp.example.com" in text and "S3cret" not in text and "SMTP_PASSWORD_ENC=" in text
+    # A blank password keeps the saved one; a blank server turns e-mail off.
+    r = await client.post("/setup/smtp", json=body | {"password": "", "port": "587"})
+    assert r.json()["port"] == "587" and mailer.password() == "S3cret!pw"
+    assert (await client.get("/setup/smtp")).json()["host"] == "smtp.example.com"
+    r = await client.post("/setup/smtp", json={"host": ""})
+    assert not r.json()["configured"] and not mailer.password()
+    assert secure_fields  # sealed with the server's own key
+
+
+async def test_smtp_settings_are_checked(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(boot, "needs_setup", lambda: False)
+    monkeypatch.setattr(envfile, "PATH", tmp_path / ".env")
+    assert (await client.post("/setup/smtp", json={"host": "h", "port": "99999"})).status_code == 422
+    assert (await client.post("/setup/smtp", json={"host": "h;x"})).status_code == 422
+    assert (await client.post("/setup/smtp", json={"host": "h", "from_address": "not-an-email"})).status_code == 422
+    assert (await client.post("/setup/smtp/test", json={"host": ""})).status_code == 422
+
+
+async def test_smtp_test_reports_a_failed_connection_without_the_password(client, monkeypatch):
+    from app import mailer
+    from tests.conftest import enc
+    monkeypatch.setattr(boot, "needs_setup", lambda: False)
+    def refuse(*args):
+        raise OSError("connection refused")
+    monkeypatch.setattr(mailer, "check", refuse)
+    r = await client.post("/setup/smtp/test", json={"host": "smtp.example.com", "user": "u", "password": enc("hunter2!!", "smtp")})
+    assert r.status_code == 502 and "connection refused" in r.json()["detail"] and "hunter2" not in r.text
+    monkeypatch.setattr(mailer, "check", lambda *a: None)
+    r = await client.post("/setup/smtp/test", json={"host": "smtp.example.com"})
+    assert r.status_code == 200 and r.json()["ok"]
+
+
+async def test_a_cashier_cannot_change_the_smtp_settings(cashier_client, monkeypatch):
+    monkeypatch.setattr(boot, "needs_setup", lambda: False)
+    monkeypatch.setattr(setup_router, "LOOPBACK", set())
+    assert (await cashier_client.post("/setup/smtp", json={"host": ""})).status_code == 403
+
+
+async def test_the_server_printer_is_saved_and_must_be_one_the_server_can_open(client, monkeypatch):
+    from app import rpt_bridge
+    have = ["EPSON TM-T82", "\\\\saturn2\\POS-80"]
+    monkeypatch.setattr(boot, "needs_setup", lambda: False)
+    monkeypatch.setattr(rpt_bridge, "using_mock", lambda: False)
+    monkeypatch.setattr(rpt_bridge, "printer_report", lambda: {"usable": have, "refused": [{"name": "POS-80 on saturn2 (redirected 4)", "why": "Windows error 1801"}]})
+    monkeypatch.setattr(rpt_bridge, "installed_printers", lambda: have)
+    monkeypatch.delenv("DIRECT_PRINTER", raising=False)
+    r = await client.get("/setup/print-printer")
+    assert r.status_code == 200 and r.json()["installed"] == have and r.json()["refused"][0]["why"] == "Windows error 1801"
+    bad = await client.post("/setup/print-printer", json={"printer": "POS-80 on saturn2 (redirected 4)"})
+    assert bad.status_code == 422 and "EPSON TM-T82" in bad.json()["detail"]
+    ok = await client.post("/setup/print-printer", json={"printer": "\\\\saturn2\\POS-80"})
+    assert ok.status_code == 200 and ok.json()["printer"] == "\\\\saturn2\\POS-80" and rpt_bridge._env("DIRECT_PRINTER") == "\\\\saturn2\\POS-80"
+    assert (await client.post("/setup/print-printer", json={"printer": ""})).json()["printer"] == ""

@@ -25,6 +25,7 @@ memory for this process only.
 import copy
 import hashlib
 import json
+import re
 import logging
 import threading
 import time
@@ -648,21 +649,21 @@ def load() -> bool:
             store.mark_app_start()
             return False
         rows: dict[str, dict] = {}
-        for r in db.fetchall("SELECT Kind, RowKey, Value FROM dbo.Web_AppRow"):
+        for r in db.fetchall("SELECT Kind, RowKey, Value FROM dbo.Web_AppRow WITH (NOLOCK)"):
             rows.setdefault(r["Kind"], {})[r["RowKey"]] = json.loads(r["Value"]) if r["Value"] is not None else None
             _saved[("row", r["Kind"], r["RowKey"])] = _hash(r["Value"]) if r["Value"] is not None else None
         docs: dict[str, dict] = {}
-        for r in db.fetchall("SELECT Kind, DocNo, Status, Value FROM dbo.Web_AppDoc"):
+        for r in db.fetchall("SELECT Kind, DocNo, Status, Value FROM dbo.Web_AppDoc WITH (NOLOCK)"):
             docs.setdefault(r["Kind"], {})[r["DocNo"]] = json.loads(r["Value"])
             _saved[("doc", r["Kind"], r["DocNo"])] = _hash(r["Value"])
             if r["Kind"] in MIRRORED_DOCS and r["Status"] != "HOLD":
                 _doc_status[(r["Kind"], r["DocNo"])] = r["Status"] or "SAVED"
         state = {}
-        for r in db.fetchall("SELECT [Key] AS k, Value FROM dbo.Web_AppSetting WHERE Section = 'state'"):
+        for r in db.fetchall("SELECT [Key] AS k, Value FROM dbo.Web_AppSetting WITH (NOLOCK) WHERE Section = 'state'"):
             state[r["k"]] = json.loads(r["Value"])
             _saved[("state", r["k"])] = _hash(r["Value"])
         moves = []
-        for r in db.fetchall("SELECT ItemCode, Qty, Kind, DocNo, MoveDate, Rate, Extra FROM dbo.Web_AppMove ORDER BY Seq"):
+        for r in db.fetchall("SELECT ItemCode, Qty, Kind, DocNo, MoveDate, Rate, Extra FROM dbo.Web_AppMove WITH (NOLOCK) ORDER BY Seq"):
             m = {"item": r["ItemCode"], "qty": float(r["Qty"]), "kind": r["Kind"], "doc_no": r["DocNo"],
                  "date": str(r["MoveDate"])[:10], "rate": float(r["Rate"]) if r["Rate"] is not None else 0.0}
             if r["Extra"]:
@@ -678,8 +679,10 @@ def load() -> bool:
         _moves_saved = len(moves)
         # Invoice numbers go on after the highest one already in the table (desktop or web), so a new web bill
         # never takes a number the old data has (SINVNO is the key; a clash would refuse the save).
+        # The parameter is cast to the column's type: a Unicode parameter against the varchar SINVNO made SQL Server read the
+        # whole 700,000-row table (76,504 pages, 24-27 s on a cold cache) instead of the 946 pages of the year's index range.
         top = db.fetchall("SELECT MAX(TRY_CAST(SUBSTRING(SINVNO, CHARINDEX('-', SINVNO) + 1, 20) AS INT)) AS n "
-                          "FROM dbo.TrnHdrSINV WHERE SINVNO LIKE ?", (f"{store.FY_PREFIX}/%",))
+                          "FROM dbo.TrnHdrSINV WITH (NOLOCK) WHERE SINVNO LIKE CAST(? AS VARCHAR(20))", (f"{store.FY_PREFIX}/%",))
         if top and top[0]["n"]:
             seq = store._seq.setdefault("sales_invoice", store.Seq(int(top[0]["n"]) + 1))
             seq.value = max(seq.value, int(top[0]["n"]) + 1)

@@ -57,12 +57,30 @@ def list_settings(all: bool = False, admin: dict = Depends(require_admin)):
     return gsettings.all_rows(include_hidden=all)
 
 
+def _update_smtp_row(code: str, value: str, admin: dict) -> dict:
+    """An SMTP row of the grid: written to backend/.env through the same path as the Email (SMTP) tab."""
+    from pydantic import ValidationError
+    from . import setup as setup_router
+    fields = setup_router.smtp_current()
+    password = ""
+    if code == gsettings.SMTP_PASSWORD_CODE:
+        password = value
+    else:
+        fields[gsettings.SMTP_FIELDS[code]] = value.strip()
+    try:
+        body = setup_router.SmtpIn(**fields, password=password)
+    except ValidationError as exc:
+        raise HTTPException(422, f"{exc.errors()[0]['loc'][-1]}: {exc.errors()[0]['msg']}")
+    setup_router.save_smtp(body, str(admin["user"]))
+    return next(r for r in gsettings.env_rows() if r["code"] == code)
+
+
 @router.put("/settings/{code}")
 def update_setting(code: str, body: SettingUpdate, admin: dict = Depends(require_admin)):
     row = store.GSETTINGS.get(code)
     if row is None:
-        if code in {r["code"] for r in gsettings.env_rows()}:
-            raise HTTPException(409, f"{code} is set in backend/.env on the server, not here")
+        if code in gsettings.SMTP_FIELDS or code == gsettings.SMTP_PASSWORD_CODE:
+            return _update_smtp_row(code, body.value, admin)
         raise HTTPException(404, f"Setting '{code}' not found")
     if code in gsettings._HIDDEN and not body.hidden:
         raise HTTPException(409, f"{code} is kept only for the older /settings API and stays hidden")

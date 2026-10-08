@@ -27,12 +27,13 @@ import { useConfirm } from '../common/ConfirmDialog';
 import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
-import { errorText, getCustomers, getNextNumber, getSalesPersons, getSettingValues, newIdempotencyKey, saveSalesInvoice, todayIso, } from '../../lib/api';
+import { deleteSalesInvoice, errorText, getCustomers, getNextNumber, getSalesPersons, getSettingValues, newIdempotencyKey, saveSalesInvoice, todayIso, } from '../../lib/api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
 import { STOCK_ITEMS, litresPerBottle, loadStockItems, sellable, stockIndex, useStockItems } from '../../data/stockData';
 import { numberToWords } from '../../lib/formatters';
 import { PAYMENT_TYPES, } from '../../data/salesCounters';
 import PrintDialog from '../print/PrintDialog';
+import WithHistory from './DocHistoryPanel';
 import { afterSavePlan, runPrint } from '../../lib/printing';
 import { useDocSettings } from '../../lib/docSettings';
 
@@ -40,12 +41,18 @@ import { useDocSettings } from '../../lib/docSettings';
 
 const toLine = (stock, qty, discPct = 0) => {
   const item = STOCK_ITEMS[stock];
-  return { id: stock, name: `${item.name} ${item.pkg}`, qoh: item.clQty, qty, rate: item.rate, discPct };
+  return { id: stock, name: `${item.name} ${item.pkg}`, qoh: item.clQty, qty, rate: item.rate, discPct, cgstPct: item.cgstPct ?? 0, sgstPct: item.sgstPct ?? 0 };
 };
 
 const money = (n) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const gross = (l) => l.qty * l.rate;
 const discAmt = (l) => (gross(l) * l.discPct) / 100;
+// GST per line is worked out on the line's amount as the backend does (Item Master's CGST % / SGST %); the item has no Cess %
+// in Item Master, so the Cess columns of the legacy grid show 0.00.
+const round2 = (n) => Math.round(n * 100) / 100;
+const cgstAmt = (l) => round2(round2(gross(l)) * (l.cgstPct ?? 0) / 100);
+const sgstAmt = (l) => round2(round2(gross(l)) * (l.sgstPct ?? 0) / 100);
+const itemAmt = (l) => gross(l) - discAmt(l) + cgstAmt(l) + sgstAmt(l);
 // Splits "26/c10-0001234" into "26/c10-" + 1234 so later bills keep the same prefix and zero padding.
 const parseInvoiceNo = (invoiceNo) => {
   const match = invoiceNo.match(/^(.*?)(\d+)$/);
@@ -139,8 +146,11 @@ export default function SalesInvoice({ setup, onClose }) {
   const totals = useMemo(() => {
     const basic = lines.reduce((acc, l) => acc + gross(l), 0);
     const disc = lines.reduce((acc, l) => acc + discAmt(l), 0);
-    // Liquor is outside GST in Karnataka (excise is built into MRP), so GST/cess rows stay at zero for these items.
-    const cgst = 0, sgst = 0, cess = 0, compCess = 0;
+    // GST comes from each item's CGST % / SGST % in Item Master (zero for liquor, whose excise is built into the MRP), as
+    // the backend prices the bill; Item Master has no cess.
+    const cgst = lines.reduce((acc, l) => acc + cgstAmt(l), 0);
+    const sgst = lines.reduce((acc, l) => acc + sgstAmt(l), 0);
+    const cess = 0, compCess = 0;
     const total = basic - disc + cgst + sgst + cess + compCess;
     const points = Math.max(0, Number(redeem) || 0);
     // Rounded to the rupee, as the backend rounds the saved bill.
@@ -155,10 +165,12 @@ export default function SalesInvoice({ setup, onClose }) {
 
   const customer = customers.find(c => c.name.toLowerCase() === party.trim().toLowerCase() || c.code.toLowerCase() === party.trim().toLowerCase());
 
-  const change = collected === '' ? 0 : (Number(collected) || 0) - totals.cash;
+  // What the cash tendered is measured against: the cash part of the bill, or the whole bill when none of it is cash.
+  const due = totals.cash > 0 ? totals.cash : totals.invoice;
+  const change = collected === '' ? 0 : (Number(collected) || 0) - due;
 
   const quickItems = sellable()
-    .filter(item => `${item.brand} ${item.name} ${item.code}`.toLowerCase().includes(quickFilter.toLowerCase()));
+    .filter(item => item.clQty > 0 && `${item.brand} ${item.name} ${item.code}`.toLowerCase().includes(quickFilter.toLowerCase()));
 
   const addItem = (stock, qty, current = lines) => {
     if (locked()) return current;
@@ -305,6 +317,7 @@ export default function SalesInvoice({ setup, onClose }) {
     discount: totals.disc + (Number(writeOff) || 0),
     redeem_points: totals.points,
     payment: { cash: totals.cash, card: totals.card, upi: totals.other, credit: 0 },
+    collected: !hold && collected !== '' ? Number(collected) || 0 : undefined,
     hold,
   });
 
@@ -325,7 +338,15 @@ export default function SalesInvoice({ setup, onClose }) {
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
 
-  const recall = (inv) => {
+  // Recalls a held bill. A bill already on the screen is held first (a swap), so it shows in Held bills and is never lost;
+  // the recalled bill's parked copy is removed only once it is on the screen. Throws when something fails, so the dialog shows why.
+  const recall = async (inv) => {
+    if (sending.current) throw new Error('Saving the last bill. Try again in a moment.');
+    if (lines.length) {
+      const parked = await send(billBody(true), saveKey.current);
+      setToast({ kind: 'ok', text: `The bill you were making was held as ${parked.doc_no} (${lines.length} items).` });
+    }
+    await deleteSalesInvoice(inv.doc_no);
     const found = inv.lines.map(l => ({ stock: stockIndex(l.item_code), qty: l.qty, rate: l.rate }));
     const missing = found.filter(l => l.stock === -1).length;
     const recalled = found.filter(l => l.stock !== -1).map(l => ({ ...toLine(l.stock, l.qty), rate: l.rate }));
@@ -407,6 +428,7 @@ export default function SalesInvoice({ setup, onClose }) {
   const payRow = 'flex items-center justify-between gap-3 py-1.5';
 
   return (
+    <WithHistory kind="sales_invoice" title="bills">
     <div className="mx-auto flex max-w-[1440px] flex-col gap-4">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {confirmDialog}
@@ -439,7 +461,7 @@ export default function SalesInvoice({ setup, onClose }) {
           <div className={`${panel} flex flex-wrap items-end gap-3 p-4`}>
             <div className="min-w-0 flex-1 basis-64">
               <label htmlFor="si-barcode" className={labelClass}>Scan or search item <span className="font-normal text-stone-400">(F2)</span></label>
-              <ItemSearchBox id="si-barcode" ref={barcodeRef} value={barcode} onChange={setBarcode} onPick={pickItem}
+              <ItemSearchBox id="si-barcode" ref={barcodeRef} value={barcode} onChange={setBarcode} onPick={pickItem} listOnArrow={!lines.length}
                 onEnterNoMatch={() => scan()} onKeyDown={searchKeys}
                 placeholder="Barcode, item code or name, then Enter" />
             </div>
@@ -479,9 +501,9 @@ export default function SalesInvoice({ setup, onClose }) {
                     <li key={item.code}>
                       <button tabIndex={-1} onClick={() => addItem(item.stock, 1)} ref={qi === quickAt ? el => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                         className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-subtle ${qi === quickAt ? 'bg-accent-soft' : ''}`}>
-                        <span className="block truncate font-medium text-stone-900 dark:text-stone-50">{item.brand}</span>
+                        <span className="block truncate font-medium text-stone-900 dark:text-stone-50">{item.brand && item.brand !== '-' ? item.brand : item.name}</span>
                         <span className="mt-0.5 flex justify-between text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
-                          <span>{item.pkg} · {item.clQty} in stock</span><span className="font-medium text-stone-700 dark:text-stone-300">₹ {money(item.rate)}</span>
+                          <span>{[item.pkg && item.pkg !== '-' ? item.pkg : '', `${item.clQty} in stock`].filter(Boolean).join(' · ')}</span><span className="font-medium text-stone-700 dark:text-stone-300">₹ {money(item.rate)}</span>
                         </span>
                       </button>
                     </li>
@@ -496,25 +518,26 @@ export default function SalesInvoice({ setup, onClose }) {
                 <table className="w-full text-left text-xs">
                   <thead className={tableHead}>
                     <tr>
-                      <th className="w-10 px-4 py-2.5">#</th>
+                      <th className="w-10 whitespace-nowrap px-4 py-2.5">SI No</th>
                       <th className="min-w-[220px] px-3 py-2.5">Item</th>
-                      <th className="px-3 py-2.5 text-right">In stock</th>
+                      <th className="px-3 py-2.5 text-right">QOH</th>
                       <th className="px-3 py-2.5 text-right">Qty</th>
                       <th className="px-3 py-2.5 text-right">Rate</th>
-                      <th className="px-3 py-2.5 text-right">Disc %</th>
-                      <th className="px-3 py-2.5 text-right">Disc amt</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Disc.%</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Disc.Amt</th>
                       <th className="px-3 py-2.5 text-right">Amount</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">CGST%</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">CGST Amt</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">SGST%</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">SGST Amt</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Cess%</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Cess Amt</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Comp.Cess Amt</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Item Amt</th>
                       <th className="w-10 px-2 py-2.5"><span className="sr-only">Remove</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line-soft tabular-nums">
-                    {lines.length === 0 && (
-                      <tr><td colSpan={9} className="px-4 py-20 text-center">
-                        <ScanLine size={28} className="mx-auto mb-2 text-stone-300 dark:text-stone-600" />
-                        <p className="text-sm font-medium text-stone-700 dark:text-stone-200">No items on this bill</p>
-                        <p className="mt-0.5 text-xs text-stone-500">Scan a barcode or type an item name and press Enter. Quick pick: F3.</p>
-                      </td></tr>
-                    )}
                     {lines.map((line, i) => {
                       const low = line.qty >= line.qoh;
                       return (
@@ -527,6 +550,14 @@ export default function SalesInvoice({ setup, onClose }) {
                           <td className="px-3 py-1.5 text-right"><input type="number" min={0} max={100} value={line.discPct || ''} placeholder="0" data-si-row={i} data-si-col="disc" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'disc')} onChange={e => updateLine(line.id, { discPct: Number(e.target.value) })} className={cellInput} aria-label={`Discount % for ${line.name}`} /></td>
                           <td className="px-3 py-2 text-right text-stone-500">{money(discAmt(line))}</td>
                           <td className="px-3 py-2 text-right font-semibold text-stone-900 dark:text-stone-50">{money(gross(line) - discAmt(line))}</td>
+                          <td className="px-3 py-2 text-right text-stone-500">{money(line.cgstPct ?? 0)}</td>
+                          <td className="px-3 py-2 text-right text-stone-500">{money(cgstAmt(line))}</td>
+                          <td className="px-3 py-2 text-right text-stone-500">{money(line.sgstPct ?? 0)}</td>
+                          <td className="px-3 py-2 text-right text-stone-500">{money(sgstAmt(line))}</td>
+                          <td className="px-3 py-2 text-right text-stone-400">{money(0)}</td>
+                          <td className="px-3 py-2 text-right text-stone-400">{money(0)}</td>
+                          <td className="px-3 py-2 text-right text-stone-400">{money(0)}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-stone-900 dark:text-stone-50">{money(itemAmt(line))}</td>
                           <td className="px-2 py-2 text-center">
                             <button tabIndex={-1} onClick={e => { e.stopPropagation(); setLines(lines.filter(l => l.id !== line.id)); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${line.name}`}><Trash2 size={14} /></button>
                           </td>
@@ -535,12 +566,20 @@ export default function SalesInvoice({ setup, onClose }) {
                     })}
                   </tbody>
                 </table>
+                {lines.length === 0 && (
+                  <div className="px-4 py-16 text-center">
+                    <ScanLine size={28} className="mx-auto mb-2 text-stone-300 dark:text-stone-600" />
+                    <p className="text-sm font-medium text-stone-700 dark:text-stone-200">No items on this bill</p>
+                    <p className="mt-0.5 text-xs text-stone-500">Scan a barcode or type an item name and press Enter. Quick pick: F3.</p>
+                  </div>
+                )}
               </div>
 
               {/* Line summary + line actions */}
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line bg-subtle/60 px-4 py-2.5 text-xs text-stone-600 dark:text-stone-300">
-                <span>Items <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{lines.length}</span></span>
-                <span>Qty <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.qty}</span></span>
+                <span># Items : <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{lines.length}</span></span>
+                <span>Total Qty : <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.qty}</span></span>
+                <span>Invoice Value : <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.invoice)}</span></span>
                 <span>Litres <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.litres.toFixed(3)}</span></span>
                 <div className="ml-auto flex flex-wrap gap-1">
                   <span className="hidden text-[11px] text-stone-400 xl:inline">↑↓ line · + − qty · Del remove · 3* qty · F9 cash · F10 save</span>
@@ -649,10 +688,15 @@ export default function SalesInvoice({ setup, onClose }) {
               <label htmlFor="si-collected" className={labelClass}>Cash tendered <span className="font-normal text-stone-400">(F9 · Enter saves)</span></label>
               <div className="flex items-center gap-2">
                 <input id="si-collected" type="number" min={0} value={collected} onFocus={e => e.target.select()} onChange={e => setCollected(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void saveBill(); } if (e.key === 'Escape') focusSearch(); }} className={`${field} flex-1 text-right text-sm tabular-nums`} placeholder="0.00" />
-                <span className={`${badge(change < 0 ? 'danger' : 'success')} px-2 py-1.5 text-xs tabular-nums`}>
-                  {change < 0 ? 'Short' : 'Change'} ₹ {money(Math.abs(change))}
-                </span>
               </div>
+              {collected !== '' && (
+                <div role="status" aria-live="polite" className={`mt-2 flex items-baseline justify-between gap-3 rounded-lg px-3 py-2.5 tabular-nums ${change < 0
+                  ? 'bg-red-100 text-red-800 ring-2 ring-red-500/40 dark:bg-red-950/60 dark:text-red-200'
+                  : 'bg-emerald-100 text-emerald-900 ring-2 ring-emerald-500/40 dark:bg-emerald-950/60 dark:text-emerald-200'}`}>
+                  <span className="text-xs font-semibold">{change < 0 ? 'Short by' : change === 0 ? 'Exact amount' : 'Return change'}</span>
+                  <span className="text-2xl font-bold tracking-tight">₹ {money(Math.abs(change))}</span>
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <button
@@ -688,5 +732,6 @@ export default function SalesInvoice({ setup, onClose }) {
 
       {printDocNo && <PrintDialog kind="sales_invoice" docNo={printDocNo} title={`Print Sales Invoice (${printDocNo})`} onClose={() => setPrintDocNo(null)} />}
     </div>
+    </WithHistory>
   );
 }

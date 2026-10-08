@@ -7,6 +7,8 @@
 // Cashiers cannot delete items (hidden here and refused with 403 by the backend).
 
 import Pager from '../common/Pager';
+import GroupBox from '../common/GroupBox';
+import { FIELD_RULES, cleanInput, fieldProblem } from '../../lib/validation';
 import { usePage } from '../common/usePage';
 import { useEffect, useState, } from 'react';
 import { Edit3, FilePlus, Save, Search, Trash2, X } from 'lucide-react';
@@ -83,9 +85,12 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
     setForm(row);
     setFormErrors({});
     setMode('View');
+    // On a phone the details sit above the list: bring them into view.
+    if (window.matchMedia?.('(max-width: 1023.98px)').matches) document.getElementById(`mc-${path}-details`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const handleFieldChange = (key, value) => {
+  const handleFieldChange = (key, rawValue) => {
+    const value = cleanInput(key, rawValue);   // phone / PIN / GSTIN ... keep only what is allowed
     let duplicateAlert = null;
     setForm(prev => ({ ...prev, [key]: value }));
 
@@ -133,6 +138,10 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
         if (val === '') {
           newErrors[f.key] = `Enter the ${f.label}`;
         }
+      }
+      if (!newErrors[f.key]) {
+        const wrong = fieldProblem(f.key, form[f.key]);   // 10-digit phone, 6-digit PIN, GSTIN / PAN / HSN patterns, tax % ...
+        if (wrong) newErrors[f.key] = wrong;
       }
     }
 
@@ -296,6 +305,14 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
     return () => window.removeEventListener('keydown', handleKeyDown);
   });
 
+  // Fields with the same `section` (masterConfigs.js) that follow each other are drawn together in one titled group box.
+  const sections = [];
+  for (const f of fields) {
+    const title = f.section ?? '';
+    const last = sections.at(-1);
+    if (last && last.title === title) last.fields.push(f); else sections.push({ title, fields: [f] });
+  }
+
   return (
     <div className="mx-auto max-w-7xl">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
@@ -329,8 +346,9 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <section aria-label={`${title} list`} className={`${panel} flex max-h-[600px] min-h-[320px] flex-col overflow-hidden`}>
+      {/* As in the desktop: the record's details on the left, the list of records on the right. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+        <section aria-label={`${title} list`} className={`${panel} flex max-h-[600px] min-h-[320px] flex-col overflow-hidden order-2`}>
           <div className="flex items-center gap-3 border-b border-line p-3">
             <div className="relative flex-1">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -371,7 +389,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
           <Pager p={pager} />
         </section>
 
-        <section aria-label="Record details" className={`${panel} self-start`}>
+        <section id={`mc-${path}-details`} aria-label="Record details" className={`${panel} scroll-mt-20 self-start order-1`}>
           <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
             <h2 className={sectionTitle}>{mode === 'New' ? 'New record' : mode === 'Edit' ? `Editing ${selected}` : selected ?? 'Details'}</h2>
             {readOnly
@@ -383,8 +401,11 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
             {/* Amazon-style "There was a problem" alert summary box */}
             {!readOnly && <FormErrorSummary errors={formErrors} onFocusField={focusField} />}
 
-            <div className={`grid gap-4 ${fields.length > 8 ? 'sm:grid-cols-2' : ''}`}>
-              {fields.map(f => {
+            <div className="space-y-4">
+            {sections.map(sec => (
+            <GroupBox key={sec.title || 'main'} title={sec.title}>
+            <div className={`grid gap-4 ${sec.fields.length > 4 || (!sec.title && fields.length > 8) ? '2xl:grid-cols-2' : ''}`}>
+              {sec.fields.map(f => {
                 // Read-only by Field Level Rights: can be filled in for a new record, not changed afterwards.
                 const locked = readOnly || ((f.key === 'code' || f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit');
                 const value = form[f.key];
@@ -431,6 +452,8 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
                               type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                               readOnly={locked}
                               disabled={locked}
+                              maxLength={FIELD_RULES[f.key]?.max}
+                              inputMode={FIELD_RULES[f.key]?.digits ? 'numeric' : undefined}
                               required={f.required}
                               value={String(value ?? '')}
                               list={path === 'items' && f.key === 'code' ? 'mc-items-code-list' : path === 'items' && f.key === 'short_name' ? 'mc-items-shortname-list' : undefined}
@@ -465,6 +488,9 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
                   </div>
                 );
               })}
+            </div>
+            </GroupBox>
+            ))}
             </div>
           </div>
         </section>

@@ -71,6 +71,18 @@ def reset_store():
 
 
 @pytest.fixture(autouse=True)
+def keep_env_file_safe(tmp_path, monkeypatch):
+    """No test may write the real backend/.env (the Database, report-folder and SMTP settings endpoints do): they write a
+    throw-away file instead, and the process environment is put back afterwards."""
+    from app import envfile
+    monkeypatch.setattr(envfile, "PATH", tmp_path / ".env")
+    before = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(before)
+
+
+@pytest.fixture(autouse=True)
 def block_network():
     """Fail any real outgoing httpx request that a test hasn't mocked. Calls to the app itself go
     through ASGITransport, which respx does not intercept."""

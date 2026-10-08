@@ -53,7 +53,9 @@ async def test_render_builds_the_desktop_job_and_returns_the_pdf(client, rpts):
     sent = json.loads(route.calls[0].request.content)
     assert route.calls[0].request.headers["X-Bridge-Key"] == "k"
     assert sent["rpt"] == "FMTSINV_GST.rpt" and sent["selection"] == "{TrnHdrSINV.SINVID} = 7"
-    assert sent["parameters"] == {"compname": "THE LIQUOR HOUSE", "gstin": "29AAAAA0000A1Z5"}
+    # the option maps only two values; the shop's phone, e-mail, address are added under the standard names
+    assert sent["parameters"]["compname"] == "THE LIQUOR HOUSE" and sent["parameters"]["gstin"] == "29AAAAA0000A1Z5"
+    assert sent["parameters"]["email"] == store.COMPANY["email"] and sent["parameters"]["phno"] == store.COMPANY["phone"]
     assert sent["table_prefix"] == "" and "logon" in sent
 
 
@@ -88,14 +90,13 @@ async def test_ctrl_click_uses_the_ctrl_click_operation(client, rpts):
     assert r.headers["content-type"] == "application/pdf"
 
 
-async def test_missing_rpt_and_missing_bridge_are_clear_errors(client, rpts, monkeypatch):
+async def test_missing_rpt_is_a_clear_error_and_no_bridge_url_uses_the_built_in_print(client, rpts, monkeypatch):
     design([{"OptionName": "Std", "CrptFileName": "NoSuchFile", "DefaultPrint": "Y"}])
     r = await client.post("/print/render", json={"kind": "sales_invoice", "doc_no": "x"})
     assert r.status_code == 404 and "NoSuchFile.rpt" in r.json()["detail"]
     monkeypatch.delenv("RPT_BRIDGE_URL")
-    monkeypatch.setattr(rpt_bridge, "local_bridge", lambda: False)   # no bridge built on this PC
-    r = await client.post("/print/render", json={"kind": "sales_invoice", "doc_no": "x", "option": "Std"})
-    assert r.status_code == 503 and "bridge" in r.json()["detail"].lower()
+    monkeypatch.setattr(rpt_bridge, "local_bridge", lambda: False)   # no bridge built on this PC: the built-in print answers (mock_bridge.py)
+    assert rpt_bridge.using_mock() and (await client.get("/print/bridge")).json()["ok"]
 
 
 async def test_a_bridge_on_another_pc_is_refused_unless_allowed(client, rpts, monkeypatch):
@@ -129,3 +130,41 @@ async def test_only_admin_can_refresh_designer_settings(cashier_client):
 
 async def test_printing_needs_a_login(anon_client):
     assert (await anon_client.get("/print/options", params={"kind": "sales_invoice"})).status_code == 401
+
+
+def test_a_printer_saved_from_a_remote_desktop_session_is_matched_to_the_one_this_pc_has():
+    from app import rpt_bridge as rb
+    have = ["Microsoft Print to PDF", "\\\\saturn2\\POS-80", "EPSON TM-T82"]
+    assert rb.resolve_printer("POS-80 on saturn2 (redirected 4)", have) == "\\\\saturn2\\POS-80"
+    assert rb.resolve_printer("POS-80 (redirected 2)", have) == "\\\\saturn2\\POS-80"
+    assert rb.resolve_printer("epson tm-t82", have) == "EPSON TM-T82"
+    assert rb.resolve_printer("Some Other Printer", have) == "Some Other Printer"   # not found: the bridge says so
+    assert rb.resolve_printer("POS-80 on saturn2 (redirected 4)", []) == "POS-80 on saturn2 (redirected 4)"
+
+
+def test_the_servers_own_printer_wins_when_it_is_installed(monkeypatch):
+    from app import rpt_bridge as rb
+    monkeypatch.setenv("DIRECT_PRINTER", "EPSON TM-T82")
+    assert rb.resolve_printer("POS-80 on saturn2 (redirected 4)", ["EPSON TM-T82", "\\\\saturn2\\POS-80"]) == "EPSON TM-T82"
+    monkeypatch.setenv("DIRECT_PRINTER", "Gone")   # not installed any more: fall back to matching the saved name
+    assert rb.resolve_printer(r"POS-80 on saturn2 (redirected 4)", ["\\\\saturn2\\POS-80"]) == "\\\\saturn2\\POS-80"
+
+
+def test_the_not_installed_message_lists_what_the_server_has():
+    from app import rpt_bridge as rb
+    text = rb.friendly_error("Crystal Reports: Printer 'X' is not installed on this PC.", {"printer": "X", "installed_printers": ["A", "B"]})
+    assert "A, B" in text and "Printer on this server" in text
+    assert "can open none" in rb.friendly_error("Printer 'X' is not installed on this PC.", {"printer": "X"})
+
+
+def test_printers_windows_lists_but_the_service_cannot_open_are_reported_apart(monkeypatch):
+    from app import rpt_bridge as rb
+    class R:
+        def json(self):
+            return {"printers": ["POS-80 on saturn2 (redirected 4)", "EPSON L5190 Series", "Fax"]}
+    monkeypatch.setattr(rb, "_call", lambda *a, **k: R())
+    monkeypatch.setattr(rb, "can_open", lambda name: (False, "Windows error 1801: The printer name is invalid.") if "redirected" in name else (True, ""))
+    report = rb.printer_report()
+    assert report["usable"] == ["EPSON L5190 Series", "Fax"]
+    assert report["refused"] == [{"name": "POS-80 on saturn2 (redirected 4)", "why": "Windows error 1801: The printer name is invalid."}]
+    assert rb.installed_printers() == ["EPSON L5190 Series", "Fax"]

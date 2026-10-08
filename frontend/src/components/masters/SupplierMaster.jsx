@@ -3,6 +3,7 @@
 // Suppliers live in the backend's in-memory store, so, like every master, edits are lost when the
 // backend restarts (see the root CLAUDE.md: writes never reach SQL Server).
 
+import { cleanInput, problems } from '../../lib/validation';
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Save } from 'lucide-react';
 import { TextField } from '../common/FormField';
@@ -26,15 +27,16 @@ const SupplierMaster = () => {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback((selectCode) => getSuppliers()
+  const load = useCallback((selectCode, startNew = false) => getSuppliers()
     .then(rows => {
       setSuppliers(rows);
       const pick = rows.find(r => r.code === selectCode) ?? (selectCode === undefined ? rows[0] : undefined);
-      if (pick) { setEditing(pick.code); setForm(pick); }
+      if (startNew) { setEditing(''); setForm({ ...BLANK }); }   // opened from the Purchase Bill's New button (?new=1): a blank record
+      else if (pick) { setEditing(pick.code); setForm(pick); }
     })
     .catch(e => toast.error(errorText(e))), []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(undefined, new URLSearchParams(window.location.search).has('new')); }, [load]);
 
   const choose = (code) => {
     setErrors({});
@@ -43,7 +45,8 @@ const SupplierMaster = () => {
     setForm(row ?? { ...BLANK, state: company?.state ?? '' });   // a new supplier starts in the shop's own state
   };
 
-  const handleFieldChange = (key, value) => {
+  const handleFieldChange = (key, rawValue) => {
+    const value = cleanInput(key, rawValue);
     setForm(prev => ({ ...prev, [key]: value }));
     if (errors[key]) {
       setErrors(prev => {
@@ -70,6 +73,8 @@ const SupplierMaster = () => {
     if (!code) errs.code = 'Enter the Supplier code';
     else if (code !== editing && suppliers.some(r => r.code.toLowerCase() === code.toLowerCase())) errs.code = 'This supplier code is already used';
     if (!form.name.trim()) errs.name = 'Enter the Supplier name';
+    if (!form.gstin.trim()) errs.gstin = 'Enter the GSTIN (mandatory for a supplier)';
+    Object.assign(errs, problems({ pin: form.pin, phone: form.phone, gstin: form.gstin }), errs.gstin ? { gstin: errs.gstin } : {});
 
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
@@ -191,7 +196,7 @@ const SupplierMaster = () => {
               />
             </div>
             <TextField id="sup-city" label="City" value={form.city} onChange={e => handleFieldChange('city', e.target.value)} />
-            <TextField id="sup-pin" label="Pincode" value={form.pin} onChange={e => handleFieldChange('pin', e.target.value)} className="tabular-nums" />
+            <TextField id="sup-pin" label="Pincode" hasError={!!errors.pin} errorMessage={errors.pin} value={form.pin} inputMode="numeric" maxLength={6} onChange={e => handleFieldChange('pin', e.target.value)} className="tabular-nums" />
             <TextField id="sup-state" label="State" value={form.state} onChange={e => handleFieldChange('state', e.target.value)} />
             <TextField id="sup-country" label="Country" value={form.country} onChange={e => handleFieldChange('country', e.target.value)} />
           </div>
@@ -203,8 +208,8 @@ const SupplierMaster = () => {
             <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">GSTIN and the currency the supplier bills in.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <TextField id="sup-phone" label="Phone no." value={form.phone} onChange={e => handleFieldChange('phone', e.target.value)} className="tabular-nums" />
-            <TextField id="sup-gst" label="GSTIN" value={form.gstin} onChange={e => handleFieldChange('gstin', e.target.value)} className="font-mono" />
+            <TextField id="sup-phone" label="Phone no." hasError={!!errors.phone} errorMessage={errors.phone} inputMode="numeric" maxLength={10} value={form.phone} onChange={e => handleFieldChange('phone', e.target.value)} className="tabular-nums" />
+            <TextField id="sup-gstin" label="GSTIN" required hasError={!!errors.gstin} errorMessage={errors.gstin} maxLength={15} value={form.gstin} onChange={e => handleFieldChange('gstin', e.target.value)} className="font-mono" />
             <TextField id="sup-currency" label="Currency" value={form.currency} onChange={e => handleFieldChange('currency', e.target.value)} />
             <label className="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-300">
               <input type="checkbox" checked={form.active} onChange={e => handleFieldChange('active', e.target.checked)} />

@@ -33,7 +33,7 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .. import admin_audit, db, secure_fields, security, sqlstore, store
+from .. import admin_audit, db, secure_fields, security, sqlstore, store, validation
 from ..passwords import hash_password, verify_password
 from ..schemas import (
     AdnlAdminPasswordIn, ChangePasswordIn, FieldRightsIn, LoginIn, LoginSettingsIn, MasterApprovalIn, ReportRightsIn, RoleIn,
@@ -102,6 +102,9 @@ PUBLIC_ROUTES = {
     # check for an Administrator's token themselves, in routers/setup.py.
     ("GET", "/setup/status"), ("GET", "/setup/current"),
     ("POST", "/setup/test"), ("POST", "/setup/connect"), ("POST", "/setup/admin"),
+    ("GET", "/setup/rpt-folder"), ("POST", "/setup/rpt-folder"),   # the .rpt path on the sign-in page's settings
+    ("GET", "/setup/smtp"), ("POST", "/setup/smtp"), ("POST", "/setup/smtp/test"),
+    ("GET", "/setup/print-printer"), ("POST", "/setup/print-printer"),   # the server's printer for direct prints   # the e-mail (SMTP) settings there too
 }
 
 
@@ -369,11 +372,12 @@ def _user_details(body: UserIn) -> dict:
     email = body.email.strip()
     if email and not EMAIL_RE.match(email):
         raise HTTPException(422, "EmailID is not valid!!")
+    mobile = validation.check({"mobile": body.mobile}).get("mobile", "")
     if not body.active and not body.inactive_reason.strip():
         raise HTTPException(422, "Reason for InActive! Enter why this user is inactive")
     if body.dob and body.dob > date.today():
         raise HTTPException(422, "Not a valid DOB")
-    return {"full_name": body.full_name.strip(), "email": email, "mobile": body.mobile.strip(),
+    return {"full_name": body.full_name.strip(), "email": email, "mobile": mobile,
             "department": body.department.strip(), "dob": body.dob.isoformat() if body.dob else None,
             "password_reset_on": body.password_reset_on.isoformat() if body.password_reset_on else None,
             "inactive_reason": "" if body.active else body.inactive_reason.strip()}

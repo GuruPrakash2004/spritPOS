@@ -39,6 +39,51 @@ export const MODULE_GROUPS = [
   { group: 'Utilities', modules: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Web Sync', 'Bulk Master Update', 'Label Printing'] },
 ];
 
+// The sidebar's tree, laid out like the desktop's menu (INVENTORY > MASTERS > ITEM RELATED > Item Master, TRANSACTIONS, REPORTS,
+// TOOLS, UTILITIES ...). A string is a module name; { name, label } shows another caption; { label, children } is a branch.
+// MODULE_GROUPS above stays the flat list (routes, rights, search); a module missing here still shows, under "More"
+// (Sidebar.jsx), so a new module is never lost from the menu.
+export const NAV_TREE = [
+  'Dashboard',
+  {
+    label: 'Inventory',
+    children: [
+      {
+        label: 'Masters',
+        children: [
+          { label: 'Company Details', children: ['Company Master'] },
+          { label: 'Item Related', children: ['Item Master', 'Item Group Master', 'UOM Master', 'Price List Maintenance', 'Package Master', 'Brand Master'] },
+          { label: 'Customer Related', children: ['Customer Master', 'Customer Group Master'] },
+          { label: 'Supplier Related', children: ['Supplier Master', 'Supplier Group Master'] },
+          {
+            label: 'Others',
+            children: ['Ledger Master', 'Ledger Group Master', 'Sales Counter Master', 'Sales Person Master', 'State Master', 'Currency Master',
+              'Location Master', 'Tax Master', 'Bank Master', 'Holiday Master'],
+          },
+        ],
+      },
+      {
+        label: 'Transactions',
+        children: ['Sales Invoice', 'Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Cash Denomination'],
+      },
+      {
+        label: 'Reports',
+        children: ['Daily Summary Report', 'Stock Balance Report', 'Stock Ledger', 'Stock Ageing', 'Profit Margin', 'Hourly Sales', 'Daily Sales', 'Brand-wise Sales',
+          'Day-wise Litres', 'Stock in Litres', 'Stock Level / Reorder', 'Package-wise Sales', 'Package-wise Purchase', 'Loyalty Report', 'Excise Stock',
+          { name: 'Reports Dashboard', label: 'Customised Reports' }],
+      },
+    ],
+  },
+  { label: 'Tools', children: ['SQL Query Execution', 'Re Write Stock'] },
+  {
+    label: 'Utilities',
+    children: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Web Sync',
+      'Bulk Master Update', 'Label Printing'],
+  },
+  { name: 'Admin Master', label: 'Admin Master (Security)' },
+  'About',
+];
+
 export const ADMIN_MASTER = 'Admin Master';
 export const ADMIN_PATH = '/adminMaster';
 export const ADMIN_ROLE = 'Administrator';

@@ -130,9 +130,53 @@ static class Program
             if (selection.Length > 0) rpt.RecordSelectionFormula = selection;
             if (job.ContainsKey("parameters") && job["parameters"] is Dictionary<string, object> ps)
                 foreach (var kv in ps) SetValue(rpt, kv.Key, kv.Value);
+            if (job.ContainsKey("label_values") && job["label_values"] is Dictionary<string, object> lv)
+            {
+                var addr = new List<string>();
+                if (job.ContainsKey("address_lines") && job["address_lines"] is System.Collections.ArrayList al)
+                    foreach (object a in al) if (!string.IsNullOrWhiteSpace(Convert.ToString(a))) addr.Add(Convert.ToString(a).Trim());
+                FillLabels(rpt, lv, addr);
+                foreach (ReportDocument sub in rpt.Subreports) FillLabels(sub, lv, new List<string>());
+            }
             return rpt;
         }
         catch { rpt.Dispose(); throw; }
+    }
+
+    /// <summary>Formats differ from client to client, so nothing here depends on one file's object names.
+    /// 1. A text object that holds only a label such as "PH NO:", "Email ID:", "GSTIN No:" (compared without case, colon and
+    ///    spaces) gets the shop's value after it, in the report's own font and alignment. `values` maps a label to its value.
+    /// 2. The address: the desktop leaves a wide, blank (spaces only) text object between the logo and those labels and fills
+    ///    it when it prints. A blank wide text object in a section above the first filled label is the address: the shop's
+    ///    address lines go in (one line per blank object, or all lines in the only one). Without a filled label nothing is
+    ///    treated as an address, so other reports are left alone.
+    /// It runs when the report is opened, so a preview, an export and a direct print all have it.</summary>
+    static void FillLabels(ReportDocument doc, Dictionary<string, object> values, List<string> address)
+    {
+        int index = 0, firstLabel = -1;
+        var blanks = new List<KeyValuePair<int, TextObject>>();
+        foreach (Section sec in doc.ReportDefinition.Sections)
+        {
+            foreach (ReportObject o in sec.ReportObjects)
+            {
+                var t = o as TextObject;
+                if (t == null) continue;
+                string raw = t.Text ?? "";
+                string key = raw.Trim().TrimEnd(':').Trim().ToLowerInvariant();
+                if (key.Length > 0 && values.ContainsKey(key))
+                {
+                    string v = Convert.ToString(values[key]);
+                    if (!string.IsNullOrWhiteSpace(v)) { t.Text = raw.TrimEnd() + " " + v.Trim(); if (firstLabel < 0) firstLabel = index; }
+                }
+                else if (raw.Length > 0 && raw.Trim().Length == 0 && t.Width >= 2500) blanks.Add(new KeyValuePair<int, TextObject>(index, t));
+            }
+            index++;
+        }
+        if (firstLabel < 0 || address.Count == 0) return;
+        var slots = blanks.FindAll(kv => kv.Key < firstLabel);
+        if (slots.Count == 0) return;
+        if (slots.Count == 1) slots[0].Value.Text = string.Join("\r\n", address.ToArray());
+        else for (int n = 0; n < slots.Count && n < address.Count; n++) slots[n].Value.Text = address[n];
     }
 
     /// <summary>Give the report one of the print option's values (Doc Designer FormulasFld/FormulasVal). The desktop sets

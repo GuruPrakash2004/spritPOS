@@ -6,6 +6,7 @@ runs during development without a live SQL Server.
 """
 import os
 import logging
+import time
 import threading
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -249,10 +250,14 @@ def fetchall(sql: str, params: tuple = ()) -> list[dict]:
     for attempt in (1, 2):
         with _db_lock:
             cur = conn.cursor()
+            started = time.perf_counter()
             try:
                 _user_statement(cur, sql, params, _driver_used.startswith("pymssql"))
                 cols = [d[0] for d in cur.description]
-                return [dict(zip(cols, row)) for row in cur.fetchall()]
+                rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+                if time.perf_counter() - started > 2:   # a lock wait or a slow server: say which query
+                    logger.warning("Slow query (%.1fs): %s", time.perf_counter() - started, " ".join(sql.split())[:160])
+                return rows
             except Exception as exc:
                 # The server dropped the connection (10053 / "Communication link failure"): reconnect, try once more.
                 if attempt == 1 and ("08S01" in str(exc) or "communication link" in str(exc).lower()):

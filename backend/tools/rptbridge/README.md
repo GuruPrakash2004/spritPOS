@@ -17,7 +17,7 @@ invoice against the desktop's print of the same bill before relying on it.
 
 ## Run
 
-Nothing to set. The backend starts `RptBridge.exe` by itself (`app/bridge_launcher.py`) on 127.0.0.1:8765 with a key it makes up at each start, restarts it if it exits, and stops it with the backend. `RPT_BRIDGE_URL` and `RPT_BRIDGE_KEY` in `backend/.env` are needed only for a bridge you start yourself:
+The backend does not start the bridge: run `RptBridge.exe <port>` yourself and set `RPT_BRIDGE_URL` and `RPT_BRIDGE_KEY` in `backend/.env`. Without them the backend uses its built-in print (`app/mock_bridge.py`). The old text follows:
 
 ```
 set RPT_BRIDGE_KEY=<long random text>

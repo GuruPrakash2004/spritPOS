@@ -95,6 +95,10 @@ URL to edit. It works directly on the shop's own SQL Server database (the one th
     nssm start vLQMS
     ```
     For HTTPS append `--ssl-certfile ... --ssl-keyfile ...` to the arguments.
+    The backend starts and supervises the Crystal bridge itself, so there is no second service. The bridge runs as the same
+    Windows user as this service. To print **directly** to a network printer (e.g. `\\saturn2\POS-80`), run the service as a
+    user who has that printer added: `nssm set vLQMS ObjectName ".\<windows-user>" "<password>"`, then `nssm restart vLQMS`.
+    (The default LocalSystem account cannot see per-user network printers; preview and PDF work either way.)
 13. Open only the app port in the firewall:
     ```
     netsh advfirewall firewall add rule name="vLQMS" dir=in action=allow protocol=TCP localport=8001

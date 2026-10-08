@@ -5,7 +5,7 @@
 // when the database is set up but can't be reached it says so, with Retry.
 
 import { useState, useEffect, } from 'react';
-import { AlertCircle, Loader2, LogIn, Moon, Sun, Wine } from 'lucide-react';
+import { AlertCircle, Database, Loader2, LogIn, Moon, Sun, Wine } from 'lucide-react';
 import { errorText, getSetupStatus, login, setRememberSession, } from '../../lib/api';
 import { loadPasswordRules } from '../../lib/passwords';
 import { encryptSecret } from '../../lib/secureField';
@@ -13,13 +13,15 @@ import { IMAGES } from '../../constants/images';
 import VlqmsLogo from '../layout/VlqmsLogo';
 import DevelopedBy from '../layout/DevelopedBy';
 import DatabaseSetup from './DatabaseSetup';
+import RptFolderSetting from '../common/RptFolderSetting';
+import SmtpSetting from '../common/SmtpSetting';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import CreateAdmin from './CreateAdmin';
 import { finYearLabel } from '../../lib/formatters';
 
 const RETRY_MS = 20_000;
 
-// ─── REALISTIC WATER DROPLET FLOW & LIQUOR SPLASH DYNAMICS ───
+// â”€â”€â”€ REALISTIC WATER DROPLET FLOW & LIQUOR SPLASH DYNAMICS â”€â”€â”€
 // Simulates individual liquor water droplets cascading downwards with gravity acceleration
 // and erupting in multi-bead splashes and concentric ripples upon hitting the roaming liquor surface.
 const LiquidDropletWaterfall = () => {
@@ -33,7 +35,7 @@ const LiquidDropletWaterfall = () => {
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden bottle-container-glass" aria-hidden="true">
-      {/* ── 1. Cascading Droplets with Splash Impact ── */}
+      {/* â”€â”€ 1. Cascading Droplets with Splash Impact â”€â”€ */}
       {drops.map((drop, idx) => (
         <div key={`water-drop-${idx}`} className="absolute top-0 bottom-0" style={{ left: drop.left }}>
           {/* Subtle luminous vertical stream guide */}
@@ -112,7 +114,7 @@ const LiquidDropletWaterfall = () => {
         </div>
       ))}
 
-      {/* ── 2. Roaming Liquor at the Bottom (Bottle Container Reservoir) ── */}
+      {/* â”€â”€ 2. Roaming Liquor at the Bottom (Bottle Container Reservoir) â”€â”€ */}
       <div className="absolute inset-x-0 bottom-0 h-44 sm:h-56 overflow-hidden pointer-events-none">
         {/* Micro-bubbles floating upward */}
         {[
@@ -175,7 +177,7 @@ const LiquidDropletWaterfall = () => {
         </svg>
       </div>
 
-      {/* ── 3. Glass reflections along container edges ── */}
+      {/* â”€â”€ 3. Glass reflections along container edges â”€â”€ */}
       <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white/12 to-transparent pointer-events-none" />
       <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
     </div>
@@ -250,7 +252,7 @@ export default function Login({ onLogin, notice = '' }) {
   return (
     <div className="flex min-h-screen font-sans bg-[#F5F1E9] dark:bg-[#0A0A0A] text-[#29231F] dark:text-stone-100 transition-colors duration-300">
       
-      {/* ═══ TOP-RIGHT THEME SWITCHER ═══ */}
+      {/* â•â•â• TOP-RIGHT THEME SWITCHER â•â•â• */}
       <div className="fixed top-5 right-5 z-50">
         <button
           type="button"
@@ -267,7 +269,7 @@ export default function Login({ onLogin, notice = '' }) {
         </button>
       </div>
 
-      {/* ═══ LEFT — Cinematic Image Panel (Transparent Bottle Container) ═══ */}
+      {/* â•â•â• LEFT — Cinematic Image Panel (Transparent Bottle Container) â•â•â• */}
       <div className="hidden lg:flex lg:w-[58%] relative overflow-hidden bg-[#180E09] dark:bg-[#0A0A0A]">
         {/* Background luxury bar shelves image with 65% visibility */}
         <img
@@ -313,7 +315,7 @@ export default function Login({ onLogin, notice = '' }) {
         </div>
       </div>
 
-      {/* ═══ RIGHT — Login Form Panel ═══ */}
+      {/* â•â•â• RIGHT — Login Form Panel â•â•â• */}
       <div className="flex flex-1 flex-col bg-[#F5F1E9] dark:bg-[#0A0A0A] transition-colors duration-300">
         {/* Mobile top hero header */}
         <div className="relative h-48 overflow-hidden lg:hidden">
@@ -348,7 +350,16 @@ export default function Login({ onLogin, notice = '' }) {
             </div>
 
             {setup && <DatabaseSetup inputClass={inputClass} labelClass={labelClass} onDone={loadDbState} />}
-            {offline && editingDb && <DatabaseSetup inputClass={inputClass} labelClass={labelClass} change onDone={() => { setEditingDb(false); loadDbState(); }} onCancel={() => setEditingDb(false)} />}
+            {setup && <div className="mt-4 space-y-4"><RptFolderSetting inputClass={inputClass} captionClass={labelClass} /><SmtpSetting inputClass={inputClass} captionClass={labelClass} /></div>}
+            {/* Database and report-files settings: always on offer (only an Administrator or the server PC can change them). */}
+            {!setup && editingDb && (
+              <div className="space-y-4">
+                <DatabaseSetup inputClass={inputClass} labelClass={labelClass} change onDone={() => { setEditingDb(false); loadDbState(); }} onCancel={() => setEditingDb(false)} />
+                <RptFolderSetting inputClass={inputClass} captionClass={labelClass} />
+                <SmtpSetting inputClass={inputClass} captionClass={labelClass} />
+                <button type="button" onClick={() => setEditingDb(false)} className="w-full rounded-xl border border-[#DCD1C5] py-2.5 text-xs font-semibold dark:border-[#2A2A2A]">Back to sign in</button>
+              </div>
+            )}
             {offline && !editingDb && (
               <p role="alert" className="mb-4 flex items-center gap-2 rounded-xl bg-[#9A4B45]/10 px-4 py-3 text-xs font-medium text-[#9A4B45] dark:bg-red-500/10 dark:text-red-400">
                 <AlertCircle size={14} className="shrink-0" />Database offline: the SQL Server can't be reached. Sign-in comes back when it does (checked every 20 seconds).
@@ -360,7 +371,7 @@ export default function Login({ onLogin, notice = '' }) {
             {needsAdmin && <CreateAdmin inputClass={inputClass} labelClass={labelClass} onDone={loadDbState} />}
 
             {/* Warm Frosted Glass Form Card */}
-            {!setup && !offline && !needsAdmin && <form
+            {!setup && !offline && !needsAdmin && !editingDb && <form
               onSubmit={submit}
               className="animate-fadeInUp animate-fadeInUp-d2
                          glass-card-login rounded-2xl p-7
@@ -401,7 +412,7 @@ export default function Login({ onLogin, notice = '' }) {
                 </p>
               )}
 
-              {/* ── HIGH-CONTRAST LOGIN BUTTON IN BOTH THEMES ── */}
+              {/* â”€â”€ HIGH-CONTRAST LOGIN BUTTON IN BOTH THEMES â”€â”€ */}
               <button
                 type="submit"
                 disabled={busy}
@@ -415,11 +426,18 @@ export default function Login({ onLogin, notice = '' }) {
                            dark:hover:shadow-[0_0_36px_rgba(212,168,71,0.75)] dark:hover:brightness-110"
               >
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-                {busy ? 'Signing in…' : 'Sign in'}
+                {busy ? 'Signing inâ€¦' : 'Sign in'}
               </button>
 
               <DevelopedBy className="mt-6 border-t border-[#E3D9CD] pt-5 dark:border-[#2A2A2A]" />
             </form>}
+
+            {!setup && !editingDb && (
+              <button type="button" onClick={() => setEditingDb(true)}
+                className="mt-4 flex w-full items-center justify-center gap-2 text-xs font-semibold text-[#64283A] underline-offset-2 hover:underline dark:text-[#D4A847]">
+                <Database size={13} />Database &amp; report settings
+              </button>
+            )}
 
             {/* Decorative wine icon */}
             <div className="mt-8 flex justify-center animate-float opacity-20 dark:opacity-15" aria-hidden="true">

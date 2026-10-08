@@ -9,6 +9,7 @@
 """
 import logging
 import threading
+import time
 
 from . import db, db_store, designer, setup_db, sqlstore, store, websync
 
@@ -30,18 +31,24 @@ def needs_admin() -> bool:
 
 def load_data() -> None:
     """Connect (if set up) and load; start the background jobs."""
+    t0 = time.perf_counter()
     sqlstore.remember_defaults()
     ok = db.init_db() and setup_db.is_ready()
+    logger.info("Database connected and checked in %.1fs", time.perf_counter() - t0)
     if ok:
         db_store.load_masters()
+        t1 = time.perf_counter()
         designer.load()   # print options and screen fields from the Doc Designer's tables
+        logger.info("Designer settings loaded in %.1fs", time.perf_counter() - t1)
     elif db.is_db_available():
         logger.warning("The database has no Web_ tables yet: no data until the Database setup has run")
     elif db.configured():
         logger.warning("The database can't be reached: no data and no sign-in until it comes back")
     else:
         logger.warning("No database set up: open the sign-in page's Database setup")
+    t2 = time.perf_counter()
     sqlstore.load()   # the web's own rows, documents, stock moves and settings (Web_App* tables)
+    logger.info("Web data loaded in %.1fs (startup total %.1fs)", time.perf_counter() - t2, time.perf_counter() - t0)
     if needs_admin():
         logger.warning("No active Administrator: create one on the sign-in page")
     if ok:

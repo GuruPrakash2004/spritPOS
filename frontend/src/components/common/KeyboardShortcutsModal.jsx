@@ -65,6 +65,7 @@ const SHORTCUT_GROUPS = [
     shortcuts: [
       { keys: ['⌘', 'K'], description: 'Focus screen search from anywhere' },
       { keys: ['/'], description: 'Quick jump to search (when not typing)' },
+      { keys: ['⌘/Ctrl', 'B'], description: 'Collapse or expand the left navigation' },
       { keys: ['?'], description: 'Show keyboard shortcuts' },
       { keys: ['Esc'], description: 'Close modals, search dropdowns, or cancel' },
     ],
@@ -75,11 +76,12 @@ const SHORTCUT_GROUPS = [
     shortcuts: [
       { keys: ['⌘', 'S'], description: 'Save the record, entry or bill' },
       { keys: ['F10'], description: 'Save & print (stock entries and purchase bill)' },
-      { keys: ['F2'], description: 'Purchase bill: item lookup (↑↓, Enter)' },
+      { keys: ['F4'], description: 'Purchase bill: add item (liquor list; F12 adds)' },
       { keys: ['Alt', 'X'], description: 'Purchase bill: cancel the bill' },
       { keys: ['Enter'], description: 'Next field (entries) / save (masters)' },
       { keys: ['Shift', 'Enter'], description: 'Previous field (entries)' },
       { keys: ['Alt', 'A'], description: 'Add a row (purchase bill, stock entries)' },
+      { keys: ['Alt', 'H'], description: 'Show or hide the History column (bills, entries)' },
       { keys: ['Tab'], description: 'Move to next input field' },
     ],
   },

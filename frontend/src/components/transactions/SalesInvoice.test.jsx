@@ -119,7 +119,7 @@ describe('SalesInvoice', () => {
     await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
 
     await user.type(screen.getByLabelText(/scan or search item/i), 'blenders')
-    expect(screen.getByRole('option', { name: /Blender's Pride/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /BLENDERS PRIDE RARE WHISKY/ })).toBeInTheDocument()
     await user.keyboard('{ArrowDown}{Enter}')
 
     expect(screen.getByText(/BLENDERS PRIDE RARE WHISKY 750ml/)).toBeInTheDocument()

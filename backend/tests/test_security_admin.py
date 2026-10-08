@@ -16,7 +16,7 @@ def _user(**extra):
 async def test_user_fields_are_saved_and_checked(client):
     res = await client.post("/admin/users", json=_user(full_name="Anitha K", email="bad-email"))
     assert res.status_code == 422 and "EmailID" in res.json()["detail"]
-    res = await client.post("/admin/users", json=_user(full_name="Anitha K", email="anitha@example.com", mobile="98450",
+    res = await client.post("/admin/users", json=_user(full_name="Anitha K", email="anitha@example.com", mobile="9845012345",
                                                        department="Billing", dob="1995-04-01"))
     assert res.status_code == 201
     u = res.json()

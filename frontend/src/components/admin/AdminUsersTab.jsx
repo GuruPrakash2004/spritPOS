@@ -2,6 +2,7 @@
 // and the desktop user master's full name, email, mobile, department, DOB, password reset date and inactive reason).
 
 import { FilePlus, Pencil, Save, Trash2, X } from 'lucide-react';
+import { cleanInput } from '../../lib/validation';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 
 import { badge, field, iconButton, label, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
@@ -107,7 +108,7 @@ export default function AdminUsersTab({ users, roles, currentUser, userForm, err
               ['dob', 'DOB', 'date'], ['password_reset_on', 'Password reset on', 'date']] ).map(([k, caption, type]) => (
               <div key={k}>
                 <label htmlFor={`am-${k}`} className={label}>{caption}</label>
-                <input id={`am-${k}`} type={type} value={userForm[k]} onChange={event => onChange(k, event.target.value)}
+                <input id={`am-${k}`} type={type} value={userForm[k]} onChange={event => onChange(k, k === 'mobile' ? cleanInput('mobile', event.target.value) : event.target.value)} inputMode={k === 'mobile' ? 'numeric' : undefined} maxLength={k === 'mobile' ? 10 : undefined}
                   className={`${field} ${errors[k] ? bad : ''}`} aria-invalid={!!errors[k]} />
                 <InlineError message={errors[k]} />
                 {k === 'password_reset_on' && <p className="mt-1 text-[11px] text-stone-500">From this date the user must change their password at sign-in.</p>}

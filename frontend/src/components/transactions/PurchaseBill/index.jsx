@@ -1,12 +1,13 @@
 // Purchase Bill (legacy frmTrnPB): receive stock from a supplier.
 //
 // Supplier invoice no/date/value, cases/bottles grid, GST/Cess/TCS, amount in words, Copy From a
-// Purchase Indent, and Add Supplier. Saves with POST /transactions/purchase-bill, which adds stock on
+// Purchase Indent, and a link to add a supplier. Saves with POST /transactions/purchase-bill, which adds stock on
 // the backend (store.move_stock). Items come from the live catalogue (data/stockData.js); CGST/SGST
 // are the Item Master rates (the backend applies those), so they are shown read-only.
 // Keyboard: Enter moves to the next field (Shift+Enter back); on the grid's last field it adds a row.
-// F2 item lookup (↑↓, Enter picks; the cursor goes to its PB Qty) · Alt+A add row · ⌘/Ctrl+S or F10 save & print ·
-// Alt+X cancel the bill.
+// F4 (or F2) opens "Add Item Into Purchase Bill" (liquor items only: search, ↑↓, Enter picks, then Cases / Loose Bottles,
+// F12 or OK adds; the cursor goes to its PB Qty) · Alt+A add row · ⌘/Ctrl+S or F10 save & print · Alt+X cancel the bill.
+// Items can only be entered once the supplier and the invoice (PB) value are in, as in the desktop.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -20,17 +21,18 @@ import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, seco
 import Toast from '../../common/Toast';
 import { toastStore } from '../../common/toastStore';
 import DropdownMenu, { menuItem } from '../../common/DropdownMenu';
-import { createMaster, errorText, getNextNumber, getPurchaseIndents, getSuppliers, newIdempotencyKey, savePurchaseBill, } from '../../../lib/api';
+import { errorText, getNextNumber, getPurchaseIndents, getSettingValues, getSuppliers, newIdempotencyKey, savePurchaseBill, } from '../../../lib/api';
 import { loadStockItems, sellable, STOCK_ITEMS, useStockItems } from '../../../data/stockData';
 import { numberToWords } from '../../../lib/formatters';
 import {
   amt, blankRow, cell, cloneRow, field, headCell, iconButton, infoBar, isFilled,
   money, panel, pctOf, PURCHASE_TYPES, stockRow, today,
 } from './purchaseBillData';
-import { AddSupplierModal, CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
+import { CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
 import { useDocSettings } from '../../../lib/docSettings';
 import Kbd from '../../common/Kbd';
-import { enterMovesNext, useShortcuts } from '../../../lib/keys';
+import { enterMovesNext, focusField, useShortcuts } from '../../../lib/keys';
+import WithHistory from '../DocHistoryPanel';
 
 export default function PurchaseBill() {
   // The backend gives the PB number when the bill is saved; this is its preview (GET /transactions/next-number).
@@ -61,7 +63,7 @@ export default function PurchaseBill() {
   const [lookupOpen, setLookupOpen] = useState(false);
   const [indents, setIndents] = useState(null);
   const [copyOpen, setCopyOpen] = useState(false);
-  const [lookupFilter, setLookupFilter] = useState('');
+  const [minMargin, setMinMargin] = useState(0);                   // Global Settings PurSellVarPer
   const [attachments, setAttachments] = useState([]);
   const [tcsPct, setTcsPct] = useState('1');
   const [remarks, setRemarks] = useState('');
@@ -100,6 +102,13 @@ export default function PurchaseBill() {
 
   const balance = (Number(invValue) || 0) - totals.net;
   const balanced = invValue !== '' && Math.abs(balance) < 0.005;
+  // As in the desktop, items can only be entered once the supplier and the PB (invoice) value are in.
+  const ready = supplier.trim() !== '' && Number(invValue) > 0;
+  const needFirst = () => focusField(supplier.trim() ? 'pb-inv-val' : 'pb-supplier');
+
+  useEffect(() => {
+    getSettingValues().then(v => setMinMargin(Number(v?.PurSellVarPer) || 0)).catch(() => undefined);
+  }, []);
 
   const selectSupplier = (name) => {
     setSupplier(name);
@@ -116,27 +125,14 @@ export default function PurchaseBill() {
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
   }, []);
 
-  const [supplierOpen, setSupplierOpen] = useState(false);
-  const [supplierSaving, setSupplierSaving] = useState(false);
-  const addSupplier = async (name, address) => {
-    // Codes can't hold / ? # % (they go in URLs); upper-case first so lower-case names aren't lost.
-    const code = name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20);
-    if (!code) return setToast({ kind: 'error', text: 'Supplier name needs at least one letter or number.' });
-    setSupplierSaving(true);
-    if (!(await toastStore.defer('ok', `Supplier "${name}" will be added when this closes.`, 'Supplier not added.'))) {
-      setSupplierSaving(false);
-      return;
-    }
-    createMaster('suppliers', { code, name, address })
-      .then(() => {
-        setSuppliers([...suppliers, { name, address }]);
-        setSupplier(name);
-        setBillingAddress(address);
-        setSupplierOpen(false);
-      })
-      .catch(e => setToast({ kind: 'error', text: errorText(e) }))
-      .finally(() => setSupplierSaving(false));
-  };
+  // "New" opens Supplier Master in a new tab, already on a blank record (the bill here stays as it is); coming back to this tab
+  // reloads the supplier list so the new supplier can be picked.
+  const newSupplier = () => { window.open('/supplier-master?new=1', '_blank'); };
+  useEffect(() => {
+    const reload = () => { void getSuppliers().then(list => setSuppliers(list.filter(x => x.active).map(x => ({ name: x.name, address: [x.address, x.city].filter(Boolean).join(', ') })))).catch(() => undefined); };
+    window.addEventListener('focus', reload);
+    return () => window.removeEventListener('focus', reload);
+  }, []);
 
   const updateRow = (uid, patch) => setRows(rows.map(r => (r.uid === uid ? { ...r, ...patch } : r)));
 
@@ -155,7 +151,7 @@ export default function PurchaseBill() {
 
   const numberCell = (row, key, label, extra = '') => (
     <input
-      type="number" min={0} step={key === 'qty' ? 1 : 0.01}
+      type="number" min={0} step={key === 'qty' ? 1 : 0.01} disabled={!ready}
       value={row[key] || ''} placeholder="0"
       onChange={e => updateRow(row.uid, { [key]: Math.max(0, key === 'qty' ? Math.floor(Number(e.target.value)) || 0 : Number(e.target.value) || 0) })}
       className={`${cell} text-right ${extra}`} aria-label={`${label} row ${rows.indexOf(row) + 1}`}
@@ -228,25 +224,27 @@ export default function PurchaseBill() {
     setToast({ kind: 'ok', text: `Copied ${added.length} items from indent ${indent.doc_no}.` });
   };
 
-  const pickFromLookup = (stock) => {
-    const row = stockRow(stock, 1);
+  // The Add Item window's OK: the item with its total bottles and purchase rate goes into the selected empty row, or a new one.
+  const addFromLookup = ({ stock, qty, rate }) => {
+    const row = { ...stockRow(stock, qty), rate };
     let at = rows.length;
     if (selectedRow && !isFilled(selectedRow)) {
       at = selectedIndex;
-      updateRow(selectedUid, { stock, code: row.code, name: row.name, qoh: row.qoh, rate: row.rate, qty: 1 });
+      updateRow(selectedUid, { stock, code: row.code, name: row.name, qoh: row.qoh, rate, qty, cgstPct: row.cgstPct, sgstPct: row.sgstPct });
     } else {
       setRows([...rows, row]);
       setSelectedUid(row.uid);
     }
     setLookupOpen(false);
-    setLookupFilter('');
-    // Straight on to the quantity of the picked item.
+    // Back to the grid, on the new row's quantity.
     setTimeout(() => {
-      const qty = document.querySelector(`[aria-label="PB Qty row ${at + 1}"]`);
-      qty?.focus();
-      qty?.select();
+      const box = document.querySelector(`[aria-label="PB Qty row ${at + 1}"]`);
+      box?.focus();
+      box?.select();
     }, 0);
   };
+
+  const openLookup = () => { if (ready) setLookupOpen(true); else needFirst(); };
 
   const resetBill = () => {
     saveKey.current = newIdempotencyKey();
@@ -306,14 +304,16 @@ export default function PurchaseBill() {
   useShortcuts({
     'Mod+S': () => { void saveBill(false); },
     F10: () => { void saveBill(true); },
-    F2: () => setLookupOpen(true),
-    'Alt+A': () => addRows(1),
+    F4: openLookup,
+    F2: openLookup,
+    'Alt+A': () => { if (ready) addRows(1); else needFirst(); },
     'Alt+X': () => { void cancelBill(); },
   });
 
   const sep = <span className="mx-1 h-5 w-px bg-line" aria-hidden="true" />;
 
   return (
+    <WithHistory kind="purchase_bill" title="purchase bills">
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {dialog}
@@ -327,7 +327,7 @@ export default function PurchaseBill() {
           </div>
           <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">PB <span className="font-mono font-medium text-stone-800 dark:text-stone-200">{pbDisplay}</span> · {totals.items} items · {totals.qty} bottles</p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <button onClick={() => setHeaderOpen(!headerOpen)} className={ghostButton} aria-expanded={headerOpen}>
             {headerOpen ? <ChevronsUp size={14} /> : <ChevronsDown size={14} />}{headerOpen ? 'Hide details' : 'Show details'}
           </button>
@@ -353,7 +353,7 @@ export default function PurchaseBill() {
               <label htmlFor="pb-supplier" className={labelClass}>Supplier<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
               <div className="flex gap-2">
                 <input id="pb-supplier" list="pb-suppliers" value={supplier} onChange={e => selectSupplier(e.target.value)} placeholder="Select or type supplier" className={field} />
-                <button onClick={() => setSupplierOpen(true)} className={secondaryButton} title="Add new supplier"><UserPlus size={14} /><span className="hidden sm:inline">New</span></button>
+                <button onClick={newSupplier} className={secondaryButton} title="Add a new supplier in Supplier Master (opens in a new tab)"><UserPlus size={14} /><span className="hidden sm:inline">New</span></button>
               </div>
               <datalist id="pb-suppliers">{suppliers.map(s => <option key={s.name} value={s.name} />)}</datalist>
             </div>
@@ -365,6 +365,15 @@ export default function PurchaseBill() {
               {editingAddress
                 ? <textarea value={billingAddress} onChange={e => setBillingAddress(e.target.value)} rows={2} className={field} aria-label="Billing address" />
                 : <p className="text-xs leading-relaxed text-stone-700 dark:text-stone-300">{billingAddress || <span className="text-stone-400">—</span>}</p>}
+            </div>
+            {/* The desktop's green "PB Value [Balance to Enter]" box: what is still to be entered against the invoice value. */}
+            <div role="status" className={`sm:col-span-2 rounded-md border px-4 py-2.5 text-center ${!ready ? 'border-stone-300 bg-stone-100 text-stone-600 dark:border-[#2A2A2A] dark:bg-[#1A1A1A] dark:text-stone-300' : balanced ? 'border-emerald-600 bg-emerald-500 text-white' : 'border-emerald-600 bg-[#33E01F] text-stone-900'}`}>
+              <div className="text-xs font-bold">PB Value <span className="font-medium">[Balance to Enter]</span></div>
+              <div className="flex items-center justify-center gap-2 text-2xl font-bold tabular-nums">
+                {balanced && <CheckCircle2 size={20} />}
+                {!ready ? <span className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle size={16} />Enter the invoice value first</span> : balanced ? '0.00 · matches the invoice' : `₹ ${money(balance)}`}
+              </div>
+              {ready && <div className="text-[11px] opacity-80">Bill total ₹ {money(totals.net)} of invoice value ₹ {money(Number(invValue))}</div>}
             </div>
           </section>
 
@@ -390,17 +399,7 @@ export default function PurchaseBill() {
                 </select>
               </div>
             </div>
-            <div role="status" className={`mt-auto flex items-center gap-3 rounded-lg px-4 py-3 ${balanced ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300' : 'bg-amber-500/12 text-amber-800 dark:text-amber-300'}`}>
-              {balanced ? <CheckCircle2 size={18} className="shrink-0" /> : <AlertTriangle size={18} className="shrink-0" />}
-              <div className="min-w-0 flex-1 text-xs">
-                <div className="font-semibold">{balanced ? 'Matches supplier invoice' : `₹ ${money(balance)} left to enter`}</div>
-                <div className="opacity-80">{balanced ? `Invoice ${invNo || ''} agrees with the bill total.` : 'PB value must match the invoice value before saving.'}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-[11px] opacity-80">PB value</div>
-                <div className="text-lg font-semibold tabular-nums">₹ {money(totals.net)}</div>
-              </div>
-            </div>
+            <p className="mt-auto text-[11px] text-stone-500">Items can be added once the supplier and the invoice value are entered; the bill saves when its total equals the invoice value.</p>
           </section>
         </div>
       )}
@@ -408,7 +407,7 @@ export default function PurchaseBill() {
       {/* Line items */}
       <section aria-label="Line items" className={`${panel} overflow-hidden`} onKeyDown={e => enterMovesNext(e, () => addRows(1))}>
         <div className="flex flex-wrap items-center gap-1 border-b border-line px-3 py-2">
-          <button onClick={() => setLookupOpen(true)} className={`${primaryButton} mr-2`}><PlusCircle size={14} />Add item<Kbd combo="F2" /></button>
+          <button onClick={openLookup} className={`${primaryButton} mr-2`}><PlusCircle size={14} />Add item<Kbd combo="F4" /></button>
           <div className="relative flex items-center">
             <button onClick={() => addRows(1)} className={iconButton} title="Add blank row (Alt+A)" aria-label="Add blank row"><PlusCircle size={16} /></button>
             <button ref={addMenuRef} onClick={() => setAddMenuOpen(!addMenuOpen)} className={`${iconButton} w-6`} aria-label="More add options" aria-expanded={addMenuOpen} aria-haspopup="menu"><ChevronDown size={14} /></button>
@@ -424,7 +423,7 @@ export default function PurchaseBill() {
           <button onClick={() => moveRow(-1)} disabled={selectedIndex <= 0} className={iconButton} title="Move row up" aria-label="Move row up"><ArrowUpCircle size={16} /></button>
           <button onClick={() => moveRow(1)} disabled={selectedIndex === -1 || selectedIndex >= rows.length - 1} className={iconButton} title="Move row down" aria-label="Move row down"><ArrowDownCircle size={16} /></button>
           {sep}
-          <button onClick={() => setLookupOpen(true)} className={iconButton} title="Item lookup" aria-label="Item lookup"><Search size={16} /></button>
+          <button onClick={openLookup} className={iconButton} title="Item lookup (F4)" aria-label="Item lookup"><Search size={16} /></button>
           <button onClick={refreshQoh} className={iconButton} title="Refresh stock on hand" aria-label="Refresh stock on hand"><RefreshCw size={16} /></button>
           <button onClick={() => setShowTaxColumns(!showTaxColumns)} className={`${iconButton} ${showTaxColumns ? '' : '!text-accent'}`} title={showTaxColumns ? 'Hide tax columns' : 'Show tax columns'} aria-label="Toggle tax columns" aria-pressed={!showTaxColumns}><Settings2 size={16} /></button>
           <button onClick={() => fileInput.current?.click()} className={`${iconButton} relative`} title="Attach supplier invoice" aria-label="Attach supplier invoice">
@@ -434,7 +433,10 @@ export default function PurchaseBill() {
           <input ref={fileInput} type="file" multiple hidden onChange={e => setAttachments([...attachments, ...Array.from(e.target.files ?? []).map(f => f.name)])} />
           {sep}
           {docSettings.allow_copy_from && <button onClick={() => { setCopyOpen(true); openCopyFrom(); }} className={ghostButton} title="Copy lines from a Purchase Indent"><FileInput size={14} />Copy from indent</button>}
-          <span className="ml-auto pr-1 text-xs tabular-nums text-stone-500">{totals.items} items · {totals.qty} qty</span>
+          <span className="ml-auto rounded bg-yellow-200 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+            {ready ? 'Press F4 to Add Single Item' : 'Enter the supplier and the PB (invoice) value to add items'}
+          </span>
+          <span className="pr-1 text-xs tabular-nums text-stone-500">{totals.items} items · {totals.qty} qty</span>
         </div>
         <div className="min-h-[400px] overflow-x-auto">
           <table className="w-full min-w-[1520px] text-xs">
@@ -465,8 +467,8 @@ export default function PurchaseBill() {
               {rows.map((row, i) => (
                 <tr key={row.uid} onClick={() => setSelectedUid(row.uid)} onFocus={() => setSelectedUid(row.uid)} aria-selected={row.uid === selectedUid} className={`transition-colors ${row.uid === selectedUid ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
                   <td className="py-1 pl-4 pr-2 text-stone-400">{i + 1}</td>
-                  <td className="px-1 py-1"><input list="pb-codes" value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={`${cell} font-mono`} aria-label={`Item code row ${i + 1}`} /></td>
-                  <td className="px-1 py-1"><input list="pb-names" value={row.name} onChange={e => setItem(row.uid, 'name', e.target.value)} className={`${cell} font-medium text-stone-900 dark:text-stone-50`} aria-label={`Item name row ${i + 1}`} /></td>
+                  <td className="px-1 py-1"><input list="pb-codes" disabled={!ready} value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={`${cell} font-mono`} aria-label={`Item code row ${i + 1}`} /></td>
+                  <td className="px-1 py-1"><input list="pb-names" disabled={!ready} value={row.name} onChange={e => setItem(row.uid, 'name', e.target.value)} className={`${cell} font-medium text-stone-900 dark:text-stone-50`} aria-label={`Item name row ${i + 1}`} /></td>
                   <td className="px-2 py-1 text-right text-stone-500">{isFilled(row) ? row.qoh : ''}</td>
                   <td className="px-1 py-1">{numberCell(row, 'qty', 'PB Qty', 'font-semibold')}</td>
                   <td className="px-1 py-1">{numberCell(row, 'rate', 'PB Rate')}</td>
@@ -547,11 +549,11 @@ export default function PurchaseBill() {
       </div>
 
       {lookupOpen && (
-        <ItemLookupModal filter={lookupFilter} onFilter={setLookupFilter} onPick={pickFromLookup} onClose={() => setLookupOpen(false)} />
+        <ItemLookupModal items={sellable().filter(i => i.cat !== 'Others')} minMarginPct={minMargin} onAdd={addFromLookup} onClose={() => setLookupOpen(false)} />
       )}
-      {supplierOpen && <AddSupplierModal saving={supplierSaving} onSave={addSupplier} onClose={() => setSupplierOpen(false)} />}
       {copyOpen && <CopyFromModal indents={indents} onCopy={copyFromIndent} onClose={() => setCopyOpen(false)} />}
       {printDocNo && <PrintDialog kind="purchase_bill" docNo={printDocNo} title={`Print Purchase Bill (${printDocNo})`} onClose={() => setPrintDocNo(null)} />}
     </div>
+    </WithHistory>
   );
 }
