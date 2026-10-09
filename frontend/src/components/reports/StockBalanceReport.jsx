@@ -6,6 +6,7 @@ import { Printer } from 'lucide-react';
 import { errorText, getItems, getStockBalance, getStockBalanceFormats, renderStockBalancePrint, todayIso } from '../../lib/api';
 import { badge, money, pageHeader, pageSub, pageTitle, panel, tableBody, tableHead, tableRow, printButton } from '../../lib/styles';
 import ReportPrintModal from '../print/ReportPrintModal';
+import { SkeletonTableRows } from '../common/Skeleton';
 
 
 
@@ -68,22 +69,22 @@ export default function StockBalanceReport() {
           </thead>
           <tbody className={tableBody}>
             {error && <tr><td colSpan={9} className="px-4 py-8 text-center text-[#9A4B45] dark:text-red-400">{error}</td></tr>}
-            {!error && !rows && <tr><td colSpan={9} className="px-4 py-8 text-center text-[#70675F]">Loading stock…</td></tr>}
-            {rows && !rows.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-[#70675F]">No stock on record.</td></tr>}
+            {!error && !rows && <SkeletonTableRows rows={8} cols={9} />}
+            {rows && !rows.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-[#5F6B80]">No stock on record.</td></tr>}
             {rows?.map((row, index) => (
               <tr key={index} className={tableRow}>
                 <td className="px-4 py-2.5">
-                  <div className="font-medium text-[#29231F] dark:text-stone-50">{row.name}</div>
-                  {row.brand && <div className="text-[11px] text-[#958B81] dark:text-stone-400">{row.brand}</div>}
+                  <div className="font-medium text-[#1A2236] dark:text-stone-50">{row.name}</div>
+                  {row.brand && <div className="text-[11px] text-[#8592A6] dark:text-stone-400">{row.brand}</div>}
                 </td>
-                <td className="px-4 py-2.5 text-[#70675F] dark:text-stone-300">{row.group}</td>
-                <td className="px-4 py-2.5 text-center text-[#958B81]">{row.pkg}</td>
-                <td className="px-4 py-2.5 text-right text-[#70675F] dark:text-stone-300">{row.opQty}</td>
+                <td className="px-4 py-2.5 text-[#5F6B80] dark:text-stone-300">{row.group}</td>
+                <td className="px-4 py-2.5 text-center text-[#8592A6]">{row.pkg}</td>
+                <td className="px-4 py-2.5 text-right text-[#5F6B80] dark:text-stone-300">{row.opQty}</td>
                 <td className="px-4 py-2.5 text-right text-[#55745A] dark:text-emerald-400">+{row.recQty}</td>
                 <td className="px-4 py-2.5 text-right text-[#9A4B45] dark:text-red-400">−{row.issQty}</td>
-                <td className="px-4 py-2.5 text-right font-semibold text-[#29231F] dark:text-stone-50">{row.clQty}</td>
-                <td className="px-4 py-2.5 text-right text-[#70675F] dark:text-stone-300">{money(row.rate)}</td>
-                <td className="px-4 py-2.5 text-right font-semibold text-[#29231F] dark:text-stone-50">{money(row.value)}</td>
+                <td className="px-4 py-2.5 text-right font-semibold text-[#1A2236] dark:text-stone-50">{row.clQty}</td>
+                <td className="px-4 py-2.5 text-right text-[#5F6B80] dark:text-stone-300">{money(row.rate)}</td>
+                <td className="px-4 py-2.5 text-right font-semibold text-[#1A2236] dark:text-stone-50">{money(row.value)}</td>
               </tr>
             ))}
           </tbody>

@@ -11,6 +11,7 @@ import { toastStore } from '../common/toastStore';
 import { companyFileUrl, deleteCompanyFile, errorText, listCompanyFiles, updateCompanyFile, uploadCompanyFile } from '../../lib/api';
 import { downloadText, toCsv } from '../../lib/csv';
 import {  field, label, primaryButton, secondaryButton, tableBody, tableHead , exportButton } from '../../lib/styles';
+import { SkeletonTableRows } from '../common/Skeleton';
 
 // Company Master → Images / Documents, stored by the backend under backend/uploads/company.
  
@@ -169,7 +170,7 @@ export function CompanyImages({ canEdit }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {files?.map(f => (
           <figure key={f.id} className="group relative h-52 overflow-hidden rounded-xl bg-stone-200 shadow-lg">
-            <img src={contentUrl(f)} alt={f.title} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+            <img src={contentUrl(f)} alt={f.title} loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
             <div className="absolute inset-0 bg-linear-to-t from-black/75 via-black/10 to-transparent" />
             <figcaption className="absolute inset-x-0 bottom-0 p-4 text-white">
               <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${f.show_on_pos ? 'bg-emerald-500/80' : 'bg-white/25'}`}>{f.show_on_pos ? 'On POS screen' : 'Hidden from POS'}</span>
@@ -216,7 +217,7 @@ export function CompanyDocuments({ canEdit }) {
             </tr>
           </thead>
           <tbody className={tableBody}>
-            {files === null && <tr><td colSpan={6} className="px-4 py-8 text-center text-stone-400">Loading…</td></tr>}
+            {files === null && <SkeletonTableRows rows={3} cols={6} />}
             {files?.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-stone-400">No documents yet.{canEdit ? ' Add the excise licence, GST certificate or KSBCL permit (PDF, Excel, Word, CSV, images; up to 8 MB).' : ''}</td></tr>}
             {files?.map(f => (
               <tr key={f.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">

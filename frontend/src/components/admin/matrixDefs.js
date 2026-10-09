@@ -63,7 +63,7 @@ export const MATRIX_SCREENS = [
   { id: 'Stock Level / Reorder', name: 'Stock Level / Reorder', group: 'REPORTS', sub: 'Reorder levels (ROL) and minimum order quantities', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'Reports Dashboard', name: 'Reports Dashboard', group: 'REPORTS', sub: 'Customised MIS reports across inventory and ledgers', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
 
-  // Tools (SQL Query Execution is Administrator-only, so it has no tick here)
+  // Tools (SQL Query Execution and Screen Preview are Administrator-only, so it has no tick here)
   { id: 'Re Write Stock', name: 'Re Write Stock', group: 'TOOLS', sub: 'Check stock against documents and rebuild QOH', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
 
   // Utilities (Global Settings and the ADMIN Audit Log are Administrator-only, so they have no tick here)

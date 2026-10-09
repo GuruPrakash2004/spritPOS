@@ -14,7 +14,7 @@ export function searchItems(text, limit = MAX) {
   for (const item of sellable()) {
     if (!(item.clQty > 0)) continue;
     const code = item.code.toLowerCase();
-    const name = `${item.brand} ${item.name} ${item.pkg} ${item.shortName ?? ''} ${item.hotKey ?? ''}`.toLowerCase();
+    const name = `${item.brand} ${item.name} ${item.pkg} ${item.shortName ?? ''} ${item.hotKey ?? ''} ${(item.aliases ?? []).join(' ')}`.toLowerCase();   // the item's aliases (MstItemAlias) find it too
     const rank = !term ? 0
       : code === term ? 0
       : code.startsWith(term) ? 1

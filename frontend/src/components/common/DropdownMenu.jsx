@@ -14,6 +14,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, } from 'react';
 import { createPortal } from 'react-dom';
+import { useExitGhost } from './useExitGhost';
 
 const MARGIN = 8;   // minimum gap to the screen edge
 const GAP = 4;      // gap between the button and the menu
@@ -32,6 +33,7 @@ export const menuItem = 'block w-full rounded-lg px-3 py-2 text-left text-stone-
 
 export default function DropdownMenu({ anchorRef, open, onClose, children, align = 'end', width = 176 }) {
   const menuRef = useRef(null);
+  useExitGhost(menuRef, open);   // the menu fades out when it closes
   const [pos, setPos] = useState(null);
 
   // Measure after render (the menu's height is only known once it is in the DOM). A position left over
@@ -51,7 +53,7 @@ export default function DropdownMenu({ anchorRef, open, onClose, children, align
       const below = r.bottom + GAP;
       const above = r.top - GAP - h;
       const top = below + h > vh - MARGIN && above >= MARGIN ? above : Math.min(below, Math.max(MARGIN, vh - h - MARGIN));
-      setPos({ top, left, width: w });
+      setPos({ top, left, width: w, up: top < r.top });
     };
     place();
     // Second pass once the menu has rendered and its height is known.
@@ -86,7 +88,7 @@ export default function DropdownMenu({ anchorRef, open, onClose, children, align
       ref={menuRef}
       role="menu"
       style={{ position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999, width: pos?.width ?? width, visibility: pos ? 'visible' : 'hidden' }}
-      className="z-[900] overflow-hidden rounded-xl border border-line bg-surface p-1 text-xs shadow-pop dark:border-[#2A2A2A] dark:bg-[#141414]"
+      className={`${pos?.up ? 'menu-pop-up' : 'menu-pop'} z-[900] overflow-hidden rounded-xl border border-line bg-surface p-1 text-xs shadow-pop dark:border-[#2A2A2A] dark:bg-[#141414]`}
       onClick={e => { if (e.target.closest('button')) onClose(); }}
     >
       {children}

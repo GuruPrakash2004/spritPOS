@@ -17,7 +17,7 @@ import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, sec
 
 
 const TABS = [['transaction', 'Transaction Settings'], ['prefix', 'Doc Prefix'], ['menu', 'Menu Sequence']];
-const select = 'rounded-md border border-[#E3D9CD] bg-white px-2 py-1 text-xs dark:border-[#2A2A2A] dark:bg-[#141414]';
+const select = 'rounded-md border border-[#DDE3EC] bg-white px-2 py-1 text-xs dark:border-[#2A2A2A] dark:bg-[#141414]';
 
 export default function OtherSettings({ embedded = false }) {
   const [tab, setTab] = useState('transaction');
@@ -31,10 +31,10 @@ export default function OtherSettings({ embedded = false }) {
           </div>
         </div>
       )}
-      <div role="tablist" className="mb-4 flex gap-1 border-b border-[#E3D9CD] dark:border-[#2A2A2A]">
+      <div role="tablist" className="mb-4 flex gap-1 border-b border-[#DDE3EC] dark:border-[#2A2A2A]">
         {TABS.map(([id, name]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-            className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold ${tab === id ? 'border-[#64283A] text-[#64283A] dark:border-[#D4A847] dark:text-[#D4A847]' : 'border-transparent text-stone-500'}`}>{name}</button>
+            className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold ${tab === id ? 'border-[#1B2B4B] text-[#1B2B4B] dark:border-[#D4A847] dark:text-[#D4A847]' : 'border-transparent text-stone-500'}`}>{name}</button>
         ))}
       </div>
       {tab === 'transaction' && <TransactionSettings />}
@@ -96,7 +96,7 @@ function TransactionSettings() {
         <div role="listbox" aria-label="Transaction" className="space-y-1">
           {Object.entries(all).map(([k, s]) => (
             <button key={k} role="option" aria-selected={k === kind} onClick={() => setKind(k)}
-              className={`w-full rounded-lg border px-3 py-2 text-left text-xs font-medium ${k === kind ? 'border-[#64283A] bg-[#64283A]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#E3D9CD] dark:border-[#2A2A2A]'}`}>{s.screen}</button>
+              className={`w-full rounded-lg border px-3 py-2 text-left text-xs font-medium ${k === kind ? 'border-[#1B2B4B] bg-[#1B2B4B]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#DDE3EC] dark:border-[#2A2A2A]'}`}>{s.screen}</button>
           ))}
         </div>
       </div>
@@ -167,7 +167,7 @@ function DocPrefix() {
   };
 
   return (
-    <section className={`${panel} divide-y divide-[#E3D9CD] dark:divide-[#2A2A2A]`} aria-label="Doc Prefix">
+    <section className={`${panel} divide-y divide-[#DDE3EC] dark:divide-[#2A2A2A]`} aria-label="Doc Prefix">
       {rows.map(r => {
         const d = drafts[r.kind] ?? { prefix: r.prefix ?? '', next: String(r.next_number) };
         const dirty = !!drafts[r.kind] && (d.prefix !== (r.prefix ?? '') || d.next !== String(r.next_number));
@@ -240,7 +240,7 @@ function MenuSequence() {
         {MODULE_GROUPS.map(g => (
           <div key={g.group}>
             <p className={label}>{g.group}</p>
-            <div className="divide-y divide-[#E3D9CD] rounded-lg border border-[#E3D9CD] dark:divide-[#2A2A2A] dark:border-[#2A2A2A]">
+            <div className="divide-y divide-[#DDE3EC] rounded-lg border border-[#DDE3EC] dark:divide-[#2A2A2A] dark:border-[#2A2A2A]">
               {g.modules.map(m => (
                 <div key={m} className="grid grid-cols-[1fr_5rem_8rem] items-center gap-3 px-3 py-1.5 text-xs">
                   <span className="truncate">{m}</span>

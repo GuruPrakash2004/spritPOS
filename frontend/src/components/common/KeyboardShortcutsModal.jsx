@@ -111,8 +111,8 @@ export default function KeyboardShortcutsModal({ onClose }) {
       }
     >
       <div className="space-y-6 py-1">
-        <p className="text-xs text-[#70675F] dark:text-stone-400">
-          Press any of these key combinations to quickly navigate and operate e-vLQMS ERP.
+        <p className="text-xs text-[#5F6B80] dark:text-stone-400">
+          Press any of these key combinations to quickly navigate and operate SpiritPOS.
         </p>
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -121,11 +121,11 @@ export default function KeyboardShortcutsModal({ onClose }) {
             return (
               <div
                 key={group.category}
-                className="flex flex-col rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-4 shadow-2xs dark:border-[#2A2A2A] dark:bg-[#141414]"
+                className="flex flex-col rounded-2xl border border-[#DDE3EC] bg-[#FFFFFF] p-4 shadow-2xs dark:border-[#2A2A2A] dark:bg-[#141414]"
               >
-                <div className="flex items-center gap-2 border-b border-[#E3D9CD] pb-2.5 dark:border-[#2A2A2A]">
-                  <Icon size={16} className="text-[#64283A] dark:text-[#D4A847]" />
-                  <h3 className="text-xs font-bold text-[#29231F] dark:text-stone-50">
+                <div className="flex items-center gap-2 border-b border-[#DDE3EC] pb-2.5 dark:border-[#2A2A2A]">
+                  <Icon size={16} className="text-[#1B2B4B] dark:text-[#D4A847]" />
+                  <h3 className="text-xs font-bold text-[#1A2236] dark:text-stone-50">
                     {group.category}
                   </h3>
                 </div>
@@ -133,13 +133,13 @@ export default function KeyboardShortcutsModal({ onClose }) {
                 <div className="mt-3 space-y-3">
                   {group.shortcuts.map(sc => (
                     <div key={sc.description} className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-[#70675F] dark:text-stone-300 leading-tight">
+                      <span className="text-[11px] text-[#5F6B80] dark:text-stone-300 leading-tight">
                         {sc.description}
                       </span>
                       <div className="flex shrink-0 items-center gap-1">
                         {sc.keys.map((k, ki) => (
                           <span key={ki} className="flex items-center gap-1">
-                            <kbd className="inline-flex min-w-[20px] items-center justify-center rounded-md border border-[#DCD1C5] bg-[#F3EEE6] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#29231F] shadow-xs dark:border-[#3A3A3A] dark:bg-[#1E1E1E] dark:text-stone-100">
+                            <kbd className="inline-flex min-w-[20px] items-center justify-center rounded-md border border-[#D5DCE7] bg-[#F0F3F8] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#1A2236] shadow-xs dark:border-[#3A3A3A] dark:bg-[#1E1E1E] dark:text-stone-100">
                               {k === '⌘' && !isMac ? 'Ctrl' : k === 'Alt' && isMac ? '⌥' : k}
                             </kbd>
                             {ki < sc.keys.length - 1 && ['⌘', 'Alt', 'Shift'].includes(sc.keys[0]) && (

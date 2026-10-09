@@ -122,7 +122,7 @@ export default function MergeItems({ mode }) {
         <datalist id="mi-items">{choices.map(i => <option key={i.code} value={labelOf(i)} />)}</datalist>
 
         {shown && (
-          <div className="mt-4 rounded-xl border border-[#E3D9CD] p-4 text-xs dark:border-line" aria-label="Merge preview">
+          <div className="mt-4 rounded-xl border border-[#DDE3EC] p-4 text-xs dark:border-line" aria-label="Merge preview">
             <h2 className={sectionTitle}>What will happen</h2>
             <ul className="mt-2 space-y-1">
               <li><b>{shown.from.code}</b> {shown.from.name}: QOH {shown.from.qoh} — will be removed</li>

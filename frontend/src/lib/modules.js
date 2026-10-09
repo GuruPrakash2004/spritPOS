@@ -33,7 +33,7 @@ export const MODULE_GROUPS = [
     ],
   },
   // The desktop app's TOOLS menu (MstMenu type 6), with its captions. Download Latest Exe is left out on purpose.
-  { group: 'Tools', modules: ['SQL Query Execution', 'Re Write Stock'] },
+  { group: 'Tools', modules: ['SQL Query Execution', 'Re Write Stock', 'Screen Preview'] },
   // The desktop app's UTILITIES menu (MstMenu type 7), with its captions; screens are added as they are built.
   // Its Security item is Admin Master, shown as "Admin Master (Security)" under Administration.
   { group: 'Utilities', modules: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Web Sync', 'Bulk Master Update', 'Label Printing'] },
@@ -74,7 +74,7 @@ export const NAV_TREE = [
       },
     ],
   },
-  { label: 'Tools', children: ['SQL Query Execution', 'Re Write Stock'] },
+  { label: 'Tools', children: ['SQL Query Execution', 'Re Write Stock', 'Screen Preview'] },
   {
     label: 'Utilities',
     children: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Web Sync',
@@ -88,7 +88,7 @@ export const ADMIN_MASTER = 'Admin Master';
 export const ADMIN_PATH = '/adminMaster';
 export const ADMIN_ROLE = 'Administrator';
 // Screens only an Administrator may open, whatever the role's module list says (the server checks too).
-export const ADMIN_ONLY = new Set([ADMIN_MASTER, 'SQL Query Execution', 'Global Settings', 'ADMIN Audit Log']);
+export const ADMIN_ONLY = new Set([ADMIN_MASTER, 'SQL Query Execution', 'Screen Preview', 'Global Settings', 'ADMIN Audit Log']);
 
 // Screens every signed-in user may open, whatever their role.
 export const ALWAYS_OPEN = new Set(['About']);
@@ -144,6 +144,7 @@ export const MODULE_KEYWORDS = {
   'Admin Master': '700 admin users user roles rights assign rights permissions password security',
   // Legacy menu shortcut codes (600, 604) find the tools as they did in the desktop app.
   'SQL Query Execution': '600 sql query select table view procedure database tools',
+  'Screen Preview': 'screen preview doc designer fields layout database columns check problems tools',
   'Re Write Stock': '604 rewrite re-write stock qoh mismatch ledger repair tools',
   // Utilities, with the desktop menu codes (702, 711-714).
   'Remove Duplicate Invoice': '711 remove duplicate invoice bill delete twice double utilities',

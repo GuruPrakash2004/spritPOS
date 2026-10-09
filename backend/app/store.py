@@ -22,9 +22,9 @@ from datetime import date
 
 # The shop's company profile (MstComp, MstCompFinYear and Company Master edits). Blank until loaded.
 COMPANY = {
-    "name": "", "email": "", "address": "", "phone": "", "fax": "", "mobile": "", "website": "", "gstin": "",
+    "name": "", "email": "", "address": "", "address1": "", "address2": "", "address3": "", "phone": "", "fax": "", "mobile": "", "website": "", "gstin": "",
     "pan": "", "cin": "", "excise_phone": "", "ksbcl_code": "", "licence_type": "", "state": "",
-    "fy_start": "", "fy_end": "",
+    "fy_start": "", "fy_end": "", "extras": {},
     "map_embed": "",   # the shop's Google Maps embed link, shown as a frame in Company Master (no API, no key)
 }
 
@@ -80,6 +80,10 @@ UTL_OPTIONS: list[dict] = []
 UTL_OPTION_EMAILS: list[dict] = []
 UTL_FIELDS: list[dict] = []
 UTL_MISC: dict = {}
+UTL_MENU: list[dict] = []          # MstMenu: the desktop's menu
+UTL_NUMFMT: list[dict] = []        # UtlDocNoFmt: number format per document
+UTL_SEARCH: list[dict] = []        # UtlSearchSettings: the fields a document's Find box searches
+UTL_CAPTIONS: dict[str, str] = {}   # UtlFldCaptions: field code -> caption override
 
 # Day-end cash counts, keyed by ISO date.
 DENOMINATIONS: dict[str, dict] = {}

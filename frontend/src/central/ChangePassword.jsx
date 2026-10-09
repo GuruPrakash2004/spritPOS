@@ -54,8 +54,8 @@ export default function ChangePassword({ user, temporary, onChanged, onCancel }
   return (
     <form onSubmit={submit} noValidate className={`${panel} mx-auto w-full max-w-md space-y-4 p-6`}>
       <div>
-        <h1 className="text-lg font-bold text-[#29231F] dark:text-stone-50">Change password</h1>
-        <p className="text-xs text-[#70675F] dark:text-stone-400">
+        <h1 className="text-lg font-bold text-[#1A2236] dark:text-stone-50">Change password</h1>
+        <p className="text-xs text-[#5F6B80] dark:text-stone-400">
           {temporary ? `Welcome, ${user}. Your first password is temporary: choose your own to continue.` : `Signed in as ${user}.`}
         </p>
       </div>

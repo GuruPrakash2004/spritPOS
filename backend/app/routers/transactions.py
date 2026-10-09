@@ -13,7 +13,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import admin_audit, doc_settings, gsettings, security, store
+from .. import admin_audit, doc_engine, doc_meta, doc_settings, gsettings, schema_meta, security, sqlstore, store
 from ..schemas import (
     CancelIn, ClosingStockIn, DenominationIn, ExpenseIn, GenerateInvoiceIn, Line, PurchaseBillIn, PurchaseIndentIn, SalesInvoiceIn,
     SalesReturnIn, StockDeductionIn,
@@ -135,6 +135,7 @@ def _listing(kind: str, tag: str):
              dependencies=[Depends(require_right("add", "Purchase Indent", "Purchase Bill"))])
 def create_indent(body: PurchaseIndentIn):
     gsettings.check_not_frozen(body.date, "This purchase indent")
+    _doc_extras("TrnHdrPI", body)
     doc_settings.check_lines("purchase_indent", body.lines, body.date)
     sup = store.find(store.SUPPLIERS, body.supplier)
     if not sup:
@@ -144,16 +145,36 @@ def create_indent(body: PurchaseIndentIn):
     lines, tot = _price_lines(body.lines, "purchase_rate", with_gst=False)
     doc_no = store.next_doc_no("purchase_indent", doc_settings.prefix("purchase_indent"))
     store.DOCS["purchase_indent"][doc_no] = {"doc_no": doc_no, "date": body.date.isoformat(), "supplier": body.supplier,
-                                             "lines": lines, "totals": tot, "remarks": body.remarks}
+                                             "lines": lines, "totals": tot, "remarks": body.remarks, "extras": body.extras}
     admin_audit.record("Purchase Indent", "Added", doc_no, "", f"supplier {body.supplier}",
                        admin_audit.doc_items(store.DOCS["purchase_indent"][doc_no], "Added"))
     return store.DOCS["purchase_indent"][doc_no]
 
 
 # ---------- Purchase Bill (adds stock) ----------
+def _doc_extras(table: str, body, hold: bool = False) -> None:
+    """Check the header columns the database added (Doc Designer) against the real table; 422 with the reason."""
+    if not body.extras:
+        return
+    if not sqlstore.enabled():
+        body.extras = {}
+        return
+    try:
+        doc_id = doc_engine.doc_id_of(next((d["DocName"] for d in store.UTL_DOCS.values()
+                                            if str(d.get("HdrTblName") or "").lower() == table.lower()), ""))
+        typed_in = doc_meta.input_columns(doc_id) if doc_id is not None else set()   # a column the designer lets people type into
+        allowed = {k: v for k, v in body.extras.items() if str(k).lower() in typed_in or not sqlstore.doc_blocked(str(k))}
+        # A held bill is unfinished: blank mandatory extras are only enforced when it is released or saved.
+        body.extras = schema_meta.clean_extras(table, {k: v for k, v in allowed.items() if not (hold and v in ("", None))},
+                                               sqlstore.DOC_CORE[table.lower()] | sqlstore._NOT_EXTRA)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
 @router.post("/purchase-bill", status_code=201, tags=["Purchase Bill"], dependencies=[Depends(require_right("add", "Purchase Bill"))])
 def create_purchase_bill(body: PurchaseBillIn):
     gsettings.check_not_frozen(body.date, "This purchase bill")
+    _doc_extras("TrnHdrPB", body)
     if body.copy_from_indent and not doc_settings.settings("purchase_bill")["allow_copy_from"]:
         raise HTTPException(422, "Copy From is switched off for Purchase Bill (Global Settings → Transaction Settings)")
     src = body.lines
@@ -212,6 +233,7 @@ def _post_sale(doc: dict, cust: dict) -> None:
 @router.post("/sales-invoice", status_code=201, tags=["Sales Invoice"], dependencies=[SALES])
 def create_sales_invoice(body: SalesInvoiceIn, current_user: dict = Depends(get_current_user)):
     gsettings.check_not_frozen(body.date, "This bill")
+    _doc_extras("TrnHdrSINV", body, body.hold)
     doc_settings.check_lines("sales_invoice", body.lines, body.date)
     counter = store.COUNTERS.get(body.counter)
     if not counter or counter["inactive"]:
@@ -353,6 +375,7 @@ def reprint_invoice(doc_no: str):
 @router.post("/sales-return", status_code=201, tags=["Sales Return"], dependencies=[Depends(require_right("add", "Sales Return"))])
 def create_sales_return(body: SalesReturnIn):
     gsettings.check_not_frozen(body.date, "This sales return")
+    _doc_extras("TrnHdrSR", body)
     doc_settings.check_lines("sales_return", body.lines, body.date)
     if body.customer:
         security.check_authorised("customers", body.customer, "Customer")
@@ -405,6 +428,7 @@ def create_expense(body: ExpenseIn):
 @router.post("/stock-deduction", status_code=201, tags=["Stock Deduction"], dependencies=[Depends(require_right("add", "Stock Deduction"))])
 def create_stock_deduction(body: StockDeductionIn):
     gsettings.check_not_frozen(body.date, "This stock deduction")
+    _doc_extras("TrnHdrSTKDED", body)
     doc_settings.check_lines("stock_deduction", body.lines, body.date)
     lines, tot = _price_lines(body.lines, "purchase_rate", with_gst=False)
     _check_stock(lines)

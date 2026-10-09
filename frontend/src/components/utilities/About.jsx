@@ -54,7 +54,7 @@ export default function About() {
       <section className={`${panel} flex flex-col items-center gap-4 p-8 text-center`}>
         <VlqmsLogo size="lg" />
         <div>
-          <h1 className={pageTitle}>{about?.product ?? 'e-vLQMS ERP'}</h1>
+          <h1 className={pageTitle}>{about?.product ?? 'SpiritPOS'}</h1>
           <p className={pageSub}>Liquor store management: masters, purchase, sales, stock and reports.</p>
         </div>
         {error && <p role="alert" className="text-xs text-[#9A4B45] dark:text-red-400">{error}</p>}
@@ -69,7 +69,7 @@ export default function About() {
               ))}
             </dl>
             {about.database && (
-              <section aria-label="Database" className="w-full rounded-lg border border-[#E3D9CD] p-3 text-left dark:border-[#2A2A2A]">
+              <section aria-label="Database" className="w-full rounded-lg border border-[#DDE3EC] p-3 text-left dark:border-[#2A2A2A]">
                 <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Database</h2>
                 <dl className="grid grid-cols-[7rem_1fr] items-center gap-x-3 gap-y-1.5 text-xs">
                   <dt className="text-stone-500">Database</dt>
@@ -112,8 +112,8 @@ export default function About() {
           </>
         )}
         {!about && !error && <p className="flex items-center gap-2 text-xs text-stone-500"><Info size={14} />Loading…</p>}
-        <DevelopedBy className="mt-2 border-t border-[#E3D9CD] pt-4 dark:border-line" />
-        <a href="https://www.softvent.com" target="_blank" rel="noreferrer noopener" className="text-xs font-medium text-[#64283A] underline-offset-2 hover:underline dark:text-[#D4A847]">www.softvent.com</a>
+        <DevelopedBy className="mt-2 border-t border-[#DDE3EC] pt-4 dark:border-line" />
+        <a href="https://www.softvent.com" target="_blank" rel="noreferrer noopener" className="text-xs font-medium text-[#1B2B4B] underline-offset-2 hover:underline dark:text-[#D4A847]">www.softvent.com</a>
       </section>
     </div>
   );

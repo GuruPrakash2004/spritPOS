@@ -22,7 +22,6 @@ export function PurchaseIndent() {
   const dateLocked = !useDocSettings('purchase_indent').allow_edit_date;
   const [supplier, setSupplier] = useState('');
   const [suppliers, setSuppliers] = useState([]);
-  const [remarks, setRemarks] = useState('');
 
   useEffect(() => {
     getSuppliers()
@@ -37,7 +36,7 @@ export function PurchaseIndent() {
       endpoint="/transactions/purchase-indent"
       rateField="purchase_rate"
       rateLabel="PB Rate"
-      buildBody={lines => ({ date: dateLocked ? todayIso() : date, supplier, remarks, lines: toLines(lines) })}
+      buildBody={lines => ({ date: dateLocked ? todayIso() : date, supplier, lines: toLines(lines) })}
       header={<>
         <div><label htmlFor="pi-date" className={label}>Indent Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="pi-date" type="date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div className="w-full min-w-0 sm:w-auto">
@@ -46,7 +45,6 @@ export function PurchaseIndent() {
             {suppliers.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
           </select>
         </div>
-        <div className="w-full min-w-0 sm:w-auto sm:flex-1"><label htmlFor="pi-rmk" className={label}>Remarks</label><input id="pi-rmk" value={remarks} onChange={e => setRemarks(e.target.value)} className={`${field} w-full`} /></div>
       </>}
     />
   );

@@ -14,6 +14,7 @@ import { numberToWords } from '../../lib/formatters';
 import {  dangerButton, field, label, money, primaryButton, secondaryButton, tableBody, tableHead , printButton } from '../../lib/styles';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import PrintDialog from '../print/PrintDialog';
+import { SkeletonTableRows } from '../common/Skeleton';
 
 
 // Re-Print Bill: fetch a saved bill and show it in a printable layout with RPT model choices.
@@ -179,7 +180,7 @@ export function HeldBillsDialog({ onClose, onRecall }) {
             </tr>
           ))}
           {bills && !bills.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-stone-400">No held bills.</td></tr>}
-          {!bills && !error && <tr><td colSpan={6} className="px-3 py-8 text-center text-stone-400">Loading…</td></tr>}
+          {!bills && !error && <SkeletonTableRows rows={4} cols={6} />}
         </tbody>
       </table>
     </Modal>

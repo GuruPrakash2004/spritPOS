@@ -131,7 +131,7 @@ export default function CompareStock() {
       <InlineError message={errors.result} />
       {rows && (
         <section className={`${panel} overflow-hidden`}>
-          <div className="flex items-center justify-between border-b border-[#E3D9CD] px-4 py-2 text-xs dark:border-line">
+          <div className="flex items-center justify-between border-b border-[#DDE3EC] px-4 py-2 text-xs dark:border-line">
             <span>{rows.filter(r => r.status !== 'OK').length} of {rows.length} item(s) differ</span>
             <label className="flex items-center gap-2"><input type="checkbox" checked={showOk} onChange={e => setShowOk(e.target.checked)} />Show matching items</label>
           </div>

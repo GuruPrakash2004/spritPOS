@@ -38,9 +38,9 @@ export default function ServerPrinterSetting({ inputClass = fieldClass, captionC
   const installed = info?.installed ?? [];
   const refused = info?.refused ?? [];
   return (
-    <form onSubmit={save} noValidate className={plain ? '' : 'rounded-2xl border border-[#E3D9CD] p-5 dark:border-[#2A2A2A]'}>
+    <form onSubmit={save} noValidate className={plain ? '' : 'rounded-2xl border border-[#DDE3EC] p-5 dark:border-[#2A2A2A]'}>
       <div className="mb-3 flex items-center gap-2">
-        <Printer size={16} className="text-[#64283A] dark:text-[#D4A847]" />
+        <Printer size={16} className="text-[#1B2B4B] dark:text-[#D4A847]" />
         <h2 className="text-sm font-bold">Printer on this server (direct print)</h2>
       </div>
       <label htmlFor="server-printer" className={captionClass}>Printer for every direct print</label>
@@ -66,7 +66,7 @@ export default function ServerPrinterSetting({ inputClass = fieldClass, captionC
       )}
       {error && <p role="alert" className="mt-2 flex items-center gap-2 text-xs text-red-600 dark:text-red-400"><AlertCircle size={14} className="shrink-0" />{error}</p>}
       <button type="submit" disabled={busy || !changed}
-        className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-[#64283A] px-4 py-2.5 text-xs font-bold text-white transition-all hover:bg-[#521E2E] disabled:pointer-events-none disabled:opacity-45 dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F7D98B] dark:to-[#C8952E] dark:text-[#181106]">
+        className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-[#1B2B4B] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#121D36] disabled:pointer-events-none disabled:opacity-45 dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F7D98B] dark:to-[#C8952E] dark:text-[#181106]">
         {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}Save printer
       </button>
     </form>

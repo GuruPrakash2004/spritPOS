@@ -15,7 +15,7 @@ import { isStale, when, } from './types';
 function SmallTable({ title, rows, cols }) {
   return (
     <section className={`${panel} overflow-hidden`}>
-      <h3 className="border-b border-[#E3D9CD] px-3 py-2 text-xs font-semibold text-[#29231F] dark:border-line dark:text-stone-100">{title}</h3>
+      <h3 className="border-b border-[#DDE3EC] px-3 py-2 text-xs font-semibold text-[#1A2236] dark:border-line dark:text-stone-100">{title}</h3>
       {!rows?.length ? <p className="px-3 py-3 text-xs text-stone-500">Nothing for this day.</p> : (
         <div className="max-h-72 overflow-auto">
           <table className="min-w-full text-xs">
@@ -104,8 +104,8 @@ export default function ShopDashboard({ shops }) {
           <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" aria-label="Totals">
             {TILES.map(([key, text]) => (
               <div key={key} className={`${panel} p-3`}>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#70675F] dark:text-stone-400">{text}</p>
-                <p className="mt-1 text-base font-bold tabular-nums text-[#29231F] dark:text-stone-50">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5F6B80] dark:text-stone-400">{text}</p>
+                <p className="mt-1 text-base font-bold tabular-nums text-[#1A2236] dark:text-stone-50">
                   {COUNT_TILES.has(key) ? Number(data.summary[key] ?? 0).toLocaleString() : `₹ ${money(Number(data.summary[key] ?? 0))}`}
                 </p>
               </div>
@@ -114,7 +114,7 @@ export default function ShopDashboard({ shops }) {
 
           {all && (
             <section className={`${panel} overflow-hidden`}>
-              <h3 className="border-b border-[#E3D9CD] px-3 py-2 text-xs font-semibold dark:border-line">Shops</h3>
+              <h3 className="border-b border-[#DDE3EC] px-3 py-2 text-xs font-semibold dark:border-line">Shops</h3>
               <div className="overflow-auto">
                 <table className="min-w-full text-xs">
                   <thead><tr>{['Shop', 'Bills', 'Sales', 'Profit', 'Cash', 'Expenses', 'Closing stock', 'Last sync'].map(h => <th key={h} className={`${tableHead} px-3 py-1.5`}>{h}</th>)}</tr></thead>

@@ -49,7 +49,7 @@ function CheckPanel({ title, sub, check }) {
   const tab = check.tabs.find(t => t.key === active) ?? check.tabs[0];
   return (
     <section className={`${panel} overflow-hidden`}>
-      <div className="flex flex-wrap items-center gap-3 border-b border-[#E3D9CD] px-5 py-3 dark:border-line">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[#DDE3EC] px-5 py-3 dark:border-line">
         <div className="mr-auto">
           <h2 className={sectionTitle}>{title}</h2>
           <p className="text-[11px] text-stone-500">{sub}</p>
@@ -58,11 +58,11 @@ function CheckPanel({ title, sub, check }) {
           ? <span className={badge('danger')}><AlertTriangle size={12} />Re-Write required</span>
           : <span className={badge('success')}><CheckCircle2 size={12} />Re-Write not Required</span>}
       </div>
-      <div role="tablist" className="flex flex-wrap gap-1 border-b border-[#E3D9CD] px-3 pt-2 dark:border-line">
+      <div role="tablist" className="flex flex-wrap gap-1 border-b border-[#DDE3EC] px-3 pt-2 dark:border-line">
         {check.tabs.map(t => (
           <button key={t.key} role="tab" aria-selected={t.key === tab?.key} onClick={() => setActive(t.key)}
             className={`-mb-px rounded-t-lg border px-3 py-1.5 text-xs font-medium ${t.key === tab?.key
-              ? 'border-[#E3D9CD] border-b-[#FFFCF7] bg-[#FFFCF7] text-[#64283A] dark:border-line dark:border-b-surface dark:bg-surface dark:text-[#D4A847]'
+              ? 'border-[#DDE3EC] border-b-[#FFFFFF] bg-[#FFFFFF] text-[#1B2B4B] dark:border-line dark:border-b-surface dark:bg-surface dark:text-[#D4A847]'
               : 'border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'}`}>
             {t.caption}{t.rows.length > 0 && <span className="ml-1.5 rounded-full bg-[#9A4B45] px-1.5 text-[10px] text-white">{t.rows.length}</span>}
           </button>

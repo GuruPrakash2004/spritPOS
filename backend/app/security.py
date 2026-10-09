@@ -72,7 +72,7 @@ def master_fields() -> dict[str, list[str]]:
               "brands": schemas.Brand, "suppliers": schemas.Supplier, "customers": schemas.Customer,
               "ledger-groups": schemas.LedgerGroup, "ledgers": schemas.Ledger, "sales-counters": schemas.SalesCounter,
               "sales-persons": schemas.SalesPerson} | schemas.SIMPLE_MODELS
-    out = {path: [f for f in m.model_fields if f not in ("code", "authorised")] for path, m in models.items()}
+    out = {path: [f for f in m.model_fields if f not in ("code", "authorised", "extras")] for path, m in models.items()}
     return out | {DASHBOARD: list(DASHBOARD_PANELS)}
 
 

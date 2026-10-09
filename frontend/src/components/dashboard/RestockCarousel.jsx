@@ -141,11 +141,11 @@ export default function RestockCarousel({ rows, days, badge }) {
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <div className="mb-4 flex items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold tracking-[0.25em] text-[#B08A45] dark:text-[#D4A847] uppercase">
+          <p className="text-[10px] font-bold tracking-[0.25em] text-[#D99A2B] dark:text-[#D4A847] uppercase">
             {healthy ? 'Best sellers' : 'Low stock'}
           </p>
-          <h3 className="mt-1 text-lg font-bold text-[#29231F] dark:text-white">{heading}</h3>
-          <p className="mt-0.5 text-xs text-[#70675F] dark:text-stone-400">{subtitle}</p>
+          <h3 className="mt-1 text-lg font-bold text-[#1A2236] dark:text-white">{heading}</h3>
+          <p className="mt-0.5 text-xs text-[#5F6B80] dark:text-stone-400">{subtitle}</p>
         </div>
         <div className="flex items-center gap-1.5">
           {badge}
@@ -181,7 +181,7 @@ export default function RestockCarousel({ rows, days, badge }) {
               if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
             }}
             className="relative flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-1 outline-none rounded-2xl
-                       focus-visible:ring-2 focus-visible:ring-[#B08A45]/50
+                       focus-visible:ring-2 focus-visible:ring-[#D99A2B]/50
                        [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {cards.map((r, idx) => {
@@ -190,33 +190,33 @@ export default function RestockCarousel({ rows, days, badge }) {
                 <article key={r.item_code} aria-label={`${idx + 1} of ${cards.length}`}
                   className="group img-zoom card-3d w-[80%] shrink-0 snap-start overflow-hidden rounded-2xl border
                              sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-3rem)/4)]
-                             bg-[#FFFCF7] border-[#E3D9CD] dark:border-[#2A2A2A] dark:bg-[#141414]">
-                  <div className="relative h-36 sm:h-44 overflow-hidden bg-[#F0EBE3] dark:bg-[#1A1A1A]">
+                             bg-[#FFFFFF] border-[#DDE3EC] dark:border-[#2A2A2A] dark:bg-[#141414]">
+                  <div className="relative h-36 sm:h-44 overflow-hidden bg-[#EDF0F6] dark:bg-[#1A1A1A]">
                     <img src={photo.src} alt={r.item_name} draggable={false}
-                      className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.035]"
-                      style={{ objectPosition: photo.position }} loading="lazy" />
-                    <span className="absolute top-3 left-3 rounded-full bg-[#29231F]/80 px-2 py-0.5 text-[10px] font-bold text-white tabular-nums shadow-md backdrop-blur-sm dark:bg-black/70">
+                      className="h-full w-full object-cover transition-transform duration-400 ease-out group-hover:scale-[1.035]"
+                      style={{ objectPosition: photo.position }} loading="lazy" decoding="async" />
+                    <span className="absolute top-3 left-3 rounded-full bg-[#1A2236]/80 px-2 py-0.5 text-[10px] font-bold text-white tabular-nums shadow-md backdrop-blur-sm dark:bg-black/70">
                       #{idx + 1}
                     </span>
                     <span className={`absolute top-3 right-3 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider shadow-md tabular-nums ${BADGE[r.status]}`}>
                       {badgeText(r)}
                     </span>
-                    <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#FFFCF7] dark:from-[#141414] to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#FFFFFF] dark:from-[#141414] to-transparent" />
                   </div>
                   <div className="p-4">
-                    <p className="text-[10px] font-bold tracking-[0.15em] text-[#B08A45] dark:text-[#D4A847] uppercase">
+                    <p className="text-[10px] font-bold tracking-[0.15em] text-[#D99A2B] dark:text-[#D4A847] uppercase">
                       {clean(r.group || '') || 'LIQUOR'}
                     </p>
-                    <h4 className="mt-1 truncate text-sm font-semibold text-[#29231F] dark:text-white" title={r.item_name}>
+                    <h4 className="mt-1 truncate text-sm font-semibold text-[#1A2236] dark:text-white" title={r.item_name}>
                       {clean(r.item_name)}
                     </h4>
                     <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className="text-base font-extrabold tabular-nums text-[#29231F] dark:text-white">₹{money(r.mrp)}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#B08A45] dark:text-[#D4A847]" title="Suggested order: two weeks of sales, at least the reorder qty">
+                      <span className="text-base font-extrabold tabular-nums text-[#1A2236] dark:text-white">₹{money(r.mrp)}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#D99A2B] dark:text-[#D4A847]" title="Suggested order: two weeks of sales, at least the reorder qty">
                         {r.needs_restock && r.suggested_qty > 0 ? `Order ${num(r.suggested_qty)}` : 'No order needed'}
                       </span>
                     </div>
-                    <p className="mt-1 text-[10px] tabular-nums text-[#70675F] dark:text-stone-400">
+                    <p className="mt-1 text-[10px] tabular-nums text-[#5F6B80] dark:text-stone-400">
                       {r.avg_daily > 0 ? `Sells ${num(r.avg_daily)}/day · ` : 'No sales · '}
                       {r.status === 'OUT_OF_STOCK' && r.last_sold ? `last sold ${shortDate(r.last_sold)}` : `sold ${num(r.sold_qty)} in ${spanDays} day${spanDays === 1 ? '' : 's'}`}
                     </p>
@@ -231,9 +231,12 @@ export default function RestockCarousel({ rows, days, badge }) {
               {Array.from({ length: stops }, (_, i) => (
                 <button key={i} type="button" role="tab" aria-selected={i === stop} aria-label={`Show from item ${i + 1}`}
                   onClick={() => goTo(i)}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${i === stop
-                    ? 'w-5 bg-[#64283A] dark:bg-[#D4A847]'
-                    : 'w-1.5 bg-[#D8CCBE] hover:bg-[#B08A45] dark:bg-[#2A2A2A] dark:hover:bg-[#D4A847]/60'}`} />
+                  className="group flex h-3 w-3 items-center justify-center">
+                  {/* the dot widens by scaling (transform), not by changing its width */}
+                  <span className={`block h-1.5 w-3 rounded-full transition duration-250 ${i === stop
+                    ? 'scale-x-[1.67] bg-[#1B2B4B] dark:bg-[#D4A847]'
+                    : 'scale-x-50 bg-[#D8CCBE] group-hover:bg-[#D99A2B] dark:bg-[#2A2A2A] dark:group-hover:bg-[#D4A847]/60'}`} />
+                </button>
               ))}
             </div>
           )}

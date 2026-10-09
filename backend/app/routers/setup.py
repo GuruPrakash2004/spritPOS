@@ -25,13 +25,14 @@ anyone else on the network. The password arrives encrypted (secure_fields, purpo
 import os
 import re
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, boot, db, envfile, mailer, rpt_bridge, secure_fields, security, setup_db, sqlstore, store
+from .. import admin_audit, boot, db, envfile, mailer, rpt_bridge, secure_fields, security, setup_db, sql_discovery, sqlstore, store
 from . import auth
 
 router = APIRouter(prefix="/setup", tags=["Database setup"])
@@ -75,6 +76,18 @@ def _guard(request: Request) -> str:
                              "(Global Settings), or open this page on the server PC itself.")
 
 
+def _open(request: Request) -> str:
+    """Database settings (view, test, connect) and the report-files path: open to anyone who reaches the sign-in page,
+    by the owner's decision (no Administrator needed). A valid token only names the user for the audit trail."""
+    header = request.headers.get("authorization", "")
+    if header.lower().startswith("bearer "):
+        try:
+            return str(auth.get_current_user(HTTPAuthorizationCredentials(scheme="Bearer", credentials=header[7:]))["user"])
+        except HTTPException:
+            return ""
+    return ""
+
+
 BAD_CHARS = set(";{}=[]\r\n'\"")
 
 
@@ -85,13 +98,19 @@ def _clean(value: str, what: str) -> str:
     return value
 
 
+def _is_saved_server(host: str) -> bool:
+    """Is `host` the server the app is set up with (or this PC)? Only then may the saved password stand in for a typed one."""
+    saved = (db.settings()["host"] or "").split("\\")[0].lower()
+    return host.split("\\")[0].lower() in (saved, "localhost", "127.0.0.1", ".", "(local)")
+
+
 def _server(body: ServerIn) -> tuple[str, str, str, str, str]:
     host = _clean(body.host, "Server name")
     if not _clean(body.user, "Login"):
         raise HTTPException(422, "Enter the SQL login name")
     password = secure_fields.decrypt(body.password, "db") if body.password else ""
-    if not password and db.configured():
-        password = db._password()   # blank = keep the saved password (changing the settings later)
+    if not password and db.configured() and _is_saved_server(host):
+        password = db._password()   # blank = keep the saved password (changing the settings later), for the saved server only
     return host, body.port.strip(), body.user.strip(), password or "", body.auth
 
 
@@ -106,22 +125,63 @@ def status():
 @router.get("/current")
 def current(request: Request):
     """The connection settings in use, to fill the form (never the password; `has_password` says one is saved)."""
-    _guard(request)
+    _open(request)
     s = db.settings()
     return {"host": s["host"], "port": s["port"] or "", "database": s["database"], "auth": s["auth"], "user": s["user"],
             "has_password": bool(db.configured() and db._password()), "connected": db.is_db_available()}
 
 
+class ScanIn(BaseModel):
+    host: str = Field("", max_length=200)   # blank = this PC's instances only
+    user: str = Field(min_length=1, max_length=128)
+    password: str = Field("", max_length=1000)
+
+
+@router.get("/instances")
+def instances(request: Request, host: str = ""):
+    """The SQL Server instances found (any version): on the local network and this PC, or every instance of `host`. Only
+    lists; nothing is tried with a login here."""
+    _open(request)
+    return {"instances": sql_discovery.discover(host.strip() or None, db.settings() if db.configured() else None)}
+
+
+@router.post("/scan")
+def scan(body: ScanIn, request: Request):
+    """Try the login on every instance of one server (or of this PC) and list each one's databases, so a database can be
+    picked from any SQL Server version. The login is tried only on the server named, never across the network."""
+    _open(request)
+    host = _clean(body.host, "Server name") if body.host.strip() else ""
+    password = secure_fields.decrypt(body.password, "db") if body.password else ""
+    if not password and db.configured() and (not host or _is_saved_server(host)):
+        password = db._password()
+    found = [e for e in sql_discovery.discover(host or None, None) if host or e["source"] == "this PC"][:40]
+
+    def one(e):
+        target = e["address"] or e["server"]
+        port = e["port"]
+        name = target if port or e["instance"].upper() == "MSSQLSERVER" else e["server"] + chr(92) + e["instance"]
+        try:
+            r = db.test_connection(name, port, "", body.user.strip(), password, "sql")
+        except Exception:   # noqa: BLE001 - one instance's failure must not hide the others
+            r = {"ok": False, "error": "Could not connect."}
+        return {**e, "host": name, "ok": r["ok"], "error": r.get("error", ""), "databases": r.get("databases", []), "driver": r.get("driver", ""),
+                "version": r.get("version") or e["version"]}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(one, found))
+    return {"instances": results}
+
+
 @router.post("/test")
 def test(body: ServerIn, request: Request):
-    _guard(request)
+    _open(request)
     host, port, user, password, auth_kind = _server(body)
     return db.test_connection(host, port, "", user, password, auth_kind)
 
 
 @router.post("/connect")
 def connect(body: ConnectIn, request: Request):
-    who = _guard(request)
+    who = _open(request)
     before = db.settings() if db.configured() else None
     host, port, user, password, auth_kind = _server(body)
     database = _clean(body.database, "Database")
@@ -162,14 +222,14 @@ def _rpt_folder_info() -> dict:
 @router.get("/rpt-folder")
 def get_rpt_folder(request: Request):
     """Where the .rpt print formats are read from, and what is in that folder."""
-    _guard(request)
+    _open(request)
     return _rpt_folder_info()
 
 
 @router.post("/rpt-folder")
 def set_rpt_folder(body: RptFolderIn, request: Request):
     """Save the .rpt folder (RPT_FOLDER in backend/.env) and use it at once. It must be an existing folder on this PC."""
-    who = _guard(request)
+    who = _open(request)
     folder = _clean(body.folder, "Report files path")
     if folder:
         if not Path(folder).is_dir():

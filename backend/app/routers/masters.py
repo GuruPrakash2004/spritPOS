@@ -15,9 +15,9 @@ from datetime import date
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from .. import admin_audit, gsettings, security, store, validation
+from .. import admin_audit, db_store, gsettings, schema_meta, security, sqlstore, store, validation
 from ..master_specs import SPECS
 from ..schemas import SIMPLE_MODELS
 from ..schemas import (
@@ -102,13 +102,23 @@ def _check_margin(row: dict) -> None:
                                  f"(₹ {rate * (1 + pct / 100):.2f}; Global Settings → PurSellVarPer)")
 
 
-def _clean(path: str, body: BaseModel, table: dict) -> BaseModel:
+def _clean(path: str, body: BaseModel, table: dict, original: str | None = None) -> BaseModel:
     """Request-side validation shared by create and update."""
     body.code = _check_code(body.code)
     if hasattr(body, "name"):
         body.name = body.name.strip()
         if not body.name:
             raise HTTPException(422, "Name cannot be blank")
+    if body.extras:   # columns added in the database / Doc Designer: checked against the real table
+        store_name = security.TABLES.get(path)
+        if store_name in sqlstore.LEGACY_MASTERS:
+            try:
+                body.extras = schema_meta.clean_extras(sqlstore.LEGACY_MASTERS[store_name][0], body.extras, sqlstore._mapped(store_name),
+                                                       exclude=(sqlstore.LEGACY_MASTERS[store_name][2], original))
+            except ValueError as e:
+                raise HTTPException(422, str(e))
+        else:
+            body.extras = {}
     for key, value in validation.check(body.model_dump()).items():   # mobile / phone / PIN / GSTIN / PAN / HSN / e-mail / tax %
         if hasattr(body, key):
             setattr(body, key, value)
@@ -142,6 +152,8 @@ def _shown(path: str, row: dict, user: dict) -> dict:
     """A row as this user may see it: purchase rate hidden from roles without cost access, and fields hidden by
     the role's Field Level Rights (Admin Master (Security))."""
     row = {**row, "purchase_rate": None} if path == "items" and hides_cost(user) else row
+    if path == "items" and hides_cost(user) and row.get("extras"):   # unknown columns may hold costs
+        row = {**row, "extras": {}}
     return security.hide_fields(user, path, row)
 
 
@@ -195,7 +207,7 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
     def update(code: str, body: model, current_user: dict = Depends(get_current_user)):
         if code not in table:
             raise HTTPException(404, f"{tag} '{code}' not found")
-        body = _clean(path, body, table)
+        body = _clean(path, body, table, original=code)
         if body.code != code:
             if body.code in table:
                 raise HTTPException(409, f"{tag} '{body.code}' already exists")
@@ -204,6 +216,10 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
                 raise HTTPException(409, f"Can't change the code of {tag} '{code}': {reason}")
         row = security.apply_field_rights(current_user, path, body.model_dump(), table[code])
         row.pop("authorised", None)
+        if "extras" not in body.model_fields_set:   # a screen that doesn't know the database's extra columns keeps them
+            row["extras"] = table[code].get("extras", {})
+        if "aliases" in row and "aliases" not in body.model_fields_set:   # nor does it blank the item's aliases
+            row["aliases"] = table[code].get("aliases", [])
         for k in ("authorised", "auth_by", "auth_on"):
             if k in table[code]:
                 row[k] = table[code][k]
@@ -255,15 +271,104 @@ def get_company():
 def update_company(body: Company, admin: dict = Depends(require_admin)):
     for key, value in validation.check(body.model_dump()).items():
         setattr(body, key, value)
+    if body.extras:   # MstComp columns beyond the web's own fields, checked against the table and the designer's rules
+        try:
+            body.extras = (schema_meta.clean_extras("MstComp", body.extras, db_store.COMPANY_COLUMNS | sqlstore._NOT_EXTRA)
+                           if sqlstore.enabled() else {})
+        except ValueError as e:
+            raise HTTPException(422, str(e))
     earlier, changed = admin_audit.diff(store.COMPANY, {**store.COMPANY, **body.model_dump()})
     if changed:
         admin_audit.record("Company Master", "Edited", store.COMPANY.get("name") or "Company", earlier, changed)
     changes = body.model_dump()
+    if any(changes.get(k) for k in ("address1", "address2", "address3")):   # the three address rows are the truth; `address` is them joined
+        changes["address"] = ", ".join(changes[k].strip() for k in ("address1", "address2", "address3") if changes.get(k, "").strip())
     if store.FIN_YEARS:   # the financial year is the desktop's (MstCompFinYear), not edited here
         changes.update(fy_start=store.COMPANY["fy_start"], fy_end=store.COMPANY["fy_end"])
+    changes["extras"] = {**(store.COMPANY.get("extras") or {}), **(changes.get("extras") or {})}
     store.COMPANY.update(changes)
     store.touch("COMPANY", "*")
     store.set_fin_year()
+    return _company()
+
+
+class FinYearIn(BaseModel):
+    start: date
+    end: date
+
+
+class DashboardLinkIn(BaseModel):
+    link: str = Field("", max_length=500)
+
+
+@router.put("/company/dashboard-link", tags=["Company Master"])
+def update_dashboard_link(body: DashboardLinkIn, admin: dict = Depends(require_admin)):
+    """Company Master's "Update Dashboard Link": MstComp.DashBoardLink (the page the desktop's dashboard shows)."""
+    link = body.link.strip()
+    if link and not re.match(r"^https?://", link, re.I):
+        raise HTTPException(422, "Enter a web address starting with http:// or https://")
+    if "dashboardlink" not in {c["name"].lower() for c in schema_meta.columns("MstComp")}:
+        raise HTTPException(409, "This database's company table has no DashBoardLink column")
+    store.COMPANY.setdefault("extras", {})["DashBoardLink"] = link
+    store.touch("COMPANY", "*")
+    admin_audit.record("Company Master", "Edited", "Dashboard link", "", link)
+    return _company()
+
+
+@router.get("/company/fin-years/next", tags=["Company Master"])
+def next_fin_year():
+    """The dates the Company Master offers for a new financial year: a year after the last one (else 1 April this year)."""
+    years = sorted(store.FIN_YEARS, key=lambda y: y["start"])
+    if years:
+        last = years[-1]
+        s0, e0 = date.fromisoformat(last["start"]), date.fromisoformat(last["end"])
+        def a_year_on(d):
+            try:
+                return date(d.year + 1, d.month, d.day)
+            except ValueError:   # 29 February
+                return date(d.year + 1, d.month, 28)
+        return {"start": a_year_on(s0).isoformat(), "end": a_year_on(e0).isoformat()}
+    return {"start": date(date.today().year, 4, 1).isoformat(), "end": date(date.today().year + 1, 3, 31).isoformat()}
+
+
+@router.post("/company/fin-years", status_code=201, tags=["Company Master"])
+def create_fin_year(body: FinYearIn, admin: dict = Depends(require_admin)):
+    """vLQMS.exe btnCreate_Click: refused when the start date already falls inside an existing financial year; created inactive."""
+    if body.end <= body.start:
+        raise HTTPException(422, "The financial year must end after it starts")
+    if not sqlstore.enabled():
+        raise HTTPException(503, "The database is offline")
+    for y in store.FIN_YEARS:
+        if date.fromisoformat(y["start"]) <= body.start <= date.fromisoformat(y["end"]):
+            raise HTTPException(409, "Financial Year already exists!")
+    from .. import db
+    with db.transaction() as cur:
+        cur.execute("INSERT INTO dbo.MstCompFinYear (yrFdate, yrTdate, Active) VALUES (?, ?, 'N')", (body.start.isoformat(), body.end.isoformat()))
+    admin_audit.write_now(admin["user"], "Company Master", "Added", "Financial year", "", f"{body.start} to {body.end}")
+    db_store.load_fin_year()
+    return _company()
+
+
+@router.delete("/company/fin-years/{start}", status_code=200, tags=["Company Master"])
+def remove_fin_year(start: date, admin: dict = Depends(require_admin)):
+    """vLQMS.exe btnRemoveFinYr_Click: at least one year must remain, only the first or the last can go, never the active one."""
+    years = sorted(store.FIN_YEARS, key=lambda y: y["start"])
+    target = next((y for y in years if y["start"] == start.isoformat()), None)
+    if target is None:
+        raise HTTPException(404, "Invalid year")
+    if len(years) <= 1:
+        raise HTTPException(409, "Atleast 1 active financial year must exist!")
+    if target not in (years[0], years[-1]):
+        raise HTTPException(409, "Only first and last row can be deleted!")
+    if target["active"]:
+        raise HTTPException(409, "Unable to remove as this financial year is currently in use!")
+    if not sqlstore.enabled():
+        raise HTTPException(503, "The database is offline")
+    from .. import db
+    with db.transaction() as cur:
+        cur.execute("DELETE FROM dbo.MstCompFinYear WHERE yrFdate = ? AND yrTdate = ?", (target["start"], target["end"]))
+    admin_audit.write_now(admin["user"], "Company Master", "Deleted", "Financial year", f"{target['start']} to {target['end']}", "")
+    db_store.load_fin_year()
     return _company()
 
 

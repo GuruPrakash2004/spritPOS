@@ -75,9 +75,9 @@ export default function SmtpSetting({ inputClass = fieldClass, captionClass = la
   const bad = (k) => (errors[k] ? '!border-red-500 !ring-2 !ring-red-500/20 animate-shake' : '');
   const err = (k) => errors[k] && <p id={`smtp-${k}-err`} className="mt-1 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400"><AlertCircle size={12} className="shrink-0" />{errors[k]}</p>;
   return (
-    <form onSubmit={save} noValidate className={plain ? '' : 'rounded-2xl border border-[#E3D9CD] p-5 dark:border-[#2A2A2A]'}>
+    <form onSubmit={save} noValidate className={plain ? '' : 'rounded-2xl border border-[#DDE3EC] p-5 dark:border-[#2A2A2A]'}>
       <div className="mb-3 flex items-center gap-2">
-        <Mail size={16} className="text-[#64283A] dark:text-[#D4A847]" />
+        <Mail size={16} className="text-[#1B2B4B] dark:text-[#D4A847]" />
         <h2 className="text-sm font-bold">Email (SMTP) settings</h2>
         {saved && <span className={`ml-auto text-[11px] font-semibold ${saved.configured ? 'text-emerald-700 dark:text-emerald-400' : 'text-stone-500'}`}>{saved.configured ? 'On' : 'Off'}</span>}
       </div>
@@ -123,11 +123,11 @@ export default function SmtpSetting({ inputClass = fieldClass, captionClass = la
       {error && <p role="alert" className="mt-3 flex items-center gap-2 text-xs text-red-600 dark:text-red-400"><AlertCircle size={14} className="shrink-0" />{error}</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" onClick={test} disabled={!!busy}
-          className="flex items-center justify-center gap-2 rounded-xl border border-[#DCD1C5] px-4 py-2.5 text-xs font-bold transition-all hover:bg-[#F3EEE6] disabled:pointer-events-none disabled:opacity-45 dark:border-[#2A2A2A] dark:hover:bg-[#1C1C1C]">
+          className="flex items-center justify-center gap-2 rounded-xl border border-[#D5DCE7] px-4 py-2.5 text-xs font-bold transition hover:bg-[#F0F3F8] disabled:pointer-events-none disabled:opacity-45 dark:border-[#2A2A2A] dark:hover:bg-[#1C1C1C]">
           {busy === 'test' ? <Loader2 size={14} className="animate-spin" /> : <Plug size={14} />}Test connection
         </button>
         <button type="submit" disabled={!!busy || !changed}
-          className="flex items-center justify-center gap-2 rounded-xl bg-[#64283A] px-4 py-2.5 text-xs font-bold text-white transition-all hover:bg-[#521E2E] disabled:pointer-events-none disabled:opacity-45 dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F7D98B] dark:to-[#C8952E] dark:text-[#181106]">
+          className="flex items-center justify-center gap-2 rounded-xl bg-[#1B2B4B] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#121D36] disabled:pointer-events-none disabled:opacity-45 dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F7D98B] dark:to-[#C8952E] dark:text-[#181106]">
           {busy === 'save' ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}Save email settings
         </button>
       </div>

@@ -32,7 +32,7 @@ import { encryptSecret } from '../../lib/secureField';
 import PermissionMatrixTable from './PermissionMatrixTable';
 
 const tabButton = (on) => `-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-xs font-semibold transition-colors ${on
-  ? 'border-[#64283A] text-[#64283A] dark:border-[#D4A847] dark:text-[#E8C36A]'
+  ? 'border-[#1B2B4B] text-[#1B2B4B] dark:border-[#D4A847] dark:text-[#E8C36A]'
   : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50'}`;
 const EMPTY_USER_DETAILS = { full_name: '', email: '', mobile: '', department: '', dob: '', password_reset_on: '', inactive_reason: '' };
 
@@ -302,18 +302,18 @@ export default function AdminMaster({ currentUser }) {
       {tab === 'roles' && (
         <div className="space-y-4 animate-slideUp">
           {/* Quick Role Switcher Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#DDE3EC] bg-[#FFFFFF] p-3.5 shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
             <div className="flex items-center gap-2.5">
-              <span className="text-xs font-semibold text-[#70675F] dark:text-stone-400">Select Role:</span>
+              <span className="text-xs font-semibold text-[#5F6B80] dark:text-stone-400">Select Role:</span>
               <div className="flex flex-wrap gap-1.5">
                 {roles.map(r => (
                   <button
                     key={r.name}
                     onClick={() => loadRoleIntoDraft(r)}
-                    className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all active:scale-[0.98] ${
+                    className={`rounded-lg px-3 py-1 text-xs font-semibold transition active:scale-[0.98] ${
                       roleDraft.name === r.name
-                        ? 'bg-[#64283A] text-white shadow-sm dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F5D88A] dark:to-[#C8952E] dark:text-[#180E09] dark:font-extrabold'
-                        : 'bg-transparent border border-[#E3D9CD] text-[#70675F] hover:bg-[#F3EEE6] dark:border-[#2A2A2A] dark:text-stone-300 dark:hover:bg-[#1C1C1C]'
+                        ? 'bg-[#1B2B4B] text-white shadow-sm dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F5D88A] dark:to-[#C8952E] dark:text-[#180E09] dark:font-extrabold'
+                        : 'bg-transparent border border-[#DDE3EC] text-[#5F6B80] hover:bg-[#F0F3F8] dark:border-[#2A2A2A] dark:text-stone-300 dark:hover:bg-[#1C1C1C]'
                     }`}
                   >
                     {r.name}
@@ -354,11 +354,11 @@ export default function AdminMaster({ currentUser }) {
                     setRoleDraft({ ...roleDraft, name: e.target.value });
                     if (roleFormErrors.name) setRoleFormErrors({});
                   }}
-                  className={`w-64 rounded-xl border border-[#DCD1C5] bg-[#FFFCF7] px-3 py-2 text-xs font-semibold text-[#29231F] shadow-xs outline-none transition-all placeholder:text-[#A69D94] hover:border-[#CBBEAF] focus:border-[#64283A] focus:ring-[3px] focus:ring-[#64283A]/10 dark:border-[#2A2A2A] dark:bg-[#1A1A1A] dark:text-stone-50 dark:focus:border-[#D4A847] dark:focus:ring-[#D4A847]/20 ${
+                  className={`w-64 rounded-xl border border-[#D5DCE7] bg-[#FFFFFF] px-3 py-2 text-xs font-semibold text-[#1A2236] shadow-xs outline-none transition placeholder:text-[#9AA5B8] hover:border-[#CBBEAF] focus:border-[#1B2B4B] focus:ring-[3px] focus:ring-[#1B2B4B]/10 dark:border-[#2A2A2A] dark:bg-[#1A1A1A] dark:text-stone-50 dark:focus:border-[#D4A847] dark:focus:ring-[#D4A847]/20 ${
                     roleFormErrors.name ? '!border-red-500 !ring-2 !ring-red-500/20' : ''
                   }`}
                 />
-                <span className="text-xs font-medium text-[#70675F] dark:text-stone-400 tabular-nums">
+                <span className="text-xs font-medium text-[#5F6B80] dark:text-stone-400 tabular-nums">
                   {openCount} screens open • {totalButtonsAllowed} buttons allowed
                 </span>
               </div>
@@ -403,45 +403,45 @@ export default function AdminMaster({ currentUser }) {
           {/* ══ 4 SUMMARY CARDS: Open · Add / Save · Edit · Delete / Cancel ══ */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-1">
             {/* Card 1: Open */}
-            <div className="rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
-              <div className="flex items-center gap-1.5 font-bold text-[#64283A] dark:text-[#D4A847]">
+            <div className="rounded-2xl border border-[#DDE3EC] bg-[#FFFFFF] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+              <div className="flex items-center gap-1.5 font-bold text-[#1B2B4B] dark:text-[#D4A847]">
                 <Eye size={15} />
                 <span>Open</span>
               </div>
-              <p className="mt-1 text-[11px] text-[#70675F] dark:text-stone-400">
+              <p className="mt-1 text-[11px] text-[#5F6B80] dark:text-stone-400">
                 See the screen in the sidebar and look at its data
               </p>
             </div>
 
             {/* Card 2: Add / Save */}
-            <div className="rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
-              <div className="flex items-center gap-1.5 font-bold text-[#64283A] dark:text-[#D4A847]">
+            <div className="rounded-2xl border border-[#DDE3EC] bg-[#FFFFFF] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+              <div className="flex items-center gap-1.5 font-bold text-[#1B2B4B] dark:text-[#D4A847]">
                 <FilePlus size={15} />
                 <span>Add / Save</span>
               </div>
-              <p className="mt-1 text-[11px] text-[#70675F] dark:text-stone-400">
+              <p className="mt-1 text-[11px] text-[#5F6B80] dark:text-stone-400">
                 Create new records or save bills and entries
               </p>
             </div>
 
             {/* Card 3: Edit */}
-            <div className="rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
-              <div className="flex items-center gap-1.5 font-bold text-[#64283A] dark:text-[#D4A847]">
+            <div className="rounded-2xl border border-[#DDE3EC] bg-[#FFFFFF] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+              <div className="flex items-center gap-1.5 font-bold text-[#1B2B4B] dark:text-[#D4A847]">
                 <Edit3 size={15} />
                 <span>Edit</span>
               </div>
-              <p className="mt-1 text-[11px] text-[#70675F] dark:text-stone-400">
+              <p className="mt-1 text-[11px] text-[#5F6B80] dark:text-stone-400">
                 Change existing records
               </p>
             </div>
 
             {/* Card 4: Delete / Cancel */}
-            <div className="rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+            <div className="rounded-2xl border border-[#DDE3EC] bg-[#FFFFFF] p-3.5 text-xs shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
               <div className="flex items-center gap-1.5 font-bold text-[#9A4B45] dark:text-red-400">
                 <Trash2 size={15} />
                 <span>Delete / Cancel</span>
               </div>
-              <p className="mt-1 text-[11px] text-[#70675F] dark:text-stone-400">
+              <p className="mt-1 text-[11px] text-[#5F6B80] dark:text-stone-400">
                 Remove records or cancel saved bills
               </p>
             </div>

@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronsDown, ChevronsUp, Copy, FileInput,
-  Info, Paperclip, PlusCircle, Printer, RefreshCw, Save, Search, Settings2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
+  Info, Paperclip, PlusCircle, Printer, RefreshCw, Save, Search, Settings2, Trash2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 import { useConfirm } from '../../common/ConfirmDialog';
 import PrintDialog from '../../print/PrintDialog';
@@ -21,6 +21,10 @@ import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, seco
 import Toast from '../../common/Toast';
 import { toastStore } from '../../common/toastStore';
 import DropdownMenu, { menuItem } from '../../common/DropdownMenu';
+import BillExtras from '../BillExtras';
+import { useColumnTone } from '../../../hooks/useColumnTone';
+import { cn } from '../../../lib/utils';
+import { useBillExtras } from '../useBillExtras';
 import { errorText, getNextNumber, getPurchaseIndents, getSettingValues, getSuppliers, newIdempotencyKey, savePurchaseBill, } from '../../../lib/api';
 import { loadStockItems, sellable, STOCK_ITEMS, useStockItems } from '../../../data/stockData';
 import { numberToWords } from '../../../lib/formatters';
@@ -75,6 +79,8 @@ export default function PurchaseBill() {
   const fileInput = useRef(null);
   // One key per bill, so a double-click on Save can't add the stock twice. Renewed for each new bill.
   const saveKey = useRef(newIdempotencyKey());
+  const extrasBill = useBillExtras('TrnHdrPB', 'pb');
+  const tone = useColumnTone('TrnHdrPB');   // red = mandatory, blue = read-only, from the Doc Designer
 
   useEffect(() => {
     if (!toast) return;
@@ -165,6 +171,11 @@ export default function PurchaseBill() {
     setAddMenuOpen(false);
   };
 
+  const deleteRowByUid = (uid) => {
+    const next = rows.filter(r => r.uid !== uid);
+    setRows(next.length ? next : [blankRow()]);
+  };
+
   const deleteRow = () => {
     if (!selectedRow) return;
     const next = rows.filter(r => r.uid !== selectedUid);
@@ -248,6 +259,7 @@ export default function PurchaseBill() {
 
   const resetBill = () => {
     saveKey.current = newIdempotencyKey();
+    extrasBill.refresh();
     const fresh = blankRow();
     setSupplier('');
     setBillingAddress('');
@@ -270,12 +282,14 @@ export default function PurchaseBill() {
     if (filled.some(r => !r.qty || !r.rate)) return setToast({ kind: 'error', text: 'Every item needs a PB Qty and PB Rate.' });
     if (!balanced) return setToast({ kind: 'error', text: `PB value differs from Inv Value by ₹ ${money(Math.abs(balance))}.` });
     if (filled.some(r => r.stock === null)) return setToast({ kind: 'error', text: 'Pick every item with Add Item so it has an item code.' });
+    if (!extrasBill.check()) return setToast({ kind: 'error', text: 'Fill the additional details marked in red.' });
     // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Save was pressed.
     const key = saveKey.current;
     const body = {
       date: docSettings.allow_edit_date ? pbDate : today(), supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: Number(invValue) || 0,
       purchase_type: purchaseType, remarks, tcs: totals.tcs, cess: totals.cess + totals.compCess,
       lines: filled.map(r => ({ item_code: r.code, bottles: r.qty, rate: r.rate })),
+      ...(extrasBill.fields.length ? { extras: extrasBill.body() } : {}),
     };
     if (!(await toastStore.defer('ok', `Purchase Bill for ${supplier} (${filled.length} items) will be saved when this closes.`, 'Save cancelled. The bill is still open.'))) return;
     savePurchaseBill(body, key).then(doc => {
@@ -442,31 +456,32 @@ export default function PurchaseBill() {
           <table className="w-full min-w-[1520px] text-xs">
             <thead className={tableHead}>
               <tr>
-                <th className={`${headCell} w-12 pl-4`}>#</th>
+                <th className={`${headCell} w-20 pl-2`}>#</th>
                 <th className={`${headCell} w-28`}>Item code</th>
                 <th className={`${headCell} min-w-72`}>Item name</th>
                 <th className={`${headCell} w-16 text-right`}>In stock</th>
-                <th className={`${headCell} w-20 text-right`}>Qty</th>
-                <th className={`${headCell} w-24 text-right`}>Rate</th>
-                <th className={`${headCell} w-28 text-right`}>Amount</th>
+                <th className={cn(`${headCell} w-20 text-right`, tone('PBQTY'))}>Qty</th>
+                <th className={cn(`${headCell} w-24 text-right`, tone('PBRATE'))}>Rate</th>
+                <th className={cn(`${headCell} w-28 text-right`, tone('PBAMT'))}>Amount</th>
                 {showTaxColumns && <>
                   <th className={`${headCell} w-16 text-right`}>CGST %</th>
-                  <th className={`${headCell} w-24 text-right`}>CGST amt</th>
+                  <th className={cn(`${headCell} w-24 text-right`, tone('CGSTAMT'))}>CGST amt</th>
                   <th className={`${headCell} w-16 text-right`}>SGST %</th>
-                  <th className={`${headCell} w-24 text-right`}>SGST amt</th>
+                  <th className={cn(`${headCell} w-24 text-right`, tone('SGSTAMT'))}>SGST amt</th>
                   <th className={`${headCell} w-16 text-right`}>Cess %</th>
-                  <th className={`${headCell} w-24 text-right`}>Cess amt</th>
-                  <th className={`${headCell} w-24 text-right`}>Comp. cess</th>
-                  <th className={`${headCell} w-24 text-right`}>GST amt</th>
-                  <th className={`${headCell} w-28 text-right`}>Net amount</th>
-                  <th className={`${headCell} w-24 pr-4 text-right`}>MRP</th>
+                  <th className={cn(`${headCell} w-24 text-right`, tone('CESSAMT'))}>Cess amt</th>
+                  <th className={cn(`${headCell} w-24 text-right`, tone('COMPCESS'))}>Comp. cess</th>
+                  <th className={cn(`${headCell} w-24 text-right`, tone('TOTGSTAMT'))}>GST amt</th>
+                  <th className={cn(`${headCell} w-28 text-right`, tone('NETAMT'))}>Net amount</th>
+                  <th className={cn(`${headCell} w-24 pr-4 text-right`, tone('MRP'))}>MRP</th>
                 </>}
               </tr>
             </thead>
             <tbody className="divide-y divide-line-soft tabular-nums">
               {rows.map((row, i) => (
                 <tr key={row.uid} onClick={() => setSelectedUid(row.uid)} onFocus={() => setSelectedUid(row.uid)} aria-selected={row.uid === selectedUid} className={`transition-colors ${row.uid === selectedUid ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
-                  <td className="py-1 pl-4 pr-2 text-stone-400">{i + 1}</td>
+                  <td className="whitespace-nowrap py-1 pl-2 pr-2 text-stone-400"><span className="inline-flex items-center gap-1">
+                    <button tabIndex={-1} onClick={e => { e.stopPropagation(); deleteRowByUid(row.uid); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Delete row ${i + 1}`} title="Delete this row"><Trash2 size={14} /></button>{i + 1}</span></td>
                   <td className="px-1 py-1"><input list="pb-codes" disabled={!ready} value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={`${cell} font-mono`} aria-label={`Item code row ${i + 1}`} /></td>
                   <td className="px-1 py-1"><input list="pb-names" disabled={!ready} value={row.name} onChange={e => setItem(row.uid, 'name', e.target.value)} className={`${cell} font-medium text-stone-900 dark:text-stone-50`} aria-label={`Item name row ${i + 1}`} /></td>
                   <td className="px-2 py-1 text-right text-stone-500">{isFilled(row) ? row.qoh : ''}</td>
@@ -519,6 +534,7 @@ export default function PurchaseBill() {
               </div>
             </div>
           )}
+          <BillExtras bill={extrasBill} idPrefix="pb" />
         </section>
 
         <section aria-label="Totals" className={`${panel} p-4 text-xs`}>

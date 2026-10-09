@@ -56,10 +56,10 @@ export default function CreateAdmin({ inputClass, labelClass, onDone }) {
   );
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-4 rounded-2xl border border-[#E3D9CD] p-6 dark:border-[#2A2A2A]">
+    <form onSubmit={submit} noValidate className="space-y-4 rounded-2xl border border-[#DDE3EC] p-6 dark:border-[#2A2A2A]">
       <div>
         <h2 className="flex items-center gap-2 text-sm font-bold"><ShieldCheck size={16} />Create the administrator</h2>
-        <p className="mt-1 text-xs text-[#70675F] dark:text-stone-400">
+        <p className="mt-1 text-xs text-[#5F6B80] dark:text-stone-400">
           None of this shop's users is an Administrator yet. Choose one and give it a password: a desktop user name makes that user the Administrator (and active) with this new password; any other name becomes a new user.
         </p>
       </div>
@@ -71,7 +71,7 @@ export default function CreateAdmin({ inputClass, labelClass, onDone }) {
           <AlertCircle size={14} className="shrink-0" />{error}
         </p>
       )}
-      <button type="submit" disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#64283A] py-3 text-sm font-bold text-white hover:bg-[#521E2E] disabled:opacity-45 dark:bg-[#D4A847] dark:text-[#181106]">
+      <button type="submit" disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1B2B4B] py-3 text-sm font-bold text-white hover:bg-[#121D36] disabled:opacity-45 dark:bg-[#D4A847] dark:text-[#181106]">
         {busy ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}{busy ? 'Saving…' : 'Make administrator'}
       </button>
     </form>

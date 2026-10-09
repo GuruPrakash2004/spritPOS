@@ -58,11 +58,12 @@ def load_data() -> None:
 
 
 def _load_history_then_sync() -> None:
+    # The Doc Designer was read a moment ago (load_data); it is read again only on a change (/designer/version) or
+    # from About → Refresh. The masters' extra database columns are read here, off the start-up path.
     try:
-        designer.refresh()   # the Doc Designer may have changed the print options since the last start
+        sqlstore.reload_extras()
     except Exception as e:
-        logger.warning("Doc Designer settings not refreshed from the legacy tables: %s", e)
-        designer.load()   # the refresh may have stopped after emptying a table: read what is there
+        logger.warning("Extra master columns not read: %s", e)
     db_store.load_transactions()
     websync.start()
 

@@ -16,6 +16,9 @@ class Company(BaseModel):
     name: str
     email: str
     address: str
+    address1: str = ""   # the desktop's Address / "." / ".." rows (MstComp Address1-3); `address` is them joined
+    address2: str = ""
+    address3: str = ""
     phone: str = ""
     fax: str = ""
     mobile: str = ""
@@ -29,6 +32,7 @@ class Company(BaseModel):
     state: str = ""
     fy_start: str
     fy_end: str
+    extras: dict[str, object] = Field(default_factory=dict)   # MstComp columns the web has no field for (Doc Designer / database)
     map_embed: str = Field("", max_length=2000)   # the shop's Google Maps embed (an <iframe> or its link), shown as a frame
 
     @field_validator("map_embed")
@@ -67,6 +71,9 @@ class MasterRow(BaseModel):
     """Base of the master models. `authorised` is set by the server only (Master Approvals in Admin Master
     (Security)): False while a row waits for approval; whatever a client sends is ignored."""
     authorised: bool | None = None
+    # Columns of the desktop table the web app has no typed field for (added in the database / Doc Designer):
+    # {column: value}. Saved only into columns the table really has (sqlstore._fit), checked by schema_meta.
+    extras: dict[str, object] = Field(default_factory=dict)
 
 
 class Item(MasterRow):
@@ -89,6 +96,7 @@ class Item(MasterRow):
     roq: int = 0
     qoh: float = 0
     active: bool = True
+    aliases: list[str] = Field(default_factory=list, description="Other names the item is found by (MstItemAlias)")
 
 
 class ItemGroup(MasterRow):
@@ -167,6 +175,9 @@ class CompanyOut(BaseModel):
     name: str = ""
     email: str = ""
     address: str = ""
+    address1: str = ""
+    address2: str = ""
+    address3: str = ""
     phone: str = ""
     fax: str = ""
     mobile: str = ""
@@ -181,6 +192,7 @@ class CompanyOut(BaseModel):
     fy_start: str = ""
     fy_end: str = ""
     map_embed: str = ""
+    extras: dict[str, object] = {}
     fin_years: list[FinYear] = []
 
 
@@ -241,6 +253,7 @@ class PurchaseIndentIn(BaseModel):
     supplier: str = "KSBCL"
     lines: list[Line] = Field(min_length=1, max_length=MAX_LINES)
     remarks: str = Field("", max_length=500)
+    extras: dict[str, object] = Field(default_factory=dict, description="Header columns the database / Doc Designer added")
 
 
 class PurchaseBillIn(BaseModel):
@@ -255,6 +268,7 @@ class PurchaseBillIn(BaseModel):
     tcs: float = Field(0, ge=0)
     cess: float = Field(0, ge=0)
     remarks: str = Field("", max_length=500)
+    extras: dict[str, object] = Field(default_factory=dict, description="Header columns the database / Doc Designer added")
 
 
 class Payment(BaseModel):
@@ -276,6 +290,7 @@ class SalesInvoiceIn(BaseModel):
     redeem_points: float = Field(0, ge=0)
     payment: Payment | None = None
     hold: bool = False
+    extras: dict[str, object] = Field(default_factory=dict, description="Header columns the database / Doc Designer added")
 
 
 class SalesReturnIn(BaseModel):
@@ -284,6 +299,7 @@ class SalesReturnIn(BaseModel):
     customer: str = "CASH"
     lines: list[Line] = Field(min_length=1, max_length=MAX_LINES)
     remarks: str = Field("", max_length=500)
+    extras: dict[str, object] = Field(default_factory=dict, description="Header columns the database / Doc Designer added")
 
 
 class ExpenseLine(BaseModel):
@@ -303,6 +319,7 @@ class StockDeductionIn(BaseModel):
     reason: Literal["Breakage", "Leakage", "Sample", "Other"] = "Breakage"
     lines: list[Line] = Field(min_length=1, max_length=MAX_LINES)
     remarks: str = Field("", max_length=500)
+    extras: dict[str, object] = Field(default_factory=dict, description="Header columns the database / Doc Designer added")
 
 
 class ClosingStockLine(BaseModel):

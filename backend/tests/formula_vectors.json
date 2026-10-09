@@ -1,0 +1,399 @@
+{
+ "words": [
+  [
+   0,
+   "Rupees Zero Only"
+  ],
+  [
+   0.5,
+   "Rupees Zero And Fifty Paise Only"
+  ],
+  [
+   1,
+   "Rupees One Only"
+  ],
+  [
+   9.99,
+   "Rupees Nine And Ninety Nine Paise Only"
+  ],
+  [
+   19,
+   "Rupees Nineteen Only"
+  ],
+  [
+   20,
+   "Rupees Twenty Only"
+  ],
+  [
+   100,
+   "Rupees One Hundred Only"
+  ],
+  [
+   101,
+   "Rupees One Hundred One Only"
+  ],
+  [
+   1000,
+   "Rupees One Thousand Only"
+  ],
+  [
+   12345.67,
+   "Rupees Twelve Thousand Three Hundred Forty Five And Sixty Seven Paise Only"
+  ],
+  [
+   99999.99,
+   "Rupees Ninety Nine Thousand Nine Hundred Ninety Nine And Ninety Nine Paise Only"
+  ],
+  [
+   100000,
+   "Rupees One Lakh Only"
+  ],
+  [
+   249029.44,
+   "Rupees Two Lakhs Forty Nine Thousand Twenty Nine And Forty Four Paise Only"
+  ],
+  [
+   80571.54,
+   "Rupees Eighty Thousand Five Hundred Seventy One And Fifty Four Paise Only"
+  ],
+  [
+   250000,
+   "Rupees Two Lakhs Fifty Thousand Only"
+  ],
+  [
+   778603.4,
+   "Rupees Seven Lakhs Seventy Eight Thousand Six Hundred Three And Forty Paise Only"
+  ],
+  [
+   10000000,
+   "Rupees One Crore Only"
+  ],
+  [
+   12345678.9,
+   "Rupees One Crore Twenty Three Lakhs Forty Five Thousand Six Hundred Seventy Eight And Ninety Paise Only"
+  ],
+  [
+   25502.52,
+   "Rupees Twenty Five Thousand Five Hundred Two And Fifty Two Paise Only"
+  ]
+ ],
+ "round50": [
+  [
+   0.49,
+   "0"
+  ],
+  [
+   0.5,
+   "1"
+  ],
+  [
+   1.5,
+   "2"
+  ],
+  [
+   2.5,
+   "3"
+  ],
+  [
+   8.99,
+   "9"
+  ],
+  [
+   1170.01,
+   "1170"
+  ],
+  [
+   9380.5,
+   "9381"
+  ],
+  [
+   3894.49,
+   "3894"
+  ]
+ ],
+ "doc": {
+  "fields": [
+   {
+    "code": "SINVQTY",
+    "section": "Detail",
+    "type": "number",
+    "decimals": 2,
+    "formula": ""
+   },
+   {
+    "code": "ITEMSELRATE",
+    "section": "Detail",
+    "type": "number",
+    "decimals": 2,
+    "formula": ""
+   },
+   {
+    "code": "CGSTPER",
+    "section": "Detail",
+    "type": "number",
+    "decimals": 2,
+    "formula": ""
+   },
+   {
+    "code": "SINVAMT",
+    "section": "Detail",
+    "type": "number",
+    "decimals": 2,
+    "formula": "#SINVQTY# * #ITEMSELRATE#"
+   },
+   {
+    "code": "CGSTAMT",
+    "section": "Detail",
+    "type": "number",
+    "decimals": 2,
+    "formula": " #SINVAMT# * #CGSTPER# /100  "
+   },
+   {
+    "code": "TOTBASICAMT",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": "SVTCOLSUM(#SINVAMT#)"
+   },
+   {
+    "code": "TOTCGSTAMT",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": "SVTCOLSUM(#CGSTAMT#)"
+   },
+   {
+    "code": "TOT",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": "#TOTBASICAMT#+ #TOTCGSTAMT#"
+   },
+   {
+    "code": "WRITEOFFAMT",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": ""
+   },
+   {
+    "code": "INVVALUE",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": "SVTROUND50( #TOT#  - #WRITEOFFAMT#)"
+   },
+   {
+    "code": "AMTINWORDS",
+    "section": "Footer",
+    "type": "text",
+    "decimals": 0,
+    "formula": "SVTAMTINWORDS( #INVVALUE# )"
+   },
+   {
+    "code": "BAD",
+    "section": "Footer",
+    "type": "text",
+    "decimals": 0,
+    "formula": "\\"
+   },
+   {
+    "code": "COLUMN5",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": "SVTCOLSUM(5)"
+   },
+   {
+    "code": "PLUSPLUS",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": "#TOT# +  + #WRITEOFFAMT#"
+   },
+   {
+    "code": "GRND",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": "#NETSUM# + #TCS#"
+   },
+   {
+    "code": "TCS",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": ""
+   },
+   {
+    "code": "NETSUM",
+    "section": "Total",
+    "type": "number",
+    "decimals": 2,
+    "formula": "SVTCOLSUM(#SINVAMT#)"
+   }
+  ],
+  "values": {
+   "WRITEOFFAMT": "0.30",
+   "TCS": "5"
+  },
+  "rows": [
+   {
+    "SINVQTY": 2,
+    "ITEMSELRATE": "100.50",
+    "CGSTPER": 9
+   },
+   {
+    "SINVQTY": 1,
+    "ITEMSELRATE": "2585",
+    "CGSTPER": 9
+   }
+  ],
+  "expect": {
+   "values": {
+    "TOTBASICAMT": "2786.00",
+    "TOTCGSTAMT": "250.74",
+    "TOT": "3036.74",
+    "INVVALUE": "3036.00",
+    "AMTINWORDS": "Rupees Three Thousand Thirty Six Only",
+    "BAD": null,
+    "COLUMN5": null,
+    "PLUSPLUS": "3037.04",
+    "GRND": "2791.00",
+    "NETSUM": "2786.00"
+   },
+   "rows": [
+    {
+     "SINVAMT": "201.00",
+     "CGSTAMT": "18.09"
+    },
+    {
+     "SINVAMT": "2585.00",
+     "CGSTAMT": "232.65"
+    }
+   ],
+   "problems": [
+    "bad: unexpected '\\\\'",
+    "column5: SVTCOLSUM needs a field"
+   ]
+  }
+ },
+ "functions": [
+  {
+   "formula": "SVTROUND100(#A#)",
+   "values": {
+    "A": "12.01"
+   },
+   "rows": [],
+   "expect": "13"
+  },
+  {
+   "formula": "SVTROUND100(#A#)",
+   "values": {
+    "A": "12"
+   },
+   "rows": [],
+   "expect": "12"
+  },
+  {
+   "formula": "SVTROUND(#A#, 1)",
+   "values": {
+    "A": "2.25"
+   },
+   "rows": [],
+   "expect": "2.3"
+  },
+  {
+   "formula": "SVTROUND(#A#)",
+   "values": {
+    "A": "2.5"
+   },
+   "rows": [],
+   "expect": "3"
+  },
+  {
+   "formula": "SVTROUNDOFFAMT(#A#)",
+   "values": {
+    "A": "100.7"
+   },
+   "rows": [],
+   "expect": "0.3"
+  },
+  {
+   "formula": "SVTROUNDOFFAMT(#A#)",
+   "values": {
+    "A": "100.2"
+   },
+   "rows": [],
+   "expect": "-0.2"
+  },
+  {
+   "formula": "SVTCOLAVG(#X#)",
+   "values": {},
+   "rows": [
+    {
+     "X": 2
+    },
+    {
+     "X": 4
+    }
+   ],
+   "expect": "3"
+  },
+  {
+   "formula": "SVTCOLMAX(#X#)",
+   "values": {},
+   "rows": [
+    {
+     "X": 2
+    },
+    {
+     "X": 9
+    }
+   ],
+   "expect": "9"
+  },
+  {
+   "formula": "SVTDATEDIFF(#A#, #B#, `D`)",
+   "values": {
+    "A": "2026-04-01",
+    "B": "2026-04-10"
+   },
+   "rows": [],
+   "expect": "1E+1"
+  },
+  {
+   "formula": "SVTDATEDIFF(#A#, #B#, `M`)",
+   "values": {
+    "A": "2026-04-01",
+    "B": "2026-07-10"
+   },
+   "rows": [],
+   "expect": "4"
+  },
+  {
+   "formula": "SVTCALCTAXAMT(#A#, 9, 0)",
+   "values": {
+    "A": "1000.5"
+   },
+   "rows": [],
+   "expect": "9E+1"
+  },
+  {
+   "formula": "SVTCALCTAXAMT(#A#, 9, 100)",
+   "values": {
+    "A": "1000.5"
+   },
+   "rows": [],
+   "expect": "91"
+  },
+  {
+   "formula": "SVTCONCATENATE(`PB-`, #A#)",
+   "values": {
+    "A": "12"
+   },
+   "rows": [],
+   "expect": "PB-12"
+  }
+ ]
+}

@@ -10,14 +10,21 @@ import Pager from '../common/Pager';
 import GroupBox from '../common/GroupBox';
 import { FIELD_RULES, cleanInput, fieldProblem } from '../../lib/validation';
 import { usePage } from '../common/usePage';
-import { useEffect, useState, } from 'react';
+import { useEffect, useMemo, useRef, useState, } from 'react';
+import LookupSelect from '../common/LookupSelect';
+import PartyRecords from './PartyRecords';
+import { getDesignerNextCode, getDesignerPickup } from '../../lib/api';
+import { useScreenFields } from '../../hooks/useScreenFields';
+import { applyDefinition, defaultFor, extraProblem, fieldsFromDefinition, pickupsAfter, ruleHolds, ruleValues, valueOf, withValue } from '../../lib/designerFields';
 import { Edit3, FilePlus, Save, Search, Trash2, X } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
+import { SkeletonTableRows } from '../common/Skeleton';
 import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { canDo, canSeeCost, createMaster, deleteMaster, errorText, fieldRight, listMaster, updateMaster } from '../../lib/api';
-import { badge, field, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
+import { cn } from '../../lib/utils';
+import { badge, field, fieldTone, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
 
  
 
@@ -35,23 +42,51 @@ import { badge, field, ghostButton, label as labelClass, pageHeader, pageSub, pa
 
 
 
-const blank = (fields) =>
-  Object.fromEntries(fields.map(f => [f.key, f.default ?? (f.type === 'bool' ? false : f.type === 'number' ? 0 : '')]));
+const blank = (fields) => {
+  const base = Object.fromEntries(fields.filter(f => !f.extra).map(f => [f.key, f.default ?? (f.type === 'bool' ? false : f.type === 'lines' ? [] : f.type === 'number' ? 0 : '')]));
+  const extras = Object.fromEntries(fields.filter(f => f.extra).map(f => [f.key, f.default ?? (f.type === 'bool' ? false : '')]));
+  // Designer defaults, and defaults that depend on another field (vLQMS.exe: "default against condition").
+  const values = { ...base, ...extras };
+  for (const f of fields) {
+    if (!f.useDefault && !f.defaultConditions) continue;
+    const v = defaultFor(f, values);
+    if (v === undefined) continue;
+    if (f.extra) extras[f.key] = v; else base[f.key] = f.type === 'number' ? Number(v) || 0 : v;
+    values[f.key] = v;
+  }
+  // Columns added in the database (read live, see hooks/useScreenFields.js) live in `extras`.
+  return { ...base, extras };
+};
 
-export default function MasterCrud({ title, subtitle, path, fields: allFields, toolbar, reloadKey = 0 }
+export default function MasterCrud({ title, subtitle, path, fields: baseFields = [], toolbar, reloadKey = 0, onSaved, newDefaults, startNew = false }
 
 
 
 ) {
+  // The screen follows the database: columns the Doc Designer / the table have beyond `baseFields` are added after
+  // them, and the set changes when the database does. The array keeps its identity while nothing changed.
+  const live = useScreenFields(path);
+  const allFields = useMemo(() => {
+    // The database's definition decides the whole screen; the field list given by the caller is only the fallback for
+    // when there is no definition (offline, no Doc Designer rows for this master).
+    const built = fieldsFromDefinition(live.screen);
+    if (built) return built;
+    const typed = applyDefinition(baseFields, live.screen);
+    return live.fields.length ? [...typed, ...live.fields] : typed;
+  }, [baseFields, live.fields, live.screen]);
   // Cost fields are left out entirely for roles that can't see costs; the backend keeps their values.
   // Cost fields for roles without cost access, and fields the role's Field Level Rights hide (Admin Master
   // (Security)), are neither shown nor sent; the server keeps their values.
   const fields = allFields.filter(f => (!f.costField || canSeeCost()) && fieldRight(path, f.key) !== 'hidden');
   const [rows, setRows] = useState([]);
+  const [loaded, setLoaded] = useState(false);   // false until the first list arrives: skeleton rows, not "No records"
   const [selected, setSelected] = useState(null);
+  const [partyOpen, setPartyOpen] = useState(false);   // customer / supplier: the records kept beside the master
   const [form, setForm] = useState(() => blank(fields));
   const [formErrors, setFormErrors] = useState({});
   const [mode, setMode] = useState('View');
+  const modeRef = useRef(mode);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
   const [filter, setFilter] = useState('');
   const [options, setOptions] = useState({});
   const [toast, setToast] = useState(null);
@@ -64,19 +99,41 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
 
   useEffect(() => {
     listMaster(path)
-      .then(list => { setRows(list); if (list[0]) { setSelected(String(list[0].code)); setForm(list[0]); } })
-      .catch(e => setToast({ kind: 'error', text: errorText(e) }));
-    // From allFields (the prop, stable between renders), not `fields`: that is filtered anew on every render,
+      .then(list => {
+        setRows(list);
+        setLoaded(true);
+        // Read again because the database changed (live.version): stay on the record being looked at.
+        setSelected(cur => (cur && list.some(r => String(r.code) === cur) ? cur : list[0] ? String(list[0].code) : null));
+        setForm(cur => {
+          const same = cur?.code != null && list.find(r => String(r.code) === String(cur.code));
+          if (modeRef.current !== 'View') return cur;   // a record being typed is never replaced
+          return same && cur.code ? same : list[0] ?? cur;
+        });
+      })
+      .catch(e => { setLoaded(true); setToast({ kind: 'error', text: errorText(e) }); });
+  }, [path, reloadKey, live.version]);
+
+  useEffect(() => {
+    // From allFields (stable between renders), not `fields`: that is filtered anew on every render,
     // so depending on it re-ran this effect after each load and fetched the lists in an endless loop.
     allFields.filter(f => f.optionsFrom).forEach(f => {
       listMaster(f.optionsFrom ?? '')
         .then(list => setOptions(o => ({ ...o, [f.key]: list.map(r => String(r.code)) })))
         .catch(() => undefined);
     });
-  }, [path, allFields, reloadKey]);
+  }, [allFields, reloadKey]);
+
+  const startedNew = useRef(false);
+  useEffect(() => {
+    // Opened to add a record (the Purchase Bill's New supplier button): start with a blank form once the list is here.
+    if (!startNew || !loaded || startedNew.current || !fields.length) return;
+    startedNew.current = true;
+    setForm({ ...blank(fields), ...newDefaults });
+    setMode('New');
+  }, [startNew, loaded, fields, newDefaults]);
 
   const readOnly = mode === 'View';
-  const listFields = fields.filter(f => f.showInList !== false).slice(0, 4);
+  const listFields = fields.filter(f => !f.designerHidden && f.showInList !== false).slice(0, 4);
   const visible = rows.filter(r => `${r.code} ${r.name ?? ''}`.toLowerCase().includes(filter.toLowerCase()));
   const pager = usePage(visible);
 
@@ -90,9 +147,26 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
   };
 
   const handleFieldChange = (key, rawValue) => {
-    const value = cleanInput(key, rawValue);   // phone / PIN / GSTIN ... keep only what is allowed
+    const extraField = allFields.find(f => f.extra && f.key === key);
+    const value = extraField ? rawValue : cleanInput(key, rawValue);   // phone / PIN / GSTIN ... keep only what is allowed
     let duplicateAlert = null;
-    setForm(prev => ({ ...prev, [key]: value }));
+    setForm(prev => (extraField ? withValue(prev, extraField, value) : { ...prev, [key]: value }));
+    // A master that generates its codes (MstAutoGenCode): choosing the series fills the next number and the code (series + 6 digits).
+    if (live.screen?.flags?.auto_code && mode === 'New' && extraField && /series$/i.test(String(extraField.column ?? ''))) {
+      const noField = allFields.find(f => f.extra && /no$/i.test(String(f.column ?? '')) && !/series$/i.test(String(f.column)));
+      getDesignerNextCode(live.screen.doc_id, String(value).trim()).then(r => setForm(prev => {
+        const next = { ...prev, code: r.code || prev.code };
+        return noField ? withValue(next, noField, r.no || '') : next;
+      })).catch(() => undefined);
+    }
+    // Pick-up fields (the designer's FldPickUP SQL) take their value from the database once the field they follow is edited.
+    const edited = allFields.find(f => f.key === key);
+    const followers = edited ? pickupsAfter(allFields, edited) : [];
+    if (followers.length && live.screen?.doc_id) {
+      const values = { ...Object.fromEntries(allFields.map(f => [f.column ?? f.key, valueOf(form, f)])), [edited.column ?? key]: value };
+      followers.forEach(f => getDesignerPickup(live.screen.doc_id, f.column ?? f.key, values)
+        .then(r => setForm(prev => withValue(prev, f, r.value ?? ''))).catch(() => undefined));
+    }
 
     // When creating a new item: if entered code or short name already exists in master, show duplicate alert!
     if (mode === 'New' && (key === 'code' || key === 'short_name')) {
@@ -122,18 +196,30 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
   };
 
   const focusField = (key) => {
-    const el = document.getElementById(`mc-${path}-${key}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.focus();
-    }
+    const target = fields.find(f => f.key === key);
+    if (target) setActiveTab(target.tab ?? '');   // the field may be on another tab
+    setTimeout(() => {
+      const el = document.getElementById(`mc-${path}-${key}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus();
+      }
+    }, 0);
   };
 
   const save = async () => {
     // Amazon-style validation: collect all missing required fields
     const newErrors = {};
     for (const f of fields) {
-      if (f.required) {
+      if (f.designerHidden) continue;   // not shown, so nothing to ask for
+      if (f.extra) {   // a column added in the database: its rules come from the Doc Designer row
+        const wrong = extraProblem(f, form);
+        if (wrong) newErrors[f.key] = wrong;
+        continue;
+      }
+      const rules = ruleValues(form);
+      if (f.hideWhen && ruleHolds(f.hideWhen, rules)) continue;   // the designer hides it under this condition
+      if (f.required || (f.mandatoryWhen && ruleHolds(f.mandatoryWhen, rules))) {
         const val = String(form[f.key] ?? '').trim();
         if (val === '') {
           newErrors[f.key] = `Enter the ${f.label}`;
@@ -144,6 +230,11 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
         if (wrong) newErrors[f.key] = wrong;
       }
     }
+
+    // vLQMS.exe: "Please enter remarks for why the record is inactive!" (the Not Active Remarks column).
+    const remarksField = fields.find(f => f.extra && String(f.key).toLowerCase() === 'inactivermks');
+    const isInactive = form.active === false || form.inactive === true;
+    if (remarksField && isInactive && !String(valueOf(form, remarksField) ?? '').trim()) newErrors[remarksField.key] = 'Enter the reason this record is inactive';
 
     if (Object.keys(newErrors).length > 0) {
       setFormErrors(newErrors);
@@ -165,7 +256,13 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
 
     setFormErrors({});
 
-    const body = Object.fromEntries(fields.map(f => [f.key, f.type === 'number' ? Number(form[f.key]) || 0 : form[f.key]]));
+    const body = Object.fromEntries(fields.filter(f => !f.extra).map(f => [f.key, f.type === 'number' ? Number(form[f.key]) || 0 : form[f.key]]));
+    // Only the extra columns still in the definition are sent: one dropped from the database is left out.
+    // On a new record, boxes left empty are not sent, so the table's own defaults stay.
+    body.extras = Object.fromEntries(fields
+      .filter(f => f.extra && !f.lockedAlways && !(f.hideWhen && ruleHolds(f.hideWhen, ruleValues(form))))
+      .map(f => [f.key, valueOf(form, f) ?? ''])
+      .filter(([, v]) => mode !== 'New' || String(v).trim() !== ''));
     const name = title.replace(' Master', '');
     // The save waits for its popup (Cancel stops it): see .claude/rules/popups-and-errors.md.
     if (!(await toastStore.defer('ok', `${name} "${String(form.code ?? '').trim() || 'new record'}" will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
@@ -176,6 +273,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
       setRows(mode === 'New' ? [...rows, saved] : rows.map(r => (String(r.code) === selected ? saved : r)));
       select(saved);
       setToast({ kind: 'ok', text: `${title.replace(' Master', '')} "${saved.code}" saved.` });
+      onSaved?.(saved);
     }).catch(e => {
       // Server errors stay until closed in the Walmart-style snackbar
       setToast({ kind: 'error', text: errorText(e) });
@@ -239,7 +337,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
       // Cmd+N, Ctrl+N or Alt+N for New
       if (canAdd && ((modKey && e.key.toLowerCase() === 'n') || (e.altKey && e.key.toLowerCase() === 'n'))) {
         e.preventDefault();
-        setForm(blank(fields));
+        setForm({ ...blank(fields), ...newDefaults });
         setFormErrors({});
         setMode('New');
         setTimeout(() => {
@@ -306,8 +404,12 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
   });
 
   // Fields with the same `section` (masterConfigs.js) that follow each other are drawn together in one titled group box.
+  // The designer's sub-sections are tabs (vLQMS.exe: one grid per SubSectionName); the first, nameless one is "Header Info".
+  const tabNames = [...new Set(fields.filter(f => !f.designerHidden).map(f => f.tab ?? ''))];
+  const [activeTab, setActiveTab] = useState('');
+  const shownTab = tabNames.includes(activeTab) ? activeTab : (tabNames[0] ?? '');
   const sections = [];
-  for (const f of fields) {
+  for (const f of fields.filter(f => !f.designerHidden && (tabNames.length < 2 || (f.tab ?? '') === shownTab))) {   // designer-hidden fields are not drawn but still saved as they are
     const title = f.section ?? '';
     const last = sections.at(-1);
     if (last && last.title === title) last.fields.push(f); else sections.push({ title, fields: [f] });
@@ -317,6 +419,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
     <div className="mx-auto max-w-7xl">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {dialog}
+      {partyOpen && selected && <PartyRecords party={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setPartyOpen(false)} />}
       <div className={`${pageHeader} mb-5`}>
         <div>
           <h1 className={pageTitle}>{title}</h1>
@@ -326,6 +429,9 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
           {readOnly ? (
             <>
               {toolbar}
+              {(path === 'customers' || path === 'suppliers') && selected && mode === 'View' && (
+                <button onClick={() => setPartyOpen(true)} className={secondaryButton}>Contacts, addresses, alerts, notes</button>
+              )}
               <button
                 onClick={remove}
                 disabled={!selected || !canDelete}
@@ -335,7 +441,7 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
                 <Trash2 size={14} />Delete
               </button>
               {canEdit && <button onClick={() => { setFormErrors({}); setMode('Edit'); }} disabled={!selected} className={secondaryButton}><Edit3 size={14} />Edit</button>}
-              {canAdd && <button onClick={() => { setForm(blank(fields)); setFormErrors({}); setMode('New'); }} className={primaryButton}><FilePlus size={14} />New</button>}
+              {canAdd && <button onClick={() => { setForm({ ...blank(fields), ...newDefaults }); setFormErrors({}); setMode('New'); }} className={primaryButton}><FilePlus size={14} />New</button>}
             </>
           ) : (
             <>
@@ -382,7 +488,8 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
                     </tr>
                   );
                 })}
-                {!visible.length && <tr><td colSpan={listFields.length} className="px-4 py-12 text-center text-stone-500">{filter ? `No records match “${filter}”.` : 'No records yet. Click New to add one.'}</td></tr>}
+                {!loaded && <SkeletonTableRows rows={7} cols={Math.max(1, listFields.length)} />}
+                {loaded && !visible.length && <tr><td colSpan={listFields.length} className="px-4 py-12 text-center text-stone-500">{filter ? `No records match “${filter}”.` : 'No records yet. Click New to add one.'}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -401,25 +508,47 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
             {/* Amazon-style "There was a problem" alert summary box */}
             {!readOnly && <FormErrorSummary errors={formErrors} onFocusField={focusField} />}
 
+            {tabNames.length > 1 && (
+              <div role="tablist" aria-label="Sections" className="mb-3 flex gap-1 overflow-x-auto border-b border-line">
+                {tabNames.map(name => (
+                  <button key={name || 'header'} type="button" role="tab" aria-selected={shownTab === name} onClick={() => setActiveTab(name)}
+                    className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition-colors ${shownTab === name ? 'border-accent text-stone-900 dark:text-stone-50' : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50'}`}>
+                    {name || 'Header Info'}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="space-y-4">
             {sections.map(sec => (
             <GroupBox key={sec.title || 'main'} title={sec.title}>
-            <div className={`grid gap-4 ${sec.fields.length > 4 || (!sec.title && fields.length > 8) ? '2xl:grid-cols-2' : ''}`}>
+            {/* Fields read from the database flow into as many columns as fit (never wider than the panel); typed ones keep the old layout. */}
+            <div className={sec.fields.every(f => f.extra)
+              ? 'grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4'
+              : `grid gap-4 ${sec.fields.length > 4 || (!sec.title && fields.length > 8) ? '2xl:grid-cols-2' : ''}`}>
               {sec.fields.map(f => {
+                const values = ruleValues(form);
+                if (f.hideWhen && ruleHolds(f.hideWhen, values)) return null;   // hidden by the designer's rule
                 // Read-only by Field Level Rights: can be filled in for a new record, not changed afterwards.
-                const locked = readOnly || ((f.key === 'code' || f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit');
-                const value = form[f.key];
+                const locked = readOnly || f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values))
+                  || ((f.key === 'code' || f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit') || (f.key === 'code' && !!live.screen?.flags?.auto_code);
+                const value = f.extra && f.type === 'date' ? String(valueOf(form, f) ?? '').slice(0, 10) : valueOf(form, f);
                 const opts = f.options ?? options[f.key] ?? [];
                 const id = `mc-${path}-${f.key}`;
                 const hasError = !readOnly && !!formErrors[f.key];
+                const required = f.required || (f.mandatoryWhen && ruleHolds(f.mandatoryWhen, values));
+                const tone = fieldTone(required, f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values)));   // red = mandatory, blue = read-only, as in vLQMS.exe
 
                 return (
-                  <div key={f.key}>
+                  <div key={f.key} className={`min-w-0 ${f.extra && f.wide ? 'col-span-full' : ''}`}>
                     {readOnly ? (
                       <>
-                        <div className="mb-1 text-xs font-medium text-stone-500 dark:text-stone-400">{f.label}</div>
+                        <div className={cn('mb-1 text-xs font-medium text-stone-500 dark:text-stone-400', tone)}>{f.label}{required && !tone.includes('blue') && <span className="ml-0.5" aria-hidden="true">*</span>}</div>
                         <div className={`min-h-5 text-sm text-stone-900 dark:text-stone-50 ${f.type === 'number' ? 'tabular-nums' : ''}`}>
-                          {f.type === 'bool'
+                          {f.type === 'lines'
+                            ? <span className="whitespace-pre-line">{(Array.isArray(value) ? value : []).join('\n') || '—'}</span>
+                            : f.type === 'lookup'
+                            ? <LookupSelect docId={f.lookup.docId} code={f.lookup.code} value={value} disabled onChange={() => undefined} className="w-full cursor-default appearance-none border-0 bg-transparent p-0 text-sm" />
+                            : f.type === 'bool'
                             ? <span className={badge(value ? 'success' : 'neutral')}>{value ? 'Yes' : 'No'}</span>
                             : String(value ?? '') === '' ? <span className="text-stone-400">—</span> : String(value)}
                         </div>
@@ -431,11 +560,19 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
                       </label>
                     ) : (
                       <>
-                        <label htmlFor={id} className={labelClass}>{f.label}{f.required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
-                        {f.type === 'select' || f.optionsFrom ? (
+                        <label htmlFor={id} title={f.tooltip} className={cn(labelClass, 'break-words', tone)}>{f.label}{required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
+                        {f.type === 'lines' ? (
+                          <textarea id={id} rows={4} readOnly={locked} value={(Array.isArray(value) ? value : []).join('\n')}
+                            onChange={e => handleFieldChange(f.key, e.target.value.split('\n'))} className={`${field} resize-y`} />
+                        ) : f.type === 'lookup' ? (
+                          <LookupSelect id={id} docId={f.lookup.docId} code={f.lookup.code} value={value} disabled={locked}
+                            onChange={v => handleFieldChange(f.key, v)} invalid={hasError}
+                            className={`${field} ${hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`} />
+                        ) : f.type === 'select' || f.optionsFrom ? (
                           <select
                             id={id}
-                            required={f.required}
+                            required={required}
+                            disabled={f.extra && locked}
                             value={String(value ?? '')}
                             onChange={e => handleFieldChange(f.key, e.target.value)}
                             aria-invalid={hasError}
@@ -445,22 +582,36 @@ export default function MasterCrud({ title, subtitle, path, fields: allFields, t
                             <option value="">Select…</option>
                             {opts.map(o => <option key={o}>{o}</option>)}
                           </select>
+                        ) : f.extra && f.multiline ? (
+                          <textarea
+                            id={id}
+                            rows={3}
+                            readOnly={locked}
+                            disabled={locked}
+                            maxLength={f.maxLength}
+                            value={String(value ?? '')}
+                            onChange={e => handleFieldChange(f.key, e.target.value)}
+                            aria-invalid={hasError}
+                            aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
+                            className={`${field} resize-y ${hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`}
+                          />
                         ) : (
                           <>
                             <input
                               id={id}
                               type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                              step={f.extra && f.type === 'number' ? (f.decimals > 0 ? 10 ** -f.decimals : 1) : undefined}
                               readOnly={locked}
                               disabled={locked}
-                              maxLength={FIELD_RULES[f.key]?.max}
+                              maxLength={f.extra ? f.maxLength : FIELD_RULES[f.key]?.max}
                               inputMode={FIELD_RULES[f.key]?.digits ? 'numeric' : undefined}
-                              required={f.required}
+                              required={required}
                               value={String(value ?? '')}
                               list={path === 'items' && f.key === 'code' ? 'mc-items-code-list' : path === 'items' && f.key === 'short_name' ? 'mc-items-shortname-list' : undefined}
                               onChange={e => handleFieldChange(f.key, e.target.value)}
                               aria-invalid={hasError}
                               aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
-                              className={`${field} ${f.type === 'number' ? 'text-right tabular-nums' : ''} ${hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`}
+                              className={cn(field, f.type === 'number' ? 'text-right tabular-nums' : '', f.lockedAlways && 'text-blue-700 dark:text-blue-300', hasError && '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake')}
                             />
                             {path === 'items' && f.key === 'code' && (
                               <datalist id="mc-items-code-list">

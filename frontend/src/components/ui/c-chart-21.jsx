@@ -43,16 +43,16 @@ export function Pattern({
   const defaultColors = ["#0CBF82", "#3383FF", "#FE9E0C", "#FF2F60"];
 
   return (
-    <Card className={`border-[#E3D9CD] bg-[#FFFCF7] shadow-sm dark:border-[#2A2A2A] dark:bg-[#141414] ${className}`}>
+    <Card className={`border-[#DDE3EC] bg-[#FFFFFF] shadow-sm dark:border-[#2A2A2A] dark:bg-[#141414] ${className}`}>
       <CardHeader className="items-center pb-0">
-        <CardTitle className="text-base font-semibold text-[#29231F] dark:text-stone-50">{title}</CardTitle>
-        {description && <CardDescription className="text-xs text-[#70675F] dark:text-stone-400">{description}</CardDescription>}
+        <CardTitle className="text-base font-semibold text-[#1A2236] dark:text-stone-50">{title}</CardTitle>
+        {description && <CardDescription className="text-xs text-[#5F6B80] dark:text-stone-400">{description}</CardDescription>}
       </CardHeader>
       <CardContent className="flex flex-col flex-1 pb-4 pt-1">
         <ChartContainer
           config={activeConfig}
           // Slice separators match the card so they read as gaps: cream in light mode, #141414 in dark mode.
-          className="mx-auto aspect-square max-h-[220px] w-full [&_.recharts-pie-sector_path]:stroke-[#FFFCF7] dark:[&_.recharts-pie-sector_path]:stroke-[#141414]"
+          className="mx-auto aspect-square max-h-[220px] w-full [&_.recharts-pie-sector_path]:stroke-[#FFFFFF] dark:[&_.recharts-pie-sector_path]:stroke-[#141414]"
         >
           <PieChart>
             <defs>
@@ -104,7 +104,7 @@ export function Pattern({
             <ChartTooltip
               content={
                 <ChartTooltipContent
-                  className="min-w-36 gap-2.5 rounded-xl border border-[#E3D9CD] bg-[#FFFCF7] p-2.5 text-xs shadow-xl dark:border-[#2A2A2A] dark:bg-[#141414]"
+                  className="min-w-36 gap-2.5 rounded-xl border border-[#DDE3EC] bg-[#FFFFFF] p-2.5 text-xs shadow-xl dark:border-[#2A2A2A] dark:bg-[#141414]"
                   formatter={(value, name) => {
                     const itemConfig = activeConfig[name ];
                     const labelText = itemConfig?.label || String(name);
@@ -117,11 +117,11 @@ export function Pattern({
                             className="h-2.5 w-2.5 shrink-0 rounded-full"
                             style={{ backgroundColor: itemColor }}
                           />
-                          <span className="text-[#70675F] dark:text-stone-300 font-medium">
+                          <span className="text-[#5F6B80] dark:text-stone-300 font-medium">
                             {labelText}
                           </span>
                         </div>
-                        <span className="font-bold tabular-nums text-[#29231F] dark:text-stone-50">
+                        <span className="font-bold tabular-nums text-[#1A2236] dark:text-stone-50">
                           {Number(value).toLocaleString()}%
                         </span>
                       </div>
@@ -139,7 +139,7 @@ export function Pattern({
               outerRadius={75}
               cornerRadius={5}
               paddingAngle={3}
-              stroke="#FFFCF7"
+              stroke="#FFFFFF"
               strokeWidth={2}
             >
               {activeData.map((entry, index) => {

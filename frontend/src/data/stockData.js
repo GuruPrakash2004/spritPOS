@@ -25,7 +25,7 @@ const toStockItem = (i) => ({
   code: i.code, name: i.name, group: i.group, brand: i.brand, pkg: i.package, cat: i.liqtype,
   clQty: i.qoh, rate: i.mrp, purchaseRate: i.purchase_rate ?? 0, cgstPct: i.cgst_per ?? 0, sgstPct: i.sgst_per ?? 0,
   active: i.active ?? true,
-  shortName: i.short_name ?? '', hotKey: i.hot_key ?? '', bottlesPerCase: i.bottles_per_case ?? 1, rol: i.rol ?? 0, roq: i.roq ?? 0,
+  shortName: i.short_name ?? '', hotKey: i.hot_key ?? i.extras?.HotKey ?? '', aliases: i.aliases ?? [], bottlesPerCase: i.bottles_per_case ?? 1, rol: i.rol ?? 0, roq: i.roq ?? 0,
 });
 
 // Merge a fresh item list into STOCK_ITEMS without moving existing entries.

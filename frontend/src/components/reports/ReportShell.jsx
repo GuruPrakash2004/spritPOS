@@ -9,6 +9,7 @@ import { errorText, getItems, getReport, todayIso, } from '../../lib/api';
 import { downloadText, toCsv } from '../../lib/csv';
 import { badge, field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow, exportButton, printButton } from '../../lib/styles';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import { SkeletonTableRows } from '../common/Skeleton';
 
  
 
@@ -28,6 +29,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
   const [items, setItems] = useState([]);
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');
+  const [running, setRunning] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
 
   useEffect(() => {
@@ -42,9 +44,11 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
     if (filters.includes('range')) { params.from_date = from; params.to_date = to; }
     if (filters.includes('item')) params.item_code = item;
     if (filters.includes('months')) params.months = months;
+    setRunning(true);
     getReport(endpoint, params)
       .then(r => { setRows(r); setError(''); })
-      .catch(e => { setRows(null); setError(errorText(e)); });
+      .catch(e => { setRows(null); setError(errorText(e)); })
+      .finally(() => setRunning(false));
   };
 
   const format = (c, v) =>
@@ -107,9 +111,10 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
           </thead>
           <tbody className={tableBody}>
             {error && <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-red-600 dark:text-red-400">{error}</td></tr>}
-            {!rows && !error && <tr><td colSpan={columns.length} className="px-4 py-14 text-center text-stone-500">Choose the filters above and run the report.</td></tr>}
-            {rows && !rows.length && <tr><td colSpan={columns.length} className="px-4 py-14 text-center text-stone-500">No data for these filters.</td></tr>}
-            {rows && pager.slice.map((r, i) => (
+            {running && <SkeletonTableRows rows={8} cols={columns.length} />}
+            {!running && !rows && !error && <tr><td colSpan={columns.length} className="px-4 py-14 text-center text-stone-500">Choose the filters above and run the report.</td></tr>}
+            {!running && rows && !rows.length && <tr><td colSpan={columns.length} className="px-4 py-14 text-center text-stone-500">No data for these filters.</td></tr>}
+            {!running && rows && pager.slice.map((r, i) => (
               <tr key={pager.from + i} className={tableRow}>
                 {columns.map((c, ci) => (
                   <td key={c.key} className={`px-4 py-2 ${num(c) ? 'text-right tabular-nums text-stone-700 dark:text-stone-200' : ci === 0 ? 'font-medium text-stone-900 dark:text-stone-50' : 'text-stone-600 dark:text-stone-300'}`}>{format(c, r[c.key])}</td>

@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from . import admin_audit, boot, bridge_launcher, db, gsettings, shop_hours, sqlstore, store
-from .routers import auth, company_files, custom_reports, masters, printing, reports, setup, tools, transactions, utilities
+from .routers import auth, company_files, custom_reports, designer as designer_router, masters, party_info, printing, reports, setup, tools, transactions, utilities
 from .schemas import SettingsIn
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -48,7 +48,7 @@ IDEMPOTENT_KEEP = 500   # replies remembered for Idempotency-Key replays
 # Connection switches (Utilities → About → Disconnect / Reconnect database): run one at a time like writes, but
 # never refused for a database that is offline (they are how it is reconnected) and nothing is saved after them.
 CONTROL_PATHS = {"/utilities/database/disconnect", "/utilities/database/reconnect"}
-NOT_WRITES = {"/print/render", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/email", "/designer/refresh", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/rpt-folder", "/setup/smtp", "/setup/smtp/test", "/setup/print-printer",
+NOT_WRITES = {"/print/render", "/setup/scan", "/utilities/backup", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/email", "/designer/refresh", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/rpt-folder", "/setup/smtp", "/setup/smtp/test", "/setup/print-printer",
               "/utilities/web-sync"}
 
 
@@ -188,6 +188,7 @@ app.include_router(auth.router)
 app.include_router(auth.admin)
 app.include_router(company_files.router)
 app.include_router(masters.router)
+app.include_router(party_info.router)
 app.include_router(transactions.router)
 app.include_router(reports.router)
 app.include_router(custom_reports.router)
@@ -195,6 +196,7 @@ app.include_router(tools.router)
 app.include_router(utilities.router)
 app.include_router(utilities.values_router)
 app.include_router(printing.router)
+app.include_router(designer_router.router)
 app.include_router(setup.router)
 
 

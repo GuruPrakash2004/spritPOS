@@ -14,3 +14,15 @@
 - Every screen must work without a mouse (billing counters rarely use one): screen keys with `useShortcuts()` and Enter-to-next-field with `enterMovesNext` (`lib/keys.js`), key hints with `<Kbd />`, dialogs through `Modal` (or `useDialogKeys` for a custom one). See `.claude/rules/popups-and-errors.md` §4.
 - Pop-up menus ("⋯ More options" and similar) use `common/DropdownMenu.jsx`, never an `absolute` div under the button: it renders in a portal, keeps the menu inside the screen on phones, and flips upwards near the bottom.
 - Export helpers are `csv.js` (CSV) and `xlsExport.js` (Excel-readable XLS). `formatters.js` has `numberToWords()` for amounts in words.
+
+## Motion
+
+- **One language, defined once** in `src/index.css`: `--ease-out` (0.16, 1, 0.3, 1), `--ease-in-out` (0.65, 0, 0.35, 1), `--ease-in`, `--dur-fast` 150 ms, `--dur-base` 250 ms, `--dur-slow` 400 ms, `--rise` 12 px, `--stagger` 50 ms (Tailwind's `transition`, `ease-out` and `duration-*` follow them). Use the tokens and the Tailwind `transition` / `transition-colors` / `transition-transform` classes, never `transition-all`, never `width`/`height`/`top`/`left` in a transition or keyframe: only `transform` and `opacity` move.
+- **Screen changes** go through `lib/viewTransition.js` (`withViewTransition`, the View Transitions API: old screen fades, new one rises 12 px; plain fade where unsupported). Billing and the other entry screens (`QUIET_SCREENS` in `App.jsx`) open with no animation so typing is never delayed. Toast timings are fixed by `.claude/rules/popups-and-errors.md`; only their curves use the tokens.
+- **Dialogs and menus** animate in (`.modal-backdrop`, `animate-slideUp`, `.menu-pop`) and out: `common/useExitGhost.js` leaves an inert fading copy when `Modal` / `DropdownMenu` unmount. Lists enter with `.stagger-enter` (short lists only, the delay stops growing after item 8); chart bars use `.bar-grow`.
+- **Loading** shows `common/Skeleton.jsx` (`SkeletonTableRows`, `ScreenSkeleton`) instead of "Loading…" or an empty gap. Rarely used screens are `lazyScreen(name)` (`lib/screenLoaders.js`, loaded on demand, prefetched on sidebar hover/focus and when idle after sign-in); add a new rarely used screen there and in `App.jsx`.
+- **Reduced motion** (`prefers-reduced-motion`) turns everything off in one global rule in `index.css`, including the login page's endless loops, smooth scrolling and the screen transition. A new animation needs no extra code for that, but an endless decorative one must also be listed in that rule.
+
+## Doc Designer / live structure
+
+- Screens follow the database: `lib/designerStore.js` is the one poll (30 s + focus) and cache; `hooks/useScreenFields.js` gives a screen its definition and re-reads it on change; `lib/designerFields.js` (`applyDefinition`, `extraFields`, rules) turns it into field configs. A new hand-built form uses `components/masters/useDefinedForm.jsx`; a bill header uses `components/transactions/useBillExtras.jsx`. Never poll `/designer/version` from a screen. `DesignerNotice` shows the quiet "updated" and "new version" notices.

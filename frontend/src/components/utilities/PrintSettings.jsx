@@ -78,7 +78,7 @@ export default function PrintSettings({ embedded = false }) {
     }
   };
 
-  const select = 'rounded-md border border-[#E3D9CD] bg-white px-2 py-1 text-xs dark:border-[#2A2A2A] dark:bg-[#141414]';
+  const select = 'rounded-md border border-[#DDE3EC] bg-white px-2 py-1 text-xs dark:border-[#2A2A2A] dark:bg-[#141414]';
   const clicks = Object.entries(data?.clicks ?? {});
   const afterSave = Object.entries(data?.after_save ?? {});
 
@@ -109,7 +109,7 @@ export default function PrintSettings({ embedded = false }) {
               {data.documents.map(d => (
                 <button key={d.doc_id} role="option" aria-selected={d.doc_id === docId} onClick={() => setDocId(d.doc_id)}
                   className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-xs ${d.doc_id === docId
-                    ? 'border-[#64283A] bg-[#64283A]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#E3D9CD] dark:border-[#2A2A2A]'}`}>
+                    ? 'border-[#1B2B4B] bg-[#1B2B4B]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#DDE3EC] dark:border-[#2A2A2A]'}`}>
                   <span className="truncate font-medium">{d.name}</span>
                   <span className={badge('neutral')}>{d.options.length}</span>
                 </button>

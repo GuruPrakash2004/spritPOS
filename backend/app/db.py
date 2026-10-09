@@ -218,7 +218,13 @@ def test_connection(host: str, port: str, database: str, user: str, password: st
         cur = conn.cursor()
         cur.execute("SELECT name FROM sys.databases WHERE database_id > 4 AND state = 0 ORDER BY name")
         names = [r[0] for r in cur.fetchall()]
-        return {"ok": True, "driver": driver, "databases": names}
+        version = ""
+        try:   # the product version of the instance that answered (2008 ... 2022), shown next to its databases
+            cur.execute("SELECT CAST(SERVERPROPERTY('ProductVersion') AS varchar(40))")
+            version = str(cur.fetchone()[0] or "")
+        except Exception:
+            pass
+        return {"ok": True, "driver": driver, "databases": names, "version": version}
     finally:
         try:
             conn.close()

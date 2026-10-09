@@ -19,7 +19,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, db, doc_settings, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store, websync
+from .. import admin_audit, db, db_backup, doc_settings, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store, websync
 from .auth import get_current_user, hides_cost, require_admin, require_module
 
 router = APIRouter(prefix="/utilities", tags=["Utilities"])
@@ -451,3 +451,20 @@ def web_sync_now(body: WebSyncIn):
     except websync.SyncFailed as exc:
         raise HTTPException(502, str(exc)) from None
     return _web_sync_status()
+
+
+@router.post("/backup", tags=["Company Master"])
+def start_backup(admin: dict = Depends(require_admin)):
+    """Company Master's Backup button: BACKUP DATABASE of the database in use into the folder set in Global Settings (Database
+    group, SQLBACKUPPATH). Runs in the background; GET /utilities/backup reports how it is going."""
+    try:
+        state = db_backup.start()
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    admin_audit.write_now(admin["user"], "Company Master", "Backup", db.settings()["database"], "", state["file"])
+    return state
+
+
+@router.get("/backup", tags=["Company Master"])
+def backup_status(admin: dict = Depends(require_admin)):
+    return db_backup.status()

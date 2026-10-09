@@ -12,6 +12,7 @@ import { InlineError } from '../common/FormErrorSummary';
 import { errorText, getAuditLog, getAuditScreens, } from '../../lib/api';
 import { downloadXls } from '../../lib/xlsExport';
 import { exportButton, field, fieldError, label, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead } from '../../lib/styles';
+import { SkeletonTableRows } from '../common/Skeleton';
 
 const iso = (d) => d.toISOString().slice(0, 10);
 const weekAgo = () => { const d = new Date(); d.setDate(d.getDate() - 7); return iso(d); };
@@ -119,11 +120,11 @@ export default function AdminAuditLog() {
                   <td className="px-3 py-1.5 tabular-nums">{i?.details}</td>
                 </tr>
               )))}
-              {!rows.length && <tr><td colSpan={12} className="px-3 py-6 text-center text-stone-500">{loading ? 'Loading…' : 'No changes in this period.'}</td></tr>}
+              {!rows.length && (loading ? <SkeletonTableRows rows={6} cols={12} /> : <tr><td colSpan={12} className="px-3 py-6 text-center text-stone-500">No changes in this period.</td></tr>)}
             </tbody>
           </table>
         </div>
-        {rows.length > 0 && <p className="border-t border-[#E3D9CD] px-4 py-2 text-[11px] text-stone-500 dark:border-line">{rows.length} entr{rows.length === 1 ? 'y' : 'ies'}</p>}
+        {rows.length > 0 && <p className="border-t border-[#DDE3EC] px-4 py-2 text-[11px] text-stone-500 dark:border-line">{rows.length} entr{rows.length === 1 ? 'y' : 'ies'}</p>}
       </section>
     </div>
   );

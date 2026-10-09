@@ -87,7 +87,7 @@ export default function WithHistory({ kind, title, children }) {
 
       {!open && (
         <button type="button" onClick={toggle} aria-label="Show history" title="Show history (Alt+H)"
-          className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-xl border border-r-0 border-[#E3D9CD] bg-[#FFFCF7] px-1.5 py-3 text-[#64283A] shadow-md hover:bg-[#F3EEE6] dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-[#D4A847] dark:hover:bg-[#1C1C1C]">
+          className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-xl border border-r-0 border-[#DDE3EC] bg-[#FFFFFF] px-1.5 py-3 text-[#1B2B4B] shadow-md hover:bg-[#F0F3F8] dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-[#D4A847] dark:hover:bg-[#1C1C1C]">
           <History size={16} />
           <span className="text-[11px] font-semibold [writing-mode:vertical-rl]">History</span>
         </button>
@@ -97,8 +97,8 @@ export default function WithHistory({ kind, title, children }) {
       {open && (
         <aside aria-label="History"
           className={`${panel} z-40 flex flex-col overflow-hidden max-2xl:fixed max-2xl:inset-y-0 max-2xl:right-0 max-2xl:w-[min(92vw,340px)] max-2xl:rounded-r-none 2xl:sticky 2xl:top-4 2xl:max-h-[calc(100vh-2rem)] 2xl:w-80 2xl:shrink-0`}>
-          <div className="flex items-center gap-1 border-b border-[#E3D9CD] px-3 py-2.5 dark:border-[#2A2A2A]">
-            <History size={15} className="text-[#64283A] dark:text-[#D4A847]" />
+          <div className="flex items-center gap-1 border-b border-[#DDE3EC] px-3 py-2.5 dark:border-[#2A2A2A]">
+            <History size={15} className="text-[#1B2B4B] dark:text-[#D4A847]" />
             <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">{TITLES[kind] ?? `Previous ${title ?? 'documents'}`}</h2>
             <button type="button" onClick={() => void refresh()} className={`${iconButton} h-7 w-7`} aria-label="Refresh history" title="Refresh">
               <RefreshCw size={13} className={busy ? 'animate-spin' : ''} />
@@ -106,11 +106,11 @@ export default function WithHistory({ kind, title, children }) {
             <button type="button" onClick={toggle} className={`${iconButton} h-7 w-7`} aria-label="Hide history" title="Hide (Alt+H)"><X size={14} /></button>
           </div>
 
-          <div className="relative border-b border-[#E3D9CD] p-2 dark:border-[#2A2A2A]">
+          <div className="relative border-b border-[#DDE3EC] p-2 dark:border-[#2A2A2A]">
             <Search size={13} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
             <input value={find} onChange={e => setFind(e.target.value)} placeholder="Find number, name or date"
               aria-label="Find in history"
-              className="w-full rounded-lg border border-[#DCD1C5] bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#64283A] dark:border-[#2A2A2A] dark:focus:border-[#D4A847]" />
+              className="w-full rounded-lg border border-[#D5DCE7] bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#1B2B4B] dark:border-[#2A2A2A] dark:focus:border-[#D4A847]" />
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -119,9 +119,9 @@ export default function WithHistory({ kind, title, children }) {
             {!error && docs !== null && !rows.length && <p className="p-3 text-xs text-stone-500">{find ? 'Nothing matches.' : 'Nothing made yet.'}</p>}
             <ul>
               {rows.map(r => (
-                <li key={r.no} className="border-b border-[#EFE9DF] last:border-0 dark:border-[#1F1F1F]">
+                <li key={r.no} className="border-b border-[#EAEEF5] last:border-0 dark:border-[#1F1F1F]">
                   <button type="button" onClick={() => setOpened(o => (o === r.no ? '' : r.no))} aria-expanded={opened === r.no}
-                    className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-[#F3EEE6] dark:hover:bg-[#1A1A1A]">
+                    className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-[#F0F3F8] dark:hover:bg-[#1A1A1A]">
                     <span className="min-w-0 flex-1">
                       <span className={`block truncate font-mono text-xs font-medium ${r.cancelled ? 'text-stone-400 line-through' : ''}`}>{r.no}</span>
                       <span className="block truncate text-[11px] text-stone-500 dark:text-stone-400">{[r.when, r.party].filter(Boolean).join(' · ')}</span>
@@ -136,7 +136,7 @@ export default function WithHistory({ kind, title, children }) {
                     <div className="bg-[#FBF8F2] px-3 pb-2.5 pt-1 text-[11px] dark:bg-[#171717]">
                       {r.lines.length ? <p className="leading-5 text-stone-600 dark:text-stone-300">{r.lines.join(' · ')}</p> : <p className="text-stone-500">No lines.</p>}
                       <button type="button" onClick={() => setPrintNo(r.no)}
-                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#B08A45] px-2.5 py-1 font-semibold text-[#64283A] hover:bg-[#B08A45]/10 dark:border-[#D4A847]/40 dark:text-[#D4A847]">
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#D99A2B] px-2.5 py-1 font-semibold text-[#1B2B4B] hover:bg-[#D99A2B]/10 dark:border-[#D4A847]/40 dark:text-[#D4A847]">
                         <Printer size={12} />Print / preview
                       </button>
                     </div>
@@ -145,7 +145,7 @@ export default function WithHistory({ kind, title, children }) {
               ))}
             </ul>
           </div>
-          <p className="border-t border-[#E3D9CD] px-3 py-1.5 text-[10px] text-stone-500 dark:border-[#2A2A2A]">
+          <p className="border-t border-[#DDE3EC] px-3 py-1.5 text-[10px] text-stone-500 dark:border-[#2A2A2A]">
             Latest {SHOWN} · <Kbd combo="Alt+H" /> hides this
           </p>
         </aside>

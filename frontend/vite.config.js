@@ -15,10 +15,20 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       input: {
         main: path.resolve(import.meta.dirname, 'index.html'),
         central: path.resolve(import.meta.dirname, 'central.html'),
+      },
+      output: {
+        // The React runtime and the icon set rarely change: their own files stay cached across app updates. The
+        // charts library is only reached through the Dashboard's lazy pie chart, so it loads on its own, later.
+        codeSplitting: {
+          groups: [
+            { name: 'vendor-react', test: /node_modules[/\\](react|react-dom|scheduler)[/\\]/, priority: 20 },
+            { name: 'vendor-icons', test: /node_modules[/\\]lucide-react[/\\]/, priority: 10 },
+          ],
+        },
       },
     },
   },

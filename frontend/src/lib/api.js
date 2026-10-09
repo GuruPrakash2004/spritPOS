@@ -223,6 +223,10 @@ export const savePrintPrinter = (printer) => request('/setup/print-printer', { m
 export const getSmtp = () => request('/setup/smtp');
 export const saveSmtp = (body) => request('/setup/smtp', { method: 'POST', body });
 export const testSmtp = (body) => request('/setup/smtp/test', { method: 'POST', body });
+/** Every SQL Server instance found (any version). `host` limits it to one server. */
+export const getSetupInstances = (host = '') => request(`/setup/instances${host ? `?host=${encodeURIComponent(host)}` : ''}`);
+/** Try the login on every instance of one server and list each one's databases. */
+export const setupScan = (body) => request('/setup/scan', { method: 'POST', body });
 export const setupTest = (body) =>
   request('/setup/test', { method: 'POST', body });
 export const setupConnect = (body) =>
@@ -254,6 +258,18 @@ export const updatePriceList = (body) => request('/masters/items/price-list', { 
 
 export const getCompany = () => request('/masters/company');
 export const saveCompany = (body) => request('/masters/company', { method: 'PUT', body });
+/** The dates offered for a new financial year (a year after the last one). */
+/** Company Master: BACKUP DATABASE into the folder set in Global Settings (runs in the background; poll the status). */
+export const startBackup = () => request('/utilities/backup', { method: 'POST', body: {} });
+export const getBackupStatus = () => request('/utilities/backup');
+export const updateDashboardLink = (link) => request('/masters/company/dashboard-link', { method: 'PUT', body: { link } });
+/** A customer's or supplier's contact persons / addresses / alert messages / notes (`kind`: contacts, addresses, alerts, activities). */
+export const getPartyRecords = (party, code, kind) => request(`/masters/${party}/${encodeURIComponent(code)}/${kind}`);
+export const savePartyRecords = (party, code, kind, rows) => request(`/masters/${party}/${encodeURIComponent(code)}/${kind}`, { method: 'PUT', body: { rows } });
+export const addPartyNote = (party, code, note) => request(`/masters/${party}/${encodeURIComponent(code)}/activities`, { method: 'POST', body: { rows: [{ Notes: note }] } });
+export const getNextFinYear = () => request('/masters/company/fin-years/next');
+export const createFinYear = (body) => request('/masters/company/fin-years', { method: 'POST', body });
+export const removeFinYear = (start) => request(`/masters/company/fin-years/${start}`, { method: 'DELETE' });
 export const getCompanyHours = () => request('/company/hours');
 
 // Company Master's pictures and documents (routers/company_files.py).
@@ -394,6 +410,44 @@ export const saveReportRights = (role, body) => request(`/admin/report-rights/${
 export const getAbout = () => request('/utilities/about');
 export const setDatabaseConnection = (action) => request(`/utilities/database/${action}`, { method: 'POST' });
 export const refreshDocDesigner = () => request('/designer/refresh', { method: 'POST' });
+
+// ─── Screens drawn from the database (routers/designer.py) ─────────────────────────────────────────
+/** The screens the Doc Designer defines: [{ doc_id, name, type, short_form, header_table, detail_table, master_path }]. */
+export const getDesignerDocs = () => request('/designer/docs');
+/** One screen: { doc_id, name, type, header_table, detail_table, master_path, version, fields: [{ code, caption, section,
+ *  sub_section, order, type, width, decimals, readonly, hidden, mandatory, options, combo, default, tooltip, hide_when,
+ *  mandatory_when, readonly_when, standard, modelled, ... }] }. */
+export const getScreenDef = (docId) => request(`/designer/screen/${docId}`);
+/** A value that changes when a table or a designer row changes (poll it to know when to read the screen again). */
+export const getSchemaVersion = () => request('/designer/version');
+export const getDesignerMenu = () => request('/designer/menu');
+/** The value a designer pick-up field takes after another field changed (`values`: the other fields by code). */
+export const getDesignerPickup = (docId, code, values) => request(`/designer/pickup/${docId}/${encodeURIComponent(code)}?values=${encodeURIComponent(JSON.stringify(values))}`);
+/** The next number and code of a code series (a master whose codes are generated). */
+export const getDesignerNextCode = (docId, series) => request(`/designer/next-code/${docId}?series=${encodeURIComponent(series)}`);
+export const getDesignerLookup = (docId, code, q = '') => request(`/designer/lookup/${docId}/${encodeURIComponent(code)}${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+/** The structure-change stream (server-sent events read with fetch, because EventSource can't send the token): calls
+ *  `onState({version, build})` for every message; resolves when the stream ends, rejects when it can't be opened. */
+export async function streamDesignerEvents(onState, signal) {
+  const res = await requestRaw('/designer/events', { signal });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return;
+    buffer += decoder.decode(value, { stream: true });
+    let cut;
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      const line = block.split('\n').find(l => l.startsWith('data:'));
+      if (line) { try { onState(JSON.parse(line.slice(5))); } catch { /* a malformed message is skipped */ } }
+    }
+  }
+}
+/** Administrator: every designer screen with what the server builds from it and what looks wrong. */
+export const getScreenPreview = () => request('/designer/preview');
 
 export const getWebSync = () => request('/utilities/web-sync');
 export const runWebSync = (body) => request('/utilities/web-sync', { method: 'POST', body });

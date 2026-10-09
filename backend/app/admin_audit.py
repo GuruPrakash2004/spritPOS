@@ -63,7 +63,12 @@ def _fmt(v) -> str:
 
 def diff(before: dict | None, after: dict | None) -> tuple[str, str]:
     """(earlier, changed) text for the fields that differ, e.g. ("mrp: 850; name: Old", "mrp: 900; name: New")."""
-    before, after = before or {}, after or {}
+    def flat(row: dict) -> dict:   # extra database columns are compared one by one, not as one dict
+        out = {k: v for k, v in row.items() if k != "extras"}
+        for k, v in (row.get("extras") or {}).items():
+            out[k] = v.strip() if isinstance(v, str) else (str(v)[:10] if hasattr(v, "isoformat") else v)
+        return out
+    before, after = flat(before or {}), flat(after or {})
     keys = [k for k in dict.fromkeys([*before, *after]) if k not in FIELDS_NEVER_SHOWN
             and _fmt(before.get(k)) != _fmt(after.get(k))]
     return ("; ".join(f"{k}: {_fmt(before.get(k))}" for k in keys),

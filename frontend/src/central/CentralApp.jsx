@@ -75,8 +75,8 @@ export default function CentralApp() {
   if (!session) return <><CentralLogin onSignedIn={signIn} reason={reason} /><SnackbarContainer /></>;
 
   return (
-    <div className={`min-h-screen ${dark ? 'dark bg-[#0A0A0A] text-stone-100' : 'bg-[#F5F1E9] text-[#29231F]'}`}>
-      <header className="sticky top-0 z-10 border-b border-[#E3D9CD] bg-[#FFFCF7]/95 backdrop-blur dark:border-[#1E1E1E] dark:bg-[#0E0E0E]/95">
+    <div className={`min-h-screen ${dark ? 'dark bg-[#0A0A0A] text-stone-100' : 'bg-[#F4F6FA] text-[#1A2236]'}`}>
+      <header className="sticky top-0 z-10 border-b border-[#DDE3EC] bg-[#FFFFFF]/95 backdrop-blur dark:border-[#1E1E1E] dark:bg-[#0E0E0E]/95">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-2">
           <VlqmsLogo size="xs" />
           <span className="text-sm font-bold">Central</span>
@@ -85,14 +85,14 @@ export default function CentralApp() {
               {TABS.map(t => (
                 <button key={t.id} onClick={() => setTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}
                   className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${tab === t.id
-                    ? 'bg-[#64283A] text-white dark:bg-[#D4A847] dark:text-[#180E09]' : 'text-[#70675F] hover:bg-[#EFE9DF] dark:text-stone-400 dark:hover:bg-[#1C1C1C]'}`}>
+                    ? 'bg-[#1B2B4B] text-white dark:bg-[#D4A847] dark:text-[#180E09]' : 'text-[#5F6B80] hover:bg-[#EAEEF5] dark:text-stone-400 dark:hover:bg-[#1C1C1C]'}`}>
                   <t.icon size={14} />{t.label}
                 </button>
               ))}
             </nav>
           )}
           <div className="ml-auto flex items-center gap-1 text-xs">
-            <span className="mr-1 text-[#70675F] dark:text-stone-400">{session.user} · {session.role}</span>
+            <span className="mr-1 text-[#5F6B80] dark:text-stone-400">{session.user} · {session.role}</span>
             <button className={iconButton} onClick={() => setChanging(true)} title="Change password" aria-label="Change password"><KeyRound size={15} /></button>
             <button className={iconButton} onClick={() => setDark(!dark)} title="Theme" aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}>{dark ? <Sun size={15} /> : <Moon size={15} />}</button>
             <button className={iconButton} onClick={() => signOut()} title="Sign out" aria-label="Sign out"><LogOut size={15} /></button>

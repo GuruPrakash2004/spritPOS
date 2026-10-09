@@ -21,13 +21,17 @@
 import { useEffect, useMemo, useRef, useState, } from 'react';
 import { PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine, ChevronDown } from 'lucide-react';
 import Kbd from '../common/Kbd';
+import { useColumnTone } from '../../hooks/useColumnTone';
+import { cn } from '../../lib/utils';
 import ItemSearchBox, { } from './ItemSearchBox';
 import { focusField, useShortcuts } from '../../lib/keys';
 import { useConfirm } from '../common/ConfirmDialog';
 import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
-import { deleteSalesInvoice, errorText, getCustomers, getNextNumber, getSalesPersons, getSettingValues, newIdempotencyKey, saveSalesInvoice, todayIso, } from '../../lib/api';
+import BillExtras from './BillExtras';
+import { useBillExtras } from './useBillExtras';
+import { deleteSalesInvoice, errorText, getCustomers, getNextNumber, getPartyRecords, getSalesPersons, getSettingValues, newIdempotencyKey, saveSalesInvoice, todayIso, } from '../../lib/api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
 import { STOCK_ITEMS, litresPerBottle, loadStockItems, sellable, stockIndex, useStockItems } from '../../data/stockData';
 import { numberToWords } from '../../lib/formatters';
@@ -108,6 +112,8 @@ export default function SalesInvoice({ setup, onClose }) {
   // One key per bill: pressing Save twice (or a retry) can't make two bills. Renewed for each new bill.
   const saveKey = useRef(newIdempotencyKey());
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const extrasBill = useBillExtras('TrnHdrSINV', 'si');
+  const tone = useColumnTone('TrnHdrSINV');   // red = mandatory, blue = read-only, from the Doc Designer
   // Global Settings values (GET /settings/values); until they load, a scan adds the item at once.
   const [gsettings, setGsettings] = useState({});
   const qtyAfterScan = gsettings.QTYSELINV?.toUpperCase() === 'Y';
@@ -164,6 +170,17 @@ export default function SalesInvoice({ setup, onClose }) {
   }, [lines, writeOff, redeem, paymentType, cardInput, otherPay]);
 
   const customer = customers.find(c => c.name.toLowerCase() === party.trim().toLowerCase() || c.code.toLowerCase() === party.trim().toLowerCase());
+  // The alert messages kept on the customer (MstPartyAlertMessage) are shown when the customer is picked, as vLQMS.exe does.
+  const alertFor = useRef('');
+  useEffect(() => {
+    const code = customer?.code;
+    if (!code || code === 'CASH' || alertFor.current === code) return;
+    alertFor.current = code;
+    getPartyRecords('customers', code, 'alerts').then(r => {
+      const text = r.rows.map(x => x.Message).filter(Boolean).join(' / ');
+      if (text) setToast({ kind: 'error', text: `Alert for ${customer.name}: ${text}` });
+    }).catch(() => undefined);
+  }, [customer?.code]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // What the cash tendered is measured against: the cash part of the bill, or the whole bill when none of it is cash.
   const due = totals.cash > 0 ? totals.cash : totals.invoice;
@@ -289,6 +306,7 @@ export default function SalesInvoice({ setup, onClose }) {
 
   const resetBill = () => {
     saveKey.current = newIdempotencyKey();
+    extrasBill.refresh();
     setLines([]);
     setSelectedId(null);
     setParty(setup.customer);
@@ -319,6 +337,7 @@ export default function SalesInvoice({ setup, onClose }) {
     payment: { cash: totals.cash, card: totals.card, upi: totals.other, credit: 0 },
     collected: !hold && collected !== '' ? Number(collected) || 0 : undefined,
     hold,
+    ...(extrasBill.fields.length ? { extras: extrasBill.body(hold) } : {}),
   });
 
   // Held bills are parked on the backend so any counter session can recall them.
@@ -352,6 +371,7 @@ export default function SalesInvoice({ setup, onClose }) {
     const recalled = found.filter(l => l.stock !== -1).map(l => ({ ...toLine(l.stock, l.qty), rate: l.rate }));
     saveKey.current = newIdempotencyKey();   // a recalled bill is a different bill
     setLines(recalled);
+    extrasBill.load(inv.extras);
     setParty(customers.find(c => c.code === inv.customer)?.name ?? inv.customer);
     setDialog(null);
     setToast(missing
@@ -372,6 +392,7 @@ export default function SalesInvoice({ setup, onClose }) {
     if (totals.card + totals.other > totals.invoice) return setToast({ kind: 'error', text: 'Card + other payment exceeds the invoice value.' });
     if (collected !== '' && change < 0) return setToast({ kind: 'error', text: `Collected amount is ₹ ${money(-change)} short of the cash amount.` });
     if (totals.points > (customer?.points ?? 0)) return setToast({ kind: 'error', text: `Only ${customer?.points ?? 0} points available to redeem.` });
+    if (!extrasBill.check()) return setToast({ kind: 'error', text: 'Fill the additional details marked in red.' });
     // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Save was pressed.
     const body = billBody(false);
     const key = saveKey.current;
@@ -521,28 +542,27 @@ export default function SalesInvoice({ setup, onClose }) {
                       <th className="w-10 whitespace-nowrap px-4 py-2.5">SI No</th>
                       <th className="min-w-[220px] px-3 py-2.5">Item</th>
                       <th className="px-3 py-2.5 text-right">QOH</th>
-                      <th className="px-3 py-2.5 text-right">Qty</th>
-                      <th className="px-3 py-2.5 text-right">Rate</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Disc.%</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Disc.Amt</th>
-                      <th className="px-3 py-2.5 text-right">Amount</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">CGST%</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">CGST Amt</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">SGST%</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">SGST Amt</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Cess%</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Cess Amt</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Comp.Cess Amt</th>
-                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Item Amt</th>
-                      <th className="w-10 px-2 py-2.5"><span className="sr-only">Remove</span></th>
-                    </tr>
+                      <th className={cn('px-3 py-2.5 text-right', tone('SINVQTY'))}>Qty</th>
+                      <th className={cn('px-3 py-2.5 text-right', tone('SINVRATE'))}>Rate</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('DISCPER'))}>Disc.%</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('DISCAMT'))}>Disc.Amt</th>
+                      <th className={cn('px-3 py-2.5 text-right', tone('SINVAMT'))}>Amount</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('CGSTPER'))}>CGST%</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('CGSTAMT'))}>CGST Amt</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('SGSTPER'))}>SGST%</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('SGSTAMT'))}>SGST Amt</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('CESSPER'))}>Cess%</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('CESSAMT'))}>Cess Amt</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('COMPCESSAMT'))}>Comp.Cess Amt</th>
+                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('ITEMAMT'))}>Item Amt</th>
+                                          </tr>
                   </thead>
                   <tbody className="divide-y divide-line-soft tabular-nums">
                     {lines.map((line, i) => {
                       const low = line.qty >= line.qoh;
                       return (
                         <tr key={line.id} onClick={() => setSelectedId(line.id)} aria-selected={selectedId === line.id} className={`cursor-pointer transition-colors ${selectedId === line.id ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
-                          <td className="px-4 py-2 text-stone-400">{i + 1}</td>
+                          <td className="whitespace-nowrap px-2 py-1 text-stone-400"><span className="inline-flex items-center gap-1"><button tabIndex={-1} onClick={e => { e.stopPropagation(); setLines(lines.filter(l => l.id !== line.id)); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${line.name}`}><Trash2 size={14} /></button>{i + 1}</span></td>
                           <td className="px-3 py-2 font-medium text-stone-900 dark:text-stone-50">{line.name}</td>
                           <td className={`px-3 py-2 text-right ${low ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500'}`}>{line.qoh}</td>
                           <td className="px-3 py-1.5 text-right"><input type="number" min={1} max={line.qoh} value={line.qty || ''} data-si-row={i} data-si-col="qty" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'qty')} onChange={e => updateLine(line.id, { qty: Number(e.target.value) })} onBlur={() => line.qty || updateLine(line.id, { qty: 1 })} className={`${cellInput} font-semibold`} aria-label={`Qty for ${line.name}`} /></td>
@@ -558,9 +578,6 @@ export default function SalesInvoice({ setup, onClose }) {
                           <td className="px-3 py-2 text-right text-stone-400">{money(0)}</td>
                           <td className="px-3 py-2 text-right text-stone-400">{money(0)}</td>
                           <td className="px-3 py-2 text-right font-semibold text-stone-900 dark:text-stone-50">{money(itemAmt(line))}</td>
-                          <td className="px-2 py-2 text-center">
-                            <button tabIndex={-1} onClick={e => { e.stopPropagation(); setLines(lines.filter(l => l.id !== line.id)); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${line.name}`}><Trash2 size={14} /></button>
-                          </td>
                         </tr>
                       );
                     })}
@@ -599,6 +616,7 @@ export default function SalesInvoice({ setup, onClose }) {
               <input id="si-party" list="si-parties" value={party} onChange={e => setParty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); focusSearch(); } }} className={field} placeholder="Walk-in customer" />
               <datalist id="si-parties">{customers.map(c => <option key={c.code} value={c.name} />)}</datalist>
             </div>
+            <BillExtras bill={extrasBill} idPrefix="si" />
             {customer && customer.points > 0 && (
               <div className="col-span-2 flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-xs text-accent-ink">
                 <Gift size={14} className="shrink-0" />

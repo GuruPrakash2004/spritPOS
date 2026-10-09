@@ -169,7 +169,7 @@ export default function PrintDialog({ kind, docNo, title, onClose }
                 <div role="radiogroup" className="space-y-1">
                   {choices.map(c => (
                     <label key={c.key} className={`flex cursor-pointer flex-col gap-0.5 rounded-lg border px-3 py-2 ${c.key === chosen
-                      ? 'border-[#64283A] bg-[#64283A]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#E3D9CD] dark:border-[#2A2A2A]'}`}>
+                      ? 'border-[#1B2B4B] bg-[#1B2B4B]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#DDE3EC] dark:border-[#2A2A2A]'}`}>
                       <span className="flex min-w-0 items-center gap-2">
                         <input type="radio" name="print-format" checked={c.key === chosen} disabled={c.option?.available === false} onChange={() => setChosen(c.key)} />
                         <span className="truncate font-medium">{c.label}</span>
@@ -193,7 +193,7 @@ export default function PrintDialog({ kind, docNo, title, onClose }
                 </select>
               </label>
             </div>
-            <div className="relative flex min-h-[60vh] flex-1 items-start justify-center overflow-auto rounded-lg border border-[#E3D9CD] bg-stone-200 p-4 dark:border-[#2A2A2A] dark:bg-[#0c0c0c]">
+            <div className="relative flex min-h-[60vh] flex-1 items-start justify-center overflow-auto rounded-lg border border-[#DDE3EC] bg-stone-200 p-4 dark:border-[#2A2A2A] dark:bg-[#0c0c0c]">
               {loading && <p className="absolute inset-0 flex items-center justify-center text-stone-500">Laying out the report…</p>}
               {previewError && <p role="alert" className="p-3 text-red-600 dark:text-red-400">{previewError}</p>}
               {url && !loading && <iframe ref={frame} title="Print preview" src={`${url}#toolbar=0&navpanes=0&view=FitH`} style={sheetStyle(size)} className="bg-white shadow-lg ring-1 ring-black/10" />}

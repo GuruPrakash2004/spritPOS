@@ -7,8 +7,8 @@
 // ranked by the backend so fast sellers that are out of stock or about to run out come first; it is
 // re-polled every 8 s with the items.
 
-import Pattern from '../ui/c-chart-21';
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import { SkeletonLine } from '../common/Skeleton';
 import {
   ArrowUpRight, ArrowDownRight,
   Package, Receipt, TrendingUp, Truck, Wine,
@@ -20,13 +20,16 @@ import RestockCarousel from './RestockCarousel';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import { useShopHours } from '../../hooks/useShopHours';
 
+// The pie chart pulls in the whole charts library (the biggest piece of the app): it loads after the rest of the Dashboard has painted.
+const Pattern = lazy(() => import('../ui/c-chart-21'));
+
 // Sales window (days) for the restock analysis.
 const RESTOCK_DAYS = 15;
 
 const LiveBadge = ({ live }) => (
   <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${live
     ? 'border-emerald-500/35 bg-emerald-50 text-emerald-700 shadow-[0_0_14px_rgba(16,185,129,0.28)] dark:bg-emerald-950/50 dark:text-emerald-300 dark:shadow-[0_0_16px_rgba(16,185,129,0.24)]'
-    : 'border-line bg-muted text-[#70675F] dark:text-stone-400'
+    : 'border-line bg-muted text-[#5F6B80] dark:text-stone-400'
   }`}>
     {live && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_7px_rgba(16,185,129,0.8)]" />}
     {live ? 'Live' : 'Unavailable'}
@@ -187,13 +190,13 @@ export const Dashboard = () => {
 
         <div className="relative z-10 flex flex-col justify-between gap-6 p-7 sm:p-10 lg:min-h-[260px] lg:flex-row lg:items-center lg:p-12">
           <div className="max-w-lg">
-            <p className="text-[10px] font-bold tracking-[0.35em] text-[#D3BB89] uppercase">
+            <p className="text-[10px] font-bold tracking-[0.35em] text-[#F0CF8A] uppercase">
               Business Overview
             </p>
             <h2 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white leading-tight"
                 style={{ fontFamily: 'var(--font-display)' }}>
-              Everything under{' '}
-              <span className="text-[#D3BB89]">one roof.</span>
+              Fast Billing. Accurate Stock.{' '}
+              Better Control.
             </h2>
             <p className="mt-3 text-sm text-white/70 max-w-md leading-relaxed">
               Monitor inventory, sales, procurement and compliance across your entire operation.
@@ -223,16 +226,16 @@ export const Dashboard = () => {
 <section aria-label="Key figures" className="stagger-enter grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {stats.map(s => (
           <div key={s.label} className="card-3d rounded-2xl border p-4 sm:p-5
-                                        bg-[#FFFCF7] border-[#E3D9CD] shadow-[0_8px_30px_rgba(72,53,38,0.06)]
-                                        hover:shadow-[0_12px_35px_rgba(72,53,38,0.10)] hover:border-[#D4C8BA]
+                                        bg-[#FFFFFF] border-[#DDE3EC] shadow-[0_8px_30px_rgba(72,53,38,0.06)]
+                                        hover:shadow-[0_12px_35px_rgba(72,53,38,0.10)] hover:border-[#C8D1DF]
                                         dark:glass-card dark:glow-gold dark:border-[#2A2A2A] dark:bg-transparent">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#70675F] dark:text-stone-400">{s.label}</span>
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#64283A]/8 dark:bg-[#D4A847]/10">
-                <s.icon size={15} className="text-[#64283A] dark:text-[#D4A847]" aria-hidden="true" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5F6B80] dark:text-stone-400">{s.label}</span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1B2B4B]/8 dark:bg-[#D4A847]/10">
+                <s.icon size={15} className="text-[#1B2B4B] dark:text-[#D4A847]" aria-hidden="true" />
               </span>
             </div>
-            <div className="mt-3 truncate text-lg font-extrabold tracking-tight sm:text-2xl tabular-nums text-[#29231F] dark:text-stone-50">{s.value}</div>
+            <div className="mt-3 truncate text-lg font-extrabold tracking-tight sm:text-2xl tabular-nums text-[#1A2236] dark:text-stone-50">{s.value}</div>
             <div className="mt-1 truncate text-xs font-medium text-[#55745A] dark:text-[#D4A847]" title={s.sub}>{s.sub}</div>
           </div>
         ))}
@@ -245,10 +248,10 @@ export const Dashboard = () => {
       {/* ═══ FULL-SPAN WAREHOUSE BANNER ═══ */}
       {shown('company_banner') && (
 <section data-panel="company_banner" className="animate-fadeInUp animate-fadeInUp-d3">
-        <div className="group relative overflow-hidden rounded-2xl dark:rounded-3xl h-64 sm:h-72 lg:h-80 img-zoom border border-[#E3D9CD] dark:border-[#2A2A2A] shadow-[0_8px_30px_rgba(72,53,38,0.06)] dark:shadow-card">
-          <img src={IMAGES.dashboard.warehouse} alt=""
+        <div className="group relative overflow-hidden rounded-2xl dark:rounded-3xl h-64 sm:h-72 lg:h-80 img-zoom border border-[#DDE3EC] dark:border-[#2A2A2A] shadow-[0_8px_30px_rgba(72,53,38,0.06)] dark:shadow-card">
+          <img src={IMAGES.dashboard.warehouse} alt="" loading="lazy" decoding="async"
             className="absolute inset-0 h-full w-full object-cover object-center
-                       transition-transform duration-700 ease-out group-hover:scale-[1.035]"
+                       transition-transform duration-400 ease-out group-hover:scale-[1.035]"
             style={{ opacity: 0.85, filter: 'saturate(0.9) brightness(0.95)' }}
             loading="lazy" />
           {/* Dual-theme atmospheric overlay gradients */}
@@ -257,7 +260,7 @@ export const Dashboard = () => {
           <div className="absolute inset-0 bg-gradient-to-t from-[#1E130E]/85 via-transparent to-transparent
                           dark:from-[#0A0A0A]/85" />
           <div className="absolute top-6 right-6 animate-float opacity-30" aria-hidden="true">
-            <Wine size={36} className="text-[#D3BB89]" />
+            <Wine size={36} className="text-[#F0CF8A]" />
           </div>
           <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
@@ -277,12 +280,12 @@ export const Dashboard = () => {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 animate-fadeInUp animate-fadeInUp-d4">
         {shown('sales_chart') && (
 <section className="xl:col-span-2 rounded-2xl border p-5
-                            bg-[#FFFCF7] border-[#E3D9CD] shadow-[0_8px_30px_rgba(72,53,38,0.06)]
+                            bg-[#FFFFFF] border-[#DDE3EC] shadow-[0_8px_30px_rgba(72,53,38,0.06)]
                             dark:glass-card dark:border-[#2A2A2A] dark:bg-transparent">
           <div className="mb-5 flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-sm font-semibold text-[#29231F] dark:text-stone-50">Sales, last 7 days</h2>
-              <p className="mt-0.5 text-xs text-[#70675F] dark:text-stone-400">Bill value in ₹ thousands</p>
+              <h2 className="text-sm font-semibold text-[#1A2236] dark:text-stone-50">Sales, last 7 days</h2>
+              <p className="mt-0.5 text-xs text-[#5F6B80] dark:text-stone-400">Bill value in ₹ thousands</p>
             </div>
             <div className="flex items-center gap-2">
               {pctChange !== null && (
@@ -297,22 +300,22 @@ export const Dashboard = () => {
           <div className="flex h-48 items-end gap-3 border-b border-line pb-px sm:gap-5" role="img" aria-label={weekData.length ? `Sales per day: ${weekData.map(day => `${day.day ?? day.date} ₹${day.amtK}k`).join(', ')}` : 'Sales data unavailable'}>
             {weekData.map((day, i) => (
               <div key={day.date} className="group flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-                <span className="text-[11px] tabular-nums text-[#70675F] opacity-100 transition-opacity dark:text-stone-400 lg:opacity-0 lg:group-hover:opacity-100">₹{day.amtK}k</span>
+                <span className="text-[11px] tabular-nums text-[#5F6B80] opacity-100 transition-opacity dark:text-stone-400 lg:opacity-0 lg:group-hover:opacity-100">₹{day.amtK}k</span>
                 <div
-                  className={`w-full max-w-10 rounded-t-md transition-all duration-300 ${
+                  className={`bar-grow w-full max-w-10 rounded-t-md transition-colors ${
                     i === weekData.length - 1
-                      ? 'bg-[#64283A] dark:bg-gradient-to-t dark:from-[#C8952E] dark:to-[#D4A847]'
-                      : 'bg-[#D4C8BA] group-hover:bg-[#B08A45]/50 dark:bg-stone-700 dark:group-hover:bg-[#D4A847]/50'
+                      ? 'bg-[#1B2B4B] dark:bg-gradient-to-t dark:from-[#C8952E] dark:to-[#D4A847]'
+                      : 'bg-[#C8D1DF] group-hover:bg-[#D99A2B]/50 dark:bg-stone-700 dark:group-hover:bg-[#D4A847]/50'
                   }`}
-                  style={{ height: `${day.amount > 0 ? Math.max(4, (day.amtK / max) * 82) : 0}%` }}
+                  style={{ height: `${day.amount > 0 ? Math.max(4, (day.amtK / max) * 82) : 0}%`, '--i': i }}
                   title={`${day.date}: ₹ ${money(day.amount)} (${day.bills} bills)`}
                 />
               </div>
             ))}
           </div>
           <div className="mt-2 flex gap-3 sm:gap-5">
-            {weekData.map(day => <span key={day.date} className="flex-1 text-center text-[11px] text-[#70675F] dark:text-stone-400">{day.day ?? day.date}</span>)}
-            {!weekData.length && <span className="w-full text-center text-xs text-[#70675F] dark:text-stone-400">Sales data unavailable</span>}
+            {weekData.map(day => <span key={day.date} className="flex-1 text-center text-[11px] text-[#5F6B80] dark:text-stone-400">{day.day ?? day.date}</span>)}
+            {!weekData.length && <span className="w-full text-center text-xs text-[#5F6B80] dark:text-stone-400">Sales data unavailable</span>}
           </div>
         </section>
       )}
@@ -320,19 +323,25 @@ export const Dashboard = () => {
         {shown('inventory_mix') && (
 <div data-panel="inventory_mix" className="h-full">
           {hasInventoryValue ? (
-            <Pattern
-              data={inventoryMixData}
-              config={inventoryMixConfig}
-              title="Inventory Mix"
-              description="Dynamic share of stock value"
-              dataKey="share"
-              nameKey="category"
-              className="h-full flex flex-col justify-between"
-            />
+            <Suspense fallback={
+              <div className={`${panel} flex h-full min-h-48 flex-col gap-3`} role="status" aria-busy="true">
+                <span className="sr-only">Loading…</span>
+                <SkeletonLine className="h-4 w-32" /><SkeletonLine className="h-3 w-48" /><SkeletonLine className="mx-auto mt-4 h-32 w-32 !rounded-full" />
+              </div>}>
+              <Pattern
+                data={inventoryMixData}
+                config={inventoryMixConfig}
+                title="Inventory Mix"
+                description="Dynamic share of stock value"
+                dataKey="share"
+                nameKey="category"
+                className="h-full flex flex-col justify-between"
+              />
+            </Suspense>
           ) : (
             <div className={`${panel} flex h-full min-h-48 flex-col justify-center`}>
-              <h2 className="text-sm font-semibold text-[#29231F] dark:text-stone-50">Inventory Mix</h2>
-              <p className="mt-2 text-xs text-[#70675F] dark:text-stone-400">
+              <h2 className="text-sm font-semibold text-[#1A2236] dark:text-stone-50">Inventory Mix</h2>
+              <p className="mt-2 text-xs text-[#5F6B80] dark:text-stone-400">
                 {items ? 'No inventory value on record.' : 'Inventory data unavailable.'}
               </p>
             </div>
@@ -344,24 +353,24 @@ export const Dashboard = () => {
       {/* ═══ STOCK MOVEMENT ═══ */}
       {shown('stock_movement') && (
 <section data-panel="stock_movement" className="rounded-2xl border p-5 animate-fadeInUp animate-fadeInUp-d5
-                          bg-[#FFFCF7] border-[#E3D9CD] shadow-[0_8px_30px_rgba(72,53,38,0.06)]
+                          bg-[#FFFFFF] border-[#DDE3EC] shadow-[0_8px_30px_rgba(72,53,38,0.06)]
                           dark:glass-card dark:border-[#2A2A2A] dark:bg-transparent">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-[#29231F] dark:text-stone-50">Stock movement</h2>
-            <p className="mt-0.5 text-xs text-[#70675F] dark:text-stone-400">Today's inventory flow across the store, in bottles</p>
+            <h2 className="text-sm font-semibold text-[#1A2236] dark:text-stone-50">Stock movement</h2>
+            <p className="mt-0.5 text-xs text-[#5F6B80] dark:text-stone-400">Today's inventory flow across the store, in bottles</p>
           </div>
           <LiveBadge live={stockMovement !== null} />
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
           {(stockMovement?.flow ?? []).map(item => (
             <div key={item.label}>
-              <p className="text-xs text-[#70675F] dark:text-stone-400">{item.label}</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-[#29231F] dark:text-stone-50">{item.value}</p>
+              <p className="text-xs text-[#5F6B80] dark:text-stone-400">{item.label}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-[#1A2236] dark:text-stone-50">{item.value}</p>
               <div className="mt-2 h-1.5 rounded-full bg-muted"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${item.pct}%` }} /></div>
             </div>
           ))}
-          {!stockMovement && <p className="text-xs text-[#70675F] dark:text-stone-400">Stock movement data unavailable.</p>}
+          {!stockMovement && <p className="text-xs text-[#5F6B80] dark:text-stone-400">Stock movement data unavailable.</p>}
         </div>
       </section>
       )}
@@ -369,12 +378,13 @@ export const Dashboard = () => {
       {/* ═══ FOOTER STORE BANNER (COMPANY MASTER 1ST IMAGE) ═══ */}
       {shown('store_banner') && (
 <section data-panel="store_banner" className="animate-fadeInUp animate-fadeInUp-d5">
-        <div className="group relative overflow-hidden rounded-2xl dark:rounded-3xl h-48 sm:h-60 lg:h-72 img-zoom border border-[#E3D9CD] dark:border-[#2A2A2A] shadow-[0_8px_30px_rgba(72,53,38,0.06)] dark:shadow-card">
+        <div className="group relative overflow-hidden rounded-2xl dark:rounded-3xl h-48 sm:h-60 lg:h-72 img-zoom border border-[#DDE3EC] dark:border-[#2A2A2A] shadow-[0_8px_30px_rgba(72,53,38,0.06)] dark:shadow-card">
           <img
             src={storeImage}
             alt={company?.name ? `${company.name} store` : 'Company store'}
+            loading="lazy" decoding="async"
             className="absolute inset-0 h-full w-full object-cover object-[center_35%]
-                       transition-transform duration-700 ease-out group-hover:scale-[1.03]"
+                       transition-transform duration-400 ease-out group-hover:scale-[1.03]"
             style={{ opacity: 0.88, filter: 'saturate(0.95) contrast(1.0) brightness(0.95)' }}
             loading="lazy"
           />
@@ -386,7 +396,7 @@ export const Dashboard = () => {
 
           <div className="absolute bottom-0 left-0 right-0 p-4 pt-3 sm:p-10 flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4">
             <div>
-              <p className="mt-2 sm:mt-0 text-[10px] font-bold tracking-[0.25em] text-[#D3BB89] uppercase">
+              <p className="mt-2 sm:mt-0 text-[10px] font-bold tracking-[0.25em] text-[#F0CF8A] uppercase">
                 Retail Outlet{company?.licence_type ? ` · ${company.licence_type}` : ' · Company Master'}
               </p>
               <h3 className="mt-1 text-2xl sm:text-3xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>

@@ -6,6 +6,7 @@ import Modal from '../../common/Modal';
 import ItemPickGrid from '../ItemPickGrid';
 
 import { field, headCell, money } from './purchaseBillData';
+import { SkeletonTableRows } from '../../common/Skeleton';
 
 const IDS = ['ai-cases', 'ai-loose', 'ai-rate', 'ai-selling', 'ai-aroed'];
 const box = 'rounded-md border border-line bg-surface/60 p-3';
@@ -40,6 +41,12 @@ export function ItemLookupModal({ items, minMarginPct = 0, onAdd, onClose }) {
   const amount = Math.round(total * (Number(rate) || 0) * 100) / 100;
   const variation = Number(rate) > 0 ? ((Number(selling) || 0) - Number(rate)) / Number(rate) * 100 : 0;
   const lowMargin = minMarginPct > 0 && variation < minMarginPct;
+
+  // Typing the Total Bottles works out the cases (by the item's bottles per case) and the loose bottles.
+  const setTotalBottles = (v) => {
+    const t = Math.max(0, Math.floor(Number(v)) || 0);
+    setCases(t ? String(Math.floor(t / perCase)) : ''); setLoose(t ? String(t % perCase) : ''); setError('');
+  };
 
   const choose = (item) => {
     if (!item) return;
@@ -110,7 +117,9 @@ export function ItemLookupModal({ items, minMarginPct = 0, onAdd, onClose }) {
               <div className={`${box} space-y-2`}>
                 <div className="flex items-center"><label htmlFor="ai-cases" className={rowLabel}>Cases</label>{numberInput(0, 'ai-cases', cases, setCases)}</div>
                 <div className="flex items-center"><label htmlFor="ai-loose" className={rowLabel}>Loose Bottles</label>{numberInput(1, 'ai-loose', loose, setLoose)}</div>
-                <div className="flex items-center"><span className={rowLabel}>Total Bottles</span><output aria-label="Total bottles" className={`${field} w-28 py-1 text-right tabular-nums`}>{total}</output></div>
+                <div className="flex items-center"><span className={rowLabel}>Total Bottles</span><input id="ai-total" type="number" min={0} step={1} aria-label="Total bottles" value={total || ''} placeholder="0"
+                  onChange={e => setTotalBottles(e.target.value)} onFocus={e => e.target.select()} onKeyDown={fieldKeys(1)}
+                  className={`${field} w-28 py-1 text-right tabular-nums`} /></div>
               </div>
               <div className={`${box} space-y-2`}>
                 <div className="flex items-center"><label htmlFor="ai-rate" className={rowLabel}>Purchase Rate</label>{numberInput(2, 'ai-rate', rate, setRate)}</div>
@@ -155,7 +164,7 @@ export function CopyFromModal({ indents, onCopy, onClose }
             </tr>
           ))}
           {indents && !indents.length && <tr><td colSpan={6} className="px-2 py-8 text-center text-stone-400">No purchase indents yet. Raise one in Purchase Indent first.</td></tr>}
-          {!indents && <tr><td colSpan={6} className="px-2 py-8 text-center text-stone-400">Loading…</td></tr>}
+          {!indents && <SkeletonTableRows rows={4} cols={6} />}
         </tbody>
       </table>
     </Modal>

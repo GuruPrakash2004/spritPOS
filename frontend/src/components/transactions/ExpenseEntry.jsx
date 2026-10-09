@@ -75,12 +75,12 @@ export default function ExpenseEntry() {
       <div className={`${panel} overflow-auto`}>
         <table className="w-full text-xs">
           <thead className={tableHead}>
-            <tr><th className="px-3 py-2">Sl</th><th className="px-3 py-2">Ledger</th><th className="px-3 py-2 text-right">Amount (₹)</th><th className="px-3 py-2">Narration</th><th className="px-3 py-2" /></tr>
+            <tr><th className="px-3 py-2">Sl</th><th className="px-3 py-2">Ledger</th><th className="px-3 py-2 text-right">Amount (₹)</th><th className="px-3 py-2">Narration</th></tr>
           </thead>
           <tbody className={tableBody}>
             {lines.map((l, i) => (
               <tr key={i}>
-                <td className="px-3 py-1.5 text-stone-400">{i + 1}</td>
+                <td className="whitespace-nowrap px-3 py-1.5 font-sans text-stone-400"><span className="inline-flex items-center gap-1.5"><button onClick={() => setLines(lines.length > 1 ? lines.filter((_, x) => x !== i) : [blank()])} className="text-stone-400 hover:text-red-500" aria-label={`Remove row ${i + 1}`}><Trash2 size={13} /></button>{i + 1}</span></td>
                 <td className="px-3 py-1.5">
                   <select value={l.ledger} onChange={e => update(i, { ledger: e.target.value })} className={`${field} w-full`} aria-label={`Ledger row ${i + 1}`}>
                     <option value="">— pick a ledger —</option>
@@ -89,7 +89,6 @@ export default function ExpenseEntry() {
                 </td>
                 <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={l.amount} onChange={e => update(i, { amount: e.target.value })} className={`${field} w-28 text-right tabular-nums`} aria-label={`Amount row ${i + 1}`} /></td>
                 <td className="px-3 py-1.5"><input value={l.narration} onChange={e => update(i, { narration: e.target.value })} className={`${field} w-full`} aria-label={`Narration row ${i + 1}`} /></td>
-                <td className="px-3 py-1.5 text-center"><button onClick={() => setLines(lines.length > 1 ? lines.filter((_, x) => x !== i) : [blank()])} className="text-stone-400 hover:text-red-500" aria-label={`Remove row ${i + 1}`}><Trash2 size={13} /></button></td>
               </tr>
             ))}
           </tbody>

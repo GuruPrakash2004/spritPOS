@@ -54,7 +54,7 @@ function ResultGrid({ result, startAt = 1 }) {
       </thead>
       <tbody className={tableBody}>
         {result.rows.map((row, r) => (
-          <tr key={r} className="hover:bg-[#FAF6EF] dark:hover:bg-subtle/70">
+          <tr key={r} className="hover:bg-[#F7F9FC] dark:hover:bg-subtle/70">
             <td className="px-2 py-1 text-right font-mono text-[11px] text-stone-400">{startAt + r}</td>
             {row.map((v, c) => (
               <td key={c} className={`whitespace-nowrap px-3 py-1 font-mono text-[11px] ${v === null ? 'italic text-stone-400' : typeof v === 'number' ? 'text-right' : ''}`}>
@@ -206,8 +206,8 @@ export default function SqlQueryExecution() {
             never on the old desktop tables. The screens show a change after the backend restarts.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs text-[#70675F] dark:text-stone-400">
-          <span className="flex items-center gap-1.5"><Database size={14} />DB Name : <strong className="text-[#29231F] dark:text-stone-100">{status?.database ?? '—'}</strong></span>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-[#5F6B80] dark:text-stone-400">
+          <span className="flex items-center gap-1.5"><Database size={14} />DB Name : <strong className="text-[#1A2236] dark:text-stone-100">{status?.database ?? '—'}</strong></span>
           <span className={`inline-flex items-center gap-1.5 ${connected ? 'text-emerald-700 dark:text-emerald-400' : 'text-[#9A4B45] dark:text-red-400'}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-[#9A4B45]'}`} />
             {status === null ? 'Checking…' : connected ? 'Connected' : 'Not connected'}
@@ -216,7 +216,7 @@ export default function SqlQueryExecution() {
       </div>
 
       {status && !connected && (
-        <div className={`${panel} px-5 py-4 text-sm text-[#70675F] dark:text-stone-300`}>
+        <div className={`${panel} px-5 py-4 text-sm text-[#5F6B80] dark:text-stone-300`}>
           SQL Server is not connected. It works once the backend can reach the shop's database (set up from the sign-in page's Database setup).
         </div>
       )}
@@ -224,7 +224,7 @@ export default function SqlQueryExecution() {
       <div className="flex min-h-0 flex-1 gap-4">
         {explorerShown && (
           <aside className={`${panel} flex w-72 shrink-0 flex-col overflow-hidden`} aria-label="Database objects">
-            <div className="flex items-center gap-2 border-b border-[#E3D9CD] p-3 dark:border-line">
+            <div className="flex items-center gap-2 border-b border-[#DDE3EC] p-3 dark:border-line">
               <div className="relative flex-1">
                 <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Find table, view, procedure" aria-label="Find database object"
@@ -236,7 +236,7 @@ export default function SqlQueryExecution() {
               {KINDS.map(kind => (
                 <div key={kind}>
                   <button onClick={() => setOpen({ ...open, [kind]: !open[kind] })} aria-expanded={open[kind]}
-                    className="flex w-full items-center gap-1 rounded-md px-1.5 py-1 font-semibold text-[#29231F] hover:bg-[#EFE9DF] dark:text-stone-100 dark:hover:bg-subtle">
+                    className="flex w-full items-center gap-1 rounded-md px-1.5 py-1 font-semibold text-[#1A2236] hover:bg-[#EAEEF5] dark:text-stone-100 dark:hover:bg-subtle">
                     {open[kind] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{kind}
                     <span className="ml-auto text-[10px] font-normal text-stone-400">{grouped[kind]?.length ?? 0}</span>
                   </button>
@@ -244,7 +244,7 @@ export default function SqlQueryExecution() {
                     <div key={`${o.schema}.${o.name}`}
                       onContextMenu={e => { e.preventDefault(); openMenu(o, e.currentTarget); }}
                       onDoubleClick={() => scriptInto(o, o.kind === 'Tables' ? 'select' : 'definition')}
-                      className="group flex items-center rounded-md py-0.5 pl-6 pr-1 hover:bg-[#EFE9DF] dark:hover:bg-subtle">
+                      className="group flex items-center rounded-md py-0.5 pl-6 pr-1 hover:bg-[#EAEEF5] dark:hover:bg-subtle">
                       <span className="flex-1 truncate font-mono text-[11px]" title={`${o.schema}.${o.name}`}>{o.schema !== 'dbo' && o.schema !== 'main' && `${o.schema}.`}{o.name}</span>
                       <button onClick={e => openMenu(o, e.currentTarget)} aria-label={`Options for ${o.name}`}
                         className="rounded p-0.5 text-stone-400 opacity-0 hover:text-stone-700 focus:opacity-100 group-hover:opacity-100 dark:hover:text-stone-100">
@@ -283,7 +283,7 @@ export default function SqlQueryExecution() {
           </div>
 
           <div className={`${panel} flex min-h-0 flex-1 flex-col overflow-hidden`}>
-            <div className="flex flex-wrap items-center gap-3 border-b border-[#E3D9CD] px-4 py-2 text-xs dark:border-line">
+            <div className="flex flex-wrap items-center gap-3 border-b border-[#DDE3EC] px-4 py-2 text-xs dark:border-line">
               {result?.kind === 'write'
                 ? <span className="font-semibold">{result.rows_affected} row(s) affected in {result.table}</span>
                 : <span className="font-semibold">Total no of rows : {result?.row_count ?? 0}</span>}
@@ -331,7 +331,7 @@ export default function SqlQueryExecution() {
           {top.data ? (
             <>
               <p className="mb-2 text-xs text-stone-500">No of Records in {top.obj.name}: {top.data.total_rows} · showing {top.data.row_count}</p>
-              <div className="max-h-[60vh] overflow-auto rounded-lg border border-[#E3D9CD] dark:border-line"><ResultGrid result={top.data} /></div>
+              <div className="max-h-[60vh] overflow-auto rounded-lg border border-[#DDE3EC] dark:border-line"><ResultGrid result={top.data} /></div>
             </>
           ) : <p className="p-4 text-xs text-stone-500">Loading…</p>}
         </Modal>

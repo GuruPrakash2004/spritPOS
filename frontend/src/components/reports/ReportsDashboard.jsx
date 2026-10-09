@@ -346,7 +346,7 @@ const ReportsDashboard = () => {
                 )}
               </tbody>
               {result.rows.length > 0 && result.columns.some(c => c.total) && (
-                <tfoot className="sticky bottom-0 bg-[#F5F1E9] font-semibold dark:bg-[#101010]">
+                <tfoot className="sticky bottom-0 bg-[#F4F6FA] font-semibold dark:bg-[#101010]">
                   <tr>
                     {result.columns.map((c, i) => (
                       <td key={c.key} className={`px-4 py-2 ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>

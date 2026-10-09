@@ -67,7 +67,7 @@ export default function ReportPrintModal({ title, formats, render, onClose }) {
           <div role="radiogroup" aria-label="Report format" className="space-y-1">
             {formats.map(f => (
               <label key={f} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 ${f === chosen
-                ? 'border-[#64283A] bg-[#64283A]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#E3D9CD] dark:border-[#2A2A2A]'}`}>
+                ? 'border-[#1B2B4B] bg-[#1B2B4B]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#DDE3EC] dark:border-[#2A2A2A]'}`}>
                 <input type="radio" name="report-format" checked={f === chosen} onChange={() => setChosen(f)} />
                 <span className="truncate font-medium">{f.replace(/\.rpt$/i, '')}</span>
               </label>
@@ -81,7 +81,7 @@ export default function ReportPrintModal({ title, formats, render, onClose }) {
             </select>
           </label>
         </div>
-        <div className="relative flex min-h-[60vh] flex-1 items-start justify-center overflow-auto rounded-lg border border-[#E3D9CD] bg-stone-200 p-4 dark:border-[#2A2A2A] dark:bg-[#0c0c0c]">
+        <div className="relative flex min-h-[60vh] flex-1 items-start justify-center overflow-auto rounded-lg border border-[#DDE3EC] bg-stone-200 p-4 dark:border-[#2A2A2A] dark:bg-[#0c0c0c]">
           {loading && <p className="absolute inset-0 flex items-center justify-center text-stone-500">Laying out the report…</p>}
           {error && <p role="alert" className="p-3 text-red-600 dark:text-red-400">{error}</p>}
           {url && !loading && <iframe ref={frame} title={`${title} preview`} src={`${url}#toolbar=0&navpanes=0&view=FitH`} style={sheetStyle(size)} className="bg-white shadow-lg ring-1 ring-black/10" />}

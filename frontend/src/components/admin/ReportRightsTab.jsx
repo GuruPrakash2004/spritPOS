@@ -44,7 +44,7 @@ export default function ReportRightsTab() {
           {reports.map(r => (
             <li key={r}>
               <button role="option" aria-selected={r === current} onClick={() => { setReport(r); setPicked(null); }}
-                className={`flex w-full items-center justify-between px-4 py-2 text-left ${r === current ? 'bg-accent-soft font-semibold' : 'hover:bg-[#FAF6EF] dark:hover:bg-subtle'}`}>
+                className={`flex w-full items-center justify-between px-4 py-2 text-left ${r === current ? 'bg-accent-soft font-semibold' : 'hover:bg-[#F7F9FC] dark:hover:bg-subtle'}`}>
                 <span>{r}</span>
                 <span className="text-[11px] text-stone-500">{data?.rights[r]?.length ? `${data.rights[r].length} user(s)` : 'everyone'}</span>
               </button>

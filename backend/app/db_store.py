@@ -30,43 +30,40 @@ def _f(v, default=0.0) -> float:
         return default
 
 
+# MstComp columns the web's own Company fields cover (CompName ... RTLCODE, PHNO); every other editable column of the
+# table is carried in the profile's `extras`, so a column added to MstComp or listed in the Doc Designer shows up.
+COMPANY_COLUMNS = {"compid", "compname", "address1", "address2", "address3", "comploc", "telno", "faxno", "mobno", "web", "gstno",
+                   "panno", "cinno", "email", "rtlcode", "phno", "jpgfile", "dashimg"}
+
+
 def load_company() -> None:
-    row = db.fetchone("""
-        SELECT TOP 1
-            CompName, Address1, Address2, CompLoc,
-            TELNO, FAXNO, MOBNO, WEB, GSTNO, PANNO, CINNO,
-            EMAIL, RTLCODE
-        FROM MstComp
-        WHERE CompID = 1
-    """)
-    if not row:
-        row = db.fetchone("""
-            SELECT TOP 1
-                CompName, Address1, Address2, CompLoc,
-                TELNO, FAXNO, MOBNO, WEB, GSTNO, PANNO, CINNO,
-                EMAIL, RTLCODE
-            FROM MstComp
-        """)
+    row = db.fetchone("SELECT TOP 1 * FROM MstComp WHERE CompID = 1") or db.fetchone("SELECT TOP 1 * FROM MstComp")
     if row:
-        addr_parts = [
-            _s(row.get("Address1")),
-            _s(row.get("Address2")),
-            _s(row.get("CompLoc")),
-        ]
-        address = ", ".join(p for p in addr_parts if p)
+        from . import schema_meta
+        row = {str(k): v for k, v in row.items()}
+        low = {k.lower(): v for k, v in row.items()}
+        # vLQMS.exe's Company Info grid: Company Name, Address, ".", "..", Email ID = CompName, Address1, Address2, Address3, EMAIL
+        lines = [_s(low.get("address1")), _s(low.get("address2")), _s(low.get("address3"))]
+        address = ", ".join(p for p in lines if p)
+        editable = {c["name"].lower() for c in schema_meta.columns("MstComp") if schema_meta.editable(c)}
+        extras = {k: (v.strip() if isinstance(v, str) else v) for k, v in row.items()
+                  if k.lower() in editable and k.lower() not in COMPANY_COLUMNS
+                  and isinstance(v, (str, int, float, bool, type(None), Decimal))}
         store.COMPANY.update({
-            "name": _s(row.get("CompName")),
-            "email": _s(row.get("EMAIL")),
+            "name": _s(low.get("compname")),
+            "email": _s(low.get("email")),
             "address": address,
-            "phone": _s(row.get("TELNO")),
-            "fax": _s(row.get("FAXNO")),
-            "mobile": _s(row.get("MOBNO")),
-            "website": _s(row.get("WEB")),
-            "gstin": _s(row.get("GSTNO")),
-            "pan": _s(row.get("PANNO", "")),
-            "cin": _s(row.get("CINNO", "")),
-            "excise_phone": _s(row.get("MOBNO")),
-            "ksbcl_code": _s(row.get("RTLCODE")),
+            "address1": lines[0], "address2": lines[1], "address3": lines[2],
+            "phone": _s(low.get("telno")),
+            "fax": _s(low.get("faxno")),
+            "mobile": _s(low.get("mobno")),
+            "website": _s(low.get("web")),
+            "gstin": _s(low.get("gstno")),
+            "pan": _s(low.get("panno")),
+            "cin": _s(low.get("cinno")),
+            "excise_phone": _s(low.get("phno")),
+            "ksbcl_code": _s(low.get("rtlcode")),
+            "extras": extras,
             # MstComp has no state or licence column: those stay as saved from Company Master (sqlstore.apply)
         })
         logger.info("Loaded company: %s", store.COMPANY["name"])
@@ -96,6 +93,15 @@ def load_items() -> None:
     if not rows:
         logger.warning("No items in MstITEM")
     store.ITEMS.clear()
+    aliases: dict[int, list[str]] | None = {}   # MstItemAlias: other names an item is found by (the desktop's item form has a grid for them)
+    try:
+        for a in db.fetchall("SELECT ItemID, ItemAlias FROM MstItemAlias"):
+            text = _s(a.get("ItemAlias"))
+            if text and text not in aliases.setdefault(int(a["ItemID"]), []):
+                aliases[int(a["ItemID"])].append(text)
+    except Exception as e:   # a database without the table: the items carry no `aliases` at all, so a save never clears them
+        logger.warning("Item aliases not read: %s", e)
+        aliases = None
     for r in rows:
         code = _s(r.get("ITEMCODE")) or str(r.get("ITEMID"))
         ltr_per_bot = _f(r.get("LTRPERBOT"), 0.75)
@@ -120,6 +126,7 @@ def load_items() -> None:
             "roq": _f(r.get("ROQ"), 48),
             "qoh": _f(r.get("QOH")),
             "active": _s(r.get("InActive")) != "Y",
+            **({"aliases": aliases.get(int(r.get("ITEMID") or 0), [])} if aliases is not None else {}),
         }
     logger.info("Loaded %d items from DB", len(store.ITEMS))
 
@@ -381,11 +388,19 @@ def _drop_loaded(docs: dict) -> None:
         del docs[no]
 
 
+def short_no(doc_no: str) -> str:
+    """A document number as the desktop's varchar(12) header columns hold it (PBNO, PINO, SRNO, STKDEDNO): the web's
+    "26/PB-0000001" is written as "26PB0000001"; a number that already fits is unchanged."""
+    return doc_no if len(doc_no) <= 12 else doc_no.replace("/", "").replace("-", "")
+
+
 def _add_loaded(docs: dict, bills: dict) -> None:
     """Add bills read from the legacy-format tables, never over a document the web app made (the web writes
-    its own bills there too; the whole document comes from Web_AppDoc)."""
+    its own bills there too; the whole document comes from Web_AppDoc). A web bill is also found under the short
+    number its header row carries, so it is not listed twice."""
+    web_short = {short_no(no) for no, d in docs.items() if "origin" not in d}
     for no, b in bills.items():
-        if no in docs and "origin" not in docs[no]:
+        if (no in docs and "origin" not in docs[no]) or no in web_short:
             continue
         docs[no] = b
 

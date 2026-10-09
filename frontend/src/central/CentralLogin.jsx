@@ -41,12 +41,12 @@ export default function CentralLogin({ onSignedIn, reason }) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F5F1E9] p-4 dark:bg-[#0A0A0A]">
+    <div className="flex min-h-screen items-center justify-center bg-[#F4F6FA] p-4 dark:bg-[#0A0A0A]">
       <form onSubmit={submit} noValidate className={`${panel} w-full max-w-sm space-y-4 p-6`}>
         <div className="flex flex-col items-center gap-2 text-center">
           <VlqmsLogo size="md" />
-          <h1 className="text-lg font-bold text-[#29231F] dark:text-stone-50">e-vLQMS ERP Central</h1>
-          <p className="text-xs text-[#70675F] dark:text-stone-400">Every shop's day and stock in one place.</p>
+          <h1 className="text-lg font-bold text-[#1A2236] dark:text-stone-50">SpiritPOS Central</h1>
+          <p className="text-xs text-[#5F6B80] dark:text-stone-400">Every shop's day and stock in one place.</p>
         </div>
         <TextField id="c-user" label="User name" value={user} required hasError={!!errors.user} errorMessage={errors.user}
           onChange={e => { setUser(e.target.value); setErrors(x => ({ ...x, user: '' })); }} />

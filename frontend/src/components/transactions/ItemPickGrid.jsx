@@ -24,7 +24,7 @@ export default function ItemPickGrid({ id, items, at, onPick, showStock = false,
     : `minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,0.6fr) minmax(0,2.6fr)${showStock ? ' 4.5rem' : ''}${showRate ? ' 5.5rem' : ''}` };
   return (
     <div id={id} role="listbox" aria-label="Items" ref={box} className={`overflow-auto border border-line bg-surface text-xs ${className}`}>
-      <div role="presentation" style={cols} className="sticky top-0 z-10 grid border-b border-line bg-[#F3EEE6] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
+      <div role="presentation" style={cols} className="sticky top-0 z-10 grid border-b border-line bg-[#F0F3F8] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
         <span className={cell}>ItemCode</span>{!narrow && <span className={cell}>ShortName</span>}{!narrow && <span className={cell}>HotKey</span>}<span className={cell}>ItemName</span>
         {showStock && <span className={`${cell} text-right`}>QOH</span>}
         {showRate && <span className={`${cell} text-right`}>Rate</span>}

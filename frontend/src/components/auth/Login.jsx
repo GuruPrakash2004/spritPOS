@@ -14,7 +14,6 @@ import VlqmsLogo from '../layout/VlqmsLogo';
 import DevelopedBy from '../layout/DevelopedBy';
 import DatabaseSetup from './DatabaseSetup';
 import RptFolderSetting from '../common/RptFolderSetting';
-import SmtpSetting from '../common/SmtpSetting';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import CreateAdmin from './CreateAdmin';
 import { finYearLabel } from '../../lib/formatters';
@@ -146,7 +145,7 @@ const LiquidDropletWaterfall = () => {
         >
           <path
             d="M0,60 C240,110 480,20 720,65 C960,110 1200,25 1440,60 L1440,160 L0,160 Z"
-            className="fill-[#B06020]/45 dark:fill-[#B08A45]/35"
+            className="fill-[#B06020]/45 dark:fill-[#D99A2B]/35"
           />
         </svg>
 
@@ -239,18 +238,18 @@ export default function Login({ onLogin, notice = '' }) {
       .finally(() => setBusy(false));
   };
 
-  const inputClass = `w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200
-    border-[#DCD1C5] bg-[#FFFCF7] text-[#29231F] placeholder:text-[#A69D94]
+  const inputClass = `w-full rounded-xl border px-4 py-3 text-sm outline-none transition duration-150
+    border-[#D5DCE7] bg-[#FFFFFF] text-[#1A2236] placeholder:text-[#9AA5B8]
     hover:border-[#CBBEAF]
-    focus:border-[#64283A] focus:ring-[3px] focus:ring-[#64283A]/10
+    focus:border-[#1B2B4B] focus:ring-[3px] focus:ring-[#1B2B4B]/10
     dark:border-[#2A2A2A] dark:bg-[#1A1A1A] dark:text-stone-50
     dark:placeholder:text-stone-600 dark:hover:border-[#3A3A3A]
     dark:focus:border-[#D4A847] dark:focus:ring-[#D4A847]/20`;
 
-  const labelClass = 'mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#70675F] dark:text-stone-400';
+  const labelClass = 'mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5F6B80] dark:text-stone-400';
 
   return (
-    <div className="flex min-h-screen font-sans bg-[#F5F1E9] dark:bg-[#0A0A0A] text-[#29231F] dark:text-stone-100 transition-colors duration-300">
+    <div className="flex min-h-screen font-sans bg-[#F4F6FA] dark:bg-[#0A0A0A] text-[#1A2236] dark:text-stone-100 transition-colors duration-250">
       
       {/* â•â•â• TOP-RIGHT THEME SWITCHER â•â•â• */}
       <div className="fixed top-5 right-5 z-50">
@@ -259,10 +258,10 @@ export default function Login({ onLogin, notice = '' }) {
           onClick={() => setDark(!dark)}
           aria-label="Toggle theme"
           className="inline-flex h-10 w-10 items-center justify-center rounded-xl border
-                     bg-[#FFFCF7]/90 border-[#E3D9CD] text-[#70675F] shadow-md
-                     hover:text-[#64283A] hover:border-[#64283A]/30
+                     bg-[#FFFFFF]/90 border-[#DDE3EC] text-[#5F6B80] shadow-md
+                     hover:text-[#1B2B4B] hover:border-[#1B2B4B]/30
                      dark:bg-[#1C1C1C]/90 dark:border-[#2A2A2A] dark:text-[#D4A847] dark:hover:bg-[#252525]
-                     backdrop-blur-md transition-all active:scale-95"
+                     backdrop-blur-md transition active:scale-95"
           title={dark ? 'Switch to Heritage Light' : 'Switch to Dark Luxury'}
         >
           {dark ? <Sun size={18} /> : <Moon size={18} />}
@@ -292,18 +291,18 @@ export default function Login({ onLogin, notice = '' }) {
         <div className="relative z-10 flex flex-col justify-between p-10 xl:p-14 w-full">
           {/* Top — Custom VLQMS Emblem Logo */}
           <div className="flex items-center gap-3 p-[4px] animate-fadeInUp">
-            <VlqmsLogo size="md" textOnly onDark={true} />
+            <VlqmsLogo size="lg" onDark />
           </div>
 
           {/* Bottom — Hero Typography & Metric Badges */}
           <div className="max-w-lg mb-6">
-            <p className="animate-fadeInUp animate-fadeInUp-d1 text-[11px] font-bold tracking-[0.35em] text-[#D3BB89] uppercase">
+            <p className="animate-fadeInUp animate-fadeInUp-d1 text-[11px] font-bold tracking-[0.35em] text-[#F0CF8A] uppercase">
               Enterprise Resource Planning
             </p>
             <h1 className="animate-fadeInUp animate-fadeInUp-d2 mt-4 text-4xl xl:text-5xl font-extrabold text-white leading-[1.1]"
                 style={{ fontFamily: 'var(--font-display)' }}>
-              Everything under{' '}
-              <span className="text-gold-gradient">one roof.</span>
+              Fast Billing. Accurate Stock.{' '}
+              Better Control.
             </h1>
             <p className="animate-fadeInUp animate-fadeInUp-d3 mt-4 text-sm leading-relaxed text-stone-200/90 max-w-md">
               Monitor inventory, sales, procurement and compliance across your entire
@@ -316,13 +315,13 @@ export default function Login({ onLogin, notice = '' }) {
       </div>
 
       {/* â•â•â• RIGHT — Login Form Panel â•â•â• */}
-      <div className="flex flex-1 flex-col bg-[#F5F1E9] dark:bg-[#0A0A0A] transition-colors duration-300">
+      <div className="flex flex-1 flex-col bg-[#F4F6FA] dark:bg-[#0A0A0A] transition-colors duration-250">
         {/* Mobile top hero header */}
         <div className="relative h-48 overflow-hidden lg:hidden">
           <img src={IMAGES.login.hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-65" />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#180E09]/75 via-[#180E09]/40 to-[#F5F1E9] dark:to-[#0A0A0A]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#180E09]/75 via-[#180E09]/40 to-[#F4F6FA] dark:to-[#0A0A0A]" />
           <div className="relative z-10 flex items-center gap-3 p-6">
-            <VlqmsLogo size="sm" textOnly onDark={true} />
+            <VlqmsLogo size="md" onDark />
           </div>
         </div>
 
@@ -331,33 +330,32 @@ export default function Login({ onLogin, notice = '' }) {
           <div className="w-full max-w-sm">
             {/* Custom VLQMS Crest Logo & Welcome Headline */}
             <div className="mb-8 hidden flex-col items-center text-center lg:flex animate-fadeInUp">
-              <h1 className="text-2xl font-bold tracking-tight text-[#29231F] dark:text-white"
+              <h1 className="text-2xl font-bold tracking-tight text-[#1A2236] dark:text-white"
                   style={{ fontFamily: 'var(--font-display)' }}>
-                {setup ? 'Set up e-vLQMS ERP' : 'Welcome back'}
+                {setup ? 'Set up SpiritPOS' : 'Welcome back'}
               </h1>
-              <p className="mt-1 text-xs text-[#70675F] dark:text-stone-400">
-                {setup ? 'Connect this shop\'s database once, then sign in.' : `Sign in to e-vLQMS ERP · ${company?.name || 'Company profile'} · ${company?.licence_type || 'Licence'}`}
+              <p className="mt-1 text-xs text-[#5F6B80] dark:text-stone-400">
+                {setup ? 'Connect this shop\'s database once, then sign in.' : `Sign in to SpiritPOS · ${company?.name || 'Company profile'} · ${company?.licence_type || 'Licence'}`}
               </p>
             </div>
 
             {/* Mobile heading */}
             <div className="mb-6 lg:hidden">
-              <h1 className="text-xl font-bold text-[#29231F] dark:text-white"
+              <h1 className="text-xl font-bold text-[#1A2236] dark:text-white"
                   style={{ fontFamily: 'var(--font-display)' }}>Welcome back</h1>
-              <p className="mt-1 text-xs text-[#70675F] dark:text-stone-400">
-                Sign in to e-vLQMS ERP · {company?.name || 'Company profile'} · {company?.licence_type || 'Licence'}
+              <p className="mt-1 text-xs text-[#5F6B80] dark:text-stone-400">
+                Sign in to SpiritPOS · {company?.name || 'Company profile'} · {company?.licence_type || 'Licence'}
               </p>
             </div>
 
             {setup && <DatabaseSetup inputClass={inputClass} labelClass={labelClass} onDone={loadDbState} />}
-            {setup && <div className="mt-4 space-y-4"><RptFolderSetting inputClass={inputClass} captionClass={labelClass} /><SmtpSetting inputClass={inputClass} captionClass={labelClass} /></div>}
-            {/* Database and report-files settings: always on offer (only an Administrator or the server PC can change them). */}
+            {setup && <div className="mt-4 space-y-4"><RptFolderSetting inputClass={inputClass} captionClass={labelClass} /></div>}
+            {/* Database and report-files settings: always on offer (open to anyone, no Administrator needed). */}
             {!setup && editingDb && (
               <div className="space-y-4">
                 <DatabaseSetup inputClass={inputClass} labelClass={labelClass} change onDone={() => { setEditingDb(false); loadDbState(); }} onCancel={() => setEditingDb(false)} />
                 <RptFolderSetting inputClass={inputClass} captionClass={labelClass} />
-                <SmtpSetting inputClass={inputClass} captionClass={labelClass} />
-                <button type="button" onClick={() => setEditingDb(false)} className="w-full rounded-xl border border-[#DCD1C5] py-2.5 text-xs font-semibold dark:border-[#2A2A2A]">Back to sign in</button>
+                <button type="button" onClick={() => setEditingDb(false)} className="w-full rounded-xl border border-[#D5DCE7] py-2.5 text-xs font-semibold dark:border-[#2A2A2A]">Back to sign in</button>
               </div>
             )}
             {offline && !editingDb && (
@@ -375,7 +373,7 @@ export default function Login({ onLogin, notice = '' }) {
               onSubmit={submit}
               className="animate-fadeInUp animate-fadeInUp-d2
                          glass-card-login rounded-2xl p-7
-                         border border-[#E3D9CD] dark:border-[#2A2A2A]
+                         border border-[#DDE3EC] dark:border-[#2A2A2A]
                          shadow-[0_20px_50px_rgba(72,53,38,0.08)] dark:shadow-card"
               noValidate
             >
@@ -399,7 +397,7 @@ export default function Login({ onLogin, notice = '' }) {
                   </select>
                 </div>
                 {offerRemember && (
-                  <label className="flex items-center gap-2 text-xs text-[#70675F] dark:text-stone-400">
+                  <label className="flex items-center gap-2 text-xs text-[#5F6B80] dark:text-stone-400">
                     <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
                     Remember me on this device (until Sign out)
                   </label>
@@ -418,9 +416,9 @@ export default function Login({ onLogin, notice = '' }) {
                 disabled={busy}
                 className="mt-6 flex w-full items-center justify-center gap-2
                            rounded-xl py-3.5 text-sm font-bold
-                           transition-all duration-200 active:scale-[0.98]
+                           transition duration-150 active:scale-[0.98]
                            disabled:pointer-events-none disabled:opacity-45
-                           bg-[#64283A] text-white shadow-[0_4px_16px_rgba(100,40,58,0.25)] hover:bg-[#521E2E]
+                           bg-[#1B2B4B] text-white shadow-[0_4px_16px_rgba(100,40,58,0.25)] hover:bg-[#121D36]
                            dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F7D98B] dark:to-[#C8952E]
                            dark:text-[#181106] dark:font-extrabold dark:shadow-[0_0_24px_rgba(212,168,71,0.55)]
                            dark:hover:shadow-[0_0_36px_rgba(212,168,71,0.75)] dark:hover:brightness-110"
@@ -429,25 +427,25 @@ export default function Login({ onLogin, notice = '' }) {
                 {busy ? 'Signing inâ€¦' : 'Sign in'}
               </button>
 
-              <DevelopedBy className="mt-6 border-t border-[#E3D9CD] pt-5 dark:border-[#2A2A2A]" />
+              <DevelopedBy className="mt-6 border-t border-[#DDE3EC] pt-5 dark:border-[#2A2A2A]" />
             </form>}
 
             {!setup && !editingDb && (
               <button type="button" onClick={() => setEditingDb(true)}
-                className="mt-4 flex w-full items-center justify-center gap-2 text-xs font-semibold text-[#64283A] underline-offset-2 hover:underline dark:text-[#D4A847]">
+                className="mt-4 flex w-full items-center justify-center gap-2 text-xs font-semibold text-[#1B2B4B] underline-offset-2 hover:underline dark:text-[#D4A847]">
                 <Database size={13} />Database &amp; report settings
               </button>
             )}
 
             {/* Decorative wine icon */}
             <div className="mt-8 flex justify-center animate-float opacity-20 dark:opacity-15" aria-hidden="true">
-              <Wine size={28} className="text-[#B08A45] dark:text-[#D4A847]" />
+              <Wine size={28} className="text-[#D99A2B] dark:text-[#D4A847]" />
             </div>
           </div>
         </main>
 
-        <footer className="pb-6 text-center text-[11px] text-[#958B81] dark:text-stone-600">
-          Softvent e-vLQMS ERP · Licence 827106637
+        <footer className="pb-6 text-center text-[11px] text-[#8592A6] dark:text-stone-600">
+          Softvent SpiritPOS · Licence 827106637
         </footer>
       </div>
     </div>

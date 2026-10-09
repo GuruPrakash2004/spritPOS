@@ -63,7 +63,7 @@ export default function Indents({ shops }) {
       {rows && rows.length === 0 && <section className={`${panel} p-6 text-center text-sm text-stone-500`}>No indents for this day.</section>}
       {rows?.map(ind => (
         <section key={`${ind.client}-${ind.PINO}`} className={`${panel} overflow-hidden`}>
-          <div className="flex flex-wrap justify-between gap-2 border-b border-[#E3D9CD] px-3 py-2 text-xs dark:border-line">
+          <div className="flex flex-wrap justify-between gap-2 border-b border-[#DDE3EC] px-3 py-2 text-xs dark:border-line">
             <span className="font-semibold">{ind.client} · {ind.PINO}</span>
             <span>{ind.SUPPName} · ₹ {money(ind.GRNDTOT)}</span>
           </div>

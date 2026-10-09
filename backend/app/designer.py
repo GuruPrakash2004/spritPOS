@@ -56,16 +56,34 @@ def load() -> None:
     except Exception as e:   # no database, or it has no designer tables
         logger.warning("Doc Designer settings not loaded: %s", e)
         return
-    store.UTL_DOCS.clear()
+    extra = {}
+    for key, table in (("menu", "MstMenu"), ("numfmt", "UtlDocNoFmt"), ("search", "UtlSearchSettings")):
+        try:   # optional tables: a database without one simply has no such settings
+            extra[key] = [_clean(r) for r in _rows(table)]
+        except Exception:
+            extra[key] = []
+    try:   # optional: global caption overrides
+        captions = {str(r.get("Code") or "").strip().lower(): str(r.get("Caption") or "").strip()
+                    for r in map(_clean, _rows("UtlFldCaptions")) if r.get("Code") and r.get("Caption")}
+    except Exception:
+        captions = {}
+    # Everything is built first and put in with one slice assignment each, so a screen being read at that moment
+    # never sees a half-empty list.
     store.UTL_DOCS.update({int(d["DocID"]): d for d in docs if d.get("DocID") is not None})
-    store.UTL_OPTIONS.clear()
-    store.UTL_OPTIONS.extend(sorted(options, key=lambda o: (int(o.get("DocID") or 0), int(o.get("OptionOrder") or 0))))
-    store.UTL_OPTION_EMAILS.clear()
-    store.UTL_OPTION_EMAILS.extend(emails)
-    store.UTL_FIELDS.clear()
-    store.UTL_FIELDS.extend(sorted(fields, key=lambda f: (int(f.get("DocID") or 0), int(f.get("FldOrderBy") or 0))))
+    for gone in set(store.UTL_DOCS) - {int(d["DocID"]) for d in docs if d.get("DocID") is not None}:
+        store.UTL_DOCS.pop(gone, None)
+    store.UTL_OPTIONS[:] = sorted(options, key=lambda o: (int(o.get("DocID") or 0), int(o.get("OptionOrder") or 0)))
+    store.UTL_OPTION_EMAILS[:] = emails
+    store.UTL_FIELDS[:] = sorted(fields, key=lambda f: (int(f.get("DocID") or 0), int(f.get("FldOrderBy") or 0)))
+    store.UTL_MENU[:] = extra["menu"]
+    store.UTL_NUMFMT[:] = extra["numfmt"]
+    store.UTL_SEARCH[:] = extra["search"]
     store.UTL_MISC.clear()
     store.UTL_MISC.update(misc[0] if misc else {})
+    store.UTL_CAPTIONS.clear()
+    store.UTL_CAPTIONS.update(captions)
+    from . import schema_meta   # the table shapes may have changed with the designer's rows
+    schema_meta.invalidate()
 
 
 def refresh() -> dict:
