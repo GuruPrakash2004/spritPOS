@@ -134,6 +134,11 @@ def _listing(kind: str, tag: str):
 @router.post("/purchase-indent", status_code=201, tags=["Purchase Indent"],
              dependencies=[Depends(require_right("add", "Purchase Indent", "Purchase Bill"))])
 def create_indent(body: PurchaseIndentIn):
+    return create_indent_doc(body)
+
+
+def create_indent_doc(body: PurchaseIndentIn) -> dict:
+    """The indent logic itself (also used by app/routers/ai.py when a suggestion is approved)."""
     gsettings.check_not_frozen(body.date, "This purchase indent")
     _doc_extras("TrnHdrPI", body)
     doc_settings.check_lines("purchase_indent", body.lines, body.date)

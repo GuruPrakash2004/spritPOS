@@ -18,7 +18,7 @@ from . import forecast as fc
 logger = logging.getLogger("vlqms.ai")
 
 DEFAULT_MODEL = "amazon/chronos-bolt-tiny"
-CONTEXT_DAYS = 365      # the most recent days given to the model
+CONTEXT_DAYS = fc.HISTORY_DAYS      # the most recent days given to the model (120 by default)
 BATCH = 64              # items per model call
 
 _pipeline = None

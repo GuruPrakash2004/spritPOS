@@ -98,7 +98,7 @@ def run(series: dict[str, list[float]], accessory: dict[str, bool], end: date, m
             if len(s) != longest or len(s) < t + need:
                 continue
             first = next((i for i, x in enumerate(s[:t]) if x > 0), None)
-            eligible[item] = s[first:t] if first is not None else []
+            eligible[item] = s[first:t][-fc.HISTORY_DAYS:] if first is not None else []
         by_method: dict[str, list[str]] = defaultdict(list)
         classes = {item: fc.classify(h, accessory.get(item, False)) for item, h in eligible.items()}
         for item, cls in classes.items():
