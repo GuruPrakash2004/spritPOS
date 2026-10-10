@@ -632,7 +632,7 @@ input[type='date']::-webkit-date-and-time-value { text-align: left; }
     transform: translateY(72vh) scale(1.0, 2.0);
   }
   95% {
-    transform: translateY(82vh) scale(1.4, 0.6);
+    transform: translateY(calc(100cqh - 104px)) scale(1.4, 0.6);
     opacity: 0.8;
   }
   100% {
@@ -714,114 +714,132 @@ input[type='date']::-webkit-date-and-time-value { text-align: left; }
 }
 
 /* ────────────────────────────────────────────────
-   REALISTIC LIQUOR DROPLET & SPLASH EFFECT
+   RAIN-DROP FALL & SPLASH
+   The panel is a size container (cqh) so a drop lands on the liquor surface, 96px above its bottom edge. One cycle per drop: it falls during the first 36% (gravity: ease-in), then at 36% it hits the surface and the
+   splash plays out until about 75%; the rest of the cycle is quiet. All parts share one duration and delay so the
+   splash always starts at the moment the drop lands. Only transform and opacity move.
    ──────────────────────────────────────────────── */
 
 @keyframes dropletFallAccelerate {
-  0% {
-    transform: translateY(-20px) scale(0.65, 0.85);
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-    transform: translateY(6vh) scale(0.8, 1.2);
-  }
-  45% {
-    opacity: 0.95;
-    transform: translateY(35vh) scale(0.9, 1.6);
-  }
-  75% {
-    opacity: 0.95;
-    transform: translateY(65vh) scale(0.95, 1.9);
-  }
-  92% {
-    transform: translateY(78vh) scale(1.1, 1.4);
-    opacity: 0.95;
-  }
-  97% {
-    transform: translateY(82vh) scale(1.6, 0.5);
-    opacity: 0.8;
-  }
-  100% {
-    transform: translateY(83vh) scale(2.2, 0.1);
-    opacity: 0;
-  }
+  0%   { transform: translateY(-20px) scale(0.8, 1);   opacity: 0; animation-timing-function: ease-in; }
+  4%   { transform: translateY(0) scale(0.85, 1.05);   opacity: 1; animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6); }
+  36%  { transform: translateY(calc(100cqh - 104px)) scale(0.85, 1.35); opacity: 1; }
+  37%  { transform: translateY(calc(100cqh - 104px)) scale(1, 0.4);     opacity: 0; }
+  100% { transform: translateY(calc(100cqh - 104px)) scale(1, 0.4);     opacity: 0; }
 }
 
-/* Concentric expanding ripples upon droplet impact */
+/* Flat ellipse rings spreading out from the point of impact (a rain puddle). Two rings, the second a beat later. */
 @keyframes dropletImpactRipple {
-  0% {
-    transform: scale(0.15);
-    opacity: 0.95;
-    border-width: 2px;
-  }
-  40% {
-    opacity: 0.7;
-    border-width: 1.5px;
-  }
-  100% {
-    transform: scale(3.2);
-    opacity: 0;
-    border-width: 0.5px;
-  }
+  0%, 36% { transform: scale(0.05); opacity: 0; }
+  38%     { transform: scale(0.1);  opacity: 0.9; }
+  78%     { transform: scale(1);    opacity: 0; }
+  100%    { transform: scale(1);    opacity: 0; }
+}
+@keyframes dropletImpactRipple2 {
+  0%, 42% { transform: scale(0.05); opacity: 0; }
+  44%     { transform: scale(0.1);  opacity: 0.7; }
+  86%     { transform: scale(1);    opacity: 0; }
+  100%    { transform: scale(1);    opacity: 0; }
 }
 
-/* Secondary droplet bead splashes erupting upward */
-@keyframes splashBeadLeft {
-  0% {
-    transform: translate(0, 0) scale(0);
-    opacity: 0;
-  }
-  30% {
-    transform: translate(-14px, -18px) scale(1);
-    opacity: 0.9;
-  }
-  70% {
-    transform: translate(-22px, -8px) scale(0.8);
-    opacity: 0.6;
-  }
-  100% {
-    transform: translate(-26px, 12px) scale(0.3);
-    opacity: 0;
-  }
+/* A crown of small droplets thrown up and out in arcs, then pulled back down. --dx is how far it flies sideways,
+   --h how high it climbs; the stops follow y = -4h·t(1-t), a parabola, so each bead rises, slows and drops. */
+@keyframes splashArc {
+  0%, 36% { transform: translate(0, 0) scale(0.4); opacity: 0; }
+  38%     { transform: translate(0, 0) scale(1); opacity: 1; }
+  44%     { transform: translate(calc(var(--dx) * 0.15), calc(var(--h) * -0.51)); opacity: 1; }
+  50%     { transform: translate(calc(var(--dx) * 0.3),  calc(var(--h) * -0.84)); opacity: 1; }
+  56%     { transform: translate(calc(var(--dx) * 0.5),  calc(var(--h) * -1)); opacity: 1; }
+  62%     { transform: translate(calc(var(--dx) * 0.7),  calc(var(--h) * -0.84)); opacity: 0.9; }
+  68%     { transform: translate(calc(var(--dx) * 0.85), calc(var(--h) * -0.51)); opacity: 0.6; }
+  74%     { transform: translate(var(--dx), 2px) scale(0.6); opacity: 0; }
+  100%    { transform: translate(var(--dx), 2px) scale(0.6); opacity: 0; }
 }
 
-@keyframes splashBeadRight {
-  0% {
-    transform: translate(0, 0) scale(0);
-    opacity: 0;
-  }
-  30% {
-    transform: translate(14px, -20px) scale(1);
-    opacity: 0.9;
-  }
-  70% {
-    transform: translate(22px, -10px) scale(0.8);
-    opacity: 0.6;
-  }
-  100% {
-    transform: translate(26px, 10px) scale(0.3);
-    opacity: 0;
-  }
+/* The jet that shoots up from the middle of a splash, then collapses (the drop lands at 36% of the cycle). */
+@keyframes splashJet {
+  0%, 36% { transform: scaleY(0); opacity: 0; }
+  38%     { transform: scaleY(0.2); opacity: 1; }
+  47%     { transform: scaleY(1); opacity: 1; }
+  57%     { transform: scaleY(0.75); opacity: 0.9; }
+  68%     { transform: scaleY(0.15); opacity: 0.6; }
+  74%, 100% { transform: scaleY(0); opacity: 0; }
 }
 
-@keyframes splashBeadCenter {
-  0% {
-    transform: translate(0, 0) scale(0);
-    opacity: 0;
-  }
-  35% {
-    transform: translate(0, -25px) scale(1.1);
-    opacity: 0.95;
-  }
-  75% {
-    transform: translate(0, -12px) scale(0.9);
-    opacity: 0.6;
-  }
-  100% {
-    transform: translate(0, 8px) scale(0.2);
-    opacity: 0;
-  }
+/* Light shafts in the liquor: shifts by exactly one pattern period (100px) so the loop has no jump. */
+@keyframes causticDrift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100px); }
+}
+
+/* ────────────────────────────────────────────────
+   POURING BOTTLE (login hero, top right)
+   One 9 s cycle shared by every part so they stay in step: the bottle tips (the liquid inside stays level, so the
+   liquid group turns the opposite way and its level sinks as it pours), a tapering stream arcs from the mouth into the
+   liquor, it splashes where it lands, then the stream thins out, a last drip falls and the bottle tips back.
+   ──────────────────────────────────────────────── */
+
+@keyframes pourBottleTilt {
+  0%, 6%    { transform: rotate(-100deg); animation-timing-function: cubic-bezier(0.45, 0, 0.25, 1); }
+  20%, 76%  { transform: rotate(-136deg); animation-timing-function: cubic-bezier(0.45, 0, 0.25, 1); }
+  92%, 100% { transform: rotate(-100deg); }
+}
+/* The opposite turn, applied to the liquid inside the bottle so its surface stays level while the bottle tips. */
+@keyframes pourLiquidTurn {
+  0%, 6%    { transform: rotate(100deg); animation-timing-function: cubic-bezier(0.45, 0, 0.25, 1); }
+  20%, 76%  { transform: rotate(136deg); animation-timing-function: cubic-bezier(0.45, 0, 0.25, 1); }
+  92%, 100% { transform: rotate(100deg); }
+}
+/* Height of the liquid surface above the mouth (px, in the level frame): full at rest, sinking while it pours. */
+@keyframes pourLevel {
+  0%, 6%    { transform: translateY(-70px); animation-timing-function: ease-in-out; }
+  20%       { transform: translateY(-118px); }
+  76%       { transform: translateY(-76px); animation-timing-function: ease-in-out; }
+  92%, 100% { transform: translateY(-70px); }
+}
+
+@keyframes pourStream {
+  0%, 12% { transform: scale(1, 0); opacity: 1; animation-timing-function: cubic-bezier(0.3, 0.6, 0.5, 1); }
+  24%, 74% { transform: scale(1, 1); opacity: 1; }
+  87%     { transform: scale(0.2, 1); opacity: 0.9; }
+  89%, 100% { transform: scale(0.2, 1); opacity: 0; }
+}
+/* The stream's slight surging as the bottle glugs. */
+@keyframes pourGlug {
+  0%, 100% { transform: scaleX(1); }
+  50%      { transform: scaleX(0.82); }
+}
+
+@keyframes pourSplashOn {
+  0%, 18% { opacity: 0; }
+  28%, 72% { opacity: 1; }
+  88%, 100% { opacity: 0; }
+}
+/* The little mound of liquor that heaves up where the stream lands. */
+@keyframes pourMound {
+  0%, 100% { transform: scale(1, 1); }
+  50%      { transform: scale(1.25, 1.6); }
+}
+/* One last drip after the stream stops. */
+@keyframes pourDrip {
+  0%, 88% { transform: translate(0, 0); opacity: 0; animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6); }
+  89%     { transform: translate(0, 0); opacity: 1; }
+  97%     { transform: translate(-20px, var(--fall)); opacity: 1; }
+  98%, 100% { transform: translate(-20px, var(--fall)); opacity: 0; }
+}
+
+@keyframes pourRipple {
+  0%   { transform: scale(0.15); opacity: 0.9; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@keyframes pourBead {
+  0%   { transform: translate(0, 0); opacity: 0; }
+  10%  { opacity: 1; }
+  25%  { transform: translate(calc(var(--dx) * 0.25), calc(var(--h) * -0.75)); }
+  50%  { transform: translate(calc(var(--dx) * 0.5), calc(var(--h) * -1)); }
+  75%  { transform: translate(calc(var(--dx) * 0.75), calc(var(--h) * -0.75)); opacity: 0.8; }
+  100% { transform: translate(var(--dx), 2px); opacity: 0; }
 }
 
 /* ═══════════════════════════════════════════════════

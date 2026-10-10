@@ -23,96 +23,183 @@ const RETRY_MS = 20_000;
 // â”€â”€â”€ REALISTIC WATER DROPLET FLOW & LIQUOR SPLASH DYNAMICS â”€â”€â”€
 // Simulates individual liquor water droplets cascading downwards with gravity acceleration
 // and erupting in multi-bead splashes and concentric ripples upon hitting the roaming liquor surface.
+// Height of the liquor surface above the panel's bottom edge (px): where drops land and splash.
+const SURFACE = 96;
+
+// Crown of splash beads: sideways reach, height and size in px (the middle one is the tall centre jet).
+const SPLASH_BEADS = [
+  { dx: -38, h: 20, size: 4 }, { dx: -20, h: 34, size: 5 }, { dx: 0, h: 46, size: 4 },
+  { dx: 20, h: 34, size: 5 }, { dx: 38, h: 20, size: 4 },
+];
+
+const DROP_SIZE = 11; // width in px of every falling drop
+
+// A whisky bottle tipped over at the top right, pouring a stream that arcs down into the liquor at the bottom
+// (the 9 s cycle is in index.css). The mouth sits at (POUR_LEFT, POUR_TOP); the stream is as long as the way down to
+// the liquor surface (cqh = panel height) and lands STREAM_DRIFT px to the left of the mouth.
+const POUR_LEFT = '68%';
+const POUR_TOP = 'max(26cqh, 215px)'; // keeps the whole tipped bottle inside the panel
+const POUR_CYCLE = '9s';
+const STREAM_DRIFT = 22;
+const POUR_FALL = `calc(100cqh - ${POUR_TOP} - ${SURFACE}px)`;
+const POUR_BEADS = [
+  { dx: -30, h: 14, size: 3, delay: '0s' }, { dx: 26, h: 18, size: 4, delay: '0.22s' },
+  { dx: -14, h: 28, size: 3, delay: '0.45s' }, { dx: 12, h: 12, size: 3, delay: '0.7s' },
+  { dx: -22, h: 20, size: 2, delay: '0.9s' }, { dx: 32, h: 10, size: 2, delay: '0.35s' },
+];
+
+// The stream as a shape in a 100 x 100 box (the box is stretched down the way to the surface): the mouth at (80, 0),
+// drifting left as it falls, like a parabola, and thinning from about 7 px to 3.5 px as gravity stretches it.
+const STREAM = (() => {
+  const left = [], right = [], mid = [];
+  for (let i = 0; i <= 24; i++) {
+    const t = i / 24;
+    const x = 80 - STREAM_DRIFT * Math.pow(t, 0.7), y = 100 * (0.1 * t + 0.9 * t * t), w = 3.8 - 1.8 * t;
+    left.push(`${(x - w).toFixed(1)},${y.toFixed(1)}`);
+    right.push(`${(x + w).toFixed(1)},${y.toFixed(1)}`);
+    mid.push(`${(x - w * 0.35).toFixed(1)},${y.toFixed(1)}`);
+  }
+  return { body: `M${left.join(' L')} L${right.reverse().join(' L')} Z`, shine: `M${mid.join(' L')}` };
+})();
+
+// Outline of the bottle (mouth at the top centre) and the same shape pulled in a little for the liquor.
+const BOTTLE_OUTER = 'M33.5 5H46.5V50C46.5 66 70 72 70 104V212Q70 224 58 224H22Q10 224 10 212V104C10 72 33.5 66 33.5 50Z';
+const BOTTLE_INNER = 'M35.5 6H44.5V50C44.5 68 66 74 66 104V210Q66 220 57 220H23Q14 220 14 210V104C14 74 35.5 68 35.5 50Z';
+const LEVEL_FRAME = { transformBox: 'view-box', transformOrigin: '40px 0px' };
+
+const PouringBottle = () => (
+  <>
+    <div className="absolute" style={{ left: POUR_LEFT, top: POUR_TOP }}>
+      {/* Bottle: drawn upright with the mouth at the top, then turned about the mouth so it hangs tipped over. */}
+      <svg width="80" height="230" viewBox="0 0 80 230" className="absolute overflow-visible"
+        style={{ left: '-40px', top: '-2px', transformOrigin: '50% 0', animation: `pourBottleTilt ${POUR_CYCLE} infinite`,
+          filter: 'drop-shadow(0 8px 10px rgba(0,0,0,0.55))' }}>
+        <defs>
+          <clipPath id="pour-inner"><path d={BOTTLE_INNER} /></clipPath>
+          <linearGradient id="pour-glass" x1="0" x2="1">
+            <stop offset="0" stopColor="#1B120B" stopOpacity="0.85" /><stop offset="0.5" stopColor="#3A2412" stopOpacity="0.55" />
+            <stop offset="1" stopColor="#120B06" stopOpacity="0.9" />
+          </linearGradient>
+          <linearGradient id="pour-liquor" x1="0" x2="1">
+            <stop offset="0" stopColor="#8A4A12" /><stop offset="0.4" stopColor="#E0922C" /><stop offset="1" stopColor="#7A3E0C" />
+          </linearGradient>
+          <linearGradient id="pour-volume" x1="0" x2="1">
+            <stop offset="0" stopColor="#000" stopOpacity="0.55" /><stop offset="0.22" stopColor="#000" stopOpacity="0" />
+            <stop offset="0.78" stopColor="#000" stopOpacity="0" /><stop offset="1" stopColor="#000" stopOpacity="0.6" />
+          </linearGradient>
+          <linearGradient id="pour-paper" x1="0" x2="1">
+            <stop offset="0" stopColor="#CDBF9F" /><stop offset="0.35" stopColor="#F7EDD4" /><stop offset="1" stopColor="#B9A985" />
+          </linearGradient>
+          <linearGradient id="pour-lip" x1="0" x2="1">
+            <stop offset="0" stopColor="#8F8A80" /><stop offset="0.5" stopColor="#F2EFE6" /><stop offset="1" stopColor="#7C776D" />
+          </linearGradient>
+        </defs>
+
+        {/* glass body */}
+        <path d={BOTTLE_OUTER} fill="url(#pour-glass)" />
+        {/* liquor, kept level while the bottle turns */}
+        <g clipPath="url(#pour-inner)">
+          <g style={{ ...LEVEL_FRAME, animation: `pourLiquidTurn ${POUR_CYCLE} infinite` }}>
+            <g style={{ animation: `pourLevel ${POUR_CYCLE} infinite` }}>
+              <rect x="-260" y="0" width="600" height="600" fill="url(#pour-liquor)" transform="translate(0 0)" style={{ fill: '#C8761A' }} />
+              <rect x="-260" y="-1.5" width="600" height="3" fill="#FFE2A0" fillOpacity="0.9" />
+            </g>
+          </g>
+          {/* roundness of the glass over the liquor */}
+          <path d={BOTTLE_INNER} fill="url(#pour-volume)" />
+        </g>
+        {/* paper label with a gold seal */}
+        <g>
+          <rect x="11" y="128" width="58" height="64" fill="url(#pour-paper)" />
+          <rect x="15" y="132" width="50" height="56" fill="none" stroke="#8A5A1A" strokeWidth="0.8" />
+          <text x="40" y="153" textAnchor="middle" fontSize="12" fontWeight="700" fill="#4A2208" fontFamily="Georgia, serif" letterSpacing="1">SPIRIT</text>
+          <text x="40" y="164" textAnchor="middle" fontSize="5" fill="#6B4A22" fontFamily="Georgia, serif" letterSpacing="1.5">RESERVE · 12 YEARS</text>
+          <circle cx="40" cy="176" r="5" fill="#D4A847" stroke="#8A5A1A" strokeWidth="0.6" />
+          <rect x="11" y="128" width="58" height="64" fill="url(#pour-volume)" />
+        </g>
+        {/* glass edge, thickness and reflections */}
+        <path d={BOTTLE_OUTER} fill="none" stroke="#F5E3B8" strokeOpacity="0.5" strokeWidth="1.4" />
+        <path d={BOTTLE_INNER} fill="none" stroke="#000" strokeOpacity="0.25" strokeWidth="1" />
+        <path d="M18 108V204" stroke="#fff" strokeOpacity="0.38" strokeWidth="4" strokeLinecap="round" />
+        <path d="M62 112V198" stroke="#fff" strokeOpacity="0.16" strokeWidth="2" strokeLinecap="round" />
+        <path d="M37.5 10V46" stroke="#fff" strokeOpacity="0.4" strokeWidth="1.6" strokeLinecap="round" />
+        {/* the open mouth */}
+        <rect x="31.5" y="0" width="17" height="7" rx="2.5" fill="url(#pour-lip)" />
+        <rect x="31.5" y="5.2" width="17" height="1.6" fill="#000" fillOpacity="0.25" />
+      </svg>
+
+      {/* The stream: arcs out of the mouth, tapers, and surges a little as the bottle glugs */}
+      <div className="absolute" style={{ left: '-80px', top: '3px', width: '100px', height: POUR_FALL,
+        transformOrigin: '80% 0', animation: `pourStream ${POUR_CYCLE} infinite` }}>
+        <div className="h-full w-full" style={{ transformOrigin: '80% 0', animation: 'pourGlug 0.7s ease-in-out infinite' }}>
+          <svg width="100" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="overflow-visible"
+            style={{ filter: 'drop-shadow(0 0 5px rgba(245,185,60,0.65))' }}>
+            <defs>
+              <linearGradient id="pour-stream" x1="0" x2="1">
+                <stop offset="0" stopColor="#B26A1C" /><stop offset="0.5" stopColor="#F3B650" /><stop offset="1" stopColor="#C27820" />
+              </linearGradient>
+            </defs>
+            <path d={STREAM.body} fill="url(#pour-stream)" fillOpacity="0.95" />
+            <path d={STREAM.shine} fill="none" stroke="#FFF3CC" strokeOpacity="0.7" strokeWidth="1.1" strokeLinecap="round" />
+          </svg>
+        </div>
+      </div>
+
+      {/* A last drip after the stream stops */}
+      <div className="absolute rounded-full"
+        style={{ left: '-2px', top: '6px', width: '5px', height: '8px', '--fall': POUR_FALL, opacity: 0,
+          borderRadius: '50% 50% 50% 50% / 35% 35% 65% 65%',
+          background: 'radial-gradient(ellipse at 35% 25%, #FFF5D6, #F5D580 40%, #D48030 80%)',
+          animation: `pourDrip ${POUR_CYCLE} infinite` }} />
+    </div>
+
+    {/* Where the stream lands: a heaving mound, rings and beads, on only while it is pouring */}
+    <div className="absolute" style={{ left: `calc(${POUR_LEFT} - ${STREAM_DRIFT}px)`, bottom: `${SURFACE}px`, animation: `pourSplashOn ${POUR_CYCLE} infinite` }}>
+      <div className="absolute rounded-full"
+        style={{ left: '-9px', top: '-5px', width: '18px', height: '9px', background: 'radial-gradient(ellipse at 50% 70%, #F3B650, #C27820)',
+          boxShadow: '0 0 8px rgba(245,185,60,0.8)', animation: 'pourMound 0.45s ease-in-out infinite' }} />
+      {['0s', '0.5s'].map(d => (
+        <div key={d} className="absolute rounded-full border border-amber-300/80"
+          style={{ left: '-36px', top: '-6px', width: '72px', height: '12px', animation: `pourRipple 1s ease-out ${d} infinite` }} />
+      ))}
+      {POUR_BEADS.map((b, i) => (
+        <div key={i} className="absolute rounded-full bg-amber-200 shadow-[0_0_6px_rgba(255,215,100,0.9)]"
+          style={{ left: `-${b.size / 2}px`, top: `-${b.size / 2}px`, width: `${b.size}px`, height: `${b.size}px`,
+            '--dx': `${b.dx}px`, '--h': `${b.h}px`, animation: `pourBead 1.1s ease-out ${b.delay} infinite` }} />
+      ))}
+    </div>
+  </>
+);
+
+// The liquor's three layers, back to front: crest outline (from the curve each used to fill), height class, view box
+// height, colours at the surface and at depth, and how strong the crest line and its glow are.
+const WAVE_LAYERS = [
+  { h: 'h-40', box: 160, crest: 'M0,60 C240,110 480,20 720,65 C960,110 1200,25 1440,60', top: '#C97B22', topA: 0.8, bottom: '#4E2508',
+    glow: 0.15, line: 0.45, animation: 'roamingLiquidSlosh1 11s ease-in-out infinite alternate' },
+  { h: 'h-36', box: 140, crest: 'M0,50 C220,15 460,95 700,45 C940,5 1180,85 1440,50', top: '#E8A63C', topA: 0.85, bottom: '#7A3E0C',
+    glow: 0.2, line: 0.6, animation: 'roamingLiquidSlosh2 7.5s ease-in-out infinite alternate' },
+  { h: 'h-32', box: 120, crest: 'M0,35 C180,65 420,10 680,40 C940,65 1180,15 1440,35', top: '#F8CB68', topA: 0.9, bottom: '#B8701C',
+    glow: 0.3, line: 0.9, animation: 'roamingLiquidSlosh3 5.2s ease-in-out infinite alternate' },
+];
+
 const LiquidDropletWaterfall = () => {
+  // All drops are one size; only the column, the fall time and the start delay differ.
   const drops = [
-    { left: '18%', duration: '2.4s', delay: '0.0s', size: 10 },
-    { left: '36%', duration: '2.8s', delay: '1.1s', size: 12 },
-    { left: '54%', duration: '2.3s', delay: '0.5s', size: 11 },
-    { left: '72%', duration: '2.9s', delay: '1.6s', size: 13 },
-    { left: '88%', duration: '2.5s', delay: '0.8s', size: 10 },
+    { left: '9%',  duration: '3.6s', delay: '0.6s' },
+    { left: '18%', duration: '3.4s', delay: '0.0s' },
+    { left: '27%', duration: '3.9s', delay: '1.9s' },
+    { left: '36%', duration: '3.8s', delay: '1.1s' },
+    { left: '45%', duration: '3.5s', delay: '1.4s' },
+    { left: '54%', duration: '3.3s', delay: '0.5s' },
+    { left: '63%', duration: '3.7s', delay: '0.3s' },
+    { left: '72%', duration: '3.9s', delay: '1.6s' },
+    { left: '80%', duration: '3.6s', delay: '2.0s' },
+    { left: '88%', duration: '3.5s', delay: '0.8s' },
+    { left: '94%', duration: '3.8s', delay: '1.2s' },
   ];
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden bottle-container-glass" aria-hidden="true">
-      {/* â”€â”€ 1. Cascading Droplets with Splash Impact â”€â”€ */}
-      {drops.map((drop, idx) => (
-        <div key={`water-drop-${idx}`} className="absolute top-0 bottom-0" style={{ left: drop.left }}>
-          {/* Subtle luminous vertical stream guide */}
-          <div
-            className="absolute top-0 bottom-0 w-[2px] opacity-40 dark:opacity-60"
-            style={{
-              background: 'linear-gradient(180deg, transparent 0%, rgba(245, 213, 128, 0.3) 20%, rgba(212, 140, 45, 0.5) 70%, transparent 100%)',
-              filter: 'blur(0.5px)',
-            }}
-          />
-
-          {/* Realistic falling water/liquor droplet (teardrop with highlight) */}
-          <div
-            className="absolute -top-4 rounded-full"
-            style={{
-              width: `${drop.size}px`,
-              height: `${drop.size * 1.5}px`,
-              left: `-${drop.size / 2 - 1}px`,
-              background: 'radial-gradient(ellipse at 35% 25%, #FFF5D6 0%, #F5D580 35%, #D48030 75%, #8A3D12 100%)',
-              boxShadow: '0 0 10px rgba(245, 185, 60, 0.85), inset 0 1px 2px rgba(255,255,255,0.8)',
-              borderRadius: '50% 50% 50% 50% / 40% 40% 60% 60%',
-              animation: `dropletFallAccelerate ${drop.duration} cubic-bezier(0.55, 0.085, 0.68, 0.53) ${drop.delay} infinite`,
-            }}
-          />
-
-          {/* Splash Impact Center at liquid line (around 82% height) */}
-          <div
-            className="absolute"
-            style={{
-              top: '82%',
-              left: '0px',
-              width: '1px',
-              height: '1px',
-            }}
-          >
-            {/* Expanding impact concentric ripple */}
-            <div
-              className="absolute -left-6 -top-2.5 rounded-full border border-amber-300/80 dark:border-amber-400"
-              style={{
-                width: '48px',
-                height: '18px',
-                animation: `dropletImpactRipple ${drop.duration} ease-out ${drop.delay} infinite`,
-              }}
-            />
-
-            {/* Splashing liquid bead — Center */}
-            <div
-              className="absolute -left-1 -top-1 rounded-full bg-amber-200 dark:bg-amber-300 shadow-[0_0_8px_rgba(255,220,100,0.9)]"
-              style={{
-                width: '4px',
-                height: '4px',
-                animation: `splashBeadCenter ${drop.duration} ease-out ${drop.delay} infinite`,
-              }}
-            />
-
-            {/* Splashing liquid bead — Left */}
-            <div
-              className="absolute -left-1 -top-1 rounded-full bg-amber-300 dark:bg-amber-400 shadow-[0_0_6px_rgba(240,180,60,0.8)]"
-              style={{
-                width: '3.5px',
-                height: '3.5px',
-                animation: `splashBeadLeft ${drop.duration} ease-out ${drop.delay} infinite`,
-              }}
-            />
-
-            {/* Splashing liquid bead — Right */}
-            <div
-              className="absolute -left-1 -top-1 rounded-full bg-amber-300 dark:bg-amber-400 shadow-[0_0_6px_rgba(240,180,60,0.8)]"
-              style={{
-                width: '3.5px',
-                height: '3.5px',
-                animation: `splashBeadRight ${drop.duration} ease-out ${drop.delay} infinite`,
-              }}
-            />
-          </div>
-        </div>
-      ))}
-
+    <div className="pointer-events-none absolute inset-0 overflow-hidden bottle-container-glass" style={{ containerType: 'size' }} aria-hidden="true">
       {/* â”€â”€ 2. Roaming Liquor at the Bottom (Bottle Container Reservoir) â”€â”€ */}
       <div className="absolute inset-x-0 bottom-0 h-44 sm:h-56 overflow-hidden pointer-events-none">
         {/* Micro-bubbles floating upward */}
@@ -136,45 +223,116 @@ const LiquidDropletWaterfall = () => {
           />
         ))}
 
-        {/* Deep wave — base liquor */}
-        <svg
-          className="absolute bottom-0 w-[200%] h-40"
-          style={{ animation: 'roamingLiquidSlosh1 11s ease-in-out infinite alternate' }}
-          viewBox="0 0 1440 160"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0,60 C240,110 480,20 720,65 C960,110 1200,25 1440,60 L1440,160 L0,160 Z"
-            className="fill-[#B06020]/45 dark:fill-[#D99A2B]/35"
-          />
-        </svg>
+        {/* Three layers of liquor, back to front. Each is lit from above (lighter at the surface, darker with depth),
+            has a bright crest line and a soft glow along it, and slides at its own pace so the crests never line up. */}
+        {WAVE_LAYERS.map((w, i) => (
+          <svg
+            key={i}
+            className={`absolute bottom-0 w-[200%] ${w.h}`}
+            style={{ animation: w.animation }}
+            viewBox={`0 0 1440 ${w.box}`}
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <linearGradient id={`wave-body-${i}`} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor={w.top} stopOpacity={w.topA} />
+                <stop offset="1" stopColor={w.bottom} stopOpacity="0.96" />
+              </linearGradient>
+            </defs>
+            <path d={`${w.crest} L1440,${w.box} L0,${w.box} Z`} fill={`url(#wave-body-${i})`} />
+            <path d={w.crest} fill="none" stroke="#FFD98A" strokeOpacity={w.glow} strokeWidth="7" vectorEffect="non-scaling-stroke" style={{ filter: 'blur(3px)' }} />
+            <path d={w.crest} fill="none" stroke="#FFF3CF" strokeOpacity={w.line} strokeWidth="1.6" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          </svg>
+        ))}
 
-        {/* Mid wave — fluid liquor wave */}
-        <svg
-          className="absolute bottom-0 w-[200%] h-36"
-          style={{ animation: 'roamingLiquidSlosh2 7.5s ease-in-out infinite alternate' }}
-          viewBox="0 0 1440 140"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0,50 C220,15 460,95 700,45 C940,5 1180,85 1440,50 L1440,140 L0,140 Z"
-            className="fill-[#D48030]/55 dark:fill-[#D4A847]/45"
-          />
-        </svg>
-
-        {/* Surface meniscus wave */}
-        <svg
-          className="absolute bottom-0 w-[200%] h-32"
-          style={{ animation: 'roamingLiquidSlosh3 5.2s ease-in-out infinite alternate' }}
-          viewBox="0 0 1440 120"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0,35 C180,65 420,10 680,40 C940,65 1180,15 1440,35 L1440,120 L0,120 Z"
-            className="fill-[#F0B048]/70 dark:fill-[#E8C36A]/65"
-          />
-        </svg>
+        {/* Light bending through the liquor: slow diagonal shafts that fade with depth */}
+        <div className="absolute inset-x-0 bottom-0 h-28 overflow-hidden"
+          style={{ maskImage: 'linear-gradient(to bottom, #000 10%, transparent 90%)', WebkitMaskImage: 'linear-gradient(to bottom, #000 10%, transparent 90%)' }}>
+          <div className="absolute inset-y-0 -left-24 w-[calc(100%+12rem)]"
+            style={{
+              background: 'repeating-linear-gradient(108deg, rgba(255,238,180,0) 0 46px, rgba(255,238,180,0.17) 70px, rgba(255,238,180,0) 100px)',
+              animation: 'causticDrift 9s linear infinite',
+            }} />
+        </div>
       </div>
+
+      {/* â”€â”€ 1. Cascading Droplets with Splash Impact â”€â”€ */}
+      {drops.map((drop, idx) => (
+        <div key={`water-drop-${idx}`} className="absolute top-0 bottom-0" style={{ left: drop.left }}>
+          {/* A falling drop: pointed at the top, round at the bottom, with a dark rim, a lit body and a bright highlight */}
+          <svg
+            width={DROP_SIZE}
+            height={DROP_SIZE * 1.6}
+            viewBox="0 0 10 16"
+            className="absolute -top-4 overflow-visible"
+            style={{
+              left: `-${DROP_SIZE / 2}px`,
+              filter: 'drop-shadow(0 0 5px rgba(245,185,60,0.7))',
+              transformOrigin: '50% 0',
+              animation: `dropletFallAccelerate ${drop.duration} cubic-bezier(0.55, 0.085, 0.68, 0.53) ${drop.delay} infinite`,
+            }}
+          >
+            <defs>
+              <radialGradient id="drop-body" cx="0.38" cy="0.62" r="0.7">
+                <stop offset="0" stopColor="#FFE9A8" /><stop offset="0.5" stopColor="#E9A23A" /><stop offset="1" stopColor="#7A3A0C" />
+              </radialGradient>
+            </defs>
+            <path d="M5 0C5.6 3 9.4 6.4 9.4 10.2A4.4 4.4 0 0 1 0.6 10.2C0.6 6.4 4.4 3 5 0Z" fill="url(#drop-body)" stroke="#5A2A08" strokeOpacity="0.55" strokeWidth="0.5" />
+            <ellipse cx="3.4" cy="10" rx="1.1" ry="2" fill="#fff" fillOpacity="0.85" transform="rotate(12 3.4 10)" />
+            <circle cx="6.9" cy="12.6" r="0.6" fill="#fff" fillOpacity="0.5" />
+          </svg>
+
+          {/* Splash Impact Center at liquid line (around 82% height) */}
+          <div
+            className="absolute"
+            style={{
+              bottom: `${SURFACE}px`,
+              left: '0px',
+              width: '1px',
+              height: '1px',
+            }}
+          >
+            {/* Two flat rings spreading out from the impact point */}
+            {[['dropletImpactRipple', 'border-amber-300/80 dark:border-amber-400'], ['dropletImpactRipple2', 'border-amber-200/60 dark:border-amber-300/80']].map(([name, cls]) => (
+              <div
+                key={name}
+                className={`absolute rounded-full border ${cls}`}
+                style={{
+                  left: '-34px', top: '-6px', width: '68px', height: '12px',
+                  animation: `${name} ${drop.duration} cubic-bezier(0.2, 0.6, 0.4, 1) ${drop.delay} infinite`,
+                }}
+              />
+            ))}
+
+            {/* The thin jet that rises from the middle of the splash just after impact */}
+            <div
+              className="absolute"
+              style={{
+                left: '-2px', top: '-26px', width: '4px', height: '26px', transformOrigin: '50% 100%',
+                borderRadius: '50% 50% 20% 20% / 45% 45% 10% 10%',
+                background: 'linear-gradient(90deg, #C27820, #FFE29A 50%, #C27820)',
+                boxShadow: '0 0 6px rgba(245,185,60,0.7)',
+                animation: `splashJet ${drop.duration} ease-out ${drop.delay} infinite`,
+              }}
+            />
+
+            {/* A crown of beads thrown up in arcs (--dx sideways, --h height) */}
+            {SPLASH_BEADS.map((b, i) => (
+              <div
+                key={i}
+                className="absolute rounded-full bg-amber-200 dark:bg-amber-300 shadow-[0_0_6px_rgba(255,215,100,0.9)]"
+                style={{
+                  left: `-${b.size / 2}px`, top: `-${b.size / 2}px`, width: `${b.size}px`, height: `${b.size}px`,
+                  '--dx': `${b.dx}px`, '--h': `${b.h}px`,
+                  animation: `splashArc ${drop.duration} linear ${drop.delay} infinite`,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <PouringBottle />
 
       {/* â”€â”€ 3. Glass reflections along container edges â”€â”€ */}
       <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white/12 to-transparent pointer-events-none" />
@@ -288,23 +446,23 @@ export default function Login({ onLogin, notice = '' }) {
         <LiquidDropletWaterfall />
 
         {/* Content overlay */}
-        <div className="relative z-10 flex flex-col justify-between p-10 xl:p-14 w-full">
+        <div className="relative z-10 flex flex-col justify-between p-8 xl:p-12 pb-52 xl:pb-60 w-full">
           {/* Top — Custom VLQMS Emblem Logo */}
           <div className="flex items-center gap-3 p-[4px] animate-fadeInUp">
             <VlqmsLogo size="lg" onDark />
           </div>
 
           {/* Bottom — Hero Typography & Metric Badges */}
-          <div className="max-w-lg mb-6">
+          <div className="max-w-[min(32rem,100%)] mb-4">
             <p className="animate-fadeInUp animate-fadeInUp-d1 text-[11px] font-bold tracking-[0.35em] text-[#F0CF8A] uppercase">
               Enterprise Resource Planning
             </p>
-            <h1 className="animate-fadeInUp animate-fadeInUp-d2 mt-4 text-4xl xl:text-5xl font-extrabold text-white leading-[1.1]"
-                style={{ fontFamily: 'var(--font-display)' }}>
+            <h1 className="animate-fadeInUp animate-fadeInUp-d2 mt-3 font-extrabold text-white leading-[1.1]"
+                style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.5rem, 2.6vw, 2.75rem)' }}>
               Fast Billing. Accurate Stock.{' '}
               Better Control.
             </h1>
-            <p className="animate-fadeInUp animate-fadeInUp-d3 mt-4 text-sm leading-relaxed text-stone-200/90 max-w-md">
+            <p className="animate-fadeInUp animate-fadeInUp-d3 mt-3 text-xs xl:text-sm leading-relaxed text-stone-200/90 max-w-md">
               Monitor inventory, sales, procurement and compliance across your entire
               distillery & retail operation — from warehouse to countertop.
             </p>
