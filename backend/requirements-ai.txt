@@ -1,0 +1,4 @@
+# Optional: pretrained forecast model for the AI stock feature (app/ai/model_forecast.py).
+# Install:  .venv/Scripts/python.exe -m pip install -r requirements-ai.txt
+torch>=2.2
+chronos-forecasting>=2.0
