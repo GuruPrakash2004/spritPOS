@@ -18,6 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import db_store, security, sqlstore, store
+from ..ai import service as ai_service
 from .auth import get_current_user, hides_cost, require_module
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -179,14 +180,21 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
     # selling, so the daily rate isn't underestimated.
     window_days = max(1, min(max(days, 1), (end - date.fromisoformat(first_sale)).days + 1)) if first_sale else max(days, 1)
 
+    # AI forecast (AI_FORECAST_ENABLED): items the model could forecast use its demand, days left, status and order quantity;
+    # the rest, and every item while the forecasts are not ready, keep the formula below.
+    ai_recs = ai_service.restock_overlay(qoh_of)
+
     rows = []
     for it in store.ITEMS.values():
         if it.get("active") is False:
             continue
         qoh, rol, roq = qoh_of.get(it["code"], it["qoh"]), it.get("rol", 0), it.get("roq", 0)
-        avg_daily = round(sold.get(it["code"], 0) / window_days, 2)
+        ai = (ai_recs or {}).get(it["code"])
+        avg_daily = ai["avg_daily"] if ai else round(sold.get(it["code"], 0) / window_days, 2)
         if qoh <= 0:
             days_left = 0.0
+        elif ai:
+            days_left = ai["days_remaining"]
         elif avg_daily > 0:
             days_left = round(qoh / avg_daily, 1)
         else:
@@ -194,6 +202,8 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
 
         if qoh <= 0:
             status = "OUT_OF_STOCK"
+        elif ai:
+            status = {"Reorder now": "CRITICAL", "Reorder soon": "LOW"}.get(ai["status"], "OK")
         elif days_left is not None and days_left <= RESTOCK_CRITICAL_DAYS:
             status = "CRITICAL"
         elif qoh <= rol or (days_left is not None and days_left <= RESTOCK_LOW_DAYS):
@@ -209,7 +219,9 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
             "last_sold": last_sold.get(it["code"]), "status": status,
             "needs_restock": status != "OK" and avg_daily > 0, "priority": priority,
             "sales_from": start.isoformat(), "sales_to": end.isoformat(), "window_days": window_days, "source": source,
-            "suggested_qty": max(roq, math.ceil(avg_daily * RESTOCK_COVER_DAYS - max(qoh, 0))),
+            "suggested_qty": ai["suggested_bottles"] if ai and ai["suggested_bottles"] > 0
+                             else max(roq, math.ceil(avg_daily * RESTOCK_COVER_DAYS - max(qoh, 0))),
+            "forecast": "ai" if ai else "formula", "ai_reason": ai["reason"] if ai else None,
         })
 
     # Items that need restock: by priority (fast sellers running out first). The rest (for filling the

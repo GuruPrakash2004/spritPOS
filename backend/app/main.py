@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from . import admin_audit, boot, bridge_launcher, db, gsettings, shop_hours, sqlstore, store
+from .ai import enabled as ai_enabled, service as ai_service
 from .routers import ai as ai_router, auth, company_files, custom_reports, designer as designer_router, masters, party_info, printing, reports, setup, tools, transactions, utilities
 from .schemas import SettingsIn
 
@@ -208,6 +209,8 @@ def startup_event():
     """Connect to SQL Server (if set up) and load the data into the in-memory store (app/boot.py)."""
     bridge_launcher.start()   # the Crystal Reports bridge runs whenever the backend does (Windows, bridge on this PC); started first so it warms up while the data loads
     boot.load_data()
+    if ai_enabled():   # the restock list's AI forecasts are made in the background, so the first Dashboard load isn't slow
+        ai_service.warm()
 
 
 @app.on_event("shutdown")

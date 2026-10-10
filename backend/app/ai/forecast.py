@@ -22,7 +22,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-HISTORY_DAYS = int(os.environ.get("AI_HISTORY_DAYS", "").strip() or 120)   # the most recent days every method learns from
+HISTORY_DAYS = int(os.environ.get("AI_HISTORY_DAYS", "").strip() or 365)   # the days of past sales every method learns from
 HORIZON_DAYS = 14
 MIN_HISTORY_DAYS = 28
 MIN_DEMAND_DAYS = 3
@@ -118,7 +118,7 @@ def tsb(series: list[float], alpha: float = ALPHA, beta: float = BETA) -> float:
 def forecast_item(series: list[float], end: date, is_accessory: bool = False, horizon: int = HORIZON_DAYS,
                   fallback_window: int | None = None) -> Forecast:
     """The next `horizon` days after `end` (the date of the last value in `series`). Only the last HISTORY_DAYS
-    days (default 120) are used; the fallback average covers the same days unless fallback_window says otherwise."""
+    days (default 365, all the stored history) are used; the fallback average covers the same days unless fallback_window says otherwise."""
     series = series[-HISTORY_DAYS:]
     fallback_window = fallback_window or HISTORY_DAYS
     cls = classify(series, is_accessory)
