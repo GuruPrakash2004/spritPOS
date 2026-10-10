@@ -16,7 +16,7 @@ import PartyRecords from './PartyRecords';
 import { getDesignerNextCode, getDesignerPickup } from '../../lib/api';
 import { useScreenFields } from '../../hooks/useScreenFields';
 import { applyDefinition, defaultFor, extraProblem, fieldsFromDefinition, pickupsAfter, ruleHolds, ruleValues, valueOf, withValue } from '../../lib/designerFields';
-import { Edit3, FilePlus, Save, Search, Trash2, X } from 'lucide-react';
+import { Edit3, FilePlus, PanelRightClose, PanelRightOpen, Save, Search, Trash2, X } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
 import { SkeletonTableRows } from '../common/Skeleton';
@@ -81,6 +81,10 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
   const [rows, setRows] = useState([]);
   const [loaded, setLoaded] = useState(false);   // false until the first list arrives: skeleton rows, not "No records"
   const [selected, setSelected] = useState(null);
+  // The list of records can be hidden (remembered per master on this computer, in the browser only).
+  const listKey = `vlqms_master_list_${path}`;
+  const [listOpen, setListOpen] = useState(() => { try { return localStorage.getItem(listKey) !== '0'; } catch { return true; } });
+  const toggleList = () => setListOpen(o => { try { localStorage.setItem(listKey, o ? '0' : '1'); } catch { /* not remembered */ } return !o; });
   const [partyOpen, setPartyOpen] = useState(false);   // customer / supplier: the records kept beside the master
   const [form, setForm] = useState(() => blank(fields));
   const [formErrors, setFormErrors] = useState({});
@@ -426,6 +430,9 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
           <p className={pageSub}>{subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={toggleList} aria-pressed={!listOpen} className={ghostButton} title={listOpen ? 'Hide the list of records' : 'Show the list of records'}>
+            {listOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}{listOpen ? 'Hide list' : 'Show list'}
+          </button>
           {readOnly ? (
             <>
               {toolbar}
@@ -453,8 +460,8 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
       </div>
 
       {/* As in the desktop: the record's details on the left, the list of records on the right. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-        <section aria-label={`${title} list`} className={`${panel} flex max-h-[600px] min-h-[320px] flex-col overflow-hidden order-2`}>
+      <div className={`grid grid-cols-1 gap-4 ${listOpen ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]' : ''}`}>
+        <section aria-label={`${title} list`} className={`${panel} flex max-h-[600px] min-h-[320px] flex-col overflow-hidden order-2 ${listOpen ? '' : 'hidden'}`}>
           <div className="flex items-center gap-3 border-b border-line p-3">
             <div className="relative flex-1">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -521,8 +528,8 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
             <div className="space-y-4">
             {sections.map(sec => (
             <GroupBox key={sec.title || 'main'} title={sec.title}>
-            {/* Fields read from the database flow into as many columns as fit (never wider than the panel); typed ones keep the old layout. */}
-            <div className={sec.fields.every(f => f.extra)
+            {/* Fields read from the database flow into as many columns as fit (never wider than the panel); typed ones keep the old layout, except while the list is hidden: then every field flows side by side instead of one long column. */}
+            <div className={!listOpen || sec.fields.every(f => f.extra)
               ? 'grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4'
               : `grid gap-4 ${sec.fields.length > 4 || (!sec.title && fields.length > 8) ? '2xl:grid-cols-2' : ''}`}>
               {sec.fields.map(f => {

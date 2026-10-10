@@ -15,8 +15,6 @@ import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { createFinYear, errorText, getBackupStatus, getCompany, getNextFinYear, removeFinYear, saveCompany, startBackup, updateDashboardLink, } from '../../lib/api';
-import Modal from '../common/Modal';
-import DatabaseSetup from '../auth/DatabaseSetup';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
 import { useScreenFields } from '../../hooks/useScreenFields';
 import { applyDefinition, extraProblem, valueOf } from '../../lib/designerFields';
@@ -72,9 +70,8 @@ const CompanyMaster = ({ canEditFiles }) => {
   const live = useScreenFields('company');
   const extraFieldList = useMemo(() => applyDefinition(EXTRA_FIELDS.map(f => ({ ...f, required: false })), live.screen), [live.screen]);
 
-  // The desktop's buttons under the grid: Backup (BACKUP DATABASE in the background), Companies... (switch database), Update Dashboard Link.
+  // The desktop's buttons under the grid: Backup (BACKUP DATABASE in the background) and Update Dashboard Link. (Companies... is not repeated here: the database is changed in Global Settings.)
   const [backup, setBackup] = useState(null);
-  const [companiesOpen, setCompaniesOpen] = useState(false);
   const [linkForm, setLinkForm] = useState(null);
   const runBackup = async () => {
     if (!(await toastStore.defer('backup', 'The database will be backed up when this closes.', 'Backup cancelled.'))) return;
@@ -389,7 +386,6 @@ const CompanyMaster = ({ canEditFiles }) => {
           <button onClick={runBackup} disabled={backup?.state === 'running'} className={secondaryButton} title="Backup of the current database">
             {backup?.state === 'running' ? 'Backing up…' : 'Backup'}
           </button>
-          <button onClick={() => setCompaniesOpen(true)} className={secondaryButton}>Companies…</button>
           <button onClick={() => setLinkForm(companyProfile?.extras?.DashBoardLink ?? '')} className="text-xs font-medium text-accent-ink underline">Update Dashboard Link</button>
           {backup?.state === 'running' && <span role="status" className="text-xs text-stone-500">Backing up {backup.file}…</span>}
         </div>
@@ -400,11 +396,6 @@ const CompanyMaster = ({ canEditFiles }) => {
           <button onClick={saveLink} className={primaryButton}>Save link</button>
           <button onClick={() => setLinkForm(null)} className={secondaryButton}>Cancel</button>
         </div>
-      )}
-      {companiesOpen && (
-        <Modal title="Companies" onClose={() => setCompaniesOpen(false)} wide>
-          <DatabaseSetup inputClass={field} labelClass={label} change plain onCancel={() => setCompaniesOpen(false)} onDone={() => window.location.reload()} />
-        </Modal>
       )}
     </div>
   );

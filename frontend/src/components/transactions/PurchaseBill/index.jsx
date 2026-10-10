@@ -23,6 +23,7 @@ import { toastStore } from '../../common/toastStore';
 import DropdownMenu, { menuItem } from '../../common/DropdownMenu';
 import BillExtras from '../BillExtras';
 import { useColumnTone } from '../../../hooks/useColumnTone';
+import { GRID_OUTLINE, useResizableTable } from '../../../hooks/useResizableTable';
 import { cn } from '../../../lib/utils';
 import { useBillExtras } from '../useBillExtras';
 import { errorText, getNextNumber, getPurchaseIndents, getSettingValues, getSuppliers, newIdempotencyKey, savePurchaseBill, } from '../../../lib/api';
@@ -80,6 +81,7 @@ export default function PurchaseBill() {
   // One key per bill, so a double-click on Save can't add the stock twice. Renewed for each new bill.
   const saveKey = useRef(newIdempotencyKey());
   const extrasBill = useBillExtras('TrnHdrPB', 'pb');
+  const { ref: gridRef, onMouseDown: gridDown, onDoubleClick: gridDouble } = useResizableTable('purchase-bill');   // stretchable columns, remembered on this computer
   const tone = useColumnTone('TrnHdrPB');   // red = mandatory, blue = read-only, from the Doc Designer
 
   useEffect(() => {
@@ -109,8 +111,17 @@ export default function PurchaseBill() {
   const balance = (Number(invValue) || 0) - totals.net;
   const balanced = invValue !== '' && Math.abs(balance) < 0.005;
   // As in the desktop, items can only be entered once the supplier and the PB (invoice) value are in.
-  const ready = supplier.trim() !== '' && Number(invValue) > 0;
-  const needFirst = () => focusField(supplier.trim() ? 'pb-inv-val' : 'pb-supplier');
+  // The bill date, supplier and supplier invoice no. / date are mandatory too.
+  const billDate = docSettings.allow_edit_date ? pbDate : today();
+  const ready = billDate !== '' && supplier.trim() !== '' && invNo.trim() !== '' && invDate !== '' && Number(invValue) > 0;
+  const needFirst = () => focusField(
+    !billDate ? 'pb-date' : !supplier.trim() ? 'pb-supplier' : !invNo.trim() ? 'pb-inv-no' : !invDate ? 'pb-inv-date' : 'pb-inv-val');
+
+  // Opening the screen puts the cursor on Bill date (or on Supplier when the date is locked by Global Settings).
+  useEffect(() => {
+    const t = window.setTimeout(() => focusField(docSettings.allow_edit_date ? 'pb-date' : 'pb-supplier'), 0);
+    return () => window.clearTimeout(t);
+  }, [docSettings.allow_edit_date]);
 
   useEffect(() => {
     getSettingValues().then(v => setMinMargin(Number(v?.PurSellVarPer) || 0)).catch(() => undefined);
@@ -276,6 +287,7 @@ export default function PurchaseBill() {
 
   const saveBill = async (andPrint = false) => {
     const filled = rows.filter(isFilled);
+    if (!billDate) return setToast({ kind: 'error', text: 'Enter the bill date.' });
     if (!supplier.trim()) return setToast({ kind: 'error', text: 'Select a supplier.' });
     if (!invNo.trim() || !invDate) return setToast({ kind: 'error', text: 'Enter the supplier Inv No and Inv Date.' });
     if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one item.' });
@@ -360,7 +372,7 @@ export default function PurchaseBill() {
               <input id="pb-no" value={pbDisplay} readOnly disabled title="Given when the bill is saved" className={`${field} font-mono`} />
             </div>
             <div>
-              <label className={labelClass} htmlFor="pb-date">Bill date</label>
+              <label className={labelClass} htmlFor="pb-date">Bill date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
               <input id="pb-date" type="date" value={docSettings.allow_edit_date ? pbDate : today()} disabled={!docSettings.allow_edit_date} onChange={e => setPbDate(e.target.value)} className={`${field} tabular-nums`} />
             </div>
             <div className="sm:col-span-2">
@@ -395,11 +407,11 @@ export default function PurchaseBill() {
           <section aria-label="Supplier invoice" className={`${panel} flex flex-col gap-4 p-5`}>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="pb-inv-no" className={labelClass}>Supplier invoice no.</label>
+                <label htmlFor="pb-inv-no" className={labelClass}>Supplier invoice no.<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
                 <input id="pb-inv-no" value={invNo} onChange={e => setInvNo(e.target.value)} className={`${field} font-mono`} />
               </div>
               <div>
-                <label htmlFor="pb-inv-date" className={labelClass}>Invoice date</label>
+                <label htmlFor="pb-inv-date" className={labelClass}>Invoice date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
                 <input id="pb-inv-date" type="date" value={invDate} onChange={e => setInvDate(e.target.value)} className={`${field} tabular-nums`} />
               </div>
               <div>
@@ -413,7 +425,7 @@ export default function PurchaseBill() {
                 </select>
               </div>
             </div>
-            <p className="mt-auto text-[11px] text-stone-500">Items can be added once the supplier and the invoice value are entered; the bill saves when its total equals the invoice value.</p>
+            <p className="mt-auto text-[11px] text-stone-500">Items can be added once the bill date, supplier, supplier invoice no. / date and the invoice value are entered; the bill saves when its total equals the invoice value.</p>
           </section>
         </div>
       )}
@@ -448,12 +460,12 @@ export default function PurchaseBill() {
           {sep}
           {docSettings.allow_copy_from && <button onClick={() => { setCopyOpen(true); openCopyFrom(); }} className={ghostButton} title="Copy lines from a Purchase Indent"><FileInput size={14} />Copy from indent</button>}
           <span className="ml-auto rounded bg-yellow-200 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-            {ready ? 'Press F4 to Add Single Item' : 'Enter the supplier and the PB (invoice) value to add items'}
+            {ready ? 'Press F4 to Add Single Item' : 'Enter the bill date, supplier, invoice no. and the PB (invoice) value to add items'}
           </span>
           <span className="pr-1 text-xs tabular-nums text-stone-500">{totals.items} items · {totals.qty} qty</span>
         </div>
         <div className="min-h-[400px] overflow-x-auto">
-          <table className="w-full min-w-[1520px] text-xs">
+          <table ref={gridRef} onMouseDown={gridDown} onDoubleClick={gridDouble} className={`${GRID_OUTLINE} w-full min-w-[1520px] text-xs`}>
             <thead className={tableHead}>
               <tr>
                 <th className={`${headCell} w-20 pl-2`}>#</th>
@@ -561,6 +573,11 @@ export default function PurchaseBill() {
             <span className="text-2xl font-semibold tracking-tight tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.net)}</span>
           </div>
           <p className="mt-1.5 text-[11px] text-stone-500">TCS on liquor purchases u/s 206C(1).</p>
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
+            <button onClick={cancelBill} className={secondaryButton}><XCircle size={14} />Cancel<Kbd combo="Alt+X" /></button>
+            <button onClick={() => saveBill(true)} className={secondaryButton}><Printer size={14} />Save &amp; print<Kbd combo="F10" /></button>
+            <button onClick={() => saveBill(false)} className={primaryButton}><Save size={14} />Save bill<Kbd combo="Mod+S" /></button>
+          </div>
         </section>
       </div>
 

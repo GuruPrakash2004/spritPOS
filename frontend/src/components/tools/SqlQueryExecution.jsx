@@ -12,13 +12,12 @@
 // Running a query, loading rows and exporting wait for their popup (Cancel stops them).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Database, Download, Eraser, FileSpreadsheet, History, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Play, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Database, Eraser, FileSpreadsheet, History, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Play, RefreshCw, Search } from 'lucide-react';
 import Modal from '../common/Modal';
 import { useConfirm } from '../common/ConfirmDialog';
 import DropdownMenu, { menuItem } from '../common/DropdownMenu';
 import { toastStore } from '../common/toastStore';
 import { errorText, executeSql, getSqlDefinition, getSqlObjects, getSqlScript, getSqlStatus, getSqlTop, } from '../../lib/api';
-import { downloadText, toCsv } from '../../lib/csv';
 import { downloadXls } from '../../lib/xlsExport';
 import { exportButton, field, ghostButton, iconButton, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
@@ -175,18 +174,14 @@ export default function SqlQueryExecution() {
     }
   };
 
-  const exportResult = async (format) => {
+  const exportResult = async () => {
     if (!result?.rows.length) return toastStore.add('error', 'Nothing to export: run a query that returns rows first.');
-    const what = format === 'csv' ? 'CSV' : 'XLS';
+    const what = 'Excel';
     if (!(await toastStore.defer('ok', `${result.row_count} rows will be exported to ${what} when this closes.`, 'Export cancelled.'))) return;
     const name = `SQL_Query_${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
-    if (format === 'csv') {
-      downloadText(`${name}.csv`, toCsv([result.columns, ...result.rows.map(r => r.map(cellText))]));
-    } else {
-      const cols = result.columns.map((c, i) => ({ key: `c${i}`, label: c, align: 'left'  }));
-      downloadXls(name, 'SQL Query Execution', `${status?.database ?? ''} · ${result.row_count} rows`, cols,
-        result.rows.map(r => Object.fromEntries(r.map((v, i) => [`c${i}`, typeof v === 'number' ? v : v === null ? null : String(v)]))));
-    }
+    const cols = result.columns.map((c, i) => ({ key: `c${i}`, label: c, align: 'left'  }));
+    downloadXls(name, 'SQL Query Execution', `${status?.database ?? ''} · ${result.row_count} rows`, cols,
+      result.rows.map(r => Object.fromEntries(r.map((v, i) => [`c${i}`, typeof v === 'number' ? v : v === null ? null : String(v)]))));
     toastStore.add('ok', `${result.row_count} rows exported to ${what}.`);
   };
 
@@ -290,8 +285,7 @@ export default function SqlQueryExecution() {
               {result && <span className="text-stone-500">{result.elapsed_ms} ms</span>}
               {result?.truncated && <span className="text-amber-700 dark:text-amber-400">Only the first 5,000 rows are shown. Narrow the query to see the rest.</span>}
               <div className="ml-auto flex gap-2">
-                <button className={exportButton} onClick={() => exportResult('csv')} disabled={!result?.rows.length}><Download size={14} />CSV</button>
-                <button className={exportButton} onClick={() => exportResult('xls')} disabled={!result?.rows.length}><FileSpreadsheet size={14} />XLS</button>
+                <button className={exportButton} onClick={() => exportResult()} disabled={!result?.rows.length}><FileSpreadsheet size={14} />Excel</button>
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-auto">

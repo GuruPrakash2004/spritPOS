@@ -9,7 +9,7 @@ import Modal from '../common/Modal';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { companyFileUrl, deleteCompanyFile, errorText, listCompanyFiles, updateCompanyFile, uploadCompanyFile } from '../../lib/api';
-import { downloadText, toCsv } from '../../lib/csv';
+import { downloadXls } from '../../lib/xlsExport';
 import {  field, label, primaryButton, secondaryButton, tableBody, tableHead , exportButton } from '../../lib/styles';
 import { SkeletonTableRows } from '../common/Skeleton';
 
@@ -196,11 +196,10 @@ export function CompanyDocuments({ canEdit }) {
 
   const exportList = async () => {
     if (!files?.length) return;
-    if (!(await toastStore.defer('ok', `${files.length} documents will be exported to CSV when this closes.`, 'Export cancelled.'))) return;
-    downloadText('Company_Documents.csv', toCsv([
-      ['Group', 'File Type', 'Name', 'File Name', 'Remarks', 'Size', 'Uploaded By', 'Uploaded At'],
-      ...files.map(f => [f.group, f.type_label, f.title, f.file_name, f.remarks, sizeText(f.size), f.uploaded_by, f.uploaded_at]),
-    ]));
+    if (!(await toastStore.defer('ok', `${files.length} documents will be exported to Excel when this closes.`, 'Export cancelled.'))) return;
+    const cols = ['Group', 'File Type', 'Name', 'File Name', 'Remarks', 'Size', 'Uploaded By', 'Uploaded At'].map(label => ({ key: label, label }));
+    downloadXls('Company_Documents', 'Company Documents', '', cols, files.map(f => Object.fromEntries(
+      [f.group, f.type_label, f.title, f.file_name, f.remarks, sizeText(f.size), f.uploaded_by, f.uploaded_at].map((v, i) => [cols[i].key, v ?? '']))));
   };
 
   return (

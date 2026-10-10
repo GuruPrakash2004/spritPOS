@@ -20,6 +20,7 @@ import WithHistory from './DocHistoryPanel';
 import DocFieldsPanel from '../docs/DocFieldsPanel';
 import { useDocHeader } from '../docs/useDocHeader';
 import { useColumnTone } from '../../hooks/useColumnTone';
+import { GRID_OUTLINE, useResizableTable } from '../../hooks/useResizableTable';
 import { cn } from '../../lib/utils';
 
 // The desktop header table of each document, so the columns the database / Doc Designer added to it show here.
@@ -78,6 +79,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   const qty = (l) => l.cases * (byCode.get(l.item_code)?.bottles_per_case ?? 0) + l.bottles;
   const filled = lines.filter(l => l.item_code);
   const docLines = filled.map(l => ({ item_code: l.item_code, qty: qty(l), rate: l.rate, cases: l.cases, bottles: l.bottles }));
+  const { ref: tableRef, onMouseDown: gridDown, onDoubleClick: gridDouble } = useResizableTable(`lines-${kind}`);   // stretchable columns, remembered on this computer
   const tone = useColumnTone(HEADER_TABLE[kind] ?? '');
   const cols = DETAIL[kind] ?? {};
   const doc = useDocHeader(HEADER_TABLE[kind] ?? '', { skip: OWN[kind] ?? [], lines: docLines, itemOf: code => byCode.get(code), idPrefix: 'ile' });
@@ -138,7 +140,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
 
       <div className={`${panel} overflow-hidden`}>
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-xs">
+        <table ref={tableRef} onMouseDown={gridDown} onDoubleClick={gridDouble} className={`${GRID_OUTLINE} w-full min-w-[720px] text-xs`}>
           <thead className={tableHead}>
             <tr>
               <th className="px-3 py-2">Sl</th><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">QOH</th>

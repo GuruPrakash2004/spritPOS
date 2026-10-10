@@ -1,5 +1,5 @@
 // Item Master: MasterCrud for /masters/items plus the legacy "Import Item from Excel" flow
-// (pick the template saved as CSV → preview with duplicates in red → POST /masters/items/import).
+// (pick the template saved as .xls → preview with duplicates in red → POST /masters/items/import).
 
 import { useRef, useState } from 'react';
 import { FileDown, FileUp, Upload } from 'lucide-react';
@@ -7,14 +7,15 @@ import MasterCrud from './MasterCrud';
 import Modal from '../common/Modal';
 import { toastStore } from '../common/toastStore';
 import { errorText, getItems, importItems } from '../../lib/api';
-import { downloadText, parseCsv, toCsv } from '../../lib/csv';
+import { downloadXlsRows } from '../../lib/xlsExport';
+import { readTableFile } from '../../lib/readTableFile';
 import { ITEM_FIELDS, ITEM_IMPORT_COLUMNS, ITEM_IMPORT_NUMERIC } from './masterConfigs';
 import { primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
 
 
 // Item Master = the generic master screen plus the legacy "Import Item from Excel" flow:
-// download template → fill in Excel → save as CSV → load → duplicates shown in red → import.
+// download template (.xls) → fill in Excel → load the .xls (or .xlsx / .csv) → duplicates shown in red → import.
 export default function ItemMaster() {
   const [reloadKey, setReloadKey] = useState(0);
   const [preview, setPreview] = useState(null);
@@ -23,12 +24,14 @@ export default function ItemMaster() {
 
   const downloadTemplate = () => {
     const header = ITEM_IMPORT_COLUMNS.map(([col]) => col);
-    downloadText('ItemImport_Template.csv', toCsv([header]));
+    downloadXlsRows('ItemImport_Template', [header]);
   };
 
   const loadFile = async (file) => {
     setMessage('');
-    const [header, ...body] = parseCsv(await file.text());
+    let rows;
+    try { rows = await readTableFile(file); } catch (e) { return setMessage(e.message); }
+    const [header, ...body] = rows;
     if (!header) return setMessage('The file is empty.');
     const index = new Map(header.map((h, i) => [h.trim().toUpperCase(), i]));
     const missing = ITEM_IMPORT_COLUMNS.filter(([col]) => !index.has(col.toUpperCase())).map(([col]) => col);
@@ -76,7 +79,7 @@ export default function ItemMaster() {
         toolbar={<>
           <button onClick={downloadTemplate} className={secondaryButton}><FileDown size={14} />Download Template</button>
           <button onClick={() => fileInput.current?.click()} className={secondaryButton}><FileUp size={14} />Import Items</button>
-          <input ref={fileInput} type="file" accept=".csv,text/csv" hidden onChange={e => { const f = e.target.files?.[0]; if (f) void loadFile(f); e.target.value = ''; }} />
+          <input ref={fileInput} type="file" accept=".xls,.xlsx,.csv" hidden onChange={e => { const f = e.target.files?.[0]; if (f) void loadFile(f); e.target.value = ''; }} />
         </>}
       />
       {message && !preview && (

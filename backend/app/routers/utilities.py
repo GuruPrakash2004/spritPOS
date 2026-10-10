@@ -12,6 +12,7 @@ Built so far:
 The web app never writes the desktop tables; every utility acts on the web app's own data.
 """
 import logging
+import platform
 import re
 from datetime import date, datetime, timedelta
 from typing import Literal
@@ -177,6 +178,8 @@ def about(current_user: dict = Depends(get_current_user)):
         "rpt_bridge": rpt_bridge.configured(),
         "rpt_files": len(rpt_bridge.rpt_files()),
         "server_time": datetime.now().isoformat(timespec="seconds"),
+        # The machine the web app runs on: the default System Name when a Sales Counter is created from Sales Invoice.
+        "system_name": (platform.node() or "ADMIN").upper(),
     }
 
 

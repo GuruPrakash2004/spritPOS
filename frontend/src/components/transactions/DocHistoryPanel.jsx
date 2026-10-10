@@ -13,10 +13,13 @@
 // - Refreshes itself when a document is saved or cancelled anywhere in the app (lib/api.js sends 'vlqms-docs-changed').
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, History, Printer, RefreshCw, Search, X } from 'lucide-react';
+import { Ban, ChevronDown, History, Printer, RefreshCw, Search, X } from 'lucide-react';
 import PrintDialog from '../print/PrintDialog';
 import { badge, iconButton, money, panel } from '../../lib/styles';
 import { DOCS_CHANGED, errorText, listDocuments } from '../../lib/api';
+import { getPurchaseDays, setPurchaseDays } from '../../lib/localPrefs';
+import { toast } from '../common/toastStore';
+import { CancelInvoiceDialog } from './SalesInvoiceDialogs';
 import { useShortcuts } from '../../lib/keys';
 import Kbd from '../common/Kbd';
 
@@ -52,13 +55,18 @@ export default function WithHistory({ kind, title, children }) {
   const [busy, setBusy] = useState(false);
   const [find, setFind] = useState('');
   const [opened, setOpened] = useState('');
+  // Only the last N days of bills (kept in this browser only, edited in the panel's own box); 0 = the latest SHOWN
+  const [days, setDays] = useState(getPurchaseDays);
+  const changeDays = (v) => { const n = Math.max(0, Math.min(3650, Math.floor(Number(v)) || 0)); setDays(n); setPurchaseDays(n); };
   const [printNo, setPrintNo] = useState('');
+  const [cancelNo, setCancelNo] = useState('');   // Sales Invoice: the bill whose "reason" window is open
 
   const toggle = useCallback(() => setOpen(o => {
     if (wide()) { try { localStorage.setItem(KEY, o ? '0' : '1'); } catch { /* the choice just isn't remembered */ } }
     return !o;
   }), []);
   useShortcuts({ 'Alt+H': toggle });
+
 
   const fetchDocs = useCallback(() => listDocuments(kind)
     .then(list => { setDocs(list); setError(''); })
@@ -76,10 +84,13 @@ export default function WithHistory({ kind, title, children }) {
 
   const rows = useMemo(() => {
     const q = find.trim().toLowerCase();
-    return (docs ?? []).filter(d => d.status !== 'HOLD').map(d => ({ doc: d, ...describe(d) }))
+    const from = days ? new Date(new Date().getTime() - days * 86_400_000) : null;
+    const since = from ? `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}` : '';
+    const list = (docs ?? []).filter(d => d.status !== 'HOLD' && (!since || String(d.date ?? '') >= since)).map(d => ({ doc: d, ...describe(d) }))
       .filter(r => !q || `${r.no} ${r.party} ${r.when}`.toLowerCase().includes(q))
-      .sort((a, b) => (a.sort < b.sort ? 1 : -1)).slice(0, SHOWN);
-  }, [docs, find]);
+      .sort((a, b) => (a.sort < b.sort ? 1 : -1));
+    return days ? list : list.slice(0, SHOWN);
+  }, [docs, find, days]);
 
   return (
     <div className="flex items-start gap-4">
@@ -104,6 +115,14 @@ export default function WithHistory({ kind, title, children }) {
               <RefreshCw size={13} className={busy ? 'animate-spin' : ''} />
             </button>
             <button type="button" onClick={toggle} className={`${iconButton} h-7 w-7`} aria-label="Hide history" title="Hide (Alt+H)"><X size={14} /></button>
+          </div>
+
+          <div className="flex items-center gap-2 border-b border-[#DDE3EC] px-3 py-1.5 text-[11px] text-stone-600 dark:border-[#2A2A2A] dark:text-stone-300">
+            <label htmlFor="hist-days">Show last</label>
+            <input id="hist-days" type="number" min={0} max={3650} value={days} onChange={e => changeDays(e.target.value)}
+              title="Days of bills listed here (0 = the latest 60). Kept on this computer only."
+              className="w-16 rounded-md border border-[#D5DCE7] bg-transparent px-1.5 py-0.5 text-right tabular-nums outline-none focus:border-[#1B2B4B] dark:border-[#2A2A2A] dark:focus:border-[#D4A847]" />
+            <span>days</span>
           </div>
 
           <div className="relative border-b border-[#DDE3EC] p-2 dark:border-[#2A2A2A]">
@@ -139,6 +158,12 @@ export default function WithHistory({ kind, title, children }) {
                         className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#D99A2B] px-2.5 py-1 font-semibold text-[#1B2B4B] hover:bg-[#D99A2B]/10 dark:border-[#D4A847]/40 dark:text-[#D4A847]">
                         <Printer size={12} />Print / preview
                       </button>
+                      {kind === 'sales_invoice' && !r.cancelled && (
+                        <button type="button" onClick={() => setCancelNo(r.no)}
+                          className="ml-2 mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-2.5 py-1 font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40">
+                          <Ban size={12} />Cancel bill
+                        </button>
+                      )}
                     </div>
                   )}
                 </li>
@@ -146,11 +171,13 @@ export default function WithHistory({ kind, title, children }) {
             </ul>
           </div>
           <p className="border-t border-[#DDE3EC] px-3 py-1.5 text-[10px] text-stone-500 dark:border-[#2A2A2A]">
-            Latest {SHOWN} · <Kbd combo="Alt+H" /> hides this
+            {days ? `Last ${days} days` : `Latest ${SHOWN}`} · {rows.length} listed ·<Kbd combo="Alt+H" /> hides this
           </p>
         </aside>
       )}
 
+      {cancelNo && <CancelInvoiceDialog initialNo={cancelNo} onClose={() => setCancelNo('')}
+        onDone={(msg) => { setCancelNo(''); toast.ok(msg); void fetchDocs(); }} />}
       {printNo && <PrintDialog kind={kind} docNo={printNo} title={`Print (${printNo})`} onClose={() => setPrintNo('')} />}
     </div>
   );

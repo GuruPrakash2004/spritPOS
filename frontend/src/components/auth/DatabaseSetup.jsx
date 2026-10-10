@@ -10,8 +10,8 @@
 // the form starts with the settings in use, a blank password keeps the saved one, and the title says so.
 
 import { useEffect, useState, } from 'react';
-import { AlertCircle, CheckCircle2, Database, Loader2, PlugZap, Search, Server } from 'lucide-react';
-import { errorText, getSetupCurrent, getSetupInstances, setupConnect, setupScan, setupTest } from '../../lib/api';
+import { AlertCircle, CheckCircle2, Database, Loader2, PlugZap } from 'lucide-react';
+import { errorText, getSetupCurrent, setupConnect, setupTest } from '../../lib/api';
 import { encryptSecret } from '../../lib/secureField';
 
 
@@ -27,39 +27,6 @@ export default function DatabaseSetup({ inputClass, labelClass, onDone, change =
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [hasPassword, setHasPassword] = useState(false);
-  const [found, setFound] = useState(null);     // SQL Server instances of any version the app found: [{label, product, port, ...}]
-  const [scanned, setScanned] = useState(null); // the login tried on every instance of the server: each with its databases
-
-  // Every SQL Server on the network and this PC, whatever its version (2008 ... 2022); a typed server limits it to that one.
-  const findServers = async () => {
-    setBusy(true); setError('');
-    try {
-      const typed = f.host.trim();
-      const r = await getSetupInstances(typed && !/^(localhost|\.|\(local\))$/i.test(typed) ? typed.split('\\')[0] : '');
-      setFound(r.instances ?? []);
-      if (!(r.instances ?? []).length) setError('No SQL Server answered. Type the server name or IP, or check that the SQL Server Browser service is running.');
-    } catch (err) { setError(errorText(err)); } finally { setBusy(false); }
-  };
-
-  const chooseInstance = (e) => {
-    setF(x => ({ ...x, host: e.address || e.server, port: e.port || '' }));
-    setErrors({}); setError(''); setScanned(null);
-  };
-
-  // The same login on every instance of the server typed (never across the network): each instance's databases.
-  const scanServer = async () => {
-    if (!f.host.trim() || !f.user.trim()) { setError('Type the server and the SQL login first, then scan.'); return; }
-    setBusy(true); setError('');
-    try {
-      const r = await setupScan({ host: f.host.trim().split('\\')[0], user: f.user.trim(), password: f.password ? await encryptSecret(f.password, 'db') : '' });
-      setScanned(r.instances ?? []);
-    } catch (err) { setError(errorText(err)); } finally { setBusy(false); }
-  };
-
-  const pickScanned = (inst, name) => {
-    setF(x => ({ ...x, host: inst.port ? (inst.address || inst.server) : inst.host, port: inst.port || '' }));
-    setDatabases(inst.databases); setDatabase(name); setStep('database'); setError('');
-  };
 
   // Changing the settings: start from the ones in use (the password is never sent back).
   useEffect(() => {
@@ -132,42 +99,6 @@ export default function DatabaseSetup({ inputClass, labelClass, onDone, change =
           {field('user', 'Login', { autoComplete: 'off' })}
           {field('password', 'Password', { type: 'password', autoComplete: 'new-password', ...(change && hasPassword ? { placeholder: 'Leave blank to keep the saved password' } : {}) })}
 
-          <div className="space-y-2 rounded-xl border border-[#DDE3EC] p-3 dark:border-[#2A2A2A]">
-            <p className="text-[11px] text-[#5F6B80] dark:text-stone-400">The server may run several SQL Server versions side by side. Find them all, or scan one server with the login above to see every database on every version.</p>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={findServers} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-[#D5DCE7] px-3 py-1.5 text-xs font-semibold dark:border-[#2A2A2A]"><Search size={13} />Find SQL Servers</button>
-              <button type="button" onClick={scanServer} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-[#D5DCE7] px-3 py-1.5 text-xs font-semibold dark:border-[#2A2A2A]"><Server size={13} />Scan all versions on this server</button>
-            </div>
-            {found && found.length > 0 && (
-              <ul className="max-h-44 space-y-1 overflow-y-auto text-xs" aria-label="SQL Servers found">
-                {found.map(e => (
-                  <li key={`${e.server}|${e.instance}`}>
-                    <button type="button" onClick={() => chooseInstance(e)} className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-[#EDF0F6] dark:hover:bg-[#1C1C1C]">
-                      <span className="min-w-0 truncate font-medium">{e.label}</span>
-                      <span className="shrink-0 text-[11px] text-[#5F6B80] dark:text-stone-400">{e.product}{e.port ? ` · port ${e.port}` : ''}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {scanned && (
-              <div className="max-h-64 space-y-2 overflow-y-auto text-xs" aria-label="Databases by SQL Server version">
-                {scanned.map(inst => (
-                  <div key={`${inst.server}|${inst.instance}`} className="rounded-lg border border-[#DDE3EC] p-2 dark:border-[#2A2A2A]">
-                    <div className="flex items-center justify-between gap-2"><span className="font-semibold">{inst.label}</span><span className="text-[11px] text-[#5F6B80] dark:text-stone-400">{inst.product}</span></div>
-                    {inst.ok ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {inst.databases.map(d => (
-                          <button key={d} type="button" onClick={() => pickScanned(inst, d)} className={`rounded-md border px-2 py-0.5 ${/lqms/i.test(d) ? 'border-[#1B2B4B] font-semibold dark:border-[#D4A847]' : 'border-[#DDE3EC] dark:border-[#2A2A2A]'}`}>{d}</button>
-                        ))}
-                        {!inst.databases.length && <span className="text-[#5F6B80]">No databases.</span>}
-                      </div>
-                    ) : <p className="mt-1 text-[#9A4B45] dark:text-red-400">Could not sign in to this instance with that login.</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
           {error && <ErrorLine text={error} />}
           <div className="flex gap-2">
             {onCancel && <button type="button" onClick={onCancel} className="rounded-xl border border-[#D5DCE7] px-4 text-xs dark:border-[#2A2A2A]">Cancel</button>}

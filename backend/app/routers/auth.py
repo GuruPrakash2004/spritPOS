@@ -104,7 +104,7 @@ PUBLIC_ROUTES = {
     ("POST", "/setup/test"), ("POST", "/setup/connect"), ("POST", "/setup/admin"),
     ("GET", "/setup/rpt-folder"), ("POST", "/setup/rpt-folder"),   # the .rpt path on the sign-in page's settings
     ("GET", "/setup/smtp"), ("POST", "/setup/smtp"), ("POST", "/setup/smtp/test"),
-    ("GET", "/setup/print-printer"), ("POST", "/setup/print-printer"),   # the server's printer for direct prints   # the e-mail (SMTP) settings there too
+    ("GET", "/setup/print-printer"), ("POST", "/setup/print-printer"), ("POST", "/setup/print-printer/add"),   # the server's printer for direct prints   # the e-mail (SMTP) settings there too
 }
 
 

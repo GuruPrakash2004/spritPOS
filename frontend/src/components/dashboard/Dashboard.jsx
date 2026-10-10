@@ -106,7 +106,7 @@ export const Dashboard = () => {
   const counters = dsr ? Object.entries(dsr.counter_wise).map(([c, v]) => `${c} ₹ ${money(v)}`).join(' · ') : '';
   const stats = [
     { label: "Today's Revenue", value: dsr ? `₹ ${money(dsr.sales_incl_gst)}` : '—', sub: !dsr ? 'Unavailable' : dsr.profit_of_the_day === null ? `${dsr.total_bills} bills today` : `+₹ ${money(dsr.profit_of_the_day)} profit`, icon: TrendingUp },
-    { label: 'Bills Issued', value: dsr ? String(dsr.total_bills) : '—', sub: counters || 'No bills yet today', icon: Receipt },
+    { label: 'Bills Issued/raised', value: dsr ? String(dsr.total_bills) : '—', sub: counters || 'No bills yet today', icon: Receipt },
     { label: dsr?.closing_stock.value === null ? 'Inventory' : 'Inventory Value', value: !dsr ? '—' : dsr.closing_stock.value === null ? `${dsr.closing_stock.qty} btl` : `₹ ${money(dsr.closing_stock.value)}`, sub: dsr ? `${dsr.closing_stock.qty} bottles · ${dsr.closing_stock.litres} L` : '—', icon: Package },
     { label: 'KSBCL Indents', value: indents ? String(indents.length) : '—', sub: indents ? `${indents.reduce((acc, i) => acc + i.totals.qty, 0)} bottles ordered` : 'Unavailable', icon: Truck },
   ];

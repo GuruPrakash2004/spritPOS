@@ -219,6 +219,8 @@ export const saveRptFolder = (folder) => request('/setup/rpt-folder', { method: 
 /** The printer all direct prints use on the server (blank = each document's own), and the printers the server can see. */
 export const getPrintPrinter = () => request('/setup/print-printer');
 export const savePrintPrinter = (printer) => request('/setup/print-printer', { method: 'POST', body: { printer } });
+/** Connect a shared printer (\\computer\printer) for the Windows user the server runs as; answers like getPrintPrinter(). */
+export const addSharedPrinter = (share) => request('/setup/print-printer/add', { method: 'POST', body: { share } });
 /** The e-mail (SMTP) settings (no password: only whether one is saved), saved, and a connection test (nothing is sent). */
 export const getSmtp = () => request('/setup/smtp');
 export const saveSmtp = (body) => request('/setup/smtp', { method: 'POST', body });

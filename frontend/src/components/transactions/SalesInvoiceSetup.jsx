@@ -7,9 +7,10 @@
 import { useEffect, useState } from 'react';
 import { Monitor, Receipt, Save } from 'lucide-react';
 import { field, label as labelBase, pageHeader, pageSub, pageTitle, panel, primaryButton, sectionTitle } from '../../lib/styles';
-import { errorText, getCustomers, getNextNumber, getSalesCounters, } from '../../lib/api';
+import { errorText, getAbout, getCustomers, getNextNumber, getSalesCounters, } from '../../lib/api';
 import { toastStore } from '../common/toastStore';
 import Kbd from '../common/Kbd';
+import { useConfirm } from '../common/ConfirmDialog';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import {
   PAYMENT_TYPES, counterFromApi,
@@ -25,7 +26,8 @@ const errorBorder = '!border-red-500 !ring-2 !ring-red-500/20 animate-shake';
 
 const FIELD_IDS = { counter: 'setup-counter', customer: 'setup-customer' };
 
-export default function SalesInvoiceSetup({ initial, onSubmit }) {
+export default function SalesInvoiceSetup({ initial, onSubmit, onCreateCounter }) {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [counters, setCounters] = useState(null);
   const [customers, setCustomers] = useState([]);
   const [counterCode, setCounterCode] = useState(initial.counter.code || readLastCounter());
@@ -39,12 +41,19 @@ export default function SalesInvoiceSetup({ initial, onSubmit }) {
       .then(list => {
         const active = list.map(counterFromApi).filter(c => !c.inactive);
         setCounters(active);
+        // Like the desktop: no counter yet → ask, and Yes opens Sales Counter Master to create one.
+        // "Not defined" = none at all, or none for this system (the counter last used here counts as this system's).
+        if (onCreateCounter) {
+          const mine = active.some(c => c.code === readLastCounter());
+          (mine ? Promise.resolve(true) : active.length ? getAbout().then(a => active.some(c => c.systemName && c.systemName.toUpperCase() === String(a?.system_name ?? '').toUpperCase())).catch(() => true) : Promise.resolve(false))
+            .then(defined => defined || confirm('Sales Counter Not Defined..., Do you want to create new?').then(yes => { if (yes) onCreateCounter(); }));
+        }
         setCounterCode(code => (active.some(c => c.code === code) ? code : active[0]?.code ?? ''));
         setTimeout(() => document.getElementById('setup-counter')?.focus(), 0);   // enabled now: Enter opens the bill
       })
       .catch(e => { setCounters([]); toastStore.add('error', errorText(e)); });
     getCustomers().then(setCustomers).catch(e => toastStore.add('error', errorText(e)));
-  }, []);
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const counter = counters?.find(c => c.code === counterCode);
 
@@ -70,6 +79,7 @@ export default function SalesInvoiceSetup({ initial, onSubmit }) {
 
   return (
     <div className="mx-auto max-w-4xl">
+      {confirmDialog}
       <div className={`${pageHeader} mb-5`}>
         <div>
           <h1 className={pageTitle}>New sales bill</h1>

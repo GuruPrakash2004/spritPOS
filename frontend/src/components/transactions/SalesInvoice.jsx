@@ -19,9 +19,11 @@
 //   Waiting popups: Enter saves now, Esc cancels.
 
 import { useEffect, useMemo, useRef, useState, } from 'react';
-import { PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine, ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronUp, PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine } from 'lucide-react';
 import Kbd from '../common/Kbd';
 import { useColumnTone } from '../../hooks/useColumnTone';
+import { useGridWidths } from '../../hooks/useGridWidths';
+import { GRID_OUTLINE } from '../../hooks/useResizableTable';
 import { cn } from '../../lib/utils';
 import ItemSearchBox, { } from './ItemSearchBox';
 import { focusField, useShortcuts } from '../../lib/keys';
@@ -64,7 +66,20 @@ const parseInvoiceNo = (invoiceNo) => {
 };
 
 const field = baseField;
-const cellInput = 'w-16 rounded-md border border-transparent bg-transparent px-1.5 py-1 text-right tabular-nums hover:border-line-strong focus:border-accent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-accent/20';
+const payRow = 'flex items-center justify-between gap-3 py-1.5';
+const cellInput = 'w-full min-w-0 rounded-md border border-transparent bg-transparent px-1.5 py-1 text-right tabular-nums hover:border-line-strong focus:border-accent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-accent/20';
+
+// The bill grid's columns in the desktop's order (id, caption, field-tone code, starting width in px). The user can drag
+// a header's right edge to resize; the widths are remembered on this computer (hooks/useGridWidths.js).
+const GRID_COLS = [
+  ['sl', 'Sl No', null, 78], ['item', 'Item', null, 260], ['qoh', 'QOH', null, 64], ['qty', 'Qty', 'SINVQTY', 78],
+  ['rate', 'Rate', 'SINVRATE', 88], ['discPct', 'Disc.%', 'DISCPER', 72], ['disc', 'Disc.Amt', 'DISCAMT', 90],
+  ['amount', 'Amount', 'SINVAMT', 100], ['total', 'Total Item Amt', null, 110], ['cgstPct', 'CGST%', 'CGSTPER', 70],
+  ['cgst', 'CGST Amt', 'CGSTAMT', 86], ['sgstPct', 'SGST%', 'SGSTPER', 70], ['sgst', 'SGST Amt', 'SGSTAMT', 86],
+  ['cessPct', 'Cess%', 'CESSPER', 66], ['cess', 'Cess Amt', 'CESSAMT', 80], ['compCess', 'Comp.Cess', 'COMPCESSAMT', 86],
+  ['itemAmt', 'Item Amt', 'ITEMAMT', 104],
+];
+const GRID_DEFAULTS = Object.fromEntries(GRID_COLS.map(([id, , , w]) => [id, w]));
 
 export default function SalesInvoice({ setup, onClose }) {
   const { counter } = setup;
@@ -82,6 +97,11 @@ export default function SalesInvoice({ setup, onClose }) {
   const [barcode, setBarcode] = useState('');
   const [scanQty, setScanQty] = useState('1');
   const [quickFilter, setQuickFilter] = useState('');
+  // The customer / sales person box can be folded away (remembered on this computer); F4 opens it again.
+  const [partyOpen, setPartyOpen] = useState(() => { try { return localStorage.getItem('vlqms_si_party_open') !== '0'; } catch { return true; } });
+  const togglePartyBox = () => setPartyOpen(o => { try { localStorage.setItem('vlqms_si_party_open', o ? '0' : '1'); } catch { /* not remembered */ } return !o; });
+  const [findLine, setFindLine] = useState('');   // narrows the bill grid to lines matching this text
+  const { widths, startResize, reset: resetWidths } = useGridWidths('sales-invoice', GRID_DEFAULTS);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickAt, setQuickAt] = useState(0);
   const [writeOff, setWriteOff] = useState('0');
@@ -213,7 +233,7 @@ export default function SalesInvoice({ setup, onClose }) {
     if (!term) return;
     if (!qty || qty < 1) return setToast({ kind: 'error', text: 'Enter a quantity of at least 1.' });
     // Exact item code first (barcode scanners send the code), then a brand/name match.
-    const exact = STOCK_ITEMS.findIndex(i => i.active && i.code.toLowerCase() === term);
+    const exact = STOCK_ITEMS.findIndex(i => i.active && (i.code.toLowerCase() === term || (i.hotKey && i.hotKey.toLowerCase() === term) || (i.shortName && i.shortName.toLowerCase() === term) || (i.aliases ?? []).some(a => String(a).toLowerCase() === term)));
     const stock = exact !== -1 ? exact : STOCK_ITEMS.findIndex(i => i.active && `${i.brand} ${i.name}`.toLowerCase().includes(term));
     if (stock === -1) return setToast({ kind: 'error', text: `No item found for "${code ?? barcode}".` });
     addItem(stock, qty);
@@ -297,7 +317,8 @@ export default function SalesInvoice({ setup, onClose }) {
     }
   };
 
-  const nextPayment = (step) =>
+  // The payment mode (and what hangs on it) opens up only once items are on the bill; the amounts then map to the mode chosen.
+  const nextPayment = (step) => lines.length &&
     setPaymentType(p => PAYMENT_TYPES[(PAYMENT_TYPES.indexOf(p) + step + PAYMENT_TYPES.length) % PAYMENT_TYPES.length]);
 
   const toggleQuick = () => {
@@ -427,7 +448,7 @@ export default function SalesInvoice({ setup, onClose }) {
   useShortcuts({
     F2: focusSearch,
     F3: toggleQuick,
-    F4: () => focusField('si-party'),
+    F4: () => { if (!partyOpen) togglePartyBox(); setTimeout(() => focusField('si-party'), 0); },
     F6: () => nextPayment(1),
     'Shift+F6': () => nextPayment(-1),
     'Alt+P': () => nextPayment(1),   // F6 is kept by some browsers for the address bar
@@ -446,7 +467,6 @@ export default function SalesInvoice({ setup, onClose }) {
     ['Basic amount', totals.basic], ['Discount', totals.disc], ['CGST', totals.cgst],
     ['SGST', totals.sgst], ['Cess', totals.cess], ['Comp. cess', totals.compCess], ['Points redeemed', totals.points],
   ];
-  const payRow = 'flex items-center justify-between gap-3 py-1.5';
 
   return (
     <WithHistory kind="sales_invoice" title="bills">
@@ -536,39 +556,32 @@ export default function SalesInvoice({ setup, onClose }) {
 
             <div className={`${panel} flex min-h-[320px] flex-col overflow-hidden`}>
               <div className="flex-1 overflow-auto">
-                <table className="w-full text-left text-xs">
+                <table className={`${GRID_OUTLINE} table-fixed text-left text-xs`} style={{ width: GRID_COLS.reduce((n, [id]) => n + widths[id], 0), minWidth: '100%' }}>
                   <thead className={tableHead}>
                     <tr>
-                      <th className="w-10 whitespace-nowrap px-4 py-2.5">SI No</th>
-                      <th className="min-w-[220px] px-3 py-2.5">Item</th>
-                      <th className="px-3 py-2.5 text-right">QOH</th>
-                      <th className={cn('px-3 py-2.5 text-right', tone('SINVQTY'))}>Qty</th>
-                      <th className={cn('px-3 py-2.5 text-right', tone('SINVRATE'))}>Rate</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('DISCPER'))}>Disc.%</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('DISCAMT'))}>Disc.Amt</th>
-                      <th className={cn('px-3 py-2.5 text-right', tone('SINVAMT'))}>Amount</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('CGSTPER'))}>CGST%</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('CGSTAMT'))}>CGST Amt</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('SGSTPER'))}>SGST%</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('SGSTAMT'))}>SGST Amt</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('CESSPER'))}>Cess%</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('CESSAMT'))}>Cess Amt</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('COMPCESSAMT'))}>Comp.Cess Amt</th>
-                      <th className={cn('whitespace-nowrap px-3 py-2.5 text-right', tone('ITEMAMT'))}>Item Amt</th>
-                                          </tr>
+                      {GRID_COLS.map(([id, caption, code]) => (
+                        <th key={id} style={{ width: widths[id] }} className={cn('relative overflow-hidden whitespace-nowrap px-3 py-2.5', !['sl', 'item'].includes(id) && 'text-right', code && tone(code))}>
+                          {caption}
+                          <span role="separator" aria-orientation="vertical" aria-label={`Resize ${caption}`} title="Drag to resize · double-click to reset all"
+                            onMouseDown={startResize(id)} onTouchStart={startResize(id)} onDoubleClick={resetWidths}
+                            className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize hover:bg-accent/40" />
+                        </th>
+                      ))}
+                    </tr>
                   </thead>
                   <tbody className="divide-y divide-line-soft tabular-nums">
-                    {lines.map((line, i) => {
+                    {lines.map((line, i) => [line, i]).filter(([line]) => !findLine.trim() || `${line.name} ${STOCK_ITEMS[line.id].code}`.toLowerCase().includes(findLine.trim().toLowerCase())).map(([line, i]) => {
                       const low = line.qty >= line.qoh;
                       return (
                         <tr key={line.id} onClick={() => setSelectedId(line.id)} aria-selected={selectedId === line.id} className={`cursor-pointer transition-colors ${selectedId === line.id ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
                           <td className="whitespace-nowrap px-2 py-1 text-stone-400"><span className="inline-flex items-center gap-1"><button tabIndex={-1} onClick={e => { e.stopPropagation(); setLines(lines.filter(l => l.id !== line.id)); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${line.name}`}><Trash2 size={14} /></button>{i + 1}</span></td>
-                          <td className="px-3 py-2 font-medium text-stone-900 dark:text-stone-50">{line.name}</td>
+                          <td className="truncate px-3 py-2 font-medium text-stone-900 dark:text-stone-50" title={line.name}>{line.name}</td>
                           <td className={`px-3 py-2 text-right ${low ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500'}`}>{line.qoh}</td>
                           <td className="px-3 py-1.5 text-right"><input type="number" min={1} max={line.qoh} value={line.qty || ''} data-si-row={i} data-si-col="qty" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'qty')} onChange={e => updateLine(line.id, { qty: Number(e.target.value) })} onBlur={() => line.qty || updateLine(line.id, { qty: 1 })} className={`${cellInput} font-semibold`} aria-label={`Qty for ${line.name}`} /></td>
                           <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={line.rate || ''} data-si-row={i} data-si-col="rate" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'rate')} onChange={e => updateLine(line.id, { rate: Number(e.target.value) })} className={`${cellInput} w-20`} aria-label={`Rate for ${line.name}`} /></td>
                           <td className="px-3 py-1.5 text-right"><input type="number" min={0} max={100} value={line.discPct || ''} placeholder="0" data-si-row={i} data-si-col="disc" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'disc')} onChange={e => updateLine(line.id, { discPct: Number(e.target.value) })} className={cellInput} aria-label={`Discount % for ${line.name}`} /></td>
                           <td className="px-3 py-2 text-right text-stone-500">{money(discAmt(line))}</td>
+                          <td className="px-3 py-2 text-right text-stone-700 dark:text-stone-200">{money(gross(line))}</td>
                           <td className="px-3 py-2 text-right font-semibold text-stone-900 dark:text-stone-50">{money(gross(line) - discAmt(line))}</td>
                           <td className="px-3 py-2 text-right text-stone-500">{money(line.cgstPct ?? 0)}</td>
                           <td className="px-3 py-2 text-right text-stone-500">{money(cgstAmt(line))}</td>
@@ -598,7 +611,8 @@ export default function SalesInvoice({ setup, onClose }) {
                 <span>Total Qty : <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.qty}</span></span>
                 <span>Invoice Value : <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.invoice)}</span></span>
                 <span>Litres <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.litres.toFixed(3)}</span></span>
-                <div className="ml-auto flex flex-wrap gap-1">
+                <div className="ml-auto flex flex-wrap items-center gap-1">
+                  <input value={findLine} onChange={e => setFindLine(e.target.value)} placeholder="Find in bill…" aria-label="Find in bill" tabIndex={-1} className={`${field} h-8 w-36 py-1 text-xs`} />
                   <span className="hidden text-[11px] text-stone-400 xl:inline">↑↓ line · + − qty · Del remove · 3* qty · F9 cash · F10 save</span>
                   <button onClick={deleteItem} disabled={!lines.length} tabIndex={-1} className={ghostButton}><Trash2 size={14} />Delete item</button>
                   <button onClick={clearItems} disabled={!lines.length} tabIndex={-1} className={ghostButton}><Eraser size={14} />Clear</button>
@@ -609,11 +623,17 @@ export default function SalesInvoice({ setup, onClose }) {
         </div>
 
         {/* RIGHT: customer, totals, payment, actions */}
-        <aside aria-label="Bill summary" className="flex flex-col gap-4 xl:sticky xl:top-0">
-          <div className={`${panel} grid grid-cols-2 gap-3 p-4`}>
+        <aside aria-label="Bill summary" className="flex flex-col gap-3 xl:sticky xl:top-0 xl:max-h-[calc(100dvh-1rem)] xl:overflow-y-auto">
+          <div className={`${panel} p-2`}>
+            <button type="button" onClick={togglePartyBox} aria-expanded={partyOpen} aria-controls="si-party-box" tabIndex={-1}
+              className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left text-[11px] font-semibold uppercase tracking-wide text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100">
+              <span className="min-w-0 truncate">{partyOpen ? 'Customer & details' : `${party || 'Walk-in'} · ${salesPerson || 'No sales person'}`}</span>
+              {partyOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            <div id="si-party-box" className={`grid grid-cols-2 gap-x-2 gap-y-1.5 px-1 pb-1 pt-1.5 text-xs ${partyOpen ? '' : 'hidden'}`}>
             <div className="col-span-2 sm:col-span-1">
               <label htmlFor="si-party" className={labelClass}>Customer <span className="font-normal text-stone-400">(F4)</span></label>
-              <input id="si-party" list="si-parties" value={party} onChange={e => setParty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); focusSearch(); } }} className={field} placeholder="Walk-in customer" />
+              <input id="si-party" list="si-parties" value={party} disabled={lines.length > 0} title={lines.length ? 'Only the payment mode can be changed once items are on the bill.' : undefined} onChange={e => setParty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); focusSearch(); } }} className={`${field} h-8 py-1 text-xs`} placeholder="Walk-in customer" />
               <datalist id="si-parties">{customers.map(c => <option key={c.code} value={c.name} />)}</datalist>
             </div>
             <BillExtras bill={extrasBill} idPrefix="si" />
@@ -626,14 +646,15 @@ export default function SalesInvoice({ setup, onClose }) {
             )}
             <div className="col-span-2 sm:col-span-1">
               <label htmlFor="si-salesperson" className={labelClass}>Sales person</label>
-              <select id="si-salesperson" value={salesPerson} onChange={e => setSalesPerson(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusSearch(); } }} className={field}>
+              <select id="si-salesperson" value={salesPerson} disabled={lines.length > 0} title={lines.length ? 'Only the payment mode can be changed once items are on the bill.' : undefined} onChange={e => setSalesPerson(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusSearch(); } }} className={`${field} h-8 py-1 text-xs`}>
                 {!salesPersons.length && <option value="">No sales persons (Sales Person Master)</option>}
                 {salesPersons.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
           </div>
+          </div>
 
-          <div className={`${panel} space-y-3 p-4 text-xs`}>
+          <div className={`${panel} space-y-2.5 p-3 text-xs`}>
             <div className="rounded-lg bg-subtle px-3 py-3">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-xs font-medium text-stone-500 dark:text-stone-400">Invoice value</span>
@@ -642,30 +663,25 @@ export default function SalesInvoice({ setup, onClose }) {
               <div className="mt-0.5 text-3xl font-semibold tracking-tight tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.invoice)}</div>
               <div className="mt-1 text-[11px] italic leading-snug text-stone-500 dark:text-stone-400">{numberToWords(totals.invoice)}</div>
             </div>
-            <details className="group rounded-lg border border-line">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-stone-600 hover:bg-subtle/70 dark:text-stone-300 [&::-webkit-details-marker]:hidden">
-                <span>Amount breakdown</span>
-                <span className="flex items-center gap-1.5 tabular-nums text-stone-900 dark:text-stone-50">{money(totals.total)}<ChevronDown size={14} className="text-stone-400 transition-transform group-open:rotate-180" /></span>
-              </summary>
-              <dl className="space-y-1.5 border-t border-line px-3 py-2.5 tabular-nums">
-                {totalRows.map(([label, value]) => (
-                  <div key={label} className="flex justify-between gap-3">
-                    <dt className="text-stone-500 dark:text-stone-400">{label}</dt>
-                    <dd className={value ? 'text-stone-800 dark:text-stone-200' : 'text-stone-400'}>{money(value)}</dd>
-                  </div>
-                ))}
-                <div className="flex justify-between gap-3 border-t border-line pt-1.5 font-medium">
-                  <dt className="text-stone-700 dark:text-stone-200">Total</dt>
-                  <dd className="text-stone-900 dark:text-stone-50">{money(totals.total)}</dd>
+            {/* The desktop's totals grid, always open so the amounts are seen without scrolling */}
+            <dl aria-label="Amount breakdown" className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border border-line px-3 py-2 tabular-nums">
+              {[...totalRows, ['Total', totals.total], ['Write-off', Number(writeOff) || 0]].map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-2">
+                  <dt className={label === 'Total' ? 'font-medium text-stone-700 dark:text-stone-200' : 'text-stone-500 dark:text-stone-400'}>{label}</dt>
+                  <dd className={label === 'Total' ? 'font-semibold text-stone-900 dark:text-stone-50' : value ? 'text-stone-800 dark:text-stone-200' : 'text-stone-400'}>{money(value)}</dd>
                 </div>
-              </dl>
-            </details>
+              ))}
+              <div className="col-span-2 flex justify-between gap-2 border-t border-line pt-1">
+                <dt className="text-stone-500 dark:text-stone-400">Payment type</dt>
+                <dd className="font-semibold text-stone-900 dark:text-stone-50">{paymentType}</dd>
+              </div>
+            </dl>
             <div className={payRow}>
               <label htmlFor="si-writeoff" className="whitespace-nowrap text-stone-500 dark:text-stone-400">Write-off</label>
-              <input id="si-writeoff" type="number" min={0} value={writeOff} onFocus={e => e.target.select()} onChange={e => setWriteOff(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusField('si-collected'); } }} className={`${field} w-28 py-1 text-right tabular-nums`} />
+              <input id="si-writeoff" type="number" min={0} disabled={!lines.length} value={writeOff} onFocus={e => e.target.select()} onChange={e => setWriteOff(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusField('si-collected'); } }} className={`${field} w-28 py-1 text-right tabular-nums`} />
             </div>
             <div role="radiogroup" aria-label="Payment type (F6 or Alt+P)" onKeyDown={e => {
-              if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
+              if (lines.length && ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
                 e.preventDefault();
                 const next = PAYMENT_TYPES[(PAYMENT_TYPES.indexOf(paymentType) + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1) + PAYMENT_TYPES.length) % PAYMENT_TYPES.length];
                 setPaymentType(next);
@@ -677,13 +693,15 @@ export default function SalesInvoice({ setup, onClose }) {
                   key={p}
                   id={`si-pay-${p}`}
                   role="radio"
+                  disabled={!lines.length}
                   tabIndex={paymentType === p ? 0 : -1}
                   aria-checked={paymentType === p}
                   onClick={() => setPaymentType(p)}
-                  className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${paymentType === p ? 'bg-surface text-stone-900 shadow-card dark:text-stone-50' : 'text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-50'}`}
+                  className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${paymentType === p ? 'bg-surface text-stone-900 shadow-card dark:text-stone-50' : 'text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-50'}`}
                 >{p}</button>
               ))}
             </div>
+            {!lines.length && <p className="-mt-1 text-[11px] text-stone-500 dark:text-stone-400">Add items to choose the payment mode.</p>}
             <dl className="tabular-nums">
               <div className={payRow}>
                 <dt className="text-stone-500 dark:text-stone-400">Card</dt>
@@ -705,7 +723,7 @@ export default function SalesInvoice({ setup, onClose }) {
             <div>
               <label htmlFor="si-collected" className={labelClass}>Cash tendered <span className="font-normal text-stone-400">(F9 · Enter saves)</span></label>
               <div className="flex items-center gap-2">
-                <input id="si-collected" type="number" min={0} value={collected} onFocus={e => e.target.select()} onChange={e => setCollected(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void saveBill(); } if (e.key === 'Escape') focusSearch(); }} className={`${field} flex-1 text-right text-sm tabular-nums`} placeholder="0.00" />
+                <input id="si-collected" type="number" min={0} disabled={!lines.length} value={collected} onFocus={e => e.target.select()} onChange={e => setCollected(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void saveBill(); } if (e.key === 'Escape') focusSearch(); }} className={`${field} flex-1 text-right text-sm tabular-nums`} placeholder="0.00" />
               </div>
               {collected !== '' && (
                 <div role="status" aria-live="polite" className={`mt-2 flex items-baseline justify-between gap-3 rounded-lg px-3 py-2.5 tabular-nums ${change < 0

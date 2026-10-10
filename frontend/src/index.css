@@ -884,6 +884,20 @@ input[type='date']::-webkit-date-and-time-value { text-align: left; }
 .menu-pop { animation: menuIn var(--dur-fast) var(--ease-out) both; transform-origin: top; }
 .menu-pop-up { animation: menuInUp var(--dur-fast) var(--ease-out) both; transform-origin: bottom; }
 
+/* Genie effect (footer sales summary): the box pours out of the footer button and sucks back into it.
+   Only transform and opacity move; the origin is set inline to the button's position. */
+@keyframes genieIn {
+  0% { opacity: 0; transform: translateY(18px) scale(0.12, 0.04) skewX(-14deg); }
+  55% { opacity: 1; transform: translateY(-4px) scale(0.9, 1.04) skewX(3deg); }
+  100% { opacity: 1; transform: translateY(0) scale(1) skewX(0); }
+}
+@keyframes genieOut {
+  0% { opacity: 1; transform: translateY(0) scale(1) skewX(0); }
+  100% { opacity: 0; transform: translateY(18px) scale(0.12, 0.04) skewX(-14deg); }
+}
+.genie-in { animation: genieIn var(--dur-slow) var(--ease-out) both; }
+.genie-out { animation: genieOut var(--dur-base) var(--ease-in) both; }
+
 /* Popups (common/Toast.jsx). Only transform and opacity animate, so the GPU does the work.
    Large screens: quick. Below lg (1024 px): a longer, softer glide in and out.
    The exit times match TOAST_EXIT_MS / TOAST_EXIT_SMALL_MS in toastStore.js. */

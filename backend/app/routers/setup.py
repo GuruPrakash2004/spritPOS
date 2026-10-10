@@ -356,6 +356,41 @@ def get_print_printer(request: Request):
     return _printer_info()
 
 
+class ShareIn(BaseModel):
+    share: str = Field(..., max_length=200)   # \\computer\printer
+
+
+SHARE_PATH = re.compile(r"^\\\\[A-Za-z0-9._-]+\\[A-Za-z0-9._ ()-]+$")
+
+
+@router.post("/print-printer/add")
+def add_shared_printer(body: ShareIn, request: Request):
+    """Connect a printer another PC shares (e.g. the USB POS printer on the shop PC: \\\\saturn2\\POS-80) for the Windows user this
+    backend and its bridge run as, so it shows in the list and can be picked. A printer seen only in a Remote Desktop session
+    (" (redirected N)") is never visible to the service; this connection is."""
+    import subprocess
+    import sys
+    who = _guard(request)
+    share = body.share.strip()
+    if not SHARE_PATH.match(share):
+        raise HTTPException(422, "Type the shared printer as \\\\computer\\printer, e.g. \\\\saturn2\\POS-80.")
+    if sys.platform != "win32":
+        raise HTTPException(409, "Adding a shared printer only works on a Windows server.")
+    try:
+        done = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             f"$ErrorActionPreference='Stop'; Add-Printer -ConnectionName '{share}'"],
+            capture_output=True, text=True, timeout=60)
+    except Exception as exc:   # noqa: BLE001
+        raise HTTPException(502, f"Could not run Windows PowerShell: {exc}")
+    if done.returncode != 0:
+        why = (done.stderr or done.stdout or "").strip().splitlines()
+        raise HTTPException(502, f"Windows could not connect to {share}: {why[0] if why else 'unknown error'}. "
+                                 "Check that the other PC is on, the printer is shared, and this server's Windows user may use it.")
+    admin_audit.write_now(who or "SERVER PC", "Printer on this server", "Added", "Shared printer", "", share)
+    return _printer_info()
+
+
 @router.post("/print-printer")
 def set_print_printer(body: PrinterIn, request: Request):
     """Save the server's printer for direct prints. It overrides the printer saved with each print option (which the desktop

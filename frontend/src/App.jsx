@@ -44,6 +44,7 @@ import { finYearLabel } from './lib/formatters';
 import SalesInvoice from './components/transactions/SalesInvoice';
 import SalesInvoiceSetup from './components/transactions/SalesInvoiceSetup';
 import Sidebar from './components/layout/Sidebar';
+import SalesTodayPopover from './components/layout/SalesTodayPopover';
 import SupplierMaster from './components/masters/SupplierMaster';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { useCompanyProfile } from './hooks/useCompanyProfile';
@@ -96,6 +97,7 @@ export default function App() {
     counter: NO_COUNTER, invoiceNo: '', paymentType: 'CASH', customer: '',
   });
   const [billOpen, setBillOpen] = useState(false);
+  const [newCounter, setNewCounter] = useState(false);   // Sales Counter Master opened from Sales Invoice to add the first counter
   const [showShortcuts, setShowShortcuts] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [changingPassword, setChangingPassword] = useState(false);
@@ -191,6 +193,7 @@ export default function App() {
     if (window.location.pathname !== path) window.history.pushState(null, '', path);
     withViewTransition(() => {
       setActiveTab(moduleName);
+      setNewCounter(false);
       setBillOpen(false);
       if (BILLING_SCREENS.includes(moduleName)) setNavCollapsed(true);   // not saved: only the toggle sets the preference
       if (window.innerWidth < 768) setSidebarOpen(false);
@@ -217,6 +220,7 @@ export default function App() {
   const openInvoiceSetup = (counter) => {
     setInvoiceDraft(draft => ({ ...draft, counter, invoiceNo: '' }));
     setBillOpen(false);
+    setNewCounter(false);
     setActiveTab('Sales Invoice');
   };
 
@@ -244,14 +248,14 @@ export default function App() {
       case 'Ledger Master': return <LedgerMaster />;
       case 'Ledger Group Master': return <LedgerGroupMaster />;
       case 'Sales Person Master': return <SalesPersonMaster />;
-      case 'Sales Counter Master': return <SalesCounterMaster onSave={openInvoiceSetup} />;
+      case 'Sales Counter Master': return <SalesCounterMaster onSave={openInvoiceSetup} startNew={newCounter} />;
       case 'Package Master': return <PackageMaster />;
       case 'Price List Maintenance': return <PriceListMaintenance />;
       case 'Brand Master': return <BrandMaster />;
       case 'Purchase Bill': return <PurchaseBill />;
       case 'Sales Invoice': return billOpen
         ? <SalesInvoice setup={invoiceDraft} onClose={() => setBillOpen(false)} />
-        : <SalesInvoiceSetup initial={invoiceDraft} onSubmit={setup => { setInvoiceDraft(setup); setBillOpen(true); }} />;
+        : <SalesInvoiceSetup initial={invoiceDraft} onCreateCounter={() => { setNewCounter(true); setActiveTab('Sales Counter Master'); }} onSubmit={setup => { setInvoiceDraft(setup); setBillOpen(true); }} />;
       case 'Expense Entry': return <ExpenseEntry />;
       case 'Stock Deduction': return <StockDeduction />;
       case 'Purchase Indent': return <PurchaseIndent />;
@@ -384,7 +388,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4 tabular-nums">
             <span className="hidden sm:inline">Bills today <span className="font-medium text-[#1A2236] dark:text-stone-200">{dsr?.total_bills ?? '—'}</span></span>
-            <span>Sales today <span className="font-semibold text-[#1B2B4B] dark:text-[#D4A847]">₹ {(dsr?.sales_incl_gst ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+            <SalesTodayPopover dsr={dsr} />
           </div>
         </footer>
       </div>

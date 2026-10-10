@@ -138,7 +138,8 @@ export default function PrintDialog({ kind, docNo, title, onClose }
         <button onClick={() => setEmailing(true)} disabled={!current || busy} className={secondaryButton}><Mail size={14} />Email</button>
         <button onClick={printDirect} disabled={!current || !printer || busy} className={secondaryButton}
           title={printer ? `Prints on ${printer} without showing it (Ctrl+Enter)` : 'Choose a printer first'}><Send size={14} />Print directly</button>
-        <button ref={mainRef} onClick={printShown} disabled={!url || loading || busy} className={primaryButton} data-autofocus><Printer size={14} />Print</button>
+        <button ref={mainRef} onClick={printShown} disabled={!url || loading || busy} className={primaryButton} data-autofocus
+          title="Opens this computer's print window: choose any printer connected to this PC"><Printer size={14} />Print</button>
       </>}
     >
       <div onKeyDown={onKeyDown}>
@@ -191,6 +192,9 @@ export default function PrintDialog({ kind, docNo, title, onClose }
                   {printer && !printers.includes(printer) && <option value={printer}>{printer}</option>}
                   {printers.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
+                <span className="mt-1 block text-[11px] leading-snug text-stone-500">
+                  These are the printers on the server. For a printer on your own PC (the one at your counter), press <b>Print</b>: your browser's print window lists this PC's printers, and remembers the one you pick.
+                </span>
               </label>
             </div>
             <div className="relative flex min-h-[60vh] flex-1 items-start justify-center overflow-auto rounded-lg border border-[#DDE3EC] bg-stone-200 p-4 dark:border-[#2A2A2A] dark:bg-[#0c0c0c]">

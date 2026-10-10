@@ -7,12 +7,12 @@ import { field as fieldClass, fieldTone, label as labelClass } from '../../lib/s
 import { cn } from '../../lib/utils';
 import { ruleHolds, ruleValues, valueOf, withValue } from '../../lib/designerFields';
 
-export default function DefinedExtras({ fields, form, onChange, readOnly, errors = {}, idPrefix }) {
+export default function DefinedExtras({ fields, form, onChange, readOnly, errors = {}, idPrefix, compact = false }) {
   const values = ruleValues(form);
   const shown = fields.filter(f => !(f.hideWhen && ruleHolds(f.hideWhen, values)));
   if (!shown.length) return null;
   return (
-    <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
+    <div className={cn('grid [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]', compact ? 'gap-2' : 'gap-4')}>
       {shown.map(f => {
         const locked = readOnly || f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values));
         const required = f.required || (f.mandatoryWhen && ruleHolds(f.mandatoryWhen, values));
@@ -40,7 +40,7 @@ export default function DefinedExtras({ fields, form, onChange, readOnly, errors
                     {(f.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 ) : f.multiline ? (
-                  <textarea id={id} rows={3} value={value} readOnly={locked} maxLength={f.maxLength} onChange={e => set(e.target.value)} className={cls} />
+                  <textarea id={id} rows={compact ? 1 : 3} value={value} readOnly={locked} maxLength={f.maxLength} onChange={e => set(e.target.value)} className={cn(cls, compact && 'min-h-0 resize-y py-1 text-xs')} />
                 ) : (
                   <input id={id} type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                     value={f.type === 'date' ? String(value).slice(0, 10) : value} readOnly={locked}

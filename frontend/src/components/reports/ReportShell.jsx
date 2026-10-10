@@ -1,4 +1,4 @@
-// Shared frame for the table-driven reports: filter row → Run → table with totals, Print and Export CSV.
+// Shared frame for the table-driven reports: filter row → Run → table with totals, Print and Export Excel.
 // Filters map to query params: on → `on`, range → `from_date`/`to_date`, item → `item_code`, months → `months`.
 
 import Pager from '../common/Pager';
@@ -6,7 +6,7 @@ import { usePage } from '../common/usePage';
 import { useEffect, useState } from 'react';
 import { FileDown, Play, Printer } from 'lucide-react';
 import { errorText, getItems, getReport, todayIso, } from '../../lib/api';
-import { downloadText, toCsv } from '../../lib/csv';
+import { downloadXls } from '../../lib/xlsExport';
 import { badge, field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow, exportButton, printButton } from '../../lib/styles';
 import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 import { SkeletonTableRows } from '../common/Skeleton';
@@ -17,7 +17,7 @@ import { SkeletonTableRows } from '../common/Skeleton';
 
 const monthStart = () => `${todayIso().slice(0, 8)}01`;
 
-// Shared frame for the API reports: filter row → Run → table with totals, Print and Export CSV.
+// Shared frame for the API reports: filter row → Run → table with totals, Print and Export Excel.
 export default function ReportShell({ title, subtitle, endpoint, filters, columns }
 
 ) {
@@ -59,7 +59,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
 
   const exportCsv = () => {
     if (!rows) return;
-    downloadText(`${title.replace(/\s+/g, '_')}.csv`, toCsv([columns.map(c => c.label), ...rows.map(r => columns.map(c => r[c.key] ?? ''))]));
+    downloadXls(title.replace(/\s+/g, '_'), title, '', columns.map(c => ({ key: c.key, label: c.label })), rows);
   };
 
   const num = (c) => c.kind && c.kind !== 'text';
@@ -73,7 +73,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
         </div>
         <div className="flex gap-2 print:hidden">
           <button onClick={() => setShowPrintModal(true)} disabled={!rows?.length} title={rows?.length ? undefined : 'Run the report first; there is nothing to print'} className={printButton}><Printer size={14} />Print</button>
-          <button onClick={exportCsv} disabled={!rows} className={exportButton}><FileDown size={14} />Export CSV</button>
+          <button onClick={exportCsv} disabled={!rows} className={exportButton}><FileDown size={14} />Export Excel</button>
         </div>
       </div>
 

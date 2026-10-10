@@ -5,7 +5,7 @@
 // when the database is set up but can't be reached it says so, with Retry.
 
 import { useState, useEffect, } from 'react';
-import { AlertCircle, Database, Loader2, LogIn, Moon, Sun, Wine } from 'lucide-react';
+import { AlertCircle, Database, Eye, EyeOff, Loader2, LogIn, Moon, Sun, Wine } from 'lucide-react';
 import { errorText, getSetupStatus, login, setRememberSession, } from '../../lib/api';
 import { loadPasswordRules } from '../../lib/passwords';
 import { encryptSecret } from '../../lib/secureField';
@@ -13,7 +13,6 @@ import { IMAGES } from '../../constants/images';
 import VlqmsLogo from '../layout/VlqmsLogo';
 import DevelopedBy from '../layout/DevelopedBy';
 import DatabaseSetup from './DatabaseSetup';
-import RptFolderSetting from '../common/RptFolderSetting';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import CreateAdmin from './CreateAdmin';
 import { finYearLabel } from '../../lib/formatters';
@@ -345,11 +344,14 @@ export default function Login({ onLogin, notice = '' }) {
   const { company } = useCompanyProfile();
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
   // The shop's financial years (newest first), the active one chosen.
   const finYears = (company?.fin_years?.length ? company.fin_years : company?.fy_start ? [{ start: company.fy_start, end: company.fy_end, active: true }] : [])
-    .map(y => ({ label: finYearLabel(y.start, y.end), active: y.active })).filter(y => y.label);
-  const [pickedYear, setFinYear] = useState('');
-  const finYear = pickedYear || finYears.find(y => y.active)?.label || finYears[0]?.label || '';
+    .map(y => ({ label: finYearLabel(y.start, y.end), active: y.active, start: y.start, end: y.end })).filter(y => y.label);
+  // No choice is offered at sign-in: the year that contains today, else the active one. Only an Administrator
+  // changes the years (Company Master → Financial Year(s)).
+  const todayDay = new Date().toLocaleDateString('en-CA');
+  const finYear = (finYears.find(y => y.start <= todayDay && todayDay <= y.end) || finYears.find(y => y.active) || finYears[0])?.label || '';
   // Login Settings: offer "Remember me" only when the Administrator allows it.
   const [offerRemember, setOfferRemember] = useState(false);
   const [remember, setRemember] = useState(false);
@@ -406,8 +408,12 @@ export default function Login({ onLogin, notice = '' }) {
 
   const labelClass = 'mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5F6B80] dark:text-stone-400';
 
+  // Sign-in form fields shrink with the window height so the page never scrolls.
+  const fitInput = inputClass.replace('py-3', 'py-[clamp(0.4rem,1.4dvh,0.75rem)]');
+  const fitLabel = labelClass.replace('mb-2', 'mb-[clamp(0.125rem,0.8dvh,0.5rem)]');
+
   return (
-    <div className="flex min-h-screen font-sans bg-[#F4F6FA] dark:bg-[#0A0A0A] text-[#1A2236] dark:text-stone-100 transition-colors duration-250">
+    <div className="flex h-dvh overflow-hidden font-sans bg-[#F4F6FA] dark:bg-[#0A0A0A] text-[#1A2236] dark:text-stone-100 transition-colors duration-250">
       
       {/* â•â•â• TOP-RIGHT THEME SWITCHER â•â•â• */}
       <div className="fixed top-5 right-5 z-50">
@@ -473,9 +479,9 @@ export default function Login({ onLogin, notice = '' }) {
       </div>
 
       {/* â•â•â• RIGHT — Login Form Panel â•â•â• */}
-      <div className="flex flex-1 flex-col bg-[#F4F6FA] dark:bg-[#0A0A0A] transition-colors duration-250">
+      <div className="flex min-h-0 flex-1 flex-col bg-[#F4F6FA] dark:bg-[#0A0A0A] transition-colors duration-250">
         {/* Mobile top hero header */}
-        <div className="relative h-48 overflow-hidden lg:hidden">
+        <div className="relative h-[clamp(4.5rem,16dvh,12rem)] shrink-0 overflow-hidden lg:hidden">
           <img src={IMAGES.login.hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-65" />
           <div className="absolute inset-0 bg-gradient-to-b from-[#180E09]/75 via-[#180E09]/40 to-[#F4F6FA] dark:to-[#0A0A0A]" />
           <div className="relative z-10 flex items-center gap-3 p-6">
@@ -484,10 +490,10 @@ export default function Login({ onLogin, notice = '' }) {
         </div>
 
         {/* Form area */}
-        <main className="flex flex-1 items-center justify-center px-6 py-8 lg:py-12">
+        <main className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-[clamp(0.5rem,3dvh,3rem)]">
           <div className="w-full max-w-sm">
             {/* Custom VLQMS Crest Logo & Welcome Headline */}
-            <div className="mb-8 hidden flex-col items-center text-center lg:flex animate-fadeInUp">
+            <div className="mb-[clamp(0.5rem,3dvh,2rem)] hidden flex-col items-center text-center lg:flex animate-fadeInUp">
               <h1 className="text-2xl font-bold tracking-tight text-[#1A2236] dark:text-white"
                   style={{ fontFamily: 'var(--font-display)' }}>
                 {setup ? 'Set up SpiritPOS' : 'Welcome back'}
@@ -498,7 +504,7 @@ export default function Login({ onLogin, notice = '' }) {
             </div>
 
             {/* Mobile heading */}
-            <div className="mb-6 lg:hidden">
+            <div className="mb-[clamp(0.25rem,2dvh,1.5rem)] lg:hidden">
               <h1 className="text-xl font-bold text-[#1A2236] dark:text-white"
                   style={{ fontFamily: 'var(--font-display)' }}>Welcome back</h1>
               <p className="mt-1 text-xs text-[#5F6B80] dark:text-stone-400">
@@ -507,12 +513,10 @@ export default function Login({ onLogin, notice = '' }) {
             </div>
 
             {setup && <DatabaseSetup inputClass={inputClass} labelClass={labelClass} onDone={loadDbState} />}
-            {setup && <div className="mt-4 space-y-4"><RptFolderSetting inputClass={inputClass} captionClass={labelClass} /></div>}
             {/* Database and report-files settings: always on offer (open to anyone, no Administrator needed). */}
             {!setup && editingDb && (
               <div className="space-y-4">
                 <DatabaseSetup inputClass={inputClass} labelClass={labelClass} change onDone={() => { setEditingDb(false); loadDbState(); }} onCancel={() => setEditingDb(false)} />
-                <RptFolderSetting inputClass={inputClass} captionClass={labelClass} />
                 <button type="button" onClick={() => setEditingDb(false)} className="w-full rounded-xl border border-[#D5DCE7] py-2.5 text-xs font-semibold dark:border-[#2A2A2A]">Back to sign in</button>
               </div>
             )}
@@ -530,29 +534,28 @@ export default function Login({ onLogin, notice = '' }) {
             {!setup && !offline && !needsAdmin && !editingDb && <form
               onSubmit={submit}
               className="animate-fadeInUp animate-fadeInUp-d2
-                         glass-card-login rounded-2xl p-7
+                         glass-card-login rounded-2xl p-[clamp(1rem,3.2dvh,1.75rem)]
                          border border-[#DDE3EC] dark:border-[#2A2A2A]
                          shadow-[0_20px_50px_rgba(72,53,38,0.08)] dark:shadow-card"
               noValidate
             >
-              <div className="space-y-5">
+              <div className="space-y-[clamp(0.5rem,2dvh,1.25rem)]">
                 <div>
-                  <label htmlFor="login-user" className={labelClass}>User name</label>
+                  <label htmlFor="login-user" className={fitLabel}>User name</label>
                   <input id="login-user" autoFocus value={user} onChange={e => setUser(e.target.value)}
-                    className={`${inputClass} uppercase`} autoComplete="username" placeholder="Enter user name" />
+                    className={`${fitInput} uppercase`} autoComplete="username" placeholder="Enter user name" />
                 </div>
                 <div>
-                  <label htmlFor="login-pwd" className={labelClass}>Password</label>
-                  <input id="login-pwd" type="password" value={password} onChange={e => setPassword(e.target.value)}
-                    className={inputClass} autoComplete="current-password" placeholder="Enter password" aria-invalid={!!error} />
-                </div>
-                <div>
-                  <label htmlFor="login-fy" className={labelClass}>Financial year</label>
-                  <select id="login-fy" value={finYear} onChange={e => setFinYear(e.target.value)}
-                    className={`${inputClass} tabular-nums`}>
-                    {!finYears.length && <option value="">—</option>}
-                    {finYears.map(y => <option key={y.label}>{y.label}</option>)}
-                  </select>
+                  <label htmlFor="login-pwd" className={fitLabel}>Password</label>
+                  <div className="relative">
+                    <input id="login-pwd" type={showPwd ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+                      className={`${fitInput} pr-11`} autoComplete="current-password" placeholder="Enter password" aria-invalid={!!error} />
+                    <button type="button" onClick={() => setShowPwd(v => !v)} tabIndex={-1}
+                      aria-label={showPwd ? 'Hide password' : 'Show password'} title={showPwd ? 'Hide password' : 'Show password'}
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#5F6B80] hover:text-[#1B2B4B] dark:text-stone-400 dark:hover:text-[#D4A847]">
+                      {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
                 {offerRemember && (
                   <label className="flex items-center gap-2 text-xs text-[#5F6B80] dark:text-stone-400">
@@ -572,8 +575,8 @@ export default function Login({ onLogin, notice = '' }) {
               <button
                 type="submit"
                 disabled={busy}
-                className="mt-6 flex w-full items-center justify-center gap-2
-                           rounded-xl py-3.5 text-sm font-bold
+                className="mt-[clamp(0.75rem,2.5dvh,1.5rem)] flex w-full items-center justify-center gap-2
+                           rounded-xl py-[clamp(0.5rem,1.6dvh,0.875rem)] text-sm font-bold
                            transition duration-150 active:scale-[0.98]
                            disabled:pointer-events-none disabled:opacity-45
                            bg-[#1B2B4B] text-white shadow-[0_4px_16px_rgba(100,40,58,0.25)] hover:bg-[#121D36]
@@ -585,24 +588,24 @@ export default function Login({ onLogin, notice = '' }) {
                 {busy ? 'Signing inâ€¦' : 'Sign in'}
               </button>
 
-              <DevelopedBy className="mt-6 border-t border-[#DDE3EC] pt-5 dark:border-[#2A2A2A]" />
+              <DevelopedBy className="mt-[clamp(0.5rem,2dvh,1.5rem)] border-t border-[#DDE3EC] pt-[clamp(0.5rem,1.6dvh,1.25rem)] dark:border-[#2A2A2A]" />
             </form>}
 
             {!setup && !editingDb && (
               <button type="button" onClick={() => setEditingDb(true)}
                 className="mt-4 flex w-full items-center justify-center gap-2 text-xs font-semibold text-[#1B2B4B] underline-offset-2 hover:underline dark:text-[#D4A847]">
-                <Database size={13} />Database &amp; report settings
+                <Database size={13} />Database settings
               </button>
             )}
 
             {/* Decorative wine icon */}
-            <div className="mt-8 flex justify-center animate-float opacity-20 dark:opacity-15" aria-hidden="true">
+            <div className="mt-6 flex justify-center animate-float [@media(max-height:760px)]:hidden opacity-20 dark:opacity-15" aria-hidden="true">
               <Wine size={28} className="text-[#D99A2B] dark:text-[#D4A847]" />
             </div>
           </div>
         </main>
 
-        <footer className="pb-6 text-center text-[11px] text-[#8592A6] dark:text-stone-600">
+        <footer className="shrink-0 pb-[clamp(0.25rem,1.5dvh,1.5rem)] text-center text-[11px] text-[#8592A6] dark:text-stone-600">
           Softvent SpiritPOS · Licence 827106637
         </footer>
       </div>

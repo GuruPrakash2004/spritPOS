@@ -22,7 +22,7 @@ import re
 
 from fastapi import HTTPException
 
-from . import db, designer, rpt_bridge, sqlstore, store
+from . import db, db_store, designer, rpt_bridge, sqlstore, store
 
 log = logging.getLogger("uvicorn.error")
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -70,7 +70,10 @@ def document_id(kind: str, doc_no: str) -> int:
     if not sqlstore.enabled():
         raise HTTPException(409, "Nothing is saved to the database right now (it is offline), so there is no saved "
                                  "document for Crystal Reports to print.")
-    rows = db.fetchall(f"SELECT [{sh}ID] AS id FROM dbo.[TrnHdr{sh}] WHERE [{sh}NO] = ?", (doc_no,))
+    # The desktop's number columns are varchar(12): the web's "26/PB-0000012" is saved as "26PB0000012" (db_store.short_no),
+    # so look for the number either way.
+    rows = db.fetchall(f"SELECT TOP 1 [{sh}ID] AS id FROM dbo.[TrnHdr{sh}] WHERE [{sh}NO] IN (?, ?)",
+                       (doc_no, db_store.short_no(doc_no)))
     if not rows:
         raise HTTPException(404, f"{doc_no} is not in the database yet.")
     return int(rows[0]["id"])

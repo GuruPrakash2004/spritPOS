@@ -6,14 +6,15 @@
 // Only an Administrator (or a request from the server PC itself) can change it.
 
 import { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, Printer, Save } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, Plug, Printer, Save } from 'lucide-react';
 import { toastStore } from './toastStore';
-import { errorText, getPrintPrinter, savePrintPrinter } from '../../lib/api';
+import { addSharedPrinter, errorText, getPrintPrinter, savePrintPrinter } from '../../lib/api';
 import { field as fieldClass, label as labelClass } from '../../lib/styles';
 
 export default function ServerPrinterSetting({ inputClass = fieldClass, captionClass = labelClass, plain = false }) {
   const [info, setInfo] = useState(null);
   const [value, setValue] = useState('');
+  const [share, setShare] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,6 +32,19 @@ export default function ServerPrinterSetting({ inputClass = fieldClass, captionC
       const i = await savePrintPrinter(printer);
       setInfo(i); setValue(i.printer);
       toastStore.add('ok', i.printer ? `Direct prints now go to ${i.printer}.` : 'Each document uses its own saved printer.');
+    } catch (err) { setError(errorText(err)); } finally { setBusy(false); }
+  };
+
+  const connect = async () => {
+    const path = share.trim();
+    if (!(await toastStore.defer('ok', `${path} will be connected to this server when this closes.`, 'Cancelled. Nothing was connected.'))) return;
+    setBusy(true); setError('');
+    try {
+      const i = await addSharedPrinter(path);
+      setInfo(i);
+      const seen = (i.installed ?? []).find(p => p.toLowerCase() === path.toLowerCase());
+      if (seen) setValue(seen);   // picked, ready to Save printer
+      toastStore.add('ok', seen ? `${seen} connected. Press Save printer to use it for every direct print.` : `${path} connected, but this service still cannot open it: see the list below.`);
     } catch (err) { setError(errorText(err)); } finally { setBusy(false); }
   };
 
@@ -65,6 +79,18 @@ export default function ServerPrinterSetting({ inputClass = fieldClass, captionC
         </div>
       )}
       {error && <p role="alert" className="mt-2 flex items-center gap-2 text-xs text-red-600 dark:text-red-400"><AlertCircle size={14} className="shrink-0" />{error}</p>}
+      <div className="mt-4 border-t border-[#DDE3EC] pt-3 dark:border-[#2A2A2A]">
+        <label htmlFor="server-share" className={captionClass}>Printer shared by another PC (e.g. the USB POS printer)</label>
+        <div className="flex gap-2">
+          <input id="server-share" value={share} onChange={e => { setShare(e.target.value); setError(''); }} spellCheck={false}
+            placeholder="\\saturn2\POS-80" className={inputClass} />
+          <button type="button" disabled={busy || !share.trim()} onClick={connect}
+            className="flex shrink-0 items-center gap-2 rounded-xl border border-[#D99A2B] px-4 text-xs font-bold text-[#1B2B4B] hover:bg-[#D99A2B]/10 disabled:pointer-events-none disabled:opacity-45 dark:text-[#D4A847]">
+            <Plug size={14} />Connect
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-stone-500">Connects it for the Windows user this server runs as, so it shows in the list above. The other PC must be on and the printer shared.</p>
+      </div>
       <button type="submit" disabled={busy || !changed}
         className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-[#1B2B4B] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#121D36] disabled:pointer-events-none disabled:opacity-45 dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F7D98B] dark:to-[#C8952E] dark:text-[#181106]">
         {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}Save printer
