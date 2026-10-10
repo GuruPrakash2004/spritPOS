@@ -39,6 +39,10 @@ def _id_to_code() -> dict[str, str]:
 
 
 def _non_liquor_groups() -> set[str]:
+    """Names of the groups whose items count as accessories. Empty when no group is flagged liquor at all: some shops have
+    every group flagged "not liquor" (MstITEMGROUP.LiqItem), and then the flag says nothing about which items are accessories."""
+    if not any(g.get("liquor") for g in store.ITEM_GROUPS.values()):
+        return set()
     return {g.get("name") for g in store.ITEM_GROUPS.values() if g.get("liquor") is False}
 
 

@@ -70,3 +70,10 @@ def test_overlay_does_not_wait_for_the_forecasts(monkeypatch):
     monkeypatch.setattr(service, "warm", lambda: started.append(1))
     monkeypatch.setitem(service._state, "forecasts", None)
     assert service.restock_overlay({}) is None and started == [1]
+
+
+def test_accessories_are_only_named_when_some_group_is_liquor(monkeypatch):
+    monkeypatch.setattr(store, "ITEM_GROUPS", {"A": {"name": "WHISKY", "liquor": True}, "B": {"name": "SODA", "liquor": False}})
+    assert service._non_liquor_groups() == {"SODA"}
+    monkeypatch.setattr(store, "ITEM_GROUPS", {"A": {"name": "WHISKY", "liquor": False}, "B": {"name": "SODA", "liquor": False}})
+    assert service._non_liquor_groups() == set()      # every group flagged non-liquor: the flag tells nothing

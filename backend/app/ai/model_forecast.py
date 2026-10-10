@@ -6,7 +6,8 @@ be used (packages not installed, weights not downloaded, any error): the shop ne
 
 Needs requirements-ai.txt (torch, chronos-forecasting). The weights download from Hugging Face on first use
 and are cached; after that it runs offline on the CPU. Set AI_FORECAST_MODEL to use another Chronos-Bolt model.
-The forecast is the model's mean (not the median: for intermittent liquor sales the median is often 0).
+The forecast is the average of the model's quantile forecasts (10% to 90%). The model's own "mean" output is only its
+median, which collapses to about 0 for items that sell on some days only.
 """
 import logging
 import os
@@ -20,6 +21,7 @@ logger = logging.getLogger("vlqms.ai")
 DEFAULT_MODEL = "amazon/chronos-bolt-tiny"
 CONTEXT_DAYS = fc.HISTORY_DAYS      # the days of past sales given to the model (a year by default, AI_HISTORY_DAYS)
 BATCH = 64              # items per model call
+QUANTILES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
 _pipeline = None
 _failed: str | None = None
@@ -58,7 +60,8 @@ def _predict(series_list: list[list[float]], horizon: int) -> list[list[float]]:
     out: list[list[float]] = []
     for i in range(0, len(series_list), BATCH):
         ctx = [torch.tensor(fc.demand(s)[-CONTEXT_DAYS:], dtype=torch.float32) for s in series_list[i:i + BATCH]]
-        _, mean = pipe.predict_quantiles(ctx, prediction_length=horizon, quantile_levels=[0.5])
+        quantiles, _ = pipe.predict_quantiles(ctx, prediction_length=horizon, quantile_levels=QUANTILES)
+        mean = quantiles.mean(dim=-1)                                  # (items, horizon)
         out.extend([max(float(v), 0.0) for v in row] for row in mean)
     return out
 
