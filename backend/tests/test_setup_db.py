@@ -300,7 +300,7 @@ async def test_the_server_printer_is_saved_and_must_be_one_the_server_can_open(c
     have = ["EPSON TM-T82", "\\\\saturn2\\POS-80"]
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
     monkeypatch.setattr(rpt_bridge, "using_mock", lambda: False)
-    monkeypatch.setattr(rpt_bridge, "printer_report", lambda: {"usable": have, "refused": [{"name": "POS-80 on saturn2 (redirected 4)", "why": "Windows error 1801"}]})
+    monkeypatch.setattr(rpt_bridge, "printer_report", lambda fresh=False: {"usable": have, "refused": [{"name": "POS-80 on saturn2 (redirected 4)", "why": "Windows error 1801"}]})
     monkeypatch.setattr(rpt_bridge, "installed_printers", lambda: have)
     monkeypatch.delenv("DIRECT_PRINTER", raising=False)
     r = await client.get("/setup/print-printer")
@@ -310,3 +310,19 @@ async def test_the_server_printer_is_saved_and_must_be_one_the_server_can_open(c
     ok = await client.post("/setup/print-printer", json={"printer": "\\\\saturn2\\POS-80"})
     assert ok.status_code == 200 and ok.json()["printer"] == "\\\\saturn2\\POS-80" and rpt_bridge._env("DIRECT_PRINTER") == "\\\\saturn2\\POS-80"
     assert (await client.post("/setup/print-printer", json={"printer": ""})).json()["printer"] == ""
+
+
+def test_connecting_to_another_database_forgets_everything_of_the_old_one():
+    """Hashes of what the old database held, its column lists, pending audit lines and replayed requests must not carry over, or a
+    row that looks unchanged is never written to the new database and old values show up."""
+    from app import admin_audit, boot, schema_meta, sqlstore, store
+    sqlstore._saved[("row", "ITEMS", "A")] = "hash-from-the-old-database"
+    sqlstore._doc_status[("sales_invoice", "26/S-1")] = "SAVED"
+    sqlstore._cols["mstitem"] = {"x": 1}
+    sqlstore._mapped_cache["items"] = {"code"}
+    schema_meta._cols["MstITEM"] = [{"name": "ItemCode"}]
+    admin_audit._pending.append({"screen": "Item Master"})
+    store.IDEMPOTENT["key"] = {"doc_no": "x"}
+    boot.forget_old_database()
+    assert not sqlstore._saved and not sqlstore._doc_status and not sqlstore._cols and not sqlstore._mapped_cache
+    assert not schema_meta._cols and not admin_audit._pending and not store.IDEMPOTENT

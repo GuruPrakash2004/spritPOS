@@ -3,14 +3,15 @@
 // Bill "Add Item" window, so every item picker looks and behaves the same.
 //   <ItemPickGrid id="x" items={list} at={2} onPick={item => ...} />
 // The caller keeps the highlight (`at`) and moves it with the keyboard; a mouse click picks a row. The highlighted
-// row is scrolled into view. `showStock` / `showRate` add the QOH and rate columns.
+// row is scrolled into view. `showStock` / `showRate` add the QOH and MRP columns. `windowsOrder` (Sales Invoice) lays the
+// columns out as the desktop's "Please Select Item" window does: ShortName, QOH, MRP, ItemCode, ItemName, ItemGroupName.
 
 import { useEffect, useRef } from 'react';
 import { money } from '../../lib/styles';
 
 const cell = 'truncate px-2 py-1.5';
 
-export default function ItemPickGrid({ id, items, at, onPick, showStock = false, showRate = false, className = 'max-h-72', empty = 'No items match.' }) {
+export default function ItemPickGrid({ id, items, at, onPick, showStock = false, showRate = false, windowsOrder = false, className = 'max-h-72', empty = 'No items match.' }) {
   const box = useRef(null);
   useEffect(() => {
     box.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
@@ -22,12 +23,13 @@ export default function ItemPickGrid({ id, items, at, onPick, showStock = false,
   const cols = { gridTemplateColumns: narrow
     ? `minmax(0,6rem) minmax(0,1fr)${showStock ? ' 3rem' : ''}${showRate ? ' 4.5rem' : ''}`
     : `minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,0.6fr) minmax(0,2.6fr)${showStock ? ' 4.5rem' : ''}${showRate ? ' 5.5rem' : ''}` };
+  if (windowsOrder) return <WindowsGrid {...{ id, items, at, onPick, className, empty, box, narrow }} />;
   return (
     <div id={id} role="listbox" aria-label="Items" ref={box} className={`overflow-auto border border-line bg-surface text-xs ${className}`}>
       <div role="presentation" style={cols} className="sticky top-0 z-10 grid border-b border-line bg-[#F0F3F8] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
         <span className={cell}>ItemCode</span>{!narrow && <span className={cell}>ShortName</span>}{!narrow && <span className={cell}>HotKey</span>}<span className={cell}>ItemName</span>
         {showStock && <span className={`${cell} text-right`}>QOH</span>}
-        {showRate && <span className={`${cell} text-right`}>Rate</span>}
+        {showRate && <span className={`${cell} text-right`}>MRP</span>}
       </div>
       {items.map((item, i) => (
         <div key={item.code} id={`${id}-${i}`} role="option" aria-selected={i === at}
@@ -40,6 +42,33 @@ export default function ItemPickGrid({ id, items, at, onPick, showStock = false,
           <span className={cell}>{item.name}</span>
           {showStock && <span className={`${cell} text-right tabular-nums`}>{item.clQty}</span>}
           {showRate && <span className={`${cell} text-right tabular-nums`}>{money(item.rate)}</span>}
+        </div>
+      ))}
+      {!items.length && <p className="px-3 py-6 text-center text-stone-500">{empty}</p>}
+    </div>
+  );
+}
+
+// The desktop's own column order. A phone drops the ItemGroupName and ItemCode columns.
+function WindowsGrid({ id, items, at, onPick, className, empty, box, narrow }) {
+  const cols = { gridTemplateColumns: narrow
+    ? 'minmax(0,1fr) 3rem 4.5rem'
+    : 'minmax(0,1.5fr) 3.5rem 5rem minmax(0,1.2fr) minmax(0,2fr) minmax(0,1fr)' };
+  return (
+    <div id={id} role="listbox" aria-label="Items" ref={box} className={`overflow-auto border border-line bg-surface text-xs ${className}`}>
+      <div role="presentation" style={cols} className="sticky top-0 z-10 grid border-b border-line bg-[#F0F3F8] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
+        <span className={cell}>ShortName</span><span className={`${cell} text-right`}>QOH</span><span className={`${cell} text-right`}>MRP</span>
+        {!narrow && <><span className={cell}>ItemCode</span><span className={cell}>ItemName</span><span className={cell}>ItemGroupName</span></>}
+      </div>
+      {items.map((item, i) => (
+        <div key={item.code} id={`${id}-${i}`} role="option" aria-selected={i === at}
+          onMouseDown={e => { e.preventDefault(); onPick(item); }}
+          style={cols}
+          className={`grid cursor-pointer border-b border-line-soft ${i === at ? 'bg-[#BBD7F0] text-stone-900 dark:bg-[#27405A] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
+          <span className={cell}>{narrow ? (item.shortName || item.name) : item.shortName}</span>
+          <span className={`${cell} text-right tabular-nums`}>{item.clQty}</span>
+          <span className={`${cell} text-right tabular-nums`}>{money(item.rate)}</span>
+          {!narrow && <><span className={`${cell} font-mono`}>{item.code}</span><span className={cell}>{item.name}</span><span className={cell}>{item.group}</span></>}
         </div>
       ))}
       {!items.length && <p className="px-3 py-6 text-center text-stone-500">{empty}</p>}

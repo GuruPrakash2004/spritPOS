@@ -30,9 +30,9 @@ def _f(v, default=0.0) -> float:
         return default
 
 
-# MstComp columns the web's own Company fields cover (CompName ... RTLCODE, PHNO); every other editable column of the
+# MstComp columns the web's own Company fields cover (CompName ... RTLCODE, PHNO; CompLoc is not one of them); every other editable column of the
 # table is carried in the profile's `extras`, so a column added to MstComp or listed in the Doc Designer shows up.
-COMPANY_COLUMNS = {"compid", "compname", "address1", "address2", "address3", "comploc", "telno", "faxno", "mobno", "web", "gstno",
+COMPANY_COLUMNS = {"compid", "compname", "address1", "address2", "address3", "telno", "faxno", "mobno", "web", "gstno",
                    "panno", "cinno", "email", "rtlcode", "phno", "jpgfile", "dashimg"}
 
 
@@ -685,16 +685,33 @@ def load_masters() -> None:
     store.mark_app_start()
 
 
+def _count(key: str, default: int) -> int:
+    """A positive whole number from the environment (backend/.env), else the default."""
+    import os
+    try:
+        n = int((os.environ.get(key) or "").strip() or default)
+    except ValueError:
+        return default
+    return n if 0 < n <= 100000 else default
+
+
 def load_transactions() -> None:
     """Load recent sales invoices and purchase bills."""
+    # How many of the latest bills are kept in memory: the Dashboard's last 7 days, the daily / hourly sales and the other reports that read
+    # the bills in memory only see these. 200 covered about a day for a busy shop (the other days of the chart came out empty), so the
+    # default is 3000 sales invoices; RECENT_INVOICES / RECENT_PURCHASE_BILLS in backend/.env change it. Read through the bill-number
+    # index, in the background thread that loads the history, so it never holds up sign-in.
+    sales, purchases = _count("RECENT_INVOICES", 3000), _count("RECENT_PURCHASE_BILLS", 300)
+    t0 = time.perf_counter()
     try:
-        load_sales_invoices(limit=200)
+        load_sales_invoices(limit=sales)
     except Exception as e:
         logger.error("load_sales_invoices failed: %s", e)
     try:
-        load_purchase_bills(limit=100)
+        load_purchase_bills(limit=purchases)
     except Exception as e:
         logger.error("load_purchase_bills failed: %s", e)
+    logger.info("Bill history read in %.1fs (latest %d sales invoices, %d purchase bills asked for)", time.perf_counter() - t0, sales, purchases)
     logger.info("Transaction data loaded: %d sales invoices, %d purchase bills", len(store.DOCS["sales_invoice"]), len(store.DOCS["purchase_bill"]))
 
 

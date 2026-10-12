@@ -267,10 +267,21 @@ def get_company():
     return _company()
 
 
+COMPANY_FREE_TEXT_COLUMNS = {"phone": ("telno", "Tel no."), "mobile": ("mobno", "Mobile no."), "excise_phone": ("phno", "Excise phone no.")}
+COMPANY_FREE_TEXT = frozenset(COMPANY_FREE_TEXT_COLUMNS)
+
+
 @router.put("/company", response_model=CompanyOut, tags=["Company Master"])
 def update_company(body: Company, admin: dict = Depends(require_admin)):
-    for key, value in validation.check(body.model_dump()).items():
+    # Tel / mobile / excise phone are free text here (several numbers may be entered, as the desktop allows); only their length is held
+    # to the column's, so nothing is silently cut when it is saved.
+    for key, value in validation.check(body.model_dump(), skip=COMPANY_FREE_TEXT).items():
         setattr(body, key, value)
+    if sqlstore.enabled():
+        widths = {c["name"].lower(): c["max_length"] // (2 if str(c["type"]).startswith("n") else 1) for c in schema_meta.columns("MstComp") if c["max_length"] > 0}
+        for key, (column, label) in COMPANY_FREE_TEXT_COLUMNS.items():
+            if widths.get(column) and len(getattr(body, key) or "") > widths[column]:
+                raise HTTPException(422, f"{label} can be at most {widths[column]} characters")
     if body.extras:   # MstComp columns beyond the web's own fields, checked against the table and the designer's rules
         try:
             body.extras = (schema_meta.clean_extras("MstComp", body.extras, db_store.COMPANY_COLUMNS | sqlstore._NOT_EXTRA)
@@ -397,7 +408,7 @@ def bulk_update_rates(body: PriceUpdate, current_user: dict = Depends(get_curren
 # Fields Bulk Master Update can set (the desktop's UtlItemBulkUpdate lists these as HSNCode, BrandID, LiqType, BotPerCases, MRP,
 # PURRATE, ROL, ROQ); its other entries (min/max level, KSBCL names, ...) have no field in the web Item Master.
 BULK_FIELDS = {"hsn_code": str, "brand": str, "liqtype": str, "bottles_per_case": int, "mrp": float, "purchase_rate": float,
-               "rol": int, "roq": int}
+               "rol": float, "roq": float}
 
 
 @router.post("/items/bulk-update", tags=["Bulk Master Update"], dependencies=[Depends(require_right("edit", "Bulk Master Update"))])

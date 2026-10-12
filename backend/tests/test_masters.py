@@ -102,3 +102,14 @@ async def test_package_with_zero_litres_from_the_desktop_still_lists(client):
     assert res.status_code == 200 and any(p["code"] == "NA" for p in res.json())
     res = await client.post("/masters/packages", json={"code": "ZERO", "litres_per_bottle": 0})
     assert res.status_code == 422
+
+
+async def test_item_reorder_level_and_quantity_may_have_decimals(client):
+    """A shop's desktop database can hold ROL / ROQ with decimals (ROQ 83.4): listing the items must not fail with a 500."""
+    from app import store
+    code = next(iter(store.ITEMS))
+    store.ITEMS[code]["roq"], store.ITEMS[code]["rol"] = 83.4, 12.5
+    res = await client.get("/masters/items")
+    assert res.status_code == 200
+    row = next(r for r in res.json() if r["code"] == code)
+    assert row["roq"] == 83.4 and row["rol"] == 12.5

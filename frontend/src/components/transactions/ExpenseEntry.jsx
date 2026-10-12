@@ -8,6 +8,7 @@ import Toast from '../common/Toast';
 import Kbd from '../common/Kbd';
 import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
+import { useConfirm } from '../common/ConfirmDialog';
 import { errorText, getLedgers, saveExpense, todayIso, } from '../../lib/api';
 import WithHistory from './DocHistoryPanel';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
@@ -22,6 +23,13 @@ export default function ExpenseEntry() {
   const [ledgers, setLedgers] = useState([]);
   const [lines, setLines] = useState([blank()]);
   const [toast, setToast] = useState(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  // A row with something on it asks first; an empty row goes without asking.
+  const removeRow = async (i) => {
+    const l = lines[i];
+    if ((l.ledger || l.amount || l.narration) && !(await confirm(`Are you sure you want to delete row ${i + 1}${l.amount ? ` (₹ ${l.amount})` : ''}?`))) return;
+    setLines(cur => (cur.length > 1 ? cur.filter((_, x) => x !== i) : [blank()]));
+  };
 
   useEffect(() => {
     if (!toast) return;
@@ -53,6 +61,7 @@ export default function ExpenseEntry() {
     <WithHistory kind="expense" title="expenses">
     <div className="mx-auto flex max-w-5xl flex-col gap-4" onKeyDown={e => enterMovesNext(e, () => setLines(ls => [...ls, blank()]))}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
+      {confirmDialog}
       <div className={pageHeader}>
         <div>
           <h1 className={pageTitle}>Expense Entry</h1>
@@ -80,7 +89,7 @@ export default function ExpenseEntry() {
           <tbody className={tableBody}>
             {lines.map((l, i) => (
               <tr key={i}>
-                <td className="whitespace-nowrap px-3 py-1.5 font-sans text-stone-400"><span className="inline-flex items-center gap-1.5"><button onClick={() => setLines(lines.length > 1 ? lines.filter((_, x) => x !== i) : [blank()])} className="text-stone-400 hover:text-red-500" aria-label={`Remove row ${i + 1}`}><Trash2 size={13} /></button>{i + 1}</span></td>
+                <td className="whitespace-nowrap px-3 py-1.5 font-sans text-stone-400"><span className="inline-flex items-center gap-1.5"><button onClick={() => void removeRow(i)} className="text-stone-400 hover:text-red-500" aria-label={`Remove row ${i + 1}`}><Trash2 size={13} /></button>{i + 1}</span></td>
                 <td className="px-3 py-1.5">
                   <select value={l.ledger} onChange={e => update(i, { ledger: e.target.value })} className={`${field} w-full`} aria-label={`Ledger row ${i + 1}`}>
                     <option value="">— pick a ledger —</option>

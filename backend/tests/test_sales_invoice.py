@@ -81,3 +81,48 @@ async def test_invalid_bills_are_rejected(client, overrides, message):
     assert res.status_code == 422
     assert message in res.json()["detail"]
     assert await qoh(client) == before
+
+
+# ─── GST from the Doc Designer's formulas ──────────────────────────────────────
+
+def _designer_has_formulas(monkeypatch):
+    """Pretend the designer gives the line amount / CGST / SGST a formula (the engine itself is stubbed per test)."""
+    from app import doc_engine, schema_meta
+    monkeypatch.setattr(doc_engine, "doc_id_of", lambda name: 1)
+    monkeypatch.setattr(schema_meta, "screen", lambda doc_id: {"fields": [{"code": c, "formula": "1"} for c in ("SINVAMT", "CGSTAMT", "SGSTAMT")]})
+
+
+async def test_bill_gst_follows_the_designers_formulas(client, monkeypatch):
+    """A designer formula for a line's amount / CGST / SGST decides those figures and the totals; no formula = built-in maths."""
+    from app import doc_engine
+    plain = (await client.post("/transactions/sales-invoice", json=bill(hold=True))).json()
+    _designer_has_formulas(monkeypatch)
+    monkeypatch.setattr(doc_engine, "compute", lambda kind, doc: {"rows": [{"SINVAMT": 100.0, "cgstamt": 9.0}], "header": {}, "problems": []})
+    res = (await client.post("/transactions/sales-invoice", json=bill(hold=True))).json()
+    line = res["lines"][0]
+    assert (line["amount"], line["cgst"]) == (100.0, 9.0)
+    assert line["sgst"] == plain["lines"][0]["sgst"]          # no formula for SGST: the built-in figure stays
+    assert res["totals"]["basic"] == 100.0 and res["totals"]["cgst"] == 9.0
+
+
+async def test_a_formula_that_fails_leaves_the_built_in_maths(client, monkeypatch):
+    from app import doc_engine
+
+    def broken(kind, doc):
+        raise RuntimeError("bad formula")
+    plain = (await client.post("/transactions/sales-invoice", json=bill(hold=True))).json()
+    _designer_has_formulas(monkeypatch)
+    monkeypatch.setattr(doc_engine, "compute", broken)
+    res = (await client.post("/transactions/sales-invoice", json=bill(hold=True))).json()
+    assert res["lines"][0]["amount"] == plain["lines"][0]["amount"]
+
+
+async def test_a_formula_that_works_out_to_zero_keeps_the_built_in_amount(client, monkeypatch):
+    """A formula the web can't feed (it reads a column the bill has no value for) gives 0: the bill must not be billed at ₹0."""
+    from app import doc_engine
+    plain = (await client.post("/transactions/sales-invoice", json=bill(hold=True))).json()
+    _designer_has_formulas(monkeypatch)
+    monkeypatch.setattr(doc_engine, "compute", lambda kind, doc: {"rows": [{"SINVAMT": 0.0, "CGSTAMT": 0.0, "SGSTAMT": 0.0}], "header": {}, "problems": []})
+    res = (await client.post("/transactions/sales-invoice", json=bill(hold=True))).json()
+    assert res["lines"][0]["amount"] == plain["lines"][0]["amount"] > 0
+    assert res["totals"]["net"] == plain["totals"]["net"]

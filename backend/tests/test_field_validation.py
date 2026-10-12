@@ -1,17 +1,18 @@
-"""Field checks as the desktop forms enforce them (app/validation.py): 10-digit phone numbers, PIN, GSTIN, PAN, HSN, tax %."""
+"""Field checks as the desktop forms enforce them (app/validation.py): 10-digit phone numbers (not on Company Master), PIN, GSTIN, PAN, HSN, tax %."""
 import pytest
 
 SUPPLIER = {"code": "VAL1", "name": "Val Supplier", "address": "MG Road", "city": "Bengaluru", "pin": "560001",
             "state": "Karnataka", "phone": "9900000000", "gstin": "29ABCDE1234F1Z5"}
 
 
-@pytest.mark.parametrize("phone", ["99000", "99000000001", "99000 00000", "abcdefghij", "+919900000000", "080-26793693"])
-async def test_company_phone_must_be_ten_digits(client, phone):
+@pytest.mark.parametrize("phone", ["99000", "+919900765776 / +918884888529", "080-26793693", "9900000000, 8800000000, 7700000000"])
+async def test_company_phone_numbers_are_free_text(client, phone):
+    """Company Master's Tel / Mobile / Excise phone take any text, so several numbers can be entered (correction #1)."""
     company = (await client.get("/masters/company")).json()
     for field in ("phone", "mobile", "excise_phone"):
         res = await client.put("/masters/company", json=company | {field: phone})
-        assert res.status_code == 422, (field, phone)
-        assert "10 digits" in res.json()["detail"]
+        assert res.status_code == 200, (field, phone, res.text)
+        assert (await client.get("/masters/company")).json()[field] == phone
 
 
 async def test_company_accepts_ten_digits_and_blank(client):

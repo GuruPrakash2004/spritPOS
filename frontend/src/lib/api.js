@@ -288,7 +288,7 @@ export const companyFileUrl = (id, download = false) => `${API_BASE}/company/fil
 export const getNextNumber = (kind, counter) => request(`/transactions/next-number${qs({ kind, counter })}`);
 
 const salesInvoicePath = (docNo) => `/transactions/sales-invoice/${docNo}`;
-export const listSalesInvoices = (status) => request(`/transactions/sales-invoice${qs({ status })}`);
+export const listSalesInvoices = (status, from_date, to_date) => request(`/transactions/sales-invoice${qs({ status, from_date, to_date })}`);
 export const saveSalesInvoice = (body, idempotencyKey) =>
   request('/transactions/sales-invoice', { method: 'POST', body, idempotencyKey });
 export const reprintSalesInvoice = (docNo) => request(`${salesInvoicePath(docNo)}/reprint`);
@@ -338,6 +338,10 @@ export const emailCustomReport = (body) => request('/reports/custom/email', { me
 export const getPrintOptions = (kind) => request(`/print/options${qs({ kind })}`);
 /** The PDF (or, for a direct print, JSON) the server built from the document's Crystal .rpt format. */
 export const renderPrint = (body) => requestRaw('/print/render', { method: 'POST', body });
+/** The Print Agent for a counter PC as a ZIP (a Blob), preset for this page's address. */
+export const downloadPrintAgent = async (origin) => (await requestRaw(`/print/agent${qs({ origin })}`)).blob();
+/** A document's report as page pictures {pages:[{png (base64), w, h (points)}], copies, name} for the Print Agent on this PC (lib/localPrint.js). */
+export const renderPrintPages = (body) => request('/print/pages', { method: 'POST', body });
 /** Remember the print option this user picked for a document. */
 export const setPrintPreference = (kind, option) => request('/print/preference', { method: 'PUT', body: { kind, option } });
 /** The Daily Summary Report's .rpt formats that are in the report folder. */
@@ -412,6 +416,8 @@ export const saveReportRights = (role, body) => request(`/admin/report-rights/${
 export const getAbout = () => request('/utilities/about');
 export const setDatabaseConnection = (action) => request(`/utilities/database/${action}`, { method: 'POST' });
 export const refreshDocDesigner = () => request('/designer/refresh', { method: 'POST' });
+// The top bar's "Refresh from Doc Designer" (Administrator): designer tables, column lists and masters' extra columns read again now. → {version, build}
+export const reloadFromDocDesigner = () => request('/designer/reload', { method: 'POST' });
 
 // ─── Screens drawn from the database (routers/designer.py) ─────────────────────────────────────────
 /** The screens the Doc Designer defines: [{ doc_id, name, type, short_form, header_table, detail_table, master_path }]. */

@@ -1,6 +1,7 @@
 // Item Master follows the role: cost fields hidden without cost access, buttons follow the
 // Add/Edit/Delete ticks saved in Admin Master.
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import MasterCrud from './MasterCrud'
 import { ITEM_FIELDS } from './masterConfigs'
@@ -60,5 +61,29 @@ describe('Item Master loading', () => {
     await new Promise(r => setTimeout(r, 200))   // a loop would keep fetching during this wait
     const uomCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/masters/uoms')).length
     expect(uomCalls).toBe(1)
+  })
+})
+
+describe('Item Master record navigation', () => {
+  const ITEMS = ['A1', 'B2', 'C3', 'D4'].map(code => ({ code, name: `ITEM ${code}`, group: 'G', mrp: 10, qoh: 0, active: true }))
+
+  it('moves first / next / previous / last through the records', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => json(url.includes('/masters/items') && !url.includes('/masters/items/') ? ITEMS : [])))
+    setAuthRights(['Item Master'])
+    const user = userEvent.setup()
+    renderItems()
+
+    const counter = async (text) => waitFor(() => expect(screen.getByText(text)).toBeInTheDocument())
+    await counter(/^\d+ \/ 4$/)
+    await user.click(screen.getByRole('button', { name: 'First record' }))
+    await counter('1 / 4')
+    expect(screen.getByRole('button', { name: 'First record' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Next record' }))
+    await counter('2 / 4')
+    await user.click(screen.getByRole('button', { name: 'Last record' }))
+    await counter('4 / 4')
+    expect(screen.getByRole('button', { name: 'Next record' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Previous record' }))
+    await counter('3 / 4')
   })
 })

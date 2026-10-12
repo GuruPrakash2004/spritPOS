@@ -9,7 +9,7 @@
 // F12 or OK adds; the cursor goes to its PB Qty) · Alt+A add row · ⌘/Ctrl+S or F10 save & print · Alt+X cancel the bill.
 // Items can only be entered once the supplier and the invoice (PB) value are in, as in the desktop.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronsDown, ChevronsUp, Copy, FileInput,
   Info, Paperclip, PlusCircle, Printer, RefreshCw, Save, Search, Settings2, Trash2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
@@ -17,7 +17,7 @@ import {
 import { useConfirm } from '../../common/ConfirmDialog';
 import PrintDialog from '../../print/PrintDialog';
 import { afterSavePlan } from '../../../lib/printing';
-import { badge, ghostButton, label as labelClass, pageTitle, primaryButton, secondaryButton, sectionTitle, tableHead } from '../../../lib/styles';
+import { badge, fieldTone, ghostButton, label as labelClass, pageTitle, primaryButton, secondaryButton, sectionTitle, tableHead } from '../../../lib/styles';
 import Toast from '../../common/Toast';
 import { toastStore } from '../../common/toastStore';
 import DropdownMenu, { menuItem } from '../../common/DropdownMenu';
@@ -26,18 +26,45 @@ import { useColumnTone } from '../../../hooks/useColumnTone';
 import { GRID_OUTLINE, useResizableTable } from '../../../hooks/useResizableTable';
 import { cn } from '../../../lib/utils';
 import { useBillExtras } from '../useBillExtras';
+import { useScreenFields } from '../../../hooks/useScreenFields';
+import { applyGridDefinition } from '../../../lib/billGrid';
+import { formulaAmounts } from '../../../lib/billMaths';
+import { applyDefinition, ruleHolds, ruleValues } from '../../../lib/designerFields';
 import { errorText, getNextNumber, getPurchaseIndents, getSettingValues, getSuppliers, newIdempotencyKey, savePurchaseBill, } from '../../../lib/api';
-import { loadStockItems, sellable, STOCK_ITEMS, useStockItems } from '../../../data/stockData';
+import { loadStockItems, sellable, STOCK_ITEMS, stockIndex, useStockItems } from '../../../data/stockData';
 import { numberToWords } from '../../../lib/formatters';
 import {
   amt, blankRow, cell, cloneRow, field, headCell, iconButton, infoBar, isFilled,
-  money, panel, pctOf, PURCHASE_TYPES, stockRow, today,
+  cgstOf, money, panel, pctOf, PURCHASE_TYPES, sgstOf, stockRow, today,
 } from './purchaseBillData';
 import { CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
 import { useDocSettings } from '../../../lib/docSettings';
 import Kbd from '../../common/Kbd';
 import { enterMovesNext, focusField, useShortcuts } from '../../../lib/keys';
 import WithHistory from '../DocHistoryPanel';
+
+// The line grid's columns in the desktop's order: [id, caption, Doc Designer column code | null, header width classes]. The designer's Detail
+// rows of TrnHdrPB give each coded column's caption, order, hidden and read-only state (lib/billGrid.js); # / Item code / Item name / Qty /
+// Rate are never hidden, and Qty never locked, because the bill can't be entered without them.
+const GRID_COLS = [
+  ['no', '#', null, 'w-20 pl-2'], ['code', 'Item code', null, 'w-28'], ['name', 'Item name', null, 'min-w-72'], ['qoh', 'In stock', null, 'w-16 text-right'],
+  ['qty', 'Qty', 'PBQTY', 'w-20 text-right'], ['rate', 'Rate', 'PBRATE', 'w-24 text-right'], ['amount', 'Amount', 'PBAMT', 'w-28 text-right'],
+  ['cgstPct', 'CGST %', 'CGSTPER', 'w-16 text-right'], ['cgst', 'CGST amt', 'CGSTAMT', 'w-24 text-right'],
+  ['sgstPct', 'SGST %', 'SGSTPER', 'w-16 text-right'], ['sgst', 'SGST amt', 'SGSTAMT', 'w-24 text-right'],
+  ['cessPct', 'Cess %', 'CESSPER', 'w-16 text-right'], ['cess', 'Cess amt', 'CESSAMT', 'w-24 text-right'],
+  ['compCess', 'Comp. cess', 'COMPCESS', 'w-24 text-right'], ['gst', 'GST amt', 'TOTGSTAMT', 'w-24 text-right'],
+  ['net', 'Net amount', 'NETAMT', 'w-28 text-right'], ['mrp', 'MRP', 'MRP', 'w-24 pr-4 text-right'],
+];
+const TAX_COLS = new Set(['cgstPct', 'cgst', 'sgstPct', 'sgst', 'cessPct', 'cess', 'compCess', 'gst', 'net', 'mrp']);   // hidden by the grid's "tax columns" toggle
+const GRID_KEEP = new Set(['no', 'code', 'name', 'qty', 'rate', 'lock:qty']);
+// The header boxes, with the designer's caption / mandatory / read-only / hidden laid over them (TrnHdrPB rows). The first five are
+// what the bill can't be saved without, so the designer may rename them but never hide them.
+const HEADER_TYPED = [
+  { key: 'date', label: 'Bill date' }, { key: 'supplier', label: 'Supplier' }, { key: 'supplier_inv_no', label: 'Supplier invoice no.' },
+  { key: 'supplier_inv_date', label: 'Invoice date' }, { key: 'supplier_inv_value', label: 'Invoice value (₹)' },
+  { key: 'purchase_type', label: 'Purchase type' }, { key: 'remarks', label: 'Remarks' },
+];
+const HEADER_KEEP = new Set(['date', 'supplier', 'supplier_inv_no', 'supplier_inv_date', 'supplier_inv_value']);
 
 export default function PurchaseBill() {
   // The backend gives the PB number when the bill is saved; this is its preview (GET /transactions/next-number).
@@ -83,6 +110,10 @@ export default function PurchaseBill() {
   const extrasBill = useBillExtras('TrnHdrPB', 'pb');
   const { ref: gridRef, onMouseDown: gridDown, onDoubleClick: gridDouble } = useResizableTable('purchase-bill');   // stretchable columns, remembered on this computer
   const tone = useColumnTone('TrnHdrPB');   // red = mandatory, blue = read-only, from the Doc Designer
+  const live = useScreenFields('table:TrnHdrPB');
+  const gridCols = useMemo(() => applyGridDefinition(GRID_COLS, live.screen, GRID_KEEP).filter(c => showTaxColumns || !TAX_COLS.has(c.id)), [live.screen, showTaxColumns]);
+  const colOf = (id) => gridCols.find(c => c.id === id);
+  const head = useMemo(() => applyDefinition(HEADER_TYPED, live.screen), [live.screen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -90,15 +121,37 @@ export default function PurchaseBill() {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // How the designer wants a header box: caption, mandatory (a star), read-only, hidden (never for the boxes the bill needs).
+  const headDef = (key, extra = {}) => {
+    const f = head.find(h => h.key === key) ?? { label: key };
+    const values = ruleValues({ date: billDate, supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: invValue, purchase_type: purchaseType, remarks, ...extra });
+    return {
+      label: f.label,
+      required: !!f.required || !!(f.mandatoryWhen && ruleHolds(f.mandatoryWhen, values)),
+      hidden: !HEADER_KEEP.has(key) && (!!f.designerHidden || !!(f.hideWhen && ruleHolds(f.hideWhen, values))),
+      locked: !!f.lockedAlways || !!(f.readonlyWhen && ruleHolds(f.readonlyWhen, values)),
+    };
+  };
+  const headLabel = (key, always = false) => { const d = headDef(key); return <>{d.label}{(always || d.required) && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</>; };
+  const headTone = (key) => fieldTone(headDef(key).required, headDef(key).locked);
+
+  // The rows with the designer's formula figures (amount, CGST, SGST) laid over them; the totals and the figure cells read these, the
+  // inputs read the rows themselves.
+  const priced = useMemo(() => {
+    const asked = rows.map(r => ({ item_code: r.code, qty: r.qty, rate: r.rate, cases: 0, bottles: r.qty }));
+    const itemOf = (code) => { const it = STOCK_ITEMS[stockIndex(code)]; return it && { cgst_per: it.cgstPct, sgst_per: it.sgstPct, mrp: it.rate, bottles_per_case: it.bottlesPerCase }; };
+    return formulaAmounts('purchase_bill', live.screen, asked, itemOf).map((f, i) => ({ ...rows[i], fAmount: f.amount, fCgst: f.cgst, fSgst: f.sgst }));
+  }, [rows, live.screen]);
+
   const selectedIndex = rows.findIndex(r => r.uid === selectedUid);
   const selectedRow = rows[selectedIndex];
 
   const totals = useMemo(() => {
-    const filled = rows.filter(isFilled);
+    const filled = priced.filter(isFilled);
     const basic = filled.reduce((acc, r) => acc + amt(r), 0);
     const tcs = (basic * (Number(tcsPct) || 0)) / 100;
-    const cgst = filled.reduce((acc, r) => acc + pctOf(r, r.cgstPct), 0);
-    const sgst = filled.reduce((acc, r) => acc + pctOf(r, r.sgstPct), 0);
+    const cgst = filled.reduce((acc, r) => acc + cgstOf(r), 0);
+    const sgst = filled.reduce((acc, r) => acc + sgstOf(r), 0);
     const cess = filled.reduce((acc, r) => acc + pctOf(r, r.cessPct), 0);
     const compCess = filled.reduce((acc, r) => acc + r.compCess, 0);
     const beforeRound = basic + tcs + cgst + sgst + cess + compCess;
@@ -106,7 +159,7 @@ export default function PurchaseBill() {
     const net = beforeRound + roundOff;
     const qty = filled.reduce((acc, r) => acc + r.qty, 0);
     return { basic, tcs, cgst, sgst, cess, compCess, roundOff, net, qty, items: filled.length };
-  }, [rows, tcsPct]);
+  }, [priced, tcsPct]);
 
   const balance = (Number(invValue) || 0) - totals.net;
   const balanced = invValue !== '' && Math.abs(balance) < 0.005;
@@ -168,7 +221,7 @@ export default function PurchaseBill() {
 
   const numberCell = (row, key, label, extra = '') => (
     <input
-      type="number" min={0} step={key === 'qty' ? 1 : 0.01} disabled={!ready}
+      type="number" min={0} step={key === 'qty' ? 1 : 0.01} disabled={!ready} readOnly={!!colOf(key)?.locked}
       value={row[key] || ''} placeholder="0"
       onChange={e => updateRow(row.uid, { [key]: Math.max(0, key === 'qty' ? Math.floor(Number(e.target.value)) || 0 : Number(e.target.value) || 0) })}
       className={`${cell} text-right ${extra}`} aria-label={`${label} row ${rows.indexOf(row) + 1}`}
@@ -182,13 +235,17 @@ export default function PurchaseBill() {
     setAddMenuOpen(false);
   };
 
-  const deleteRowByUid = (uid) => {
-    const next = rows.filter(r => r.uid !== uid);
-    setRows(next.length ? next : [blankRow()]);
+  // A row with an item on it asks first (as the desktop's "Item deletion" box does); a blank row goes without asking.
+  const sure = async (row) => !isFilled(row) || confirm(`Are you sure you want to delete the item '${row.name || row.code}'?`);
+
+  const deleteRowByUid = async (uid) => {
+    const row = rows.find(r => r.uid === uid);
+    if (row && !(await sure(row))) return;
+    setRows(cur => { const next = cur.filter(r => r.uid !== uid); return next.length ? next : [blankRow()]; });
   };
 
-  const deleteRow = () => {
-    if (!selectedRow) return;
+  const deleteRow = async () => {
+    if (!selectedRow || !(await sure(selectedRow))) return;
     const next = rows.filter(r => r.uid !== selectedUid);
     const safe = next.length ? next : [blankRow()];
     setRows(safe);
@@ -294,6 +351,7 @@ export default function PurchaseBill() {
     if (filled.some(r => !r.qty || !r.rate)) return setToast({ kind: 'error', text: 'Every item needs a PB Qty and PB Rate.' });
     if (!balanced) return setToast({ kind: 'error', text: `PB value differs from Inv Value by ₹ ${money(Math.abs(balance))}.` });
     if (filled.some(r => r.stock === null)) return setToast({ kind: 'error', text: 'Pick every item with Add Item so it has an item code.' });
+    if (headDef('remarks').required && !remarks.trim()) return setToast({ kind: 'error', text: `Enter the ${headDef('remarks').label}.` });
     if (!extrasBill.check()) return setToast({ kind: 'error', text: 'Fill the additional details marked in red.' });
     // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Save was pressed.
     const key = saveKey.current;
@@ -372,13 +430,13 @@ export default function PurchaseBill() {
               <input id="pb-no" value={pbDisplay} readOnly disabled title="Given when the bill is saved" className={`${field} font-mono`} />
             </div>
             <div>
-              <label className={labelClass} htmlFor="pb-date">Bill date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
-              <input id="pb-date" type="date" value={docSettings.allow_edit_date ? pbDate : today()} disabled={!docSettings.allow_edit_date} onChange={e => setPbDate(e.target.value)} className={`${field} tabular-nums`} />
+              <label className={cn(labelClass, headTone('date'))} htmlFor="pb-date">{headLabel('date', true)}</label>
+              <input id="pb-date" type="date" value={docSettings.allow_edit_date ? pbDate : today()} disabled={!docSettings.allow_edit_date || headDef('date').locked} onChange={e => setPbDate(e.target.value)} className={`${field} tabular-nums`} />
             </div>
             <div className="sm:col-span-2">
-              <label htmlFor="pb-supplier" className={labelClass}>Supplier<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
+              <label htmlFor="pb-supplier" className={cn(labelClass, headTone('supplier'))}>{headLabel('supplier', true)}</label>
               <div className="flex gap-2">
-                <input id="pb-supplier" list="pb-suppliers" value={supplier} onChange={e => selectSupplier(e.target.value)} placeholder="Select or type supplier" className={field} />
+                <input id="pb-supplier" list="pb-suppliers" readOnly={headDef('supplier').locked} value={supplier} onChange={e => selectSupplier(e.target.value)} placeholder="Select or type supplier" className={field} />
                 <button onClick={newSupplier} className={secondaryButton} title="Add a new supplier in Supplier Master (opens in a new tab)"><UserPlus size={14} /><span className="hidden sm:inline">New</span></button>
               </div>
               <datalist id="pb-suppliers">{suppliers.map(s => <option key={s.name} value={s.name} />)}</datalist>
@@ -407,23 +465,23 @@ export default function PurchaseBill() {
           <section aria-label="Supplier invoice" className={`${panel} flex flex-col gap-4 p-5`}>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="pb-inv-no" className={labelClass}>Supplier invoice no.<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
-                <input id="pb-inv-no" value={invNo} onChange={e => setInvNo(e.target.value)} className={`${field} font-mono`} />
+                <label htmlFor="pb-inv-no" className={cn(labelClass, headTone('supplier_inv_no'))}>{headLabel('supplier_inv_no', true)}</label>
+                <input id="pb-inv-no" readOnly={headDef('supplier_inv_no').locked} value={invNo} onChange={e => setInvNo(e.target.value)} className={`${field} font-mono`} />
               </div>
               <div>
-                <label htmlFor="pb-inv-date" className={labelClass}>Invoice date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
-                <input id="pb-inv-date" type="date" value={invDate} onChange={e => setInvDate(e.target.value)} className={`${field} tabular-nums`} />
+                <label htmlFor="pb-inv-date" className={cn(labelClass, headTone('supplier_inv_date'))}>{headLabel('supplier_inv_date', true)}</label>
+                <input id="pb-inv-date" type="date" readOnly={headDef('supplier_inv_date').locked} value={invDate} onChange={e => setInvDate(e.target.value)} className={`${field} tabular-nums`} />
               </div>
               <div>
-                <label htmlFor="pb-inv-val" className={labelClass}>Invoice value (₹)</label>
-                <input id="pb-inv-val" type="number" min={0} step="0.01" value={invValue} onChange={e => setInvValue(e.target.value)} className={`${field} text-right tabular-nums`} />
+                <label htmlFor="pb-inv-val" className={cn(labelClass, headTone('supplier_inv_value'))}>{headLabel('supplier_inv_value')}</label>
+                <input id="pb-inv-val" type="number" min={0} step="0.01" readOnly={headDef('supplier_inv_value').locked} value={invValue} onChange={e => setInvValue(e.target.value)} className={`${field} text-right tabular-nums`} />
               </div>
-              <div>
-                <label htmlFor="pb-type" className={labelClass}>Purchase type</label>
-                <select id="pb-type" value={purchaseType} onChange={e => setPurchaseType(e.target.value)} className={field}>
+              {!headDef('purchase_type').hidden && <div>
+                <label htmlFor="pb-type" className={cn(labelClass, headTone('purchase_type'))}>{headLabel('purchase_type')}</label>
+                <select id="pb-type" value={purchaseType} disabled={headDef('purchase_type').locked} onChange={e => setPurchaseType(e.target.value)} className={field}>
                   {PURCHASE_TYPES.map(t => <option key={t}>{t}</option>)}
                 </select>
-              </div>
+              </div>}
             </div>
             <p className="mt-auto text-[11px] text-stone-500">Items can be added once the bill date, supplier, supplier invoice no. / date and the invoice value are entered; the bill saves when its total equals the invoice value.</p>
           </section>
@@ -468,52 +526,41 @@ export default function PurchaseBill() {
           <table ref={gridRef} onMouseDown={gridDown} onDoubleClick={gridDouble} className={`${GRID_OUTLINE} w-full min-w-[1520px] text-xs`}>
             <thead className={tableHead}>
               <tr>
-                <th className={`${headCell} w-20 pl-2`}>#</th>
-                <th className={`${headCell} w-28`}>Item code</th>
-                <th className={`${headCell} min-w-72`}>Item name</th>
-                <th className={`${headCell} w-16 text-right`}>In stock</th>
-                <th className={cn(`${headCell} w-20 text-right`, tone('PBQTY'))}>Qty</th>
-                <th className={cn(`${headCell} w-24 text-right`, tone('PBRATE'))}>Rate</th>
-                <th className={cn(`${headCell} w-28 text-right`, tone('PBAMT'))}>Amount</th>
-                {showTaxColumns && <>
-                  <th className={`${headCell} w-16 text-right`}>CGST %</th>
-                  <th className={cn(`${headCell} w-24 text-right`, tone('CGSTAMT'))}>CGST amt</th>
-                  <th className={`${headCell} w-16 text-right`}>SGST %</th>
-                  <th className={cn(`${headCell} w-24 text-right`, tone('SGSTAMT'))}>SGST amt</th>
-                  <th className={`${headCell} w-16 text-right`}>Cess %</th>
-                  <th className={cn(`${headCell} w-24 text-right`, tone('CESSAMT'))}>Cess amt</th>
-                  <th className={cn(`${headCell} w-24 text-right`, tone('COMPCESS'))}>Comp. cess</th>
-                  <th className={cn(`${headCell} w-24 text-right`, tone('TOTGSTAMT'))}>GST amt</th>
-                  <th className={cn(`${headCell} w-28 text-right`, tone('NETAMT'))}>Net amount</th>
-                  <th className={cn(`${headCell} w-24 pr-4 text-right`, tone('MRP'))}>MRP</th>
-                </>}
+                {gridCols.map(({ id, caption, code, width }) => <th key={id} className={cn(`${headCell} ${width}`, code && tone(code))}>{caption}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-line-soft tabular-nums">
-              {rows.map((row, i) => (
-                <tr key={row.uid} onClick={() => setSelectedUid(row.uid)} onFocus={() => setSelectedUid(row.uid)} aria-selected={row.uid === selectedUid} className={`transition-colors ${row.uid === selectedUid ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
-                  <td className="whitespace-nowrap py-1 pl-2 pr-2 text-stone-400"><span className="inline-flex items-center gap-1">
-                    <button tabIndex={-1} onClick={e => { e.stopPropagation(); deleteRowByUid(row.uid); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Delete row ${i + 1}`} title="Delete this row"><Trash2 size={14} /></button>{i + 1}</span></td>
-                  <td className="px-1 py-1"><input list="pb-codes" disabled={!ready} value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={`${cell} font-mono`} aria-label={`Item code row ${i + 1}`} /></td>
-                  <td className="px-1 py-1"><input list="pb-names" disabled={!ready} value={row.name} onChange={e => setItem(row.uid, 'name', e.target.value)} className={`${cell} font-medium text-stone-900 dark:text-stone-50`} aria-label={`Item name row ${i + 1}`} /></td>
-                  <td className="px-2 py-1 text-right text-stone-500">{isFilled(row) ? row.qoh : ''}</td>
-                  <td className="px-1 py-1">{numberCell(row, 'qty', 'PB Qty', 'font-semibold')}</td>
-                  <td className="px-1 py-1">{numberCell(row, 'rate', 'PB Rate')}</td>
-                  <td className="px-2 py-1 text-right font-semibold text-stone-900 dark:text-stone-50">{isFilled(row) ? money(amt(row)) : ''}</td>
-                  {showTaxColumns && <>
-                    <td className="px-2 py-1 text-right tabular-nums text-stone-600 dark:text-stone-300" title="From Item Master">{isFilled(row) ? row.cgstPct : ''}</td>
-                    <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.cgstPct)) : ''}</td>
-                    <td className="px-2 py-1 text-right tabular-nums text-stone-600 dark:text-stone-300" title="From Item Master">{isFilled(row) ? row.sgstPct : ''}</td>
-                    <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.sgstPct)) : ''}</td>
-                    <td className="px-1 py-1">{numberCell(row, 'cessPct', 'CESS %')}</td>
-                    <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.cessPct)) : ''}</td>
-                    <td className="px-1 py-1">{numberCell(row, 'compCess', 'Comp.Cess')}</td>
-                    <td className="px-2 py-1 text-right text-stone-600 dark:text-stone-300">{isFilled(row) ? money(pctOf(row, row.cgstPct) + pctOf(row, row.sgstPct)) : ''}</td>
-                    <td className="px-2 py-1 text-right font-semibold text-stone-900 dark:text-stone-50">{isFilled(row) ? money(amt(row) + pctOf(row, row.cgstPct) + pctOf(row, row.sgstPct) + pctOf(row, row.cessPct) + row.compCess) : ''}</td>
-                    <td className="py-1 pl-2 pr-4 text-right text-stone-600 dark:text-stone-300" title="From Item Master">{row.stock !== null ? money(STOCK_ITEMS[row.stock].rate) : ''}</td>
-                  </>}
-                </tr>
-              ))}
+              {rows.map((row, i) => {
+                const pr = priced[i] ?? row;   // the row with its formula figures
+                const text = (v, extra = '') => <td className={`px-2 py-1 text-right ${extra}`}>{isFilled(row) ? v : ''}</td>;
+                const grey = 'text-stone-600 dark:text-stone-300';
+                // One cell per column, in the order the grid shows them (gridCols).
+                const cells = {
+                  no: <td className="whitespace-nowrap py-1 pl-2 pr-2 text-stone-400"><span className="inline-flex items-center gap-1">
+                    <button tabIndex={-1} onClick={e => { e.stopPropagation(); deleteRowByUid(row.uid); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Delete row ${i + 1}`} title="Delete this row"><Trash2 size={14} /></button>{i + 1}</span></td>,
+                  code: <td className="px-1 py-1"><input list="pb-codes" disabled={!ready} value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={`${cell} font-mono`} aria-label={`Item code row ${i + 1}`} /></td>,
+                  name: <td className="px-1 py-1"><input list="pb-names" disabled={!ready} value={row.name} onChange={e => setItem(row.uid, 'name', e.target.value)} className={`${cell} font-medium text-stone-900 dark:text-stone-50`} aria-label={`Item name row ${i + 1}`} /></td>,
+                  qoh: <td className="px-2 py-1 text-right text-stone-500">{isFilled(row) ? row.qoh : ''}</td>,
+                  qty: <td className="px-1 py-1">{numberCell(row, 'qty', 'PB Qty', 'font-semibold')}</td>,
+                  rate: <td className="px-1 py-1">{numberCell(row, 'rate', 'PB Rate')}</td>,
+                  amount: text(money(amt(pr)), 'font-semibold text-stone-900 dark:text-stone-50'),
+                  cgstPct: <td className={`px-2 py-1 text-right tabular-nums ${grey}`} title="From Item Master">{isFilled(row) ? row.cgstPct : ''}</td>,
+                  cgst: text(money(cgstOf(pr)), grey),
+                  sgstPct: <td className={`px-2 py-1 text-right tabular-nums ${grey}`} title="From Item Master">{isFilled(row) ? row.sgstPct : ''}</td>,
+                  sgst: text(money(sgstOf(pr)), grey),
+                  cessPct: <td className="px-1 py-1">{numberCell(row, 'cessPct', 'CESS %')}</td>,
+                  cess: text(money(pctOf(pr, row.cessPct)), grey),
+                  compCess: <td className="px-1 py-1">{numberCell(row, 'compCess', 'Comp.Cess')}</td>,
+                  gst: text(money(cgstOf(pr) + sgstOf(pr)), grey),
+                  net: text(money(amt(pr) + cgstOf(pr) + sgstOf(pr) + pctOf(pr, row.cessPct) + row.compCess), 'font-semibold text-stone-900 dark:text-stone-50'),
+                  mrp: <td className={`py-1 pl-2 pr-4 text-right ${grey}`} title="From Item Master">{row.stock !== null ? money(STOCK_ITEMS[row.stock].rate) : ''}</td>,
+                };
+                return (
+                  <tr key={row.uid} onClick={() => setSelectedUid(row.uid)} onFocus={() => setSelectedUid(row.uid)} aria-selected={row.uid === selectedUid} className={`transition-colors ${row.uid === selectedUid ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
+                    {gridCols.map(({ id }) => <Fragment key={id}>{cells[id]}</Fragment>)}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           <datalist id="pb-codes">{sellable().map(item => <option key={item.code} value={item.code}>{item.name}</option>)}</datalist>
@@ -540,10 +587,10 @@ export default function PurchaseBill() {
                 <div className={labelClass}>Amount in words</div>
                 <p className="text-xs italic text-stone-700 dark:text-stone-300">{numberToWords(totals.net)}</p>
               </div>
-              <div>
-                <label htmlFor="pb-remarks" className={labelClass}>Remarks</label>
-                <textarea id="pb-remarks" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} placeholder="Notes for this purchase bill" className={field} />
-              </div>
+              {!headDef('remarks').hidden && <div>
+                <label htmlFor="pb-remarks" className={cn(labelClass, headTone('remarks'))}>{headLabel('remarks')}</label>
+                <textarea id="pb-remarks" readOnly={headDef('remarks').locked} value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} placeholder="Notes for this purchase bill" className={field} />
+              </div>}
             </div>
           )}
           <BillExtras bill={extrasBill} idPrefix="pb" />

@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Printer, Trash2 } from 'lucide-react';
+import { useConfirm } from '../common/ConfirmDialog';
 import { toastStore } from '../common/toastStore';
 import { errorText, getItems, } from '../../lib/api';
 import { code128Svg } from '../../lib/code128';
@@ -20,6 +21,7 @@ export default function LabelPrinting() {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState('');
   const [rows, setRows] = useState([]);
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [size, setSize] = useState('50x25');
   const [withName, setWithName] = useState(true);
   const [withMrp, setWithMrp] = useState(false);
@@ -67,6 +69,7 @@ export default function LabelPrinting() {
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
+      {confirmDialog}
       <div className={pageHeader}>
         <div>
           <h1 className={pageTitle}>Label Printing</h1>
@@ -116,7 +119,7 @@ export default function LabelPrinting() {
                     className={`${field} ml-auto w-24 text-right tabular-nums`} />
                 </td>
                 <td className="px-2 py-2 text-right">
-                  <button type="button" aria-label={`Remove ${r.code}`} onClick={() => setRows(x => x.filter(y => y.code !== r.code))} className={`${secondaryButton} !px-2`}><Trash2 size={13} /></button>
+                  <button type="button" aria-label={`Remove ${r.code}`} onClick={async () => { if (await confirm(`Are you sure you want to remove '${r.code}' from the labels?`)) setRows(x => x.filter(y => y.code !== r.code)); }} className={`${secondaryButton} !px-2`}><Trash2 size={13} /></button>
                 </td>
               </tr>
             ))}

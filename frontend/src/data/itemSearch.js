@@ -23,5 +23,8 @@ export function searchItems(text, limit = MAX) {
       : -1;
     if (rank >= 0) ranked.push({ item, rank });
   }
-  return ranked.sort((a, b) => a.rank - b.rank || a.item.name.localeCompare(b.item.name)).slice(0, limit).map(r => r.item);
+  // Within a rank the list is in the desktop's order: by ShortName (blank first), then item name.
+  const key = (item) => (item.shortName || '').toUpperCase();
+  const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  return ranked.sort((a, b) => a.rank - b.rank || order(key(a.item), key(b.item)) || order(a.item.name.toUpperCase(), b.item.name.toUpperCase())).slice(0, limit).map(r => r.item);
 }

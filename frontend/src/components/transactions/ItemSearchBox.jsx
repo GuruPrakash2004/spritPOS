@@ -80,7 +80,7 @@ const ItemSearchBox = forwardRef(function ItemSearchBox(
       />
       {open && (
         <div className="absolute left-0 top-full z-40 mt-1 w-[min(760px,calc(100vw-4rem))] shadow-2xl">
-          <ItemPickGrid id={listId} items={matches} at={at} onPick={pick} showStock showRate className="max-h-80" />
+          <ItemPickGrid id={listId} items={matches} at={at} onPick={pick} showStock showRate windowsOrder className="max-h-80" />
           <p aria-hidden="true" className="border border-t-0 border-line bg-surface px-2.5 py-1 text-[10px] text-stone-400">↑↓ choose · Enter add · Esc close · items with no stock are not listed</p>
         </div>
       )}

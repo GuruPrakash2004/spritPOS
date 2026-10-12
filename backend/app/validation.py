@@ -29,10 +29,12 @@ RULES = {
 PERCENT_FIELDS = {"cgst_per": "CGST %", "sgst_per": "SGST %"}
 
 
-def problems(data: dict) -> dict[str, str]:
-    """{field: message} for every field of `data` that breaks a rule."""
+def problems(data: dict, skip: frozenset | set = frozenset()) -> dict[str, str]:
+    """{field: message} for every field of `data` that breaks a rule (the fields in `skip` are not checked)."""
     found = {}
     for key, (label, pattern, wrong, _upper) in RULES.items():
+        if key in skip:
+            continue
         value = data.get(key)
         if value in (None, ""):
             continue
@@ -48,9 +50,10 @@ def problems(data: dict) -> dict[str, str]:
     return found
 
 
-def check(data: dict) -> dict:
-    """Raises 422 naming the first wrong field; returns the values to keep (trimmed, GSTIN and PAN in capitals)."""
-    wrong = problems(data)
+def check(data: dict, skip: frozenset | set = frozenset()) -> dict:
+    """Raises 422 naming the first wrong field; returns the values to keep (trimmed, GSTIN and PAN in capitals).
+    `skip`: fields whose rule doesn't apply on this screen (Company Master's phone numbers are free text)."""
+    wrong = problems(data, skip)
     if wrong:
         raise HTTPException(422, next(iter(wrong.values())))
     cleaned = {}

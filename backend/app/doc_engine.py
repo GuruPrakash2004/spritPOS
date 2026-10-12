@@ -23,11 +23,52 @@ DOCS = {
     "stock_deduction": {"name": "Stock Deduction",
                         "line": {"STKDEDQTY": "qty", "STKQTY": "qty", "LTRPERBOT": "item.litres_per_bottle"},
                         "header": {}},
+    "sales_invoice": {"name": "Sales Invoice",
+                      "line": {"SINVQTY": "qty", "SINVRATE": "rate", "STKQTY": "qty", "NOOFCASES": "cases", "NOOFBOTTLES": "bottles",
+                               "CGSTPER": "item.cgst_per", "SGSTPER": "item.sgst_per", "MRP": "item.mrp"},
+                      "header": {}},
     "purchase_bill": {"name": "Purchase Bill",
                       "line": {"PBQTY": "qty", "PBRATE": "rate", "STKQTY": "qty", "NOOFCASES": "cases", "NOOFBOTTLES": "bottles",
                                "CGSTPER": "item.cgst_per", "SGSTPER": "item.sgst_per"},
                       "header": {"TCS": "totals.tcs", "OTHAMT": "totals.other"}},
 }
+
+
+# The columns of a priced line the designer's formulas decide (when the designer gives that column a formula): designer
+# column -> the key of the priced line it fills. Used by the bills' pricing (routers/transactions._price_lines), so the
+# GST on a bill follows the designer's formulas and the built-in maths is only the fallback.
+LINE_OUT = {"sales_invoice": {"SINVAMT": "amount", "CGSTAMT": "cgst", "SGSTAMT": "sgst"},
+            "purchase_bill": {"PBAMT": "amount", "CGSTAMT": "cgst", "SGSTAMT": "sgst"}}
+
+
+def line_amounts(kind: str, lines: list[dict]) -> list[dict]:
+    """For each priced line (qty, rate, cases, bottles, item_code ...): {"amount"|"cgst"|"sgst": value} for the columns
+    the designer gives a formula, rounded to paise. A line (or a whole bill) the formulas can't work out gets {}, so the
+    caller keeps its own figure."""
+    out_cols = LINE_OUT.get(kind)
+    if not out_cols or not lines:
+        return [{} for _ in lines]
+    try:
+        doc_id = doc_id_of(DOCS[kind]["name"])
+        wanted = {c.lower() for c in out_cols}
+        # Nothing to work out unless the designer gives one of these columns a formula: skip the formula engine (every save asks).
+        if doc_id is None or not any(f.get("formula") and str(f.get("code") or "").lower() in wanted
+                                     for f in (schema_meta.screen(doc_id) or {}).get("fields", [])):
+            return [{} for _ in lines]
+        rows = compute(kind, {"lines": lines, "totals": {}})["rows"]
+    except Exception:   # noqa: BLE001 - a formula problem must never stop a bill being priced
+        return [{} for _ in lines]
+    result = []
+    for line, row in zip(lines, rows):
+        low = {str(k).lower(): v for k, v in row.items()}
+        own = {key: round(float(low[col.lower()]), 2) for col, key in out_cols.items()
+               if isinstance(low.get(col.lower()), (int, float))}
+        # A priced line (qty and rate above zero) whose amount formula gives nothing or 0 is a formula the web can't feed
+        # (it reads a column the bill has no value for): keep the built-in figures rather than bill ₹0.
+        if own and (own.get("amount") or 0) <= 0 and (line.get("qty") or 0) * (line.get("rate") or 0) > 0:
+            own = {}
+        result.append(own)
+    return result + [{} for _ in range(len(lines) - len(result))]
 
 
 def _source(spec: str, line: dict | None, doc: dict):

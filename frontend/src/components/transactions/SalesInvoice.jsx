@@ -18,7 +18,7 @@
 //   and "3*" sets the qty for the next item. In a line: ↑/↓ move between lines, Enter or Esc back to the search.
 //   Waiting popups: Enter saves now, Esc cancels.
 
-import { useEffect, useMemo, useRef, useState, } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, } from 'react';
 import { ChevronDown, ChevronUp, PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine } from 'lucide-react';
 import Kbd from '../common/Kbd';
 import { useColumnTone } from '../../hooks/useColumnTone';
@@ -28,36 +28,42 @@ import { cn } from '../../lib/utils';
 import ItemSearchBox, { } from './ItemSearchBox';
 import { focusField, useShortcuts } from '../../lib/keys';
 import { useConfirm } from '../common/ConfirmDialog';
-import {  badge, field as baseField, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
+import {  badge, field as baseField, fieldTone, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import BillExtras from './BillExtras';
+import CustomerPicker from './CustomerPicker';
 import { useBillExtras } from './useBillExtras';
 import { deleteSalesInvoice, errorText, getCustomers, getNextNumber, getPartyRecords, getSalesPersons, getSettingValues, newIdempotencyKey, saveSalesInvoice, todayIso, } from '../../lib/api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
-import { STOCK_ITEMS, litresPerBottle, loadStockItems, sellable, stockIndex, useStockItems } from '../../data/stockData';
+import { STOCK_ITEMS, lineName, litresPerBottle, loadStockItems, sellable, stockIndex, useStockItems } from '../../data/stockData';
 import { numberToWords } from '../../lib/formatters';
 import { PAYMENT_TYPES, } from '../../data/salesCounters';
 import PrintDialog from '../print/PrintDialog';
 import WithHistory from './DocHistoryPanel';
 import { afterSavePlan, runPrint } from '../../lib/printing';
 import { useDocSettings } from '../../lib/docSettings';
+import { useScreenFields } from '../../hooks/useScreenFields';
+import { applyGridDefinition } from '../../lib/billGrid';
+import { formulaAmounts } from '../../lib/billMaths';
+import { applyDefinition, ruleHolds, ruleValues } from '../../lib/designerFields';
 
 
 
 const toLine = (stock, qty, discPct = 0) => {
   const item = STOCK_ITEMS[stock];
-  return { id: stock, name: `${item.name} ${item.pkg}`, qoh: item.clQty, qty, rate: item.rate, discPct, cgstPct: item.cgstPct ?? 0, sgstPct: item.sgstPct ?? 0 };
+  return { id: stock, name: lineName(item), qoh: item.clQty, qty, rate: item.rate, discPct, cgstPct: item.cgstPct ?? 0, sgstPct: item.sgstPct ?? 0 };
 };
 
 const money = (n) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const gross = (l) => l.qty * l.rate;
+// A line's amount / CGST / SGST come from the designer's formulas when it has them (`fAmount`, `fCgst`, `fSgst`, set by `priced` below), else from qty × MRP and the item's GST %.
+const gross = (l) => l.fAmount ?? l.qty * l.rate;
 const discAmt = (l) => (gross(l) * l.discPct) / 100;
 // GST per line is worked out on the line's amount as the backend does (Item Master's CGST % / SGST %); the item has no Cess %
 // in Item Master, so the Cess columns of the legacy grid show 0.00.
 const round2 = (n) => Math.round(n * 100) / 100;
-const cgstAmt = (l) => round2(round2(gross(l)) * (l.cgstPct ?? 0) / 100);
-const sgstAmt = (l) => round2(round2(gross(l)) * (l.sgstPct ?? 0) / 100);
+const cgstAmt = (l) => l.fCgst ?? round2(round2(gross(l)) * (l.cgstPct ?? 0) / 100);
+const sgstAmt = (l) => l.fSgst ?? round2(round2(gross(l)) * (l.sgstPct ?? 0) / 100);
 const itemAmt = (l) => gross(l) - discAmt(l) + cgstAmt(l) + sgstAmt(l);
 // Splits "26/c10-0001234" into "26/c10-" + 1234 so later bills keep the same prefix and zero padding.
 const parseInvoiceNo = (invoiceNo) => {
@@ -73,13 +79,18 @@ const cellInput = 'w-full min-w-0 rounded-md border border-transparent bg-transp
 // a header's right edge to resize; the widths are remembered on this computer (hooks/useGridWidths.js).
 const GRID_COLS = [
   ['sl', 'Sl No', null, 78], ['item', 'Item', null, 260], ['qoh', 'QOH', null, 64], ['qty', 'Qty', 'SINVQTY', 78],
-  ['rate', 'Rate', 'SINVRATE', 88], ['discPct', 'Disc.%', 'DISCPER', 72], ['disc', 'Disc.Amt', 'DISCAMT', 90],
+  ['rate', 'MRP', 'SINVRATE', 88], ['discPct', 'Disc.%', 'DISCPER', 72], ['disc', 'Disc.Amt', 'DISCAMT', 90],
   ['amount', 'Amount', 'SINVAMT', 100], ['total', 'Total Item Amt', null, 110], ['cgstPct', 'CGST%', 'CGSTPER', 70],
   ['cgst', 'CGST Amt', 'CGSTAMT', 86], ['sgstPct', 'SGST%', 'SGSTPER', 70], ['sgst', 'SGST Amt', 'SGSTAMT', 86],
   ['cessPct', 'Cess%', 'CESSPER', 66], ['cess', 'Cess Amt', 'CESSAMT', 80], ['compCess', 'Comp.Cess', 'COMPCESSAMT', 86],
   ['itemAmt', 'Item Amt', 'ITEMAMT', 104],
 ];
 const GRID_DEFAULTS = Object.fromEntries(GRID_COLS.map(([id, , , w]) => [id, w]));
+// Columns the bill can't work without (the designer may rename or reorder them, never hide them); Qty can't be locked either.
+const GRID_KEEP = new Set(['sl', 'item', 'qty', 'rate', 'lock:qty']);
+// The header boxes drawn here (the setup step has counter, payment mode and customer); the designer's captions, mandatory,
+// read-only and hidden flags are laid over them (Doc Designer rows of TrnHdrSINV).
+const HEADER_TYPED = [{ key: 'customer', label: 'Customer' }, { key: 'salesperson', label: 'Sales person' }];
 
 export default function SalesInvoice({ setup, onClose }) {
   const { counter } = setup;
@@ -134,6 +145,21 @@ export default function SalesInvoice({ setup, onClose }) {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const extrasBill = useBillExtras('TrnHdrSINV', 'si');
   const tone = useColumnTone('TrnHdrSINV');   // red = mandatory, blue = read-only, from the Doc Designer
+  const live = useScreenFields('table:TrnHdrSINV');
+  const cols = useMemo(() => applyGridDefinition(GRID_COLS, live.screen, GRID_KEEP), [live.screen]);   // the grid as the designer lays it out
+  const colOf = (id) => cols.find(c => c.id === id);
+  const head = useMemo(() => applyDefinition(HEADER_TYPED, live.screen), [live.screen]);
+  // The lines with the designer's formula figures (line amount, CGST, SGST) laid over them; the screen's totals and cells read these.
+  const priced = useMemo(() => {
+    const asked = lines.map(l => ({ item_code: STOCK_ITEMS[l.id].code, qty: l.qty, rate: l.rate, cases: 0, bottles: l.qty }));
+    const itemOf = (code) => { const it = STOCK_ITEMS[stockIndex(code)]; return it && { cgst_per: it.cgstPct, sgst_per: it.sgstPct, mrp: it.rate, bottles_per_case: it.bottlesPerCase }; };
+    return formulaAmounts('sales_invoice', live.screen, asked, itemOf).map((f, i) => ({ ...lines[i], fAmount: f.amount, fCgst: f.cgst, fSgst: f.sgst }));
+  }, [lines, live.screen]);
+  const headDef = (key) => {
+    const f = head.find(h => h.key === key) ?? { label: key };
+    const values = ruleValues({ customer: party, salesperson: salesPerson });
+    return { label: f.label, required: !!f.required || !!(f.mandatoryWhen && ruleHolds(f.mandatoryWhen, values)), hidden: !!f.designerHidden || !!(f.hideWhen && ruleHolds(f.hideWhen, values)), locked: !!f.lockedAlways || !!(f.readonlyWhen && ruleHolds(f.readonlyWhen, values)) };
+  };
   // Global Settings values (GET /settings/values); until they load, a scan adds the item at once.
   const [gsettings, setGsettings] = useState({});
   const qtyAfterScan = gsettings.QTYSELINV?.toUpperCase() === 'Y';
@@ -170,12 +196,12 @@ export default function SalesInvoice({ setup, onClose }) {
   const billNo = numbering ? `${numbering.head}${String(seq).padStart(numbering.width, '0')}` : '—';
 
   const totals = useMemo(() => {
-    const basic = lines.reduce((acc, l) => acc + gross(l), 0);
-    const disc = lines.reduce((acc, l) => acc + discAmt(l), 0);
+    const basic = priced.reduce((acc, l) => acc + gross(l), 0);
+    const disc = priced.reduce((acc, l) => acc + discAmt(l), 0);
     // GST comes from each item's CGST % / SGST % in Item Master (zero for liquor, whose excise is built into the MRP), as
     // the backend prices the bill; Item Master has no cess.
-    const cgst = lines.reduce((acc, l) => acc + cgstAmt(l), 0);
-    const sgst = lines.reduce((acc, l) => acc + sgstAmt(l), 0);
+    const cgst = priced.reduce((acc, l) => acc + cgstAmt(l), 0);
+    const sgst = priced.reduce((acc, l) => acc + sgstAmt(l), 0);
     const cess = 0, compCess = 0;
     const total = basic - disc + cgst + sgst + cess + compCess;
     const points = Math.max(0, Number(redeem) || 0);
@@ -187,7 +213,7 @@ export default function SalesInvoice({ setup, onClose }) {
     const qty = lines.reduce((acc, l) => acc + l.qty, 0);
     const litres = lines.reduce((acc, l) => acc + l.qty * litresPerBottle(STOCK_ITEMS[l.id].pkg), 0);
     return { basic, disc, cgst, sgst, cess, compCess, total, points, invoice, card, other, cash, qty, litres };
-  }, [lines, writeOff, redeem, paymentType, cardInput, otherPay]);
+  }, [lines, priced, writeOff, redeem, paymentType, cardInput, otherPay]);
 
   const customer = customers.find(c => c.name.toLowerCase() === party.trim().toLowerCase() || c.code.toLowerCase() === party.trim().toLowerCase());
   // The alert messages kept on the customer (MstPartyAlertMessage) are shown when the customer is picked, as vLQMS.exe does.
@@ -296,14 +322,13 @@ export default function SalesInvoice({ setup, onClose }) {
       setSelectedId(line.id);
     } else if (e.key === 'Delete') {
       e.preventDefault();
-      setLines(lines.filter(l => l.id !== line.id));
-      setSelectedId(lines[at + 1]?.id ?? lines[at - 1]?.id ?? null);
+      void removeLine(line.id);
     } else if (e.key === 'Enter') {
       focusLineCell(at, 'qty');
     }
   };
 
-  // Keys inside a line's Qty / Rate / Disc % box.
+  // Keys inside a line's Qty / MRP / Disc % box.
   const cellKeys = (row, col) => (e) => {
     if (e.key === 'Enter' || e.key === 'Escape') {
       e.preventDefault();
@@ -340,13 +365,31 @@ export default function SalesInvoice({ setup, onClose }) {
     barcodeRef.current?.focus();
   };
 
-  const clearItems = () => { setLines([]); setSelectedId(null); };
+  const clearItems = async () => {
+    if (locked() || !lines.length) return;
+    if (!(await confirm(`Are you sure you want to remove all ${lines.length} item${lines.length > 1 ? 's' : ''} from this bill?`))) return focusSearch();
+    setLines([]);
+    setSelectedId(null);
+    focusSearch();
+  };
+
+  // Removing an item asks first, as the desktop's "Item deletion..." box does (No keeps the item).
+  const removeLine = async (id) => {
+    if (locked()) return;
+    const at = lines.findIndex(l => l.id === id);
+    if (at === -1) return;
+    const next = lines[at + 1]?.id ?? lines[at - 1]?.id ?? null;
+    const ok = await confirm(`Are you sure you want to delete the item '${lines[at].name}'?`);
+    if (ok && !sending.current) {
+      setLines(cur => cur.filter(l => l.id !== id));
+      setSelectedId(cur => (cur === id ? next : cur));
+    }
+    focusSearch();
+  };
 
   const deleteItem = () => {
     const target = selectedId ?? lines.at(-1)?.id;
-    if (target === undefined) return;
-    setLines(lines.filter(l => l.id !== target));
-    setSelectedId(null);
+    if (target !== undefined) void removeLine(target);
   };
 
   const billBody = (hold) => ({
@@ -413,6 +456,8 @@ export default function SalesInvoice({ setup, onClose }) {
     if (totals.card + totals.other > totals.invoice) return setToast({ kind: 'error', text: 'Card + other payment exceeds the invoice value.' });
     if (collected !== '' && change < 0) return setToast({ kind: 'error', text: `Collected amount is ₹ ${money(-change)} short of the cash amount.` });
     if (totals.points > (customer?.points ?? 0)) return setToast({ kind: 'error', text: `Only ${customer?.points ?? 0} points available to redeem.` });
+    if (headDef('customer').required && !party.trim()) return setToast({ kind: 'error', text: `Enter the ${headDef('customer').label}.` });
+    if (headDef('salesperson').required && !salesPerson) return setToast({ kind: 'error', text: `Choose the ${headDef('salesperson').label}.` });
     if (!extrasBill.check()) return setToast({ kind: 'error', text: 'Fill the additional details marked in red.' });
     // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Save was pressed.
     const body = billBody(false);
@@ -556,10 +601,10 @@ export default function SalesInvoice({ setup, onClose }) {
 
             <div className={`${panel} flex min-h-[320px] flex-col overflow-hidden`}>
               <div className="flex-1 overflow-auto">
-                <table className={`${GRID_OUTLINE} table-fixed text-left text-xs`} style={{ width: GRID_COLS.reduce((n, [id]) => n + widths[id], 0), minWidth: '100%' }}>
+                <table className={`${GRID_OUTLINE} table-fixed text-left text-xs`} style={{ width: cols.reduce((n, { id }) => n + widths[id], 0), minWidth: '100%' }}>
                   <thead className={tableHead}>
                     <tr>
-                      {GRID_COLS.map(([id, caption, code]) => (
+                      {cols.map(({ id, caption, code }) => (
                         <th key={id} style={{ width: widths[id] }} className={cn('relative overflow-hidden whitespace-nowrap px-3 py-2.5', !['sl', 'item'].includes(id) && 'text-right', code && tone(code))}>
                           {caption}
                           <span role="separator" aria-orientation="vertical" aria-label={`Resize ${caption}`} title="Drag to resize · double-click to reset all"
@@ -570,27 +615,32 @@ export default function SalesInvoice({ setup, onClose }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line-soft tabular-nums">
-                    {lines.map((line, i) => [line, i]).filter(([line]) => !findLine.trim() || `${line.name} ${STOCK_ITEMS[line.id].code}`.toLowerCase().includes(findLine.trim().toLowerCase())).map(([line, i]) => {
+                    {priced.map((line, i) => [line, i]).filter(([line]) => !findLine.trim() || `${line.name} ${STOCK_ITEMS[line.id].code}`.toLowerCase().includes(findLine.trim().toLowerCase())).map(([line, i]) => {
                       const low = line.qty >= line.qoh;
+                      const num = (v, cls) => <td className={`px-3 py-2 text-right ${cls}`}>{money(v)}</td>;
+                      // One cell per column, in the order the grid shows them (cols).
+                      const cell = {
+                        sl: <td className="whitespace-nowrap px-2 py-1 text-stone-400"><span className="inline-flex items-center gap-1"><button tabIndex={-1} onClick={e => { e.stopPropagation(); void removeLine(line.id); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${line.name}`}><Trash2 size={14} /></button>{i + 1}</span></td>,
+                        item: <td className="truncate px-3 py-2 font-medium text-stone-900 dark:text-stone-50" title={line.name}>{line.name}</td>,
+                        qoh: <td className={`px-3 py-2 text-right ${low ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500'}`}>{line.qoh}</td>,
+                        qty: <td className="px-3 py-1.5 text-right"><input type="number" min={1} max={line.qoh} value={line.qty || ''} data-si-row={i} data-si-col="qty" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'qty')} onChange={e => updateLine(line.id, { qty: Number(e.target.value) })} onBlur={() => line.qty || updateLine(line.id, { qty: 1 })} className={`${cellInput} font-semibold`} aria-label={`Qty for ${line.name}`} /></td>,
+                        rate: <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={line.rate || ''} readOnly={colOf('rate')?.locked} data-si-row={i} data-si-col="rate" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'rate')} onChange={e => updateLine(line.id, { rate: Number(e.target.value) })} className={`${cellInput} w-20`} aria-label={`${colOf('rate')?.caption ?? 'MRP'} for ${line.name}`} /></td>,
+                        discPct: <td className="px-3 py-1.5 text-right"><input type="number" min={0} max={100} value={line.discPct || ''} placeholder="0" readOnly={colOf('discPct')?.locked} data-si-row={i} data-si-col="disc" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'disc')} onChange={e => updateLine(line.id, { discPct: Number(e.target.value) })} className={cellInput} aria-label={`Discount % for ${line.name}`} /></td>,
+                        disc: num(discAmt(line), 'text-stone-500'),
+                        amount: num(gross(line), 'text-stone-700 dark:text-stone-200'),
+                        total: num(gross(line) - discAmt(line), 'font-semibold text-stone-900 dark:text-stone-50'),
+                        cgstPct: num(line.cgstPct ?? 0, 'text-stone-500'),
+                        cgst: num(cgstAmt(line), 'text-stone-500'),
+                        sgstPct: num(line.sgstPct ?? 0, 'text-stone-500'),
+                        sgst: num(sgstAmt(line), 'text-stone-500'),
+                        cessPct: num(0, 'text-stone-400'),
+                        cess: num(0, 'text-stone-400'),
+                        compCess: num(0, 'text-stone-400'),
+                        itemAmt: num(itemAmt(line), 'font-semibold text-stone-900 dark:text-stone-50'),
+                      };
                       return (
                         <tr key={line.id} onClick={() => setSelectedId(line.id)} aria-selected={selectedId === line.id} className={`cursor-pointer transition-colors ${selectedId === line.id ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
-                          <td className="whitespace-nowrap px-2 py-1 text-stone-400"><span className="inline-flex items-center gap-1"><button tabIndex={-1} onClick={e => { e.stopPropagation(); setLines(lines.filter(l => l.id !== line.id)); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Remove ${line.name}`}><Trash2 size={14} /></button>{i + 1}</span></td>
-                          <td className="truncate px-3 py-2 font-medium text-stone-900 dark:text-stone-50" title={line.name}>{line.name}</td>
-                          <td className={`px-3 py-2 text-right ${low ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500'}`}>{line.qoh}</td>
-                          <td className="px-3 py-1.5 text-right"><input type="number" min={1} max={line.qoh} value={line.qty || ''} data-si-row={i} data-si-col="qty" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'qty')} onChange={e => updateLine(line.id, { qty: Number(e.target.value) })} onBlur={() => line.qty || updateLine(line.id, { qty: 1 })} className={`${cellInput} font-semibold`} aria-label={`Qty for ${line.name}`} /></td>
-                          <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={line.rate || ''} data-si-row={i} data-si-col="rate" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'rate')} onChange={e => updateLine(line.id, { rate: Number(e.target.value) })} className={`${cellInput} w-20`} aria-label={`Rate for ${line.name}`} /></td>
-                          <td className="px-3 py-1.5 text-right"><input type="number" min={0} max={100} value={line.discPct || ''} placeholder="0" data-si-row={i} data-si-col="disc" onFocus={e => { e.target.select(); setSelectedId(line.id); }} onKeyDown={cellKeys(i, 'disc')} onChange={e => updateLine(line.id, { discPct: Number(e.target.value) })} className={cellInput} aria-label={`Discount % for ${line.name}`} /></td>
-                          <td className="px-3 py-2 text-right text-stone-500">{money(discAmt(line))}</td>
-                          <td className="px-3 py-2 text-right text-stone-700 dark:text-stone-200">{money(gross(line))}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-stone-900 dark:text-stone-50">{money(gross(line) - discAmt(line))}</td>
-                          <td className="px-3 py-2 text-right text-stone-500">{money(line.cgstPct ?? 0)}</td>
-                          <td className="px-3 py-2 text-right text-stone-500">{money(cgstAmt(line))}</td>
-                          <td className="px-3 py-2 text-right text-stone-500">{money(line.sgstPct ?? 0)}</td>
-                          <td className="px-3 py-2 text-right text-stone-500">{money(sgstAmt(line))}</td>
-                          <td className="px-3 py-2 text-right text-stone-400">{money(0)}</td>
-                          <td className="px-3 py-2 text-right text-stone-400">{money(0)}</td>
-                          <td className="px-3 py-2 text-right text-stone-400">{money(0)}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-stone-900 dark:text-stone-50">{money(itemAmt(line))}</td>
+                          {cols.map(({ id }) => <Fragment key={id}>{cell[id]}</Fragment>)}
                         </tr>
                       );
                     })}
@@ -631,11 +681,10 @@ export default function SalesInvoice({ setup, onClose }) {
               {partyOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
             <div id="si-party-box" className={`grid grid-cols-2 gap-x-2 gap-y-1.5 px-1 pb-1 pt-1.5 text-xs ${partyOpen ? '' : 'hidden'}`}>
-            <div className="col-span-2 sm:col-span-1">
-              <label htmlFor="si-party" className={labelClass}>Customer <span className="font-normal text-stone-400">(F4)</span></label>
-              <input id="si-party" list="si-parties" value={party} disabled={lines.length > 0} title={lines.length ? 'Only the payment mode can be changed once items are on the bill.' : undefined} onChange={e => setParty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); focusSearch(); } }} className={`${field} h-8 py-1 text-xs`} placeholder="Walk-in customer" />
-              <datalist id="si-parties">{customers.map(c => <option key={c.code} value={c.name} />)}</datalist>
-            </div>
+            {!headDef('customer').hidden && <div className="col-span-2 sm:col-span-1">
+              <label htmlFor="si-party" className={cn(labelClass, fieldTone(headDef('customer').required, headDef('customer').locked))}>{headDef('customer').label}{headDef('customer').required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>} <span className="font-normal text-stone-400">(F4)</span></label>
+              <CustomerPicker id="si-party" value={party} onChange={setParty} customers={customers} disabled={lines.length > 0 || headDef('customer').locked} title={lines.length ? 'Only the payment mode can be changed once items are on the bill.' : undefined} onDone={focusSearch} />
+            </div>}
             <BillExtras bill={extrasBill} idPrefix="si" />
             {customer && customer.points > 0 && (
               <div className="col-span-2 flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-xs text-accent-ink">
@@ -644,13 +693,13 @@ export default function SalesInvoice({ setup, onClose }) {
                 <input type="number" min={0} max={customer.points} value={redeem} onChange={e => setRedeem(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusField('si-collected'); } }} placeholder="Redeem" className={`${field} w-24 py-1 text-right tabular-nums`} aria-label="Points to redeem" />
               </div>
             )}
-            <div className="col-span-2 sm:col-span-1">
-              <label htmlFor="si-salesperson" className={labelClass}>Sales person</label>
-              <select id="si-salesperson" value={salesPerson} disabled={lines.length > 0} title={lines.length ? 'Only the payment mode can be changed once items are on the bill.' : undefined} onChange={e => setSalesPerson(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusSearch(); } }} className={`${field} h-8 py-1 text-xs`}>
+            {!headDef('salesperson').hidden && <div className="col-span-2 sm:col-span-1">
+              <label htmlFor="si-salesperson" className={cn(labelClass, fieldTone(headDef('salesperson').required, headDef('salesperson').locked))}>{headDef('salesperson').label}{headDef('salesperson').required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
+              <select id="si-salesperson" value={salesPerson} disabled={lines.length > 0 || headDef('salesperson').locked} title={lines.length ? 'Only the payment mode can be changed once items are on the bill.' : undefined} onChange={e => setSalesPerson(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusSearch(); } }} className={`${field} h-8 py-1 text-xs`}>
                 {!salesPersons.length && <option value="">No sales persons (Sales Person Master)</option>}
                 {salesPersons.map(p => <option key={p}>{p}</option>)}
               </select>
-            </div>
+            </div>}
           </div>
           </div>
 

@@ -92,8 +92,8 @@ class Item(MasterRow):
     purchase_rate: float | None = Field(None, ge=0)
     cgst_per: float = 0
     sgst_per: float = 0
-    rol: int = 0
-    roq: int = 0
+    rol: float = 0   # the desktop allows decimals (e.g. ROQ 83.4)
+    roq: float = 0
     qoh: float = 0
     active: bool = True
     aliases: list[str] = Field(default_factory=list, description="Other names the item is found by (MstItemAlias)")

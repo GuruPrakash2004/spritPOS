@@ -20,6 +20,7 @@ import { getAuthToken, getDsr, getMe, requestTokenFromOtherTabs, setAuthRights, 
 import { ADMIN_MASTER, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
 import { moduleForPath, pathForModule } from './lib/routes';
 import { iconButton, primaryButton } from './lib/styles';
+import DesignerRefreshButton from './components/layout/DesignerRefreshButton';
 import { SIMPLE_MASTERS } from './lib/simpleMasters';
 import { isTypingTarget, useAdvanceAfterSelect, useShortcuts } from './lib/keys';
 import { withViewTransition } from './lib/viewTransition';
@@ -352,6 +353,7 @@ export default function App() {
             <span className="hidden rounded-md border px-2 py-1 text-[11px] font-medium tabular-nums lg:inline
                              border-[#DDE3EC] text-[#1B2B4B]
                              dark:border-[#2A2A2A] dark:text-[#D4A847]" title="Financial year">FY {finYear || finYearLabel(company?.fy_start, company?.fy_end) || '—'}</span>
+            {user.role === ADMIN_ROLE && <DesignerRefreshButton />}
             <button onClick={() => setDarkMode(!darkMode)} className={`${iconButton} print:hidden`} title={darkMode ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}>
               {darkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>
@@ -364,7 +366,7 @@ export default function App() {
                 <div className="text-[11px] text-[#5F6B80] dark:text-stone-400">{user.role}</div>
               </div>
               <button onClick={() => setChangingPassword(true)} className={`${iconButton} print:hidden`} title="Change my password" aria-label="Change my password"><KeyRound size={16} /></button>
-              <button onClick={() => { setSession(null); setAuthUser('', '', ''); setBillOpen(false); setActiveTab('Dashboard'); window.history.replaceState(null, '', '/'); }} className={`${iconButton} hover:text-[#9A4B45] print:hidden dark:hover:text-red-400`} title="Log out" aria-label="Log out"><LogOut size={16} /></button>
+              <button onClick={async () => { if (!(await confirm(billOpen ? 'A sales bill is open. Are you sure you want to log out?' : 'Are you sure you want to log out?'))) return; setSession(null); setAuthUser('', '', ''); setBillOpen(false); setActiveTab('Dashboard'); window.history.replaceState(null, '', '/'); }} className={`${iconButton} hover:text-[#9A4B45] print:hidden dark:hover:text-red-400`} title="Log out" aria-label="Log out"><LogOut size={16} /></button>
             </div>
           </div>
         </header>

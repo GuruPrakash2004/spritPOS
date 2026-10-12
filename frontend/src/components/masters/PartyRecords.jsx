@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { useConfirm } from '../common/ConfirmDialog';
 import Modal from '../common/Modal';
 import { toastStore } from '../common/toastStore';
 import { addPartyNote, errorText, getPartyRecords, savePartyRecords } from '../../lib/api';
@@ -21,6 +22,7 @@ export default function PartyRecords({ party, code, name, canEdit, onClose }) {
   const [data, setData] = useState({ columns: [], rows: [] });
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const spec = TABS.find(t => t.id === tab);
 
   const load = useCallback(() => getPartyRecords(party, code, tab).then(r => { setError(''); setData(r); }).catch(e => setError(errorText(e))), [party, code, tab]);
@@ -28,7 +30,10 @@ export default function PartyRecords({ party, code, name, canEdit, onClose }) {
 
   const edit = (i, key, value) => setData(d => ({ ...d, rows: d.rows.map((r, j) => (j === i ? { ...r, [key]: value } : r)) }));
   const add = () => setData(d => ({ ...d, rows: [...d.rows, Object.fromEntries(d.columns.map(c => [c.key, c.type === 'yn' ? false : '']))] }));
-  const remove = (i) => setData(d => ({ ...d, rows: d.rows.filter((_, j) => j !== i) }));
+  const remove = async (i) => {
+    if (!(await confirm('Are you sure you want to delete this row?'))) return;
+    setData(d => ({ ...d, rows: d.rows.filter((_, j) => j !== i) }));
+  };
 
   const save = async () => {
     setError('');
@@ -42,6 +47,8 @@ export default function PartyRecords({ party, code, name, canEdit, onClose }) {
   };
 
   return (
+    <>
+    {confirmDialog}
     <Modal title={`${name || code}: records`} onClose={onClose} wide footer={<button onClick={onClose} className={secondaryButton}>Close</button>}>
       <div role="tablist" className="mb-3 flex gap-1 border-b border-line">
         {TABS.map(t => (
@@ -95,5 +102,6 @@ export default function PartyRecords({ party, code, name, canEdit, onClose }) {
         </div>
       )}
     </Modal>
+    </>
   );
 }

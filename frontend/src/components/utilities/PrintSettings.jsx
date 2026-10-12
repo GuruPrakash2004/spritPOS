@@ -12,6 +12,8 @@ import { toastStore } from '../common/toastStore';
 import RptFolderSetting from '../common/RptFolderSetting';
 import SmtpSetting from '../common/SmtpSetting';
 import ServerPrinterSetting from '../common/ServerPrinterSetting';
+import LocalPrinterSetting from '../common/LocalPrinterSetting';
+import { detectAgent } from '../../lib/localPrint';
 import { InlineError } from '../common/FormErrorSummary';
 import { errorText, getPrintBridge, getPrintSettings, savePrintOption, } from '../../lib/api';
 import { badge, field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton } from '../../lib/styles';
@@ -38,6 +40,7 @@ export default function PrintSettings({ embedded = false }) {
   const [drafts, setDrafts] = useState({});
   const [errors, setErrors] = useState({});
   const [printers, setPrinters] = useState([]);
+  const [pcPrinters, setPcPrinters] = useState([]);   // the printers of the PC this page is open on (Print Agent), offered first
   const [saving, setSaving] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -48,6 +51,7 @@ export default function PrintSettings({ embedded = false }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { getPrintBridge().then(b => setPrinters(b.printers ?? [])).catch(() => { /* typing a printer name still works */ }); }, []);
+  useEffect(() => { void detectAgent(true).then(a => setPcPrinters(a?.printers ?? [])); }, []);
 
   const doc = useMemo(() => data?.documents.find(d => d.doc_id === docId) ?? null, [data, docId]);
 
@@ -93,6 +97,7 @@ export default function PrintSettings({ embedded = false }) {
       </div>
 
       <div className={`${panel} mb-5 p-4`}><RptFolderSetting plain /></div>
+      <div className={`${panel} mb-5 p-4`}><LocalPrinterSetting plain /></div>
       <div className={`${panel} mb-5 p-4`}><ServerPrinterSetting plain /></div>
       <div className={`${panel} mb-5 p-4`}><SmtpSetting plain /></div>
 
@@ -151,7 +156,7 @@ export default function PrintSettings({ embedded = false }) {
                       </select></label>
                     <label><span className={label}>Printer (direct print)</span>
                       <input list={`printers-${key(o)}`} value={d.printer} onChange={e => edit(o, { printer: e.target.value })} className={field} maxLength={50} placeholder="Windows default" />
-                      <datalist id={`printers-${key(o)}`}>{printers.map(p => <option key={p} value={p} />)}</datalist></label>
+                      <datalist id={`printers-${key(o)}`}>{[...new Set([...pcPrinters, ...printers])].map(p => <option key={p} value={p} label={pcPrinters.includes(p) ? 'this PC' : 'server'} />)}</datalist></label>
                     <label><span className={label}>Copies</span>
                       <input type="number" min={1} max={20} value={d.copies} onChange={e => edit(o, { copies: Math.trunc(Number(e.target.value)) })} className={field} /></label>
                     <div className="flex items-end gap-4 pb-1.5">

@@ -24,8 +24,12 @@ export const stockRow = (stock, qty) => {
   };
 };
 
-export const amt = (r) => r.qty * r.rate;
+// A row's amount / CGST / SGST come from the designer's formulas when it has them (`fAmount`, `fCgst`, `fSgst`, laid over the row by
+// the screen's `priced` rows), else from qty × rate and the item's GST %.
+export const amt = (r) => r.fAmount ?? r.qty * r.rate;
 export const pctOf = (r, pct) => (amt(r) * pct) / 100;
+export const cgstOf = (r) => r.fCgst ?? pctOf(r, r.cgstPct);
+export const sgstOf = (r) => r.fSgst ?? pctOf(r, r.sgstPct);
 export const isFilled = (r) => r.stock !== null || r.name.trim() !== '';
 
 export { panel, field, iconButton } from '../../../lib/styles';

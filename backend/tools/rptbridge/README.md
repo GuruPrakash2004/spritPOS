@@ -39,3 +39,13 @@ RPT_TABLE_PREFIX=               # leave empty: reports read the desktop's own ta
 - The reports are made on the desktop's tables (`TrnHdrSINV`, ...), and the web app saves its bills in those same tables, so a bill saved on the web prints as it is. `RPT_TABLE_PREFIX` stays empty.
 - The `showSPRpt` path (UtlMisc.InvPrintFromSP = Y: `fmtSPInvPrint.rpt` over the `mSP_PrintInv` procedure) is supported.
 - The 7 `.rpt` files that embed the desktop's SQL Server connection stay out of git; copy them by hand.
+
+## Speed (2026-10-12)
+
+The bridge keeps up to 6 loaded reports in memory and uses them again (opening a `.rpt` was the slowest step of a print): each job puts the report
+back as saved, sets the logon, selection formula and parameters again, and refreshes the data. It answers every job with an `X-Bridge-Timing`
+header (`reused;open=ms;run=ms;ms`, or `loaded;` the first time a report is used) which the backend logs (`Crystal bridge ... [..]`).
+`RPT_BRIDGE_CACHE=0` in the bridge's environment turns the reuse off. The build before this change is kept as `bin/RptBridge.exe.prev`
+(stop the bridge, copy it over `RptBridge.exe`, start the bridge) if it has to be put back.
+Build with the Crystal DLLs from the GAC, e.g. copy `CrystalDecisions.Shared.dll` and `CrystalDecisions.CrystalReports.Engine.dll` from
+`C:\Windowsssembly\GAC_MSIL\...` to a folder and `dotnet build -c Release -p:CrystalDir=<that folder>\ -o <output>`.

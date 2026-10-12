@@ -1,37 +1,41 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./api', () => ({ getSchemaVersion: vi.fn(), getDesignerDocs: vi.fn(), getScreenDef: vi.fn(), streamDesignerEvents: vi.fn(() => new Promise(() => undefined)) }));
-import { getSchemaVersion } from './api';
-import { getDesignerSnapshot, subscribeDesigner } from './designerStore';
-
-const flush = async () => { await vi.advanceTimersByTimeAsync(0); };
+import { getDesignerDocs, getSchemaVersion, streamDesignerEvents } from './api';
+import { forceDesignerReload, getDesignerSnapshot, loadDocs, subscribeDesigner } from './designerStore';
 
 describe('designerStore', () => {
   let off;
-  beforeEach(() => { vi.useFakeTimers(); getSchemaVersion.mockReset(); });
-  afterEach(() => { off?.(); vi.useRealTimers(); });
+  afterEach(() => { off?.(); off = undefined; vi.useRealTimers(); });
 
-  it('takes the first version as the baseline and counts later moves', async () => {
-    getSchemaVersion.mockResolvedValue({ version: 'a', build: '1' });
+  it('asks the server nothing on its own: no check when subscribed, no poll, no check when the window gets focus', async () => {
+    vi.useFakeTimers();
     off = subscribeDesigner(() => {});
-    await flush();
-    expect(getDesignerSnapshot()).toMatchObject({ version: 'a', changes: 0, buildChanged: false });
-    getSchemaVersion.mockResolvedValue({ version: 'b', build: '2' });
-    await vi.advanceTimersByTimeAsync(30000);
-    expect(getDesignerSnapshot()).toMatchObject({ version: 'b', changes: 1, buildChanged: true });
+    await vi.advanceTimersByTimeAsync(120000);
+    window.dispatchEvent(new Event('focus'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getSchemaVersion).not.toHaveBeenCalled();
+    expect(streamDesignerEvents).not.toHaveBeenCalled();
+    expect(getDesignerSnapshot()).toMatchObject({ changes: 0, buildChanged: false });
   });
 
-  it('keeps the same snapshot object while nothing changes, and stops polling with the last subscriber', async () => {
-    getSchemaVersion.mockResolvedValue({ version: 'a', build: '' });
+  it('forceDesignerReload (the top bar button) drops the cached lists and counts a change', async () => {
+    getDesignerDocs.mockResolvedValue([{ doc_id: 1 }]);
     off = subscribeDesigner(() => {});
-    await flush();
-    const first = getDesignerSnapshot();
-    await vi.advanceTimersByTimeAsync(30000);
-    expect(getDesignerSnapshot()).toBe(first);
-    off(); off = undefined;
-    const calls = getSchemaVersion.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(90000);
-    expect(getSchemaVersion.mock.calls.length).toBe(calls);
-    expect(getDesignerSnapshot().version).toBe('');
+    await loadDocs();
+    await loadDocs();
+    expect(getDesignerDocs).toHaveBeenCalledTimes(1);   // cached
+    forceDesignerReload('v2', '');
+    expect(getDesignerSnapshot()).toMatchObject({ version: 'v2', changes: 1 });
+    await loadDocs();
+    expect(getDesignerDocs).toHaveBeenCalledTimes(2);   // read again after the refresh
+  });
+
+  it('notes a newer front-end build reported by the refresh', () => {
+    off = subscribeDesigner(() => {});
+    forceDesignerReload('v1', '100');
+    expect(getDesignerSnapshot().buildChanged).toBe(false);   // the first build seen is the page's own
+    forceDesignerReload('v2', '101');
+    expect(getDesignerSnapshot().buildChanged).toBe(true);
   });
 });

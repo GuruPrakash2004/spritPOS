@@ -54,7 +54,9 @@ def _item(code: str) -> dict:
     return store.ITEMS[code]
 
 
-def _price_lines(lines: list[Line], rate_field: str, with_gst: bool) -> tuple[list[dict], dict]:
+def _price_lines(lines: list[Line], rate_field: str, with_gst: bool, kind: str | None = None) -> tuple[list[dict], dict]:
+    """Price the lines. `kind` (a bill that has designer formulas for its line amount / CGST / SGST) lets those formulas
+    decide those three figures; without a formula, or when it can't be worked out, the built-in maths stands."""
     out, tot = [], {"qty": 0, "litres": 0.0, "basic": 0.0, "cgst": 0.0, "sgst": 0.0}
     for ln in lines:
         it = _item(ln.item_code)
@@ -68,11 +70,15 @@ def _price_lines(lines: list[Line], rate_field: str, with_gst: bool) -> tuple[li
         litres = qty * store.PACKAGES.get(it["package"], {}).get("litres_per_bottle", 0)
         out.append({"item_code": it["code"], "item_name": it["name"], "cases": ln.cases, "bottles": ln.bottles,
                     "qty": qty, "rate": rate, "amount": amt, "cgst": cgst, "sgst": sgst, "litres": round(litres, 3)})
-        tot["qty"] += qty
-        tot["litres"] = round(tot["litres"] + litres, 3)
-        tot["basic"] = round(tot["basic"] + amt, 2)
-        tot["cgst"] = round(tot["cgst"] + cgst, 2)
-        tot["sgst"] = round(tot["sgst"] + sgst, 2)
+    if kind and with_gst:
+        for line, own in zip(out, doc_engine.line_amounts(kind, out)):
+            line.update(own)   # the designer's formula for that column, where there is one
+    for line in out:
+        tot["qty"] += line["qty"]
+        tot["litres"] = round(tot["litres"] + line["litres"], 3)
+        tot["basic"] = round(tot["basic"] + line["amount"], 2)
+        tot["cgst"] = round(tot["cgst"] + line["cgst"], 2)
+        tot["sgst"] = round(tot["sgst"] + line["sgst"], 2)
     tot["net"] = round(tot["basic"] + tot["cgst"] + tot["sgst"], 2)
     return out, tot
 
@@ -194,7 +200,7 @@ def create_purchase_bill(body: PurchaseBillIn):
     security.check_authorised("suppliers", sup["code"], "Supplier")
     body.supplier = sup["code"]
     doc_settings.check_lines("purchase_bill", src, body.date)
-    lines, tot = _price_lines(src, "purchase_rate", with_gst=True)
+    lines, tot = _price_lines(src, "purchase_rate", with_gst=True, kind="purchase_bill")
     tot["tcs"], tot["cess"] = body.tcs, body.cess
     tot["net"] = round(tot["net"] + body.tcs + body.cess, 2)
     tot["balance_vs_supplier_value"] = round(body.supplier_inv_value - tot["net"], 2)
@@ -252,7 +258,7 @@ def create_sales_invoice(body: SalesInvoiceIn, current_user: dict = Depends(get_
         raise HTTPException(422, f"Unknown customer '{body.customer}'")
     security.check_authorised("customers", cust["code"], "Customer")
     body.customer = cust["code"]
-    lines, tot = _price_lines(body.lines, "mrp", with_gst=True)
+    lines, tot = _price_lines(body.lines, "mrp", with_gst=True, kind="sales_invoice")
     if not body.hold:
         _check_stock(lines)
     if body.redeem_points > cust["points"]:

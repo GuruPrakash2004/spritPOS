@@ -1,6 +1,7 @@
 // Dialogs used by SalesInvoice:
 // - ReprintDialog: fetch a saved bill (/reprint) and print it in a chosen .rpt format.
-// - CancelInvoiceDialog: cancel with a mandatory remark (stock and points go back).
+// - CancelInvoiceDialog: cancel with a mandatory remark (stock and points go back); lists the last 30 days' saved bills
+//   to pick from and the cancelled bills with their reasons.
 // - HeldBillsDialog: list held bills and recall one into the invoice (onRecall).
 // Keyboard: Re-Print — type the number, Enter finds it, Enter again prints; Cancel — Enter moves to the reason,
 // Enter there cancels the bill; Held bills — ↑/↓ choose, Enter recalls. Esc closes each.
@@ -8,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { Printer, Search, Undo2, XCircle } from 'lucide-react';
 import Modal from '../common/Modal';
+import { useConfirm } from '../common/ConfirmDialog';
 import { toastStore } from '../common/toastStore';
 import { cancelSalesInvoice, errorText, listSalesInvoices, reprintSalesInvoice, } from '../../lib/api';
 import { numberToWords } from '../../lib/formatters';
@@ -100,26 +102,55 @@ export function ReprintDialog({ initialNo, onClose }) {
   );
 }
 
-// Cancel Invoice: a saved bill is cancelled with a mandatory remark and its stock is returned.
+// Cancel Invoice: a saved bill is cancelled with a mandatory remark and its stock is returned. Two lists help: the recent
+// saved bills (click one, or ↑/↓ in Bill No, to fill the number) and the cancelled bills with their reasons, newest first.
+const LIST_DAYS = 30;
+const newestFirst = (a, b) => `${b.date} ${b.time ?? ''}`.localeCompare(`${a.date} ${a.time ?? ''}`);
+
 export function CancelInvoiceDialog({ initialNo, onClose, onDone }) {
   const [no, setNo] = useState(initialNo);
   const [remarks, setRemarks] = useState('');
   const [error, setError] = useState('');
+  const [view, setView] = useState('saved');   // 'saved' (bills that can be cancelled) | 'cancelled'
+  const [bills, setBills] = useState({ saved: null, cancelled: null });
+  const [at, setAt] = useState(-1);
+  const { confirm, dialog: confirmDialog } = useConfirm();
+
+  useEffect(() => {
+    const from = new Date(Date.now() - LIST_DAYS * 86400000).toISOString().slice(0, 10);
+    listSalesInvoices('SAVED', from).then(l => setBills(b => ({ ...b, saved: l.sort(newestFirst) }))).catch(() => setBills(b => ({ ...b, saved: [] })));
+    listSalesInvoices('CANCELLED', from).then(l => setBills(b => ({ ...b, cancelled: l.sort(newestFirst) }))).catch(() => setBills(b => ({ ...b, cancelled: [] })));
+  }, []);
+
+  const choose = (i) => { const bill = bills.saved?.[i]; if (bill) { setAt(i); setNo(bill.doc_no); setError(''); } };
 
   const submit = async () => {
     if (!no.trim()) return setError('Enter the bill number.');
     if (remarks.trim().length < 3) return setError('A reason for cancelling is required.');
     setError('');
+    if (!(await confirm(`Are you sure you want to cancel invoice ${no.trim()}? Its stock goes back and its points are reversed.`))) return;
     if (!(await toastStore.defer('delete', `Bill ${no.trim()} will be cancelled when this closes.`, 'Bill not cancelled. Nothing was changed.'))) return;
     cancelSalesInvoice(no.trim(), remarks.trim())
       .then(inv => onDone(`Bill ${inv.doc_no} cancelled — stock returned.`))
       .catch(e => setError(errorText(e)));
   };
 
+  const list = bills[view];
+  const cancelledView = view === 'cancelled';
+  const tab = (id, text, count) => (
+    <button type="button" role="tab" aria-selected={view === id} tabIndex={-1} onClick={() => setView(id)}
+      className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${view === id ? 'bg-surface text-stone-900 shadow-card dark:text-stone-50' : 'text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-50'}`}>
+      {text}{count != null ? ` (${count})` : ''}
+    </button>
+  );
+
   return (
+    <>
+    {confirmDialog}
     <Modal
       title="Cancel Invoice"
       onClose={onClose}
+      wide
       footer={<>
         <button onClick={onClose} className={secondaryButton}>Back</button>
         <button onClick={submit} className={dangerButton}><XCircle size={14} />Cancel Invoice</button>
@@ -128,16 +159,51 @@ export function CancelInvoiceDialog({ initialNo, onClose, onDone }) {
       <div className="space-y-3">
         <div>
           <label htmlFor="ci-no" className={label}>Bill No<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
-          <input id="ci-no" value={no} onChange={e => setNo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('ci-rmk')?.focus(); } }} className={`${field} w-full font-mono`} />
+          <input id="ci-no" value={no} onChange={e => { setNo(e.target.value); setAt(-1); }} onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); document.getElementById('ci-rmk')?.focus(); }
+            if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && bills.saved?.length) {
+              e.preventDefault();
+              setView('saved');
+              choose(Math.max(0, Math.min(bills.saved.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1))));
+            }
+          }} className={`${field} w-full font-mono`} />
         </div>
         <div>
           <label htmlFor="ci-rmk" className={label}>Reason for cancelling<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
           <textarea id="ci-rmk" rows={3} value={remarks} onChange={e => setRemarks(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); } }} className={`${field} w-full`} placeholder="e.g. customer returned the bottles before leaving" />
-          <p className="mt-1 text-[11px] text-stone-500">Enter cancels the bill · Shift+Enter for a new line</p>
+          <p className="mt-1 text-[11px] text-stone-500">Enter cancels the bill · Shift+Enter for a new line · ↑↓ in Bill No picks from the list</p>
         </div>
         {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+        <div>
+          <div role="tablist" aria-label="Bill lists" className="mb-2 inline-flex gap-1 rounded-lg bg-muted p-1">
+            {tab('saved', `Saved bills · last ${LIST_DAYS} days`, bills.saved?.length)}
+            {tab('cancelled', 'Cancelled bills', bills.cancelled?.length)}
+          </div>
+          <div className="max-h-56 overflow-auto rounded-lg border border-line">
+            <table className="w-full text-xs" aria-label={cancelledView ? 'Cancelled bills' : 'Saved bills'}>
+              <thead className={tableHead}>
+                <tr><th className="px-3 py-2">Bill No</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Customer</th><th className="px-3 py-2 text-right">Value</th>{cancelledView && <th className="px-3 py-2">Reason</th>}</tr>
+              </thead>
+              <tbody className={tableBody}>
+                {list?.map((b, i) => (
+                  <tr key={b.doc_no} aria-selected={!cancelledView && i === at} onClick={cancelledView ? undefined : () => { choose(i); document.getElementById('ci-rmk')?.focus(); }}
+                    className={`${cancelledView ? '' : 'cursor-pointer hover:bg-subtle'} ${!cancelledView && i === at ? 'bg-accent-soft' : ''}`}>
+                    <td className="px-3 py-1.5 font-mono">{b.doc_no}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{b.date} {b.time ?? ''}</td>
+                    <td className="px-3 py-1.5">{b.customer}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">₹ {money(b.totals?.net ?? 0)}</td>
+                    {cancelledView && <td className="px-3 py-1.5">{b.cancel_remarks ?? ''}</td>}
+                  </tr>
+                ))}
+                {list && !list.length && <tr><td colSpan={cancelledView ? 5 : 4} className="px-3 py-6 text-center text-stone-400">{cancelledView ? 'No cancelled bills in this period.' : 'No saved bills in this period.'}</td></tr>}
+                {!list && <SkeletonTableRows rows={3} cols={cancelledView ? 5 : 4} />}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </Modal>
+    </>
   );
 }
 

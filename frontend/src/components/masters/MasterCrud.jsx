@@ -1,9 +1,9 @@
 // Generic master screen (the web version of legacy frmMstGeneral): list + search on the left,
-// form on the right, New / Edit / Delete / Save.
+// form on the right, New / Edit / Delete / Save (Cancel / Save are at the top and again at the bottom of the form).
 //
 // Talks to the backend CRUD factory at /masters/<path> (backend/app/routers/masters.py).
 // `fields` (see masterConfigs.js) describes the form; `optionsFrom` fills a select from another master.
-// Keyboard: Enter/⌘S save, Esc cancel, ⌘N/Alt+N new, ↑/↓ move between fields.
+// Keyboard: Enter/⌘S save, Esc cancel, ⌘N/Alt+N new, ↑/↓ move between fields, Alt+Home / Alt+PageUp / Alt+PageDown / Alt+End first / previous / next / last record (also the arrow buttons).
 // Cashiers cannot delete items (hidden here and refused with 403 by the backend).
 
 import Pager from '../common/Pager';
@@ -16,7 +16,7 @@ import PartyRecords from './PartyRecords';
 import { getDesignerNextCode, getDesignerPickup } from '../../lib/api';
 import { useScreenFields } from '../../hooks/useScreenFields';
 import { applyDefinition, defaultFor, extraProblem, fieldsFromDefinition, pickupsAfter, ruleHolds, ruleValues, valueOf, withValue } from '../../lib/designerFields';
-import { Edit3, FilePlus, PanelRightClose, PanelRightOpen, Save, Search, Trash2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Edit3, FilePlus, PanelRightClose, PanelRightOpen, Save, Search, Trash2, X } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
 import { SkeletonTableRows } from '../common/Skeleton';
@@ -148,6 +148,17 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
     setMode('View');
     // On a phone the details sit above the list: bring them into view.
     if (window.matchMedia?.('(max-width: 1023.98px)').matches) document.getElementById(`mc-${path}-details`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Record navigation (the desktop's Move First / Previous / Next / Last): through the records in the list's order (the search
+  // filter applies), showing the page the record is on.
+  const selectedAt = visible.findIndex(r => String(r.code) === selected);
+  const goTo = (where) => {
+    if (!visible.length) return;
+    const to = where === 'first' ? 0 : where === 'last' ? visible.length - 1
+      : where === 'next' ? Math.min(visible.length - 1, selectedAt + 1) : Math.max(0, selectedAt - 1);
+    select(visible[to]);
+    pager.setPage(Math.floor(to / pager.size));
   };
 
   const handleFieldChange = (key, rawValue) => {
@@ -379,6 +390,12 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
         }
       }
 
+      // Alt+Home / Alt+PageUp / Alt+PageDown / Alt+End: first / previous / next / last record
+      if (readOnly && e.altKey && !modKey) {
+        const where = { Home: 'first', PageUp: 'prev', PageDown: 'next', End: 'last' }[e.key];
+        if (where) { e.preventDefault(); goTo(where); return; }
+      }
+
       // Table row selection with Arrow keys in View mode
       if (readOnly && visible.length > 0) {
         const target = e.target ;
@@ -430,6 +447,15 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
           <p className={pageSub}>{subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {readOnly && visible.length > 0 && (
+            <div role="group" aria-label="Move between records" className="flex items-center gap-1">
+              <button type="button" onClick={() => goTo('first')} disabled={selectedAt === 0} className={ghostButton} title="First record (Alt+Home)" aria-label="First record"><ChevronsLeft size={14} /></button>
+              <button type="button" onClick={() => goTo('prev')} disabled={selectedAt === 0} className={ghostButton} title="Previous record (Alt+Page Up)" aria-label="Previous record"><ChevronLeft size={14} /></button>
+              <span className="min-w-14 text-center text-xs tabular-nums text-stone-500" aria-live="polite">{selectedAt + 1} / {visible.length}</span>
+              <button type="button" onClick={() => goTo('next')} disabled={selectedAt === visible.length - 1} className={ghostButton} title="Next record (Alt+Page Down)" aria-label="Next record"><ChevronRight size={14} /></button>
+              <button type="button" onClick={() => goTo('last')} disabled={selectedAt === visible.length - 1} className={ghostButton} title="Last record (Alt+End)" aria-label="Last record"><ChevronsRight size={14} /></button>
+            </div>
+          )}
           <button type="button" onClick={toggleList} aria-pressed={!listOpen} className={ghostButton} title={listOpen ? 'Hide the list of records' : 'Show the list of records'}>
             {listOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}{listOpen ? 'Hide list' : 'Show list'}
           </button>
@@ -651,6 +677,14 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
             ))}
             </div>
           </div>
+
+          {/* The same Cancel / Save as the top of the page, so a long form is saved without scrolling back up. */}
+          {!readOnly && (
+            <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
+              <button onClick={cancel} className={secondaryButton}><X size={14} />Cancel</button>
+              <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
+            </div>
+          )}
         </section>
       </div>
     </div>

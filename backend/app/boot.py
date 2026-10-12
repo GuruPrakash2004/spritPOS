@@ -68,8 +68,31 @@ def _load_history_then_sync() -> None:
     websync.start()
 
 
+def forget_old_database() -> None:
+    """Drop everything remembered about the database the app was connected to, so nothing of it leaks into another one: the tables'
+    column lists, the hashes of what SQL Server holds (a row that looks unchanged would otherwise never be written to the new
+    database), pending audit lines, replayed requests, the AI forecasts and the designer's change marker. The store's own tables are
+    emptied by sqlstore.reload() right after."""
+    from . import admin_audit, schema_meta
+    from .ai import service as ai_service
+    from .routers import designer as designer_router
+    schema_meta.invalidate()
+    with sqlstore._lock:
+        sqlstore._mapped_cache.clear()
+        sqlstore._saved.clear()
+        sqlstore._doc_status.clear()
+        sqlstore._cols.clear()
+        sqlstore._pending_merges.clear()
+    admin_audit._pending.clear()
+    store.IDEMPOTENT.clear()
+    ai_service._state.update(at=0.0, end=None, forecasts=None, error=None)
+    designer_router._last["version"] = None
+    designer_router._shared.update(at=0.0, version="")
+
+
 def reload_after_setup() -> None:
     """The database is connected and its web tables exist: load the shop's data (the connection is already open)."""
+    forget_old_database()   # the connection may now point at another database
     sqlstore.reload()   # also loads the bill history
     designer.load()
     websync.start()

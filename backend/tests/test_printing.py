@@ -168,3 +168,28 @@ def test_printers_windows_lists_but_the_service_cannot_open_are_reported_apart(m
     assert report["usable"] == ["EPSON L5190 Series", "Fax"]
     assert report["refused"] == [{"name": "POS-80 on saturn2 (redirected 4)", "why": "Windows error 1801: The printer name is invalid."}]
     assert rb.installed_printers() == ["EPSON L5190 Series", "Fax"]
+
+
+def test_printers_are_checked_side_by_side_and_remembered(monkeypatch):
+    """Opening every printer is what made a print slow (a network printer that is off takes seconds): they are checked together
+    and the answer is kept, so a second print doesn't repeat it."""
+    import time
+    from app import rpt_bridge
+    calls = []
+
+    def slow_open(name):
+        calls.append(name)
+        time.sleep(0.2)
+        return True, ""
+    monkeypatch.setattr(rpt_bridge, "_call", lambda path, job, method="POST": type("R", (), {"json": lambda self: {"printers": ["A", "B", "C", "D"]}})())
+    monkeypatch.setattr(rpt_bridge, "can_open", slow_open)
+    rpt_bridge._PRINTERS.update(at=0.0, report=None)
+    started = time.perf_counter()
+    first = rpt_bridge.printer_report()
+    assert time.perf_counter() - started < 0.6          # four 0.2 s checks ran together, not one after another (0.8 s)
+    assert first["usable"] == ["A", "B", "C", "D"]
+    rpt_bridge.printer_report()
+    assert len(calls) == 4                              # the second call came from the memory
+    rpt_bridge.printer_report(fresh=True)
+    assert len(calls) == 8
+    rpt_bridge._PRINTERS.update(at=0.0, report=None)

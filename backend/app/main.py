@@ -12,6 +12,7 @@ import hashlib
 import logging
 import mimetypes
 import os
+import threading
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -49,7 +50,7 @@ IDEMPOTENT_KEEP = 500   # replies remembered for Idempotency-Key replays
 # Connection switches (Utilities → About → Disconnect / Reconnect database): run one at a time like writes, but
 # never refused for a database that is offline (they are how it is reconnected) and nothing is saved after them.
 CONTROL_PATHS = {"/utilities/database/disconnect", "/utilities/database/reconnect"}
-NOT_WRITES = {"/print/render", "/setup/scan", "/utilities/backup", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/email", "/designer/refresh", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/rpt-folder", "/setup/smtp", "/setup/smtp/test", "/setup/print-printer", "/setup/print-printer/add",
+NOT_WRITES = {"/print/render", "/print/pages", "/setup/scan", "/utilities/backup", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/email", "/designer/refresh", "/designer/reload", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/rpt-folder", "/setup/smtp", "/setup/smtp/test", "/setup/print-printer", "/setup/print-printer/add",
               "/utilities/web-sync",
               # AI suggestions: generating may take a while (the forecast) and rejecting changes only the ai.* tables.
               "/ai/suggestions/generate"}
@@ -204,10 +205,19 @@ app.include_router(setup.router)
 app.include_router(ai_router.router)
 
 
+def _prepare_print_agent() -> None:
+    """Build the Print Agent that counter PCs download (tools/printagent) when it isn't built yet; never stops the backend."""
+    try:
+        printing._agent_exe()
+    except Exception as exc:   # noqa: BLE001 - a missing agent only means the download link says so
+        logger.info("Print Agent not prepared: %s", getattr(exc, "detail", exc))
+
+
 @app.on_event("startup")
 def startup_event():
     """Connect to SQL Server (if set up) and load the data into the in-memory store (app/boot.py)."""
     bridge_launcher.start()   # the Crystal Reports bridge runs whenever the backend does (Windows, bridge on this PC); started first so it warms up while the data loads
+    threading.Thread(target=_prepare_print_agent, daemon=True).start()   # the counter PCs' Print Agent is ready to download
     boot.load_data()
     if ai_enabled():   # the restock list's AI forecasts are made in the background, so the first Dashboard load isn't slow
         ai_service.warm()

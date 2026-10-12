@@ -32,7 +32,7 @@ _EXPLICIT: dict[str, dict[str, str]] = {
 # The two bills' own header fields (the web keys of SalesInvoiceIn / PurchaseBillIn), by document path.
 # Company Master is the single MstComp row. The web's "excise phone" is the designer's PHNO ("Phone No"): it used to
 # be filled from MOBNO, the same value as Mobile.
-_EXPLICIT["company"] = {"name": "CompName", "email": "EMAIL", "phone": "TELNO", "fax": "FAXNO", "mobile": "MOBNO", "website": "WEB",
+_EXPLICIT["company"] = {"name": "CompName", "email": "EMAIL", "address1": "Address1", "address2": "Address2", "address3": "Address3", "phone": "TELNO", "fax": "FAXNO", "mobile": "MOBNO", "website": "WEB",
                         "gstin": "GSTNO", "pan": "PANNO", "cin": "CINNO", "excise_phone": "PHNO", "ksbcl_code": "RTLCODE"}
 _EXPLICIT["sales-invoice"] = {"date": "SINVDate", "counter": "SCID", "customer": "CUSTID", "salesperson": "SPID",
                               "payment_type": "SALTYP", "discount": "TOTDISCAMT"}

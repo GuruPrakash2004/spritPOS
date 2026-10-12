@@ -13,6 +13,7 @@ import { CompanyDocuments, CompanyImages } from './CompanyFiles';
 import { TextField } from '../common/FormField';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
+import { useConfirm } from '../common/ConfirmDialog';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { createFinYear, errorText, getBackupStatus, getCompany, getNextFinYear, removeFinYear, saveCompany, startBackup, updateDashboardLink, } from '../../lib/api';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
@@ -34,7 +35,7 @@ const TABS = [
   { id: 'Documents', icon: FolderArchive },
 ];
 
-const EXTRA_FIELDS = [
+const EXTRA_FIELDS = [   // the Additional Fields tab's typed boxes (the Company Info tab's are in TYPED below)
   { id: 'co-tel', label: 'Tel no.', key: 'phone' },
   { id: 'co-fax', label: 'Fax no.', key: 'fax', placeholder: 'Optional' },
   { id: 'co-mobile', label: 'Mobile no.', key: 'mobile', mono: true },
@@ -46,6 +47,18 @@ const EXTRA_FIELDS = [
   { id: 'co-ksbcl', label: 'KSBCL retailer code', key: 'ksbcl_code', mono: true },
 ];
 
+// Tel / mobile / excise phone take any text (several numbers, +91, spaces, a slash): no 10-digit rule on this screen.
+const FREE_TEXT = new Set(['phone', 'mobile', 'excise_phone']);
+
+const TYPED = [
+  { key: 'name', label: 'Company name (licence holder)', required: true },
+  { key: 'email', label: 'Email address', required: true },
+  { key: 'address1', label: 'Address', required: true },
+  { key: 'address2', label: 'Address line 2' },
+  { key: 'address3', label: 'Address line 3' },
+  ...EXTRA_FIELDS.map(f => ({ ...f, required: false })),
+];
+
 // "2026-04-01" → "01/04/2026" for the financial-year table.
 const dmy = (iso) => (iso ? iso.split('-').reverse().join('/') : '—');
 
@@ -53,6 +66,7 @@ const dmy = (iso) => (iso ? iso.split('-').reverse().join('/') : '—');
 let lastProfile = null;
 
 const CompanyMaster = ({ canEditFiles }) => {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [tab, setTab] = useState('Company Info');
   const [companyProfile, setCompanyProfile] = useState(lastProfile);
   const [companyName, setCompanyName] = useState(lastProfile?.name ?? '');
@@ -68,7 +82,11 @@ const CompanyMaster = ({ canEditFiles }) => {
   // The Additional Fields tab follows the Doc Designer's MstComp definition (caption, order, mandatory, read-only, hidden)
   // and shows every other MstComp column the database has (`extras`), saved back to MstComp.
   const live = useScreenFields('company');
-  const extraFieldList = useMemo(() => applyDefinition(EXTRA_FIELDS.map(f => ({ ...f, required: false })), live.screen), [live.screen]);
+  // The designer describes the whole Company screen: every typed field (name, e-mail, address lines, the Additional Fields)
+  // takes its caption / mandatory / read-only / hidden state, and one it has no row for (the desktop doesn't show it) is hidden.
+  const applied = useMemo(() => applyDefinition(TYPED, live.screen, { hideUnlisted: true }), [live.screen]);
+  const def = (key) => applied.find(f => f.key === key) ?? { label: key, required: false, designerHidden: false };
+  const extraFieldList = useMemo(() => applied.filter(f => f.id), [applied]);
 
   // The desktop's buttons under the grid: Backup (BACKUP DATABASE in the background) and Update Dashboard Link. (Companies... is not repeated here: the database is changed in Global Settings.)
   const [backup, setBackup] = useState(null);
@@ -109,6 +127,7 @@ const CompanyMaster = ({ canEditFiles }) => {
     } catch (e) { setToast({ kind: 'error', text: errorText(e) }); }
   };
   const deleteFinYear = async (y) => {
+    if (!(await confirm(`Are you sure you want to delete the financial year ${dmy(y.start)} to ${dmy(y.end)}?`))) return;
     if (!(await toastStore.defer('delete', `The financial year ${dmy(y.start)} to ${dmy(y.end)} will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
     try {
       const profile = await removeFinYear(y.start);
@@ -141,15 +160,17 @@ const CompanyMaster = ({ canEditFiles }) => {
   const handleSave = async () => {
     if (!canEditFiles || !companyProfile) return;
     const errs = {};
-    if (!companyName.trim()) errs['co-name'] = 'Enter the company name';
-    if (!addr[0].trim()) errs['co-address'] = 'Enter the address';
-    if (!email.trim()) errs['co-email'] = 'Enter the email address';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs['co-email'] = 'Enter a valid email address';
+    if (!def('name').designerHidden && !companyName.trim()) errs['co-name'] = `Enter the ${def('name').label}`;
+    if (!def('address1').designerHidden && !addr[0].trim()) errs['co-address'] = `Enter the ${def('address1').label}`;
+    if (!def('email').designerHidden) {
+      if (!email.trim()) errs['co-email'] = `Enter the ${def('email').label}`;
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs['co-email'] = 'Enter a valid email address';
+    }
     // Tel / mobile / excise phone: exactly 10 digits; GSTIN and PAN in their patterns (lib/validation.js, same as the server).
     for (const f of extraFieldList) {
       if (f.designerHidden) continue;
       const text = String(companyProfile[f.key] ?? '').trim();
-      const wrong = f.required && !text ? `Enter the ${f.label}` : fieldProblem(f.key, companyProfile[f.key]);
+      const wrong = f.required && !text ? `Enter the ${f.label}` : FREE_TEXT.has(f.key) ? '' : fieldProblem(f.key, companyProfile[f.key]);
       if (wrong) errs[f.id] = wrong;
     }
     for (const f of live.fields) {
@@ -197,6 +218,7 @@ const CompanyMaster = ({ canEditFiles }) => {
   return (
     <div className="mx-auto max-w-6xl">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
+      {confirmDialog}
 
       <div className={`${pageHeader} mb-5`}>
         <div>
@@ -235,41 +257,43 @@ const CompanyMaster = ({ canEditFiles }) => {
           <div>
             <FormErrorSummary errors={errors} onFocusField={focusField} />
             <div className="grid gap-5 md:grid-cols-2">
-              <TextField
+              {!def('name').designerHidden && <TextField
                 id="co-name"
-                label="Company name (licence holder)"
+                label={def('name').label}
                 value={companyName}
-                required
-                readOnly={!canEditFiles || !companyProfile}
+                required={def('name').required}
+                designerReadOnly={def('name').lockedAlways}
+                readOnly={!canEditFiles || !companyProfile || def('name').lockedAlways}
                 hasError={!!errors['co-name']}
                 errorMessage={errors['co-name']}
                 onChange={e => {
                   setCompanyName(e.target.value);
                   if (errors['co-name']) setErrors(prev => { const n = { ...prev }; delete n['co-name']; return n; });
                 }}
-              />
-              <TextField
+              />}
+              {!def('email').designerHidden && <TextField
                 id="co-email"
-                label="Email address"
+                label={def('email').label}
                 type="email"
                 value={email}
-                required
-                readOnly={!canEditFiles || !companyProfile}
+                required={def('email').required}
+                designerReadOnly={def('email').lockedAlways}
+                readOnly={!canEditFiles || !companyProfile || def('email').lockedAlways}
                 hasError={!!errors['co-email']}
                 errorMessage={errors['co-email']}
                 onChange={e => {
                   setEmail(e.target.value);
                   if (errors['co-email']) setErrors(prev => { const n = { ...prev }; delete n['co-email']; return n; });
                 }}
-              />
+              />}
               <div className="md:col-span-2 grid gap-3">
-                {['Address', 'Address line 2', 'Address line 3'].map((caption, i) => (
-                  <div key={caption}>
-                    <label htmlFor={i === 0 ? 'co-address' : `co-address${i + 1}`} className={cn(label, fieldTone(i === 0, false))}>{caption}{i === 0 && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
+                {['address1', 'address2', 'address3'].filter(k => !def(k).designerHidden).map((k) => { const i = Number(k.slice(-1)) - 1; const caption = def(k).label; return (
+                  <div key={k}>
+                    <label htmlFor={i === 0 ? 'co-address' : `co-address${i + 1}`} className={cn(label, fieldTone(def(k).required, def(k).lockedAlways))}>{caption}{def(k).required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
                     <input
                       id={i === 0 ? 'co-address' : `co-address${i + 1}`}
                       value={addr[i]}
-                      readOnly={!canEditFiles || !companyProfile}
+                      readOnly={!canEditFiles || !companyProfile || def(k).lockedAlways}
                       onChange={e => {
                         setAddr(prev => prev.map((x, j) => (j === i ? e.target.value : x)));
                         if (i === 0 && errors['co-address']) setErrors(prev => { const next = { ...prev }; delete next['co-address']; return next; });
@@ -279,7 +303,7 @@ const CompanyMaster = ({ canEditFiles }) => {
                     />
                     {i === 0 && <InlineError id="co-address-err" message={errors['co-address']} />}
                   </div>
-                ))}
+                ); })}
               </div>
               <div className="md:col-span-2">
                 <label className={label}>Shop location</label>
@@ -308,10 +332,10 @@ const CompanyMaster = ({ canEditFiles }) => {
                 readOnly={!canEditFiles || !companyProfile || f.lockedAlways}
                 hasError={!!errors[f.id]}
                 errorMessage={errors[f.id]}
-                inputMode={FIELD_RULES[f.key]?.digits ? 'numeric' : undefined}
-                maxLength={FIELD_RULES[f.key]?.max}
+                inputMode={!FREE_TEXT.has(f.key) && FIELD_RULES[f.key]?.digits ? 'numeric' : undefined}
+                maxLength={FREE_TEXT.has(f.key) ? undefined : FIELD_RULES[f.key]?.max}
                 onChange={e => {
-                  const value = cleanInput(f.key, e.target.value);   // digits only for phone numbers, capitals for GSTIN / PAN
+                  const value = FREE_TEXT.has(f.key) ? e.target.value : cleanInput(f.key, e.target.value);   // capitals for GSTIN / PAN; phone numbers are left as typed
                   setCompanyProfile(profile => profile ? { ...profile, [f.key]: value } : profile);
                   if (errors[f.id]) setErrors(prev => { const n = { ...prev }; delete n[f.id]; return n; });
                 }}
@@ -383,6 +407,7 @@ const CompanyMaster = ({ canEditFiles }) => {
 
       {canEditFiles && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button onClick={handleSave} className={primaryButton}><Save size={14} />Save Master</button>
           <button onClick={runBackup} disabled={backup?.state === 'running'} className={secondaryButton} title="Backup of the current database">
             {backup?.state === 'running' ? 'Backing up…' : 'Backup'}
           </button>

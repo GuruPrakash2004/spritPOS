@@ -66,6 +66,14 @@ export function useStockItems() {
   return STOCK_ITEMS;
 }
 
+// An item's name for a bill line: the package is added only when the item's name doesn't already end with it
+// ("100 PIPERS DELUXE BLENDED WHISKY 180ML" is not shown as "... 180ML 180ML").
+export const lineName = (item) => {
+  const name = (item.name ?? '').trim();
+  const pkg = (item.pkg ?? '').trim();
+  return !pkg || pkg === '-' || name.toUpperCase().includes(pkg.toUpperCase()) ? name : `${name} ${pkg}`;
+};
+
 // Litres in one bottle, from the package code: "750ml" → 0.75, "2 LTR" / "1L" → 2 / 1, a bare "650" → 0.65.
 // Display only; the backend works litres out from Package Master when a bill is saved.
 export const litresPerBottle = (pkg) => {

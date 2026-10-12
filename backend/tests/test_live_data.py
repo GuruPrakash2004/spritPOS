@@ -174,3 +174,15 @@ async def test_a_walk_in_bill_needs_no_cash_customer_row(client):
         "customer": "CASH", "payment_type": "CASH", "lines": [{"item_code": "VIN-750", "bottles": 1}]})
     assert res.status_code == 201, res.text
     assert res.json()["customer"] == "CASH"
+
+
+def test_how_many_recent_bills_are_kept_is_configurable(monkeypatch):
+    """The Dashboard's 7-day chart reads the bills in memory: 200 left most days empty, so the default is 3000 and .env can change it."""
+    from app import db_store
+    monkeypatch.delenv("RECENT_INVOICES", raising=False)
+    assert db_store._count("RECENT_INVOICES", 3000) == 3000
+    monkeypatch.setenv("RECENT_INVOICES", "5000")
+    assert db_store._count("RECENT_INVOICES", 3000) == 5000
+    for bad in ("0", "-4", "many", "999999999"):
+        monkeypatch.setenv("RECENT_INVOICES", bad)
+        assert db_store._count("RECENT_INVOICES", 3000) == 3000

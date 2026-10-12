@@ -7,13 +7,16 @@
 - POST /print/custom-report   a Customised Report through the Crystal file in its definition (UtlReportsCRHdr.RptFileName)
 - GET  /print/bridge          is the Crystal Reports bridge set up and answering
 - POST /print/render          the report as a PDF for the preview tab, or sent to the option's printer (direct print)
+- POST /print/pages           the report as page pictures for the Print Agent on a counter PC (silent print on that PC's printers)
 - POST /print/email           the report as a PDF, e-mailed with the option's subject, text and recipients
 - POST /designer/refresh      read the Doc Designer's latest settings again (Administrator)
 Nothing here changes the shop's data, so these POSTs are in main.NOT_WRITES.
 """
+import base64
 import re
 import time
 from datetime import date
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -202,6 +205,97 @@ async def render(body: PrintIn, user: dict = Depends(get_current_user)):
     return Response(pdf, media_type="application/pdf", headers={
         "Content-Disposition": f'inline; filename="{name}"', "X-Print-Rpt": job["rpt"], "X-Print-Option": job["option"],
         "X-Page-Size": size})
+
+
+class PagesIn(PrintIn):
+    dpi: int = 203          # a thermal receipt printer's resolution; an office printer is fine with it too
+
+
+def _rasterize(pdf: bytes, dpi: int) -> list[dict]:
+    try:
+        import pymupdf
+    except ImportError:
+        raise HTTPException(501, "Printing on a counter PC needs PyMuPDF on the server (pip install pymupdf).")
+    dpi = max(100, min(400, dpi))
+    doc = pymupdf.open(stream=pdf, filetype="pdf")
+    pages = []
+    for page in doc:
+        pix = page.get_pixmap(dpi=dpi, alpha=False)
+        pages.append({"png": base64.b64encode(pix.tobytes("png")).decode("ascii"),
+                      "w": round(page.rect.width, 2), "h": round(page.rect.height, 2)})
+    return pages
+
+
+@router.post("/print/pages")
+async def render_pages(body: PagesIn, user: dict = Depends(get_current_user)):
+    """The report as page pictures (PNG, the page size in points) for the Print Agent on a counter PC, which prints them
+    silently on that PC's own printer. The same layout as the preview (Crystal through the bridge, trimmed to what is drawn)."""
+    body.action, body.printer = "preview", ""
+    job = await run_in_threadpool(_job, body)
+    pdf = await run_in_threadpool(rpt_bridge.render_pdf, job)
+    pdf, _size = await run_in_threadpool(rpt_bridge.preview_pdf, pdf)
+    pages = await run_in_threadpool(_rasterize, pdf, body.dpi)
+    return {"pages": pages, "copies": job["copies"], "rpt": job["rpt"], "name": body.doc_no}
+
+
+AGENT_DIR = Path(__file__).resolve().parents[2] / "tools" / "printagent"
+ORIGIN = re.compile(r"^https?://[A-Za-z0-9.\-\[\]:]+$")
+
+AGENT_INSTALL = r"""@echo off
+rem vLQMS Print Agent: ONE file, double-click it once on this PC (no administrator needed). It puts the agent in
+rem %LOCALAPPDATA%\VlqmsPrintAgent for {origin} (added to the addresses already allowed, so another application can share the agent),
+rem starts it at every Windows sign-in and starts it now.
+setlocal
+set DEST=%LOCALAPPDATA%\VlqmsPrintAgent
+taskkill /im VlqmsPrintAgent.exe /f >nul 2>&1
+if not exist "%DEST%" mkdir "%DEST%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$l = Get-Content -LiteralPath '%~f0' | Where-Object {{ $_ -like '::B64 *' }} | ForEach-Object {{ $_.Substring(6) }}; [IO.File]::WriteAllBytes('%DEST%\VlqmsPrintAgent.exe', [Convert]::FromBase64String(($l -join '')))"
+if errorlevel 1 (echo Could not unpack the agent. & pause & exit /b 1)
+findstr /x /c:"{origin}" "%DEST%\printagent.txt" >nul 2>&1 || >>"%DEST%\printagent.txt" echo {origin}
+reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v VlqmsPrintAgent /t REG_SZ /d "\"%DEST%\VlqmsPrintAgent.exe\"" /f >nul
+start "" "%DEST%\VlqmsPrintAgent.exe"
+echo Print Agent installed. It starts by itself at every sign-in.
+echo Go back to vLQMS and open Print: this PC's printers are listed under "This PC".
+timeout /t 5 >nul
+exit /b 0
+"""
+
+
+def _agent_exe() -> Path:
+    """The built agent; when it isn't there yet and this server is Windows, build it once with the .NET compiler Windows has."""
+    exe = AGENT_DIR / "bin" / "VlqmsPrintAgent.exe"
+    if exe.exists():
+        return exe
+    import os
+    import subprocess
+    import sys
+    if sys.platform == "win32":
+        for fw in ("Framework64", "Framework"):
+            csc = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Microsoft.NET" / fw / "v4.0.30319" / "csc.exe"
+            if csc.exists():
+                exe.parent.mkdir(parents=True, exist_ok=True)
+                done = subprocess.run([str(csc), "/nologo", "/target:winexe", "/optimize+", f"/out:{exe}", "/r:System.Drawing.dll",
+                                       "/r:System.Web.Extensions.dll", str(AGENT_DIR / "Program.cs")], capture_output=True, text=True, timeout=120)
+                if done.returncode == 0 and exe.exists():
+                    return exe
+                break
+    raise HTTPException(404, "The Print Agent is not built on this server. Run backend/tools/printagent/build.cmd on a Windows PC, "
+                             "then copy bin/VlqmsPrintAgent.exe to backend/tools/printagent/bin/ here.")
+
+
+@router.get("/print/agent")
+async def download_agent(origin: str, user: dict = Depends(get_current_user)):
+    """The Print Agent as ONE self-installing file for a counter PC, already set to this web address (`origin`, e.g.
+    http://192.168.1.10): double-click it once there. It starts by itself at every sign-in from then on."""
+    origin = origin.strip().rstrip("/")
+    if not ORIGIN.match(origin):
+        raise HTTPException(422, "The address must look like http://192.168.1.10 or https://shop.example.com")
+    exe = await run_in_threadpool(_agent_exe)
+    b64 = base64.b64encode(exe.read_bytes()).decode("ascii")
+    payload = "\r\n".join("::B64 " + b64[i:i + 100] for i in range(0, len(b64), 100))
+    script = AGENT_INSTALL.format(origin=origin).replace("\n", "\r\n") + payload + "\r\n"
+    return Response(script.encode("ascii"), media_type="application/octet-stream",
+                    headers={"Content-Disposition": 'attachment; filename="vLQMS-Print-Agent-Setup.cmd"'})
 
 
 def _mail_text(text: str, sh: str, doc_no: str) -> str:

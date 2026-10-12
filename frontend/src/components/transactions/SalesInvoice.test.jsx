@@ -139,7 +139,9 @@ describe('SalesInvoice', () => {
     await user.type(search, '++-')
     expect(qty).toHaveValue(4)
     await user.keyboard('{Delete}')
-    expect(screen.getByText('No items on this bill')).toBeInTheDocument()
+    expect(await screen.findByText(/Are you sure you want to delete the item 'BLENDERS/)).toBeInTheDocument()   // asks first (correction #8)
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByText('No items on this bill')).toBeInTheDocument()
   })
 
   it('saves with Ctrl+S and with Enter in Cash tendered', async () => {

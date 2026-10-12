@@ -79,12 +79,18 @@ export const ITEM_FIELDS = [
   { key: 'active', label: 'Active', type: 'bool', showInList: false, default: true, section: 'Stock' },
 ];
 
-// Column order of the legacy Docs/ItemImport_Template.xlsx.xlsx, mapped to the API field names.
+// The columns of ItemImport_Template.xlsx (public/ItemImport_Template.xlsx, the file Download Template gives): the sheet
+// "LP ITEM MASTE" has a row of hints on top and the column names on row 2. Each is [column, API field name, required].
+// A file may leave out the optional columns (and name the brand column BRAND instead of BRANDCODE).
 export const ITEM_IMPORT_COLUMNS = [
-  ['ITEMCODE', 'code'], ['ITEMNAME', 'name'], ['SHORTNAME', 'short_name'], ['HSNCODE', 'hsn_code'],
-  ['ITEMGROUPCode', 'group'], ['BRAND', 'brand'], ['LIQTYPE', 'liqtype'], ['UOMCode', 'uom'], ['PKGCode', 'package'],
-  ['BOTPERCASES', 'bottles_per_case'], ['MRP', 'mrp'], ['PURRATE', 'purchase_rate'], ['CGSTPER', 'cgst_per'],
-  ['SGSTPER', 'sgst_per'], ['ROL', 'rol'], ['ROQ', 'roq'],
+  ['ITEMCODE', 'code', true], ['ITEMNAME', 'name', true], ['SHORTNAME', 'short_name', false], ['ITEMGROUPCode', 'group', true],
+  ['LIQTYPE', 'liqtype', false], ['UOMCode', 'uom', true], ['PKGCode', 'package', true], ['BOTPERCASES', 'bottles_per_case', true],
+  ['MRP', 'mrp', true], ['PURRATE', 'purchase_rate', false], ['CGSTPER', 'cgst_per', false], ['SGSTPER', 'sgst_per', false],
+  ['ROL', 'rol', false], ['ROQ', 'roq', false], ['HSNCODE', 'hsn_code', false], ['BRANDCODE', 'brand', false],
 ];
+export const ITEM_IMPORT_ALIASES = { BRAND: 'BRANDCODE' };
 
 export const ITEM_IMPORT_NUMERIC = new Set(['bottles_per_case', 'mrp', 'purchase_rate', 'cgst_per', 'sgst_per', 'rol', 'roq']);
+// The template's other item columns (MstITEM columns the web has no typed field for): sent as `extras`, which the server
+// checks against the real table (a column the shop's table doesn't have is dropped).
+export const ITEM_IMPORT_EXTRAS = ['MAXLEVEL', 'MINLEVEL', 'NONSTKABLE', 'CESSPER', 'COMPCESS'];

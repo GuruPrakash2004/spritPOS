@@ -7,6 +7,7 @@
 // Crystal Reports itself. A document the designer has no option for uses the desktop's file mode: pick one of the
 // FMTSINV*.rpt files (the choice is remembered on this PC, as the desktop's INI does).
 import { emailPrint, getPrintOptions, renderPrint, setPrintPreference } from './api';
+import { agentNow, pcPrinterFor, printDocumentOnThisPc, warmAgent } from './localPrint';
 
  
 
@@ -55,6 +56,21 @@ export const openPreviewTab = () => {
  */
 export async function runPrint(req, tab) {
   try {
+    // A direct print goes to the printer of THIS PC (its default, or the one picked last here) when the Print Agent runs on it.
+    if (req.action === 'direct' && !req.printer) {
+      const pc = pcPrinterFor(agentNow());   // what is known now: never waits for the agent to answer
+      warmAgent();
+      if (pc) {
+        try {
+          const r = await printDocumentOnThisPc({ kind: req.kind, doc_no: req.doc_no, option: req.option, rpt: req.rpt }, pc);
+          tab?.close();
+          return { action: 'direct', text: `${req.doc_no} sent to ${r.printer} on this PC (${r.copies} ${r.copies === 1 ? 'copy' : 'copies'}).` };
+        } catch (e) {
+          if (agentNow()) throw e;   // the agent answered and refused (a printer problem): say so
+          // the agent has gone away: print on the server's printer as before
+        }
+      }
+    }
     const res = await renderPrint(req);
     if ((res.headers.get('Content-Type') ?? '').includes('application/pdf')) {
       const url = URL.createObjectURL(await res.blob());
@@ -87,7 +103,10 @@ export async function afterSavePlan(kind, fallback, andPrint) {
   let o = null;
   try { o = await fetchPrintOptions(kind); } catch { /* offline: fall back to the settings */ }
   const d = o?.designed ? defaultOption(o) : null;
-  const direct = (x) => (x.click === 'direct' && x.printer ? { plan: 'direct' , option: x } : null);
+  // A direct print needs a printer: the option's own on the server, or (with the Print Agent on this PC) this PC's default.
+  const onThisPc = !!agentNow();   // what is known now (the page looks for the agent when it loads): a save never waits for it
+  warmAgent();
+  const direct = (x) => (x.click === 'direct' && (x.printer || onThisPc) ? { plan: 'direct' , option: x } : null);
   if (d) {
     if (andPrint) return direct(d) ?? { plan: 'dialog' };
     if (d.after_save === 'PP') return direct(d) ?? { plan: 'dialog' };

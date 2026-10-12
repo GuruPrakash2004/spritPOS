@@ -516,7 +516,7 @@ export default function Login({ onLogin, notice = '' }) {
             {/* Database and report-files settings: always on offer (open to anyone, no Administrator needed). */}
             {!setup && editingDb && (
               <div className="space-y-4">
-                <DatabaseSetup inputClass={inputClass} labelClass={labelClass} change onDone={() => { setEditingDb(false); loadDbState(); }} onCancel={() => setEditingDb(false)} />
+                <DatabaseSetup inputClass={inputClass} labelClass={labelClass} change onDone={() => { setEditingDb(false); window.location.reload(); }} onCancel={() => setEditingDb(false)} />   {/* another database: the page starts again, so nothing of the old one stays in the browser */}
                 <button type="button" onClick={() => setEditingDb(false)} className="w-full rounded-xl border border-[#D5DCE7] py-2.5 text-xs font-semibold dark:border-[#2A2A2A]">Back to sign in</button>
               </div>
             )}

@@ -58,6 +58,7 @@ def main() -> int:
     ap.add_argument("--history", type=int, default=365, help="days of history to read before the newest origin")
     ap.add_argument("--no-model", action="store_true")
     ap.add_argument("--detail", action="store_true")
+    ap.add_argument("--end", help="last day to test (YYYY-MM-DD); default yesterday")
     ap.add_argument("--out", default="backtest_out")
     args = ap.parse_args()
     if not 90 <= args.days <= 180:
@@ -66,7 +67,7 @@ def main() -> int:
     if not db.init_db():
         print("No database connection (check backend/.env).")
         return 1
-    end = date.today() - timedelta(days=1)
+    end = date.fromisoformat(args.end) if args.end else date.today() - timedelta(days=1)
     series, accessory = load(end - timedelta(days=args.history + args.days - 1), end)
     if not any(any(s) for s in series.values()):
         print("ai.ItemDailySales has no sales in this period. Run: python -m app.ai.sales_history")

@@ -340,7 +340,7 @@ class PrinterIn(BaseModel):
 
 
 def _printer_info() -> dict:
-    report = {"usable": [], "refused": []} if rpt_bridge.using_mock() else rpt_bridge.printer_report()
+    report = {"usable": [], "refused": []} if rpt_bridge.using_mock() else rpt_bridge.printer_report(fresh=True)
     import getpass
     try:
         runs_as = getpass.getuser()   # the Windows user this backend (and the bridge it starts) runs as; a name ending in $ is LocalSystem

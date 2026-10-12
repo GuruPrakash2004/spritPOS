@@ -140,6 +140,21 @@ async def test_audit_log_is_admin_only(cashier_client):
 async def test_about(cashier_client):
     res = (await cashier_client.get("/utilities/about")).json()
     assert res["product"] == "e-vLQMS ERP" and res["software_version"] and "db_connected" in res
+    assert res["client_system_name"]   # the PC's own name (the server's when the caller is local)
+
+
+def test_client_system_name_uses_the_callers_pc(monkeypatch):
+    from types import SimpleNamespace
+    from app.routers import utilities
+    monkeypatch.setattr(utilities.socket, "gethostbyaddr", lambda host: ("client-pc.lan", [], [host]))
+    utilities._CLIENT_NAMES.clear()
+    assert utilities.client_system_name(SimpleNamespace(client=SimpleNamespace(host="192.168.1.20"), headers={})) == "CLIENT-PC"
+    # behind a proxy the browser's address is the first X-Forwarded-For entry
+    proxied = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), headers={"x-forwarded-for": "192.168.1.20, 10.0.0.1"})
+    assert utilities.client_system_name(proxied) == "CLIENT-PC"
+    monkeypatch.setattr(utilities.socket, "gethostbyaddr", lambda host: (_ for _ in ()).throw(OSError()))
+    utilities._CLIENT_NAMES.clear()
+    assert utilities.client_system_name(SimpleNamespace(client=SimpleNamespace(host="192.168.1.21"), headers={})) == utilities.platform.node().upper()
 
 
 # ─── Remove Duplicate Invoice (711) ──────────────────────────────────────────
@@ -377,3 +392,11 @@ async def test_smtp_rows_of_the_grid_are_edited_and_saved_to_env(client, monkeyp
     assert (await put("SMTPSecurity", "weird")).status_code == 422
     assert (await put("SMTPFromID", "not-an-email")).status_code == 422
     assert (await put("SMTPPassword", "")).status_code == 200 and mailer.password() == "S3cret!pw"   # blank keeps it
+
+
+# ─── Refresh from Doc Designer (top bar button) ──────────────────────────────
+
+async def test_reload_from_designer_is_for_the_administrator_and_needs_the_database(client, cashier_client):
+    assert (await cashier_client.post("/designer/reload")).status_code == 403
+    res = await client.post("/designer/reload")
+    assert res.status_code == 409   # the tests run without a database: nothing to read again

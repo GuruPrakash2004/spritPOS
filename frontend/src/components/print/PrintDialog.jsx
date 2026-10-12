@@ -9,21 +9,21 @@
 // Keyboard: the Print button has focus when it opens (Enter prints); ↑/↓ choose the format; Ctrl/⌘+Enter prints
 // directly; Esc closes (useDialogKeys).
 import { useEffect, useRef, useState } from 'react';
-import { Mail, Printer, Send } from 'lucide-react';
+import { Download, Mail, Printer, Send } from 'lucide-react';
 import Modal from '../common/Modal';
 import { toast, toastStore } from '../common/toastStore';
-import { errorText, getPrintBridge, renderPrint } from '../../lib/api';
+import { downloadPrintAgent, errorText, getPrintBridge, renderPrint } from '../../lib/api';
 import { field, label as labelClass, primaryButton, secondaryButton } from '../../lib/styles';
 import {
   emailPrint, fetchPrintOptions, setPrintPreference, saveFormat, savedFormat,
 
 } from '../../lib/printing';
 import { printFrame, sheetStyle, usePdfPreview } from './usePdfPreview';
+import { detectAgent, PC_PREFIX, printDocumentOnThisPc, rememberPrinter, savedPrinter } from '../../lib/localPrint';
 
 
 
-const PRINTER_KEY = 'vlqms_doc_printer';
-const savedPrinter = () => { try { return localStorage.getItem(PRINTER_KEY) || ''; } catch { return ''; } };
+// A printer is either one of THIS PC (value "pc:Name", through the Print Agent, lib/localPrint.js) or one of the server (its plain name).
 
 export default function PrintDialog({ kind, docNo, title, onClose }
 
@@ -36,6 +36,7 @@ export default function PrintDialog({ kind, docNo, title, onClose }
   const [to, setTo] = useState('');
   const [printers, setPrinters] = useState([]);
   const [picked, setPicked] = useState(null);
+  const [agent, setAgent] = useState(null);   // the Print Agent on this PC: {host, default, printers} or null
   const frame = useRef(null);
   const mainRef = useRef(null);
 
@@ -49,7 +50,15 @@ export default function PrintDialog({ kind, docNo, title, onClose }
       setChosen(pick);
     }).catch(e => setError(errorText(e)));
     getPrintBridge().then(b => setPrinters(b.printers ?? [])).catch(() => { /* the preview says why */ });
+    void detectAgent(true).then(setAgent);
   }, [kind]);
+
+  // Until the Print Agent is found, look again every few seconds: right after its one-time setup the list of this PC's printers appears by itself.
+  useEffect(() => {
+    if (agent) return undefined;
+    const t = setInterval(() => { void detectAgent(true).then(a => { if (a) setAgent(a); }); }, 4000);
+    return () => clearInterval(t);
+  }, [agent]);
 
   const choices = !info ? [] : info.designed
     ? info.options.map(o => ({ key: o.name, label: o.name, option: o }))
@@ -57,8 +66,13 @@ export default function PrintDialog({ kind, docNo, title, onClose }
   const current = choices.find(c => c.key === chosen);
   const target = (c) => (c?.option ? { option: c.option.name } : { rpt: c?.rpt });
 
-  // The printer for Print directly: the one picked for this format, else the option's own (Doc Designer), else the one picked last on this PC.
-  const printer = picked && picked.key === current?.key ? picked.value : (current?.option?.printer || savedPrinter());
+  // The printer for Print directly: the one picked for this format; else, with the Print Agent on this PC, the printer picked last
+  // here or this PC's default; else the option's own (Doc Designer), else the one picked last on this PC.
+  const pcPrinters = agent?.printers ?? [];
+  const lastPicked = savedPrinter();
+  const pcDefault = lastPicked.startsWith(PC_PREFIX) && pcPrinters.includes(lastPicked.slice(PC_PREFIX.length))
+    ? lastPicked : agent?.default ? `${PC_PREFIX}${agent.default}` : '';
+  const printer = picked && picked.key === current?.key ? picked.value : (pcDefault || current?.option?.printer || lastPicked);
   const setPrinter = (value) => setPicked({ key: current?.key ?? '', value });
 
   const ready = !!current && !!info?.bridge_configured && current.option?.available !== false;
@@ -78,16 +92,31 @@ export default function PrintDialog({ kind, docNo, title, onClose }
     printFrame(frame, url);
   };
 
+  // The agent as a ZIP already set to this page's address: unzip it on this PC and run install.cmd once.
+  const getAgent = async () => {
+    try {
+      const url = URL.createObjectURL(await downloadPrintAgent(window.location.origin));
+      const a = document.createElement('a');
+      a.href = url; a.download = 'vLQMS-Print-Agent-Setup.cmd';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      toast.ok('Open the downloaded Setup file once. This window finds the agent by itself.');
+    } catch (e) { toast.error(errorText(e)); }
+  };
+
   const printDirect = async () => {
     if (!current || !printer || busy) return;
-    if (!(await toastStore.defer('ok', `${docNo} will be sent to ${printer} when this closes.`, 'Print cancelled. Nothing was sent.'))) return;
+    const onPc = printer.startsWith(PC_PREFIX);
+    const shown = onPc ? `${printer.slice(PC_PREFIX.length)} (this PC)` : printer;
+    if (!(await toastStore.defer('ok', `${docNo} will be sent to ${shown} when this closes.`, 'Print cancelled. Nothing was sent.'))) return;
     remember();
     setBusy(true);
     try {
-      const res = await renderPrint({ kind, doc_no: docNo, action: 'direct', printer, ...target(current) });
-      const r = await res.json() ;
-      try { localStorage.setItem(PRINTER_KEY, printer); } catch { /* blocked */ }
-      toast.ok(`${docNo} sent to ${r.printer || printer} (${r.copies} ${r.copies === 1 ? 'copy' : 'copies'}).`);
+      let r;
+      if (onPc) r = await printDocumentOnThisPc({ kind, doc_no: docNo, ...target(current) }, printer.slice(PC_PREFIX.length));
+      else r = await (await renderPrint({ kind, doc_no: docNo, action: 'direct', printer, ...target(current) })).json();
+      rememberPrinter(printer);
+      toast.ok(`${docNo} sent to ${onPc ? shown : (r.printer || printer)} (${r.copies} ${r.copies === 1 ? 'copy' : 'copies'}).`);
       onClose();
     } catch (e) {
       toast.error(errorText(e));
@@ -189,12 +218,28 @@ export default function PrintDialog({ kind, docNo, title, onClose }
                 <span className={labelClass}>Printer (for Print directly)</span>
                 <select value={printer} onChange={e => setPrinter(e.target.value)} className={field}>
                   <option value="">Choose a printer…</option>
-                  {printer && !printers.includes(printer) && <option value={printer}>{printer}</option>}
-                  {printers.map(p => <option key={p} value={p}>{p}</option>)}
+                  {printer && !printer.startsWith(PC_PREFIX) && !printers.includes(printer) && <option value={printer}>{printer}</option>}
+                  {pcPrinters.length > 0 && (
+                    <optgroup label={`This PC${agent?.host ? ` (${agent.host})` : ''}`}>
+                      {pcPrinters.map(p => <option key={`pc:${p}`} value={`${PC_PREFIX}${p}`}>{p}{p === agent?.default ? ' (default)' : ''}</option>)}
+                    </optgroup>
+                  )}
+                  {printers.length > 0 && (
+                    <optgroup label="Server">
+                      {printers.map(p => <option key={p} value={p}>{p}</option>)}
+                    </optgroup>
+                  )}
                 </select>
                 <span className="mt-1 block text-[11px] leading-snug text-stone-500">
-                  These are the printers on the server. For a printer on your own PC (the one at your counter), press <b>Print</b>: your browser's print window lists this PC's printers, and remembers the one you pick.
+                  {agent
+                    ? <>Printers connected to this PC are listed under <b>This PC</b> and print without asking; its default printer is chosen first.</>
+                    : <>To print straight to the printers of this PC, install the Print Agent on it once. Without it, <b>Print</b> opens your browser's print window, which lists this PC's printers.</>}
                 </span>
+                {!agent && (
+                  <button type="button" onClick={getAgent} className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-accent-ink underline">
+                    <Download size={12} />Download Print Agent for this PC
+                  </button>
+                )}
               </label>
             </div>
             <div className="relative flex min-h-[60vh] flex-1 items-start justify-center overflow-auto rounded-lg border border-[#DDE3EC] bg-stone-200 p-4 dark:border-[#2A2A2A] dark:bg-[#0c0c0c]">

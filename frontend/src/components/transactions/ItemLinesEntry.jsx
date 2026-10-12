@@ -54,6 +54,12 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   const kind = endpoint.replace('/transactions/', '').replace(/-/g, '_') ;
   const docSettings = useDocSettings(kind);
   const { confirm, dialog: confirmDialog } = useConfirm();
+  // A line with an item asks first; a blank line goes without asking.
+  const removeLine = async (i) => {
+    const l = lines[i];
+    if ((l.item_code || l.cases || l.bottles) && !(await confirm(`Are you sure you want to delete the item '${items.find(x => x.code === l.item_code)?.name ?? l.item_code}'?`))) return;
+    setLines(cur => (cur.length > 1 ? cur.filter((_, x) => x !== i) : [blankLine()]));
+  };
   const gridRef = useRef(null);
   const focusRow = useRef(null);   // a row just added gets the cursor in its item box
 
@@ -153,7 +159,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
               const item = byCode.get(l.item_code);
               return (
                 <tr key={i}>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-sans text-stone-400"><span className="inline-flex items-center gap-1.5"><button onClick={() => setLines(lines.length > 1 ? lines.filter((_, x) => x !== i) : [blankLine()])} tabIndex={-1} className="text-stone-400 hover:text-red-500" aria-label={`Remove row ${i + 1}`}><Trash2 size={13} /></button>{i + 1}</span></td>
+                  <td className="whitespace-nowrap px-3 py-1.5 font-sans text-stone-400"><span className="inline-flex items-center gap-1.5"><button onClick={() => void removeLine(i)} tabIndex={-1} className="text-stone-400 hover:text-red-500" aria-label={`Remove row ${i + 1}`}><Trash2 size={13} /></button>{i + 1}</span></td>
                   <td className="px-3 py-1.5">
                     <select value={l.item_code} onChange={e => update(i, { item_code: e.target.value })} className={`${field} w-full max-w-sm font-sans`} aria-label={`Item row ${i + 1}`}>
                       <option value="">— pick an item —</option>

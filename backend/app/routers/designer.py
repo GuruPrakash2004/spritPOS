@@ -98,6 +98,26 @@ def _build_id() -> str:
         return ""
 
 
+@router.post("/designer/reload")
+async def reload_from_designer(admin: dict = Depends(require_admin)):
+    """The top bar's "Refresh from Doc Designer" button (Administrator): read the designer's tables, the tables' column lists and the
+    masters' extra columns again, now, and answer the new structure version. Nothing is read again on its own when a page loads."""
+    if not sqlstore.enabled():
+        raise HTTPException(409, "Not available while the database is offline.")
+    async with _refresh_lock:
+        try:
+            await run_in_threadpool(designer.refresh)
+            await run_in_threadpool(schema_meta.invalidate)
+            await run_in_threadpool(sqlstore.reload_extras)
+            current = await run_in_threadpool(schema_meta.fingerprint)
+        except Exception as e:   # noqa: BLE001 - say why instead of a bare 500
+            raise HTTPException(503, f"Could not read the Doc Designer settings: {e}")
+        if current:
+            _last["version"] = current
+            _shared.update(at=time.monotonic(), version=current)
+    return {"version": current, "build": _build_id()}
+
+
 @router.get("/designer/version")
 async def version(user: dict = Depends(get_current_user)):
     """The structure fingerprint. When it moved since the last call the designer's rows and the column lists are read

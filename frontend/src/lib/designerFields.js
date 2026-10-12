@@ -86,6 +86,7 @@ export function extraFields(screen) {
 const KEEP = new Set(['code', 'name']);
 
 /**
+ * (`hideUnlisted`: a typed field with no designer row is hidden too, for a screen the designer describes completely.)
  * The web app's own (typed) fields with the Doc Designer laid over them: its caption, mandatory / read-only flags,
  * hint, conditional rules and order win; a field the designer hides is flagged `designerHidden` (the screen does not
  * draw or check it, but still saves its value unchanged, so a required field can't make the save fail). The
@@ -99,7 +100,7 @@ const rekey = (rule, colToKey) => {
 };
 const columnKeys = (screen) => new Map((screen?.fields ?? []).filter(d => d.web_key).map(d => [String(d.code).toLowerCase(), d.web_key]));
 
-export function applyDefinition(typed, screen) {
+export function applyDefinition(typed, screen, { hideUnlisted = false } = {}) {
   if (!screen?.fields?.length) return typed;
   const byKey = new Map();
   for (const d of screen.fields) if (d.web_key && !byKey.has(d.web_key)) byKey.set(d.web_key, d);
@@ -107,6 +108,8 @@ export function applyDefinition(typed, screen) {
   const colToKey = columnKeys(screen);
   const over = typed.map(f => {
     const d = byKey.get(f.key);
+    // With hideUnlisted (Company Master) a typed field the designer has no row for is not part of the desktop's screen: hidden.
+    if (!d && hideUnlisted && !f.extra && !KEEP.has(f.key)) return { ...f, designerHidden: true };
     if (!d || f.extra || d.fk) return f;   // a key column's flags (hidden ID) don't describe the web's drop-down
     const keep = KEEP.has(f.key);
     return {

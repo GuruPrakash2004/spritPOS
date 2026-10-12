@@ -7,15 +7,15 @@ import MasterCrud from './MasterCrud';
 import Modal from '../common/Modal';
 import { toastStore } from '../common/toastStore';
 import { errorText, getItems, importItems } from '../../lib/api';
-import { downloadXlsRows } from '../../lib/xlsExport';
 import { readTableFile } from '../../lib/readTableFile';
-import { ITEM_FIELDS, ITEM_IMPORT_COLUMNS, ITEM_IMPORT_NUMERIC } from './masterConfigs';
+import { ITEM_FIELDS, ITEM_IMPORT_ALIASES, ITEM_IMPORT_COLUMNS, ITEM_IMPORT_EXTRAS, ITEM_IMPORT_NUMERIC } from './masterConfigs';
 import { primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
 
 
 // Item Master = the generic master screen plus the legacy "Import Item from Excel" flow:
-// download template (.xls) → fill in Excel → load the .xls (or .xlsx / .csv) → duplicates shown in red → import.
+// download the template (ItemImport_Template.xlsx, served as it is) → fill in Excel → load the .xlsx / .xls / .csv → duplicates shown in red → import.
+// The sheet has a row of hints on top and the column names on row 2: the row holding ITEMCODE is taken as the header.
 export default function ItemMaster() {
   const [reloadKey, setReloadKey] = useState(0);
   const [preview, setPreview] = useState(null);
@@ -23,27 +23,42 @@ export default function ItemMaster() {
   const fileInput = useRef(null);
 
   const downloadTemplate = () => {
-    const header = ITEM_IMPORT_COLUMNS.map(([col]) => col);
-    downloadXlsRows('ItemImport_Template', [header]);
+    const link = document.createElement('a');
+    link.href = `${import.meta.env.BASE_URL}ItemImport_Template.xlsx`;
+    link.download = 'ItemImport_Template.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   };
 
   const loadFile = async (file) => {
     setMessage('');
     let rows;
     try { rows = await readTableFile(file); } catch (e) { return setMessage(e.message); }
-    const [header, ...body] = rows;
-    if (!header) return setMessage('The file is empty.');
-    const index = new Map(header.map((h, i) => [h.trim().toUpperCase(), i]));
-    const missing = ITEM_IMPORT_COLUMNS.filter(([col]) => !index.has(col.toUpperCase())).map(([col]) => col);
+    // The header is the row that holds ITEMCODE (the template has a row of hints above it).
+    const at = rows.findIndex(r => r.some(c => c.trim().toUpperCase() === 'ITEMCODE'));
+    if (!rows.length) return setMessage('The file is empty.');
+    if (at === -1) return setMessage('No ITEMCODE column found. Use Download Template.');
+    const header = rows[at];
+    const body = rows.slice(at + 1);
+    const index = new Map(header.map((h, i) => [(ITEM_IMPORT_ALIASES[h.trim().toUpperCase()] ?? h.trim().toUpperCase()), i]));
+    const missing = ITEM_IMPORT_COLUMNS.filter(([col, , required]) => required && !index.has(col.toUpperCase())).map(([col]) => col);
     if (missing.length) return setMessage(`Missing columns: ${missing.join(', ')}. Use Download Template.`);
     const existing = new Set((await getItems()).map(i => i.code));
     const seen = new Set();
-    setPreview(body.map(cells => {
+    setPreview(body.filter(cells => (cells[index.get('ITEMCODE')] ?? '').trim() !== '' || (cells[index.get('ITEMNAME')] ?? '').trim() !== '').map(cells => {
       const row = {};
       ITEM_IMPORT_COLUMNS.forEach(([col, key]) => {
+        if (!index.has(col.toUpperCase())) return;   // an optional column the file doesn't have
         const raw = (cells[index.get(col.toUpperCase())] ?? '').trim();
-        row[key] = ITEM_IMPORT_NUMERIC.has(key) ? Number(raw) || 0 : raw;
+        row[key] = ITEM_IMPORT_NUMERIC.has(key) ? Number(raw.replace(/,/g, '')) || 0 : raw;
       });
+      const extras = {};
+      for (const col of ITEM_IMPORT_EXTRAS) {
+        const raw = index.has(col) ? (cells[index.get(col)] ?? '').trim() : '';
+        if (raw !== '') extras[col] = col === 'NONSTKABLE' ? raw : raw.replace(/,/g, '');
+      }
+      if (Object.keys(extras).length) row.extras = extras;
       const code = String(row.code);
       const duplicate = existing.has(code) || seen.has(code);
       seen.add(code);

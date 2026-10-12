@@ -14,10 +14,12 @@ The web app never writes the desktop tables; every utility acts on the web app's
 import logging
 import platform
 import re
+import socket
+import time
 from datetime import date, datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .. import admin_audit, db, db_backup, doc_settings, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store, websync
@@ -159,8 +161,37 @@ def _connection_details() -> dict:
     return out
 
 
+_CLIENT_NAMES: dict[str, tuple[str, float]] = {}   # address -> (name, when looked up); a lease change is picked up after the TTL
+_NAME_TTL, _MISS_TTL = 600.0, 60.0
+
+
+def client_system_name(request: Request) -> str:
+    """The Windows name of the PC that is calling (e.g. CLIENT-PC), found from its address on the LAN; the server's own name
+    when the caller is the server itself or the name can't be found. Remembered per address (a lookup can be slow)."""
+    host = request.client.host if request.client else ""
+    # Behind the Vite dev proxy or a reverse proxy the direct caller is the proxy: the browser's address is the first
+    # X-Forwarded-For entry. It only picks a default System Name (nothing is decided by it), so it needn't be trusted.
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        host = forwarded
+    mine = (platform.node() or "ADMIN").upper()
+    if not host or host in ("127.0.0.1", "::1", "localhost", "testclient"):
+        return mine
+    now = time.monotonic()
+    hit = _CLIENT_NAMES.get(host)
+    if not hit or now - hit[1] > (_NAME_TTL if hit[0] else _MISS_TTL):
+        try:
+            name = socket.gethostbyaddr(host)[0].split(".")[0].upper()
+        except (OSError, UnicodeError):
+            name = ""
+        if len(_CLIENT_NAMES) > 500:
+            _CLIENT_NAMES.clear()
+        hit = _CLIENT_NAMES[host] = (name, now)
+    return hit[0] or mine
+
+
 @router.get("/about")
-def about(current_user: dict = Depends(get_current_user)):
+def about(request: Request, current_user: dict = Depends(get_current_user)):
     from ..main import app
     return {
         # The database name is shown to everyone who can open About; the server, port, login and driver only to an Administrator.
@@ -180,6 +211,8 @@ def about(current_user: dict = Depends(get_current_user)):
         "server_time": datetime.now().isoformat(timespec="seconds"),
         # The machine the web app runs on: the default System Name when a Sales Counter is created from Sales Invoice.
         "system_name": (platform.node() or "ADMIN").upper(),
+        # The PC this browser is on (the desktop's System Name for a Sales Counter): Sales Invoice picks that PC's counter.
+        "client_system_name": client_system_name(request),
     }
 
 
@@ -187,18 +220,18 @@ def about(current_user: dict = Depends(get_current_user)):
 # These change no shop data, so main.py runs them without the "database offline" check and saves nothing after.
 
 @router.post("/database/disconnect")
-def disconnect_database(admin: dict = Depends(require_admin)):
+def disconnect_database(request: Request, admin: dict = Depends(require_admin)):
     """Close the SQL Server connection to test the app without it (the settings in .env are kept). Signed-in users
     stay signed in and see what is in memory; nothing can be saved and nobody new can sign in until Reconnect."""
     if not db.configured():
         raise HTTPException(409, "No database is set up")
     db.disconnect()
     logger.warning("Database disconnected for testing by %s", admin["user"])
-    return about(admin)
+    return about(request, admin)
 
 
 @router.post("/database/reconnect")
-def reconnect_database(admin: dict = Depends(require_admin)):
+def reconnect_database(request: Request, admin: dict = Depends(require_admin)):
     """Connect again and load the shop's data."""
     if not db.configured():
         raise HTTPException(409, "No database is set up")
@@ -206,7 +239,7 @@ def reconnect_database(admin: dict = Depends(require_admin)):
         raise HTTPException(503, "Could not connect to the database. Check that SQL Server is running and try again.")
     sqlstore.reload()
     logger.warning("Database reconnected by %s", admin["user"])
-    return about(admin)
+    return about(request, admin)
 
 
 # ─── Remove Duplicate Invoice (711) ──────────────────────────────────────────

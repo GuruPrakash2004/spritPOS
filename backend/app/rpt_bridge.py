@@ -19,10 +19,12 @@ Settings:
                           which hold the bills made on the web too)
     RPT_BRIDGE_ALLOW_REMOTE=1   allow a real bridge that is not on this PC (the database logon is sent to it)
 """
+import logging
 import os
 import re
 import secrets
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -31,6 +33,8 @@ from fastapi import HTTPException
 
 from . import db, mock_bridge, store
 
+logger = logging.getLogger(__name__)
+SLOW_SECONDS = 5.0   # a print slower than this is logged as a warning with the usual causes
 DEFAULT_FOLDER = Path(__file__).resolve().parents[1] / "Rpts"
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 THERMAL_PREVIEW_PT = 216   # 3 inches in points: the width of the thermal paper roll
@@ -154,10 +158,19 @@ def _call(path: str, job: dict | None, method: str = "POST") -> httpx.Response:
         body = {**job, "parameters": {**company_parameters(), **(job.get("parameters") or {})},
                 "rpt": safe_rpt_name(job["rpt"]), "folder": str(folder()), "table_prefix": table_prefix(),
                 "logon": _logon(), "label_values": label_values(), "address_lines": address_lines()}
+    started = time.perf_counter()
     try:
         r = httpx.request(method, base + path, json=body, headers={"X-Bridge-Key": key()}, timeout=TIMEOUT)
     except httpx.HTTPError as e:
+        logger.warning("Crystal bridge %s %s failed after %.1fs: %s", path, (job or {}).get("rpt", ""), time.perf_counter() - started, e.__class__.__name__)
         raise HTTPException(503, f"The Crystal Reports bridge can't be reached ({e.__class__.__name__}). Is it running?")
+    took = time.perf_counter() - started
+    # The whole Crystal run is timed here: it opens the .rpt, logs on to SQL Server for every table, lays the pages out against the
+    # printer and writes the PDF. Slow usually means the database logon (SQL Server on another PC), a printer that is off or
+    # unreachable (Crystal needs one to lay the page out), or a heavy format.
+    (logger.warning if took > SLOW_SECONDS else logger.info)(
+        "Crystal bridge %s %s took %.1fs (HTTP %s) [%s]%s", path, (job or {}).get("rpt", ""), took, r.status_code, r.headers.get("X-Bridge-Timing", "no timing"),
+        " - slow: check the database server's speed and that the Windows default / chosen printer is online" if took > SLOW_SECONDS else "")
     if r.status_code >= 400:
         try:
             detail = r.json().get("error") or r.text
@@ -313,17 +326,32 @@ def can_open(name: str) -> tuple[bool, str]:
         return True, f"not checked ({exc})"
 
 
-def printer_report() -> dict:
-    """The printers the bridge lists, split into those this service can really open and those Windows refuses (with why)."""
+_PRINTERS = {"at": 0.0, "report": None}
+_PRINTERS_TTL = 120.0   # the PC's printers rarely change; asking Windows to open every one of them is what takes the time
+
+
+def printer_report(fresh: bool = False) -> dict:
+    """The printers the bridge lists, split into those this service can really open and those Windows refuses (with why).
+    Opening a printer asks Windows to reach it, and a network or Remote Desktop printer that is off can take many seconds, so the
+    checks run side by side (the slowest one, not the sum, is the wait) and the answer is kept for two minutes; a print then
+    no longer repeats it. A good answer is kept only when the list was read (`fresh` forces a new look)."""
+    now = time.monotonic()
+    if not fresh and _PRINTERS["report"] is not None and now - _PRINTERS["at"] < _PRINTERS_TTL:
+        return _PRINTERS["report"]
     try:
         listed = list(_call("/health", None, "GET").json().get("printers") or [])
     except Exception:   # noqa: BLE001 - only a hint
         return {"usable": [], "refused": []}
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(listed)))) as pool:
+        checked = list(pool.map(can_open, listed))
     usable, refused = [], []
-    for name in listed:
-        ok, why = can_open(name)
+    for name, (ok, why) in zip(listed, checked):
         (usable if ok else refused).append(name if ok else {"name": name, "why": why})
-    return {"usable": usable, "refused": refused}
+    report = {"usable": usable, "refused": refused}
+    _PRINTERS.update(at=time.monotonic(), report=report)
+    logger.info("Printers checked in %.1fs: %d usable, %d refused", time.monotonic() - now, len(usable), len(refused))
+    return report
 
 
 def installed_printers() -> list[str]:

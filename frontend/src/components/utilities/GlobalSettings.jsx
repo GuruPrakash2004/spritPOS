@@ -276,7 +276,7 @@ export default function GlobalSettings() {
       {part === 'database' && (
         <section className={`${panel} mx-auto max-w-md p-5`} aria-label="Database settings">
           <DatabaseSetup inputClass={field} labelClass={label} change plain
-            onDone={() => { toastStore.add('ok', 'Database settings saved. The shop\'s data was loaded from the database.'); setPart('settings'); }} />
+            onDone={() => { toastStore.add('ok', 'Database settings saved. The shop\'s data was loaded from the database. The page reloads now.'); setPart('settings'); setTimeout(() => window.location.reload(), 1200); }} />
         </section>
       )}
     </div>
