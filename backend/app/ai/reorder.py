@@ -29,7 +29,7 @@ STATUS_ORDER = {NOW: 0, SOON: 1, INSUFFICIENT: 2, MONITOR: 3}
 
 def _env_float(key: str, default: float) -> float:
     try:
-        return float(os.environ.get(key, "").strip() or default)
+        return float(os.environ.get(key, "").split("#")[0].strip() or default)
     except ValueError:
         return default
 

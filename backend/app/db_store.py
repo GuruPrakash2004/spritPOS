@@ -432,10 +432,15 @@ def _recent_sinv_numbers(limit: int) -> list[str] | None:
         return None
 
 
-def load_sales_invoices(limit: int = 200) -> None:
-    """Load the most recent sales invoices into DOCS['sales_invoice'] fast."""
-    numbers = _recent_sinv_numbers(limit)
-    if numbers:
+def load_sales_invoices(limit: int = 200, days: tuple[date, date] | None = None) -> None:
+    """Load the most recent sales invoices into DOCS['sales_invoice'] fast. `days` (first, last) loads the bills of those dates instead
+    and keeps what is already loaded (used by `ensure_days` for dates older than the latest bills)."""
+    numbers = None if days else _recent_sinv_numbers(limit)
+    if days:
+        recent = (f"SELECT SINVID, SINVNO, SINVDate, CUSTID, TOTAMT, CASHAMT, CARDAMT, TOTQTY, SPID, SCID, AddedBy, Cancelled, SINVTime "
+                  f"FROM TrnHdrSINV WITH (NOLOCK) WHERE SINVDate >= '{days[0].isoformat()}' AND SINVDate < '{(days[1] + timedelta(days=1)).isoformat()}' "
+                  "AND Cancelled = 'N' AND ISNULL(BILLSYSTEM, '') <> 'WEB'")
+    elif numbers:
         in_list = ", ".join("'" + n.replace("'", "''") + "'" for n in numbers)   # literals: the index is used (see above)
         recent = f"SELECT SINVID, SINVNO, SINVDate, CUSTID, TOTAMT, CASHAMT, CARDAMT, TOTQTY, SPID, SCID, AddedBy, Cancelled, SINVTime FROM TrnHdrSINV WITH (NOLOCK) WHERE SINVNO IN ({in_list})"
     else:
@@ -470,7 +475,8 @@ def load_sales_invoices(limit: int = 200) -> None:
     person_by_id = {p.get("_spid"): p.get("name") or code for code, p in store.SALES_PERSONS.items() if p.get("_spid")}
 
     docs = store.DOCS["sales_invoice"]
-    _drop_loaded(docs)
+    if not days:
+        _drop_loaded(docs)
 
     bills: dict = {}
     for r in rows:
@@ -540,12 +546,15 @@ def load_sales_invoices(limit: int = 200) -> None:
     logger.info("Loaded %d sales invoices from DB", len(docs))
 
 
-def load_purchase_bills(limit: int = 100) -> None:
-    """Load the most recent purchase bills fast."""
+def load_purchase_bills(limit: int = 100, days: tuple[date, date] | None = None) -> None:
+    """Load the most recent purchase bills fast (or, with `days`, those of that first..last date, keeping what is loaded)."""
+    pick = (f"TOP {limit}" if not days else "")
+    where = (f"WHERE PBDate >= '{days[0].isoformat()}' AND PBDate < '{(days[1] + timedelta(days=1)).isoformat()}'" if days else "")
     rows = db.fetchall(f"""
         WITH RecentPB AS (
-            SELECT TOP {limit} PBID, PBNO, PBDate, SUPPID, PartyName
+            SELECT {pick} PBID, PBNO, PBDate, SUPPID, PartyName
             FROM TrnHdrPB WITH (NOLOCK)
+            {where}
             ORDER BY PBID DESC
         )
         SELECT
@@ -561,7 +570,8 @@ def load_purchase_bills(limit: int = 100) -> None:
         item_by_id[item.get("_itemid", "")] = code
 
     docs = store.DOCS["purchase_bill"]
-    _drop_loaded(docs)
+    if not days:
+        _drop_loaded(docs)
     bills: dict = {}
     for r in rows:
         pb_no = _s(r.get("PBNO"))
@@ -712,7 +722,53 @@ def load_transactions() -> None:
     except Exception as e:
         logger.error("load_purchase_bills failed: %s", e)
     logger.info("Bill history read in %.1fs (latest %d sales invoices, %d purchase bills asked for)", time.perf_counter() - t0, sales, purchases)
+    _remember_oldest()
     logger.info("Transaction data loaded: %d sales invoices, %d purchase bills", len(store.DOCS["sales_invoice"]), len(store.DOCS["purchase_bill"]))
+
+
+_old_lock = threading.Lock()
+_oldest: dict[str, str | None] = {}     # kind -> date of the oldest bill the start-up load brought in
+_covered: dict[str, set] = {}           # kind -> older dates already read from SQL Server
+MAX_OLD_BILLS = 30000                   # older bills kept in memory at once; past this they are dropped and read again when asked
+
+
+def _remember_oldest() -> None:
+    """After the start-up load: note how far back the bills in memory go, and forget the older dates read on demand."""
+    _covered.clear()
+    for kind in ("sales_invoice", "purchase_bill"):
+        dates = [d["date"] for d in store.DOCS[kind].values() if d.get("origin") == "db" and d.get("date")]
+        _oldest[kind] = min(dates) if dates else None
+
+
+def ensure_days(first: date, last: date, purchases: bool = False) -> None:
+    """Make sure the bills of first..last are in memory for a report. The latest bills are loaded at start-up; for a date older than
+    those, the missing dates are read from SQL Server once (never on a request for recent dates, so billing and the Dashboard
+    are not slowed) and kept. Does nothing when the database is off or the start-up load found no bill."""
+    kind = "purchase_bill" if purchases else "sales_invoice"
+    oldest = _oldest.get(kind)
+    if not oldest or first.isoformat() >= oldest or not db.is_db_available():
+        return
+    stop = min(last, date.fromisoformat(oldest) - timedelta(days=1))
+    with _old_lock:
+        done = _covered.setdefault(kind, set())
+        missing = [first + timedelta(days=n) for n in range((stop - first).days + 1) if (first + timedelta(days=n)).isoformat() not in done]
+        if not missing:
+            return
+        docs = store.DOCS[kind]
+        if sum(1 for d in docs.values() if d.get("origin") == "db") > _count("RECENT_INVOICES", 3000) + MAX_OLD_BILLS:
+            _drop_loaded(docs)            # too many old bills kept: start again (the latest ones are read back below)
+            done.clear()
+            (load_purchase_bills(_count("RECENT_PURCHASE_BILLS", 300)) if purchases else load_sales_invoices(_count("RECENT_INVOICES", 3000)))
+            missing = [first + timedelta(days=n) for n in range((stop - first).days + 1)]
+        t0 = time.perf_counter()
+        try:
+            span = (missing[0], missing[-1])
+            (load_purchase_bills(days=span) if purchases else load_sales_invoices(days=span))
+        except Exception as e:  # noqa: BLE001 - the report then shows what is in memory
+            logger.error("Reading older %s bills failed: %s", kind, e)
+            return
+        done.update(d.isoformat() for d in missing)
+        logger.info("Read older %s bills for %s to %s in %.1fs", kind, span[0], span[1], time.perf_counter() - t0)
 
 
 def load_all() -> None:

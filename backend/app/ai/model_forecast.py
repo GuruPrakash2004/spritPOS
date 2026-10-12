@@ -28,6 +28,12 @@ _failed: str | None = None
 _lock = threading.Lock()
 
 
+def use_model() -> bool:
+    """AI_USE_MODEL in backend/.env (1/true/yes/on). Off by default: forecasts come from the statistical methods
+    (day-of-week average for fast sellers and accessories, TSB for slow sellers, the old formula for items with little history)."""
+    return os.environ.get("AI_USE_MODEL", "").split("#")[0].strip().lower() in ("1", "true", "yes", "on")
+
+
 def model_name() -> str:
     return os.environ.get("AI_FORECAST_MODEL", "").strip() or DEFAULT_MODEL
 
@@ -71,7 +77,9 @@ def forecast_many(items: dict[str, tuple[list[float], bool]], end: date, horizon
     Items with enough history go through the model in batches; the rest, or all of them if the model fails,
     use forecast.forecast_item."""
     result = {code: fc.forecast_item(s, end, acc, horizon) for code, (s, acc) in items.items()}
-    codes = [c for c, f in result.items() if f.fallback is None]      # the ones with enough history
+    if not use_model():     # the shop's own backtest: the statistical methods beat the model on stockouts and bias
+        return result
+    codes =[c for c, f in result.items() if f.fallback is None]      # the ones with enough history
     if not codes:
         return result
     try:

@@ -84,6 +84,8 @@ def forget_old_database() -> None:
         sqlstore._cols.clear()
         sqlstore._pending_merges.clear()
     admin_audit._pending.clear()
+    db_store._oldest.clear()      # how far back the old database's bills went, and the older dates read from it
+    db_store._covered.clear()
     store.IDEMPOTENT.clear()
     ai_service._state.update(at=0.0, end=None, forecasts=None, error=None)
     designer_router._last["version"] = None

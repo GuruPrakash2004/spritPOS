@@ -89,7 +89,7 @@ web address the user has open (`window.location.origin`):
 
 No administrator rights, no installer, no files to copy: the user double-clicks the downloaded file once. From then on the
 agent starts at every sign-in.
-
+ 
 ## 4. The browser side
 
 `frontend/src/lib/localPrint.js` (framework independent, plain `fetch`):

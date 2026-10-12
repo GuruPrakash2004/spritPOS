@@ -22,7 +22,15 @@ import os
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-HISTORY_DAYS = int(os.environ.get("AI_HISTORY_DAYS", "").strip() or 365)   # the days of past sales every method learns from
+def _env_int(key: str, default: int) -> int:
+    """A whole number from backend/.env; a typo or a trailing '# note' must not stop the server from starting."""
+    try:
+        return int(os.environ.get(key, "").split("#")[0].strip() or default)
+    except ValueError:
+        return default
+
+
+HISTORY_DAYS = _env_int("AI_HISTORY_DAYS", 365)   # the days of past sales every method learns from
 HORIZON_DAYS = 14
 MIN_HISTORY_DAYS = 28
 MIN_DEMAND_DAYS = 3
@@ -124,9 +132,9 @@ def forecast_item(series: list[float], end: date, is_accessory: bool = False, ho
     cls = classify(series, is_accessory)
     d = demand(series)
     start = end + timedelta(days=1)
-    if cls == FAST:
+    if cls in (FAST, ACCESSORY):     # the backtest on the shop's sales: the day-of-week average has the least bias and fewest stockouts
         return Forecast(cls, "dow_wma", dow_wma(series, end, horizon), start, history_days=len(d))
-    if cls in (SLOW, ACCESSORY):
+    if cls == SLOW:
         return Forecast(cls, "tsb", [tsb(series)] * horizon, start, history_days=len(d))
     # Not enough history: the existing formula if anything sold, else leave it to ROL / ROQ.
     window = d[-fallback_window:]

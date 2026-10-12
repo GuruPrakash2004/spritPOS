@@ -8,3 +8,5 @@ certifi>=2024.2.2   # CA certificates for SMTP TLS (app/mailer.py)
 httpx>=0.28         # Web Sync pushes to the central site (app/websync.py)
 pymupdf>=1.24   # trims the report PDF to its drawn area for the on-screen print preview (app/rpt_bridge.py)
 jinja2>=3.1        # HTML templates of the built-in print (app/mock_bridge.py)
+torch>=2.2                # AI stock forecast model (app/ai/model_forecast.py); only used with AI_FORECAST_ENABLED=1
+chronos-forecasting>=2.0  # the pretrained forecast model; without it the AI feature falls back to its statistical methods

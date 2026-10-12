@@ -239,6 +239,8 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
 @router.get("/dsr")
 def daily_summary_report(on: date, current_user: dict = Depends(get_current_user)):
     d = on.isoformat()
+    db_store.ensure_days(on, on)                   # a date older than the bills loaded at start-up is read from SQL Server once
+    db_store.ensure_days(on, on, purchases=True)
     invs = [i for i in store.DOCS["sales_invoice"].values() if i["date"] == d]
     saved = [i for i in invs if i["status"] == "SAVED"]
     liquor_basic = non_liquor_basic = profit = 0.0
@@ -312,6 +314,7 @@ def stock_ageing(as_on: date, months: int = Query(6, ge=1, le=120), current_user
 
 
 def _saved_invoices(from_date: date, to_date: date):
+    db_store.ensure_days(from_date, to_date)
     return [i for i in store.DOCS["sales_invoice"].values()
             if i["status"] == "SAVED" and from_date.isoformat() <= i["date"] <= to_date.isoformat()]
 
@@ -537,6 +540,7 @@ def package_wise_purchase(from_date: date, to_date: date, current_user: dict = D
     """Purchases (net of purchase returns) by bottle size. The amount is at cost, so it is hidden from roles without cost access."""
     _check_range(from_date, to_date)
     pk = defaultdict(lambda: {"qty": 0, "litres": 0.0, "amount": 0.0})
+    db_store.ensure_days(from_date, to_date, purchases=True)
     for bill in store.DOCS["purchase_bill"].values():
         if not from_date.isoformat() <= bill["date"] <= to_date.isoformat():
             continue

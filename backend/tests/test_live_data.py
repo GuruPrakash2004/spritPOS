@@ -186,3 +186,26 @@ def test_how_many_recent_bills_are_kept_is_configurable(monkeypatch):
     for bad in ("0", "-4", "many", "999999999"):
         monkeypatch.setenv("RECENT_INVOICES", bad)
         assert db_store._count("RECENT_INVOICES", 3000) == 3000
+
+
+def test_a_date_older_than_the_loaded_bills_is_read_from_sql_server_once(monkeypatch):
+    """Reports for a date before the latest bills ask SQL Server for just those dates, once, and a database switch forgets it."""
+    from datetime import date
+    from app import db, db_store
+    asked = []
+    row = {"SINVID": 1, "SINVNO": "26/C1-0000001", "SINVDate": "2026-01-05", "CUSTID": 1, "TOTAMT": 500, "CASHAMT": 500, "CARDAMT": 0,
+           "TOTQTY": 1, "SPID": 1, "SCID": 1, "AddedBy": "ADMIN", "Cancelled": "N", "SINVTime": "10:00:00",
+           "SINVDtlID": 1, "ITEMID": 1, "SINVQty": 1, "SINVRate": 500, "SINVAmt": 500, "CGSTPER": 0, "CGSTAMT": 0, "SGSTPER": 0, "SGSTAMT": 0}
+    monkeypatch.setattr(db, "is_db_available", lambda: True)
+    monkeypatch.setattr(db, "fetchall", lambda sql, *a: asked.append(sql) or [row])
+    monkeypatch.setitem(db_store._oldest, "sales_invoice", "2026-09-01")
+    db_store._covered.clear()
+    db_store.ensure_days(date(2026, 1, 5), date(2026, 1, 6))
+    assert len(asked) == 1 and "2026-01-05" in asked[0] and "2026-01-07" in asked[0]
+    assert store.DOCS["sales_invoice"]["26/C1-0000001"]["date"] == "2026-01-05"
+    db_store.ensure_days(date(2026, 1, 5), date(2026, 1, 6))      # already read: no second query
+    db_store.ensure_days(date(2026, 9, 2), date(2026, 9, 3))      # newer than the oldest loaded bill: nothing to read
+    assert len(asked) == 1
+    from app import boot
+    boot.forget_old_database()
+    assert not db_store._oldest and not db_store._covered
