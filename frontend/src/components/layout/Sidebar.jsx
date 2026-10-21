@@ -189,9 +189,11 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
 
         {/* Brand */}
         <div className={`flex h-14 shrink-0 items-center justify-between border-b border-[#E2D8CC] dark:border-[#1E1E1E] px-4 ${collapsed ? 'md:justify-center md:px-0' : ''}`}>
-          <div className={`flex items-center gap-2.5 p-[4px] ${collapsed ? 'md:hidden' : ''}`}>
+          <a href={pathForModule('Dashboard')} title="Go to Dashboard" aria-label="Go to Dashboard"
+            onClick={e => { if (isPlainClick(e)) { e.preventDefault(); onOpenModule('Dashboard'); onClose?.(); } }}
+            className={`flex items-center gap-2.5 rounded-md p-[4px] ${collapsed ? 'md:hidden' : ''}`}>
             <VlqmsLogo size="sm" textOnly />
-          </div>
+          </a>
           {onToggleCollapse && (
             <button
               className="hidden rounded-lg p-1.5 text-[#7B879B] hover:bg-[#E1E7F0] hover:text-[#1A2236] md:block dark:text-stone-500 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-50"

@@ -3,7 +3,7 @@
 // Reads GET /reports/dsr (today), /reports/sales/daily (last 7 days), /reports/stock-movement,
 // /transactions/purchase-indent, /masters/items and the first company image. Each panel shows a
 // "Live" badge when its data came from the API and "Unavailable" when the call failed.
-// The "Restock immediately" carousel (RestockCarousel.jsx) shows up to 10 items from /reports/restock,
+// The "Restock immediately" carousel (RestockCarousel.jsx) shows up to 15 items from /reports/restock,
 // ranked by the backend so fast sellers that are out of stock or about to run out come first; it is
 // re-polled every 8 s with the items.
 
@@ -57,7 +57,7 @@ export const Dashboard = () => {
     const loadItems = () => {
       getItems().then(setItems).catch(() => setItems(null));
       if (shown('restock')) {
-        getRestock(RESTOCK_DAYS, 10)
+        getRestock(RESTOCK_DAYS, 15)
           .then(setRestockRows)
           .catch(() => setRestockRows(null));
       }

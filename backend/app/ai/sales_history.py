@@ -28,6 +28,7 @@ from . import enabled
 logger = logging.getLogger("vlqms.ai")
 
 BACKFILL_DAYS = 365      # first run: how far back to read
+LOADED_THROUGH: date | None = None   # the day the last refresh read up to (days without a sale are not stored, so last_loaded() can be older)
 LOOKBACK_DAYS = 3        # every run re-reads this many of the latest stored days
 CHUNK_DAYS = 14          # dates read and saved per transaction
 
@@ -135,6 +136,11 @@ def save_rows(start: date, end: date, rows: list[dict]) -> None:
                         (r["item_id"], r["day"].isoformat(), r["sold"], r["returned"], r["net"]))
 
 
+def _mark(through: date) -> None:
+    global LOADED_THROUGH
+    LOADED_THROUGH = through
+
+
 def refresh(through: date | None = None, backfill_days: int = BACKFILL_DAYS) -> dict:
     """Bring ai.ItemDailySales up to `through` (default: yesterday, the last complete day).
     Returns {"status", "from", "to", "days", "rows"}; status is "skipped" (flag off, no database), "up-to-date" or "ok"."""
@@ -145,6 +151,7 @@ def refresh(through: date | None = None, backfill_days: int = BACKFILL_DAYS) -> 
     through = through or (date.today() - timedelta(days=1))
     window = plan_window(last_loaded(), through, backfill_days)
     if window is None:
+        _mark(through)
         return {"status": "up-to-date", "to": through.isoformat(), "days": 0, "rows": 0}
     total = 0
     for start, end in chunk_dates(*window):
@@ -152,6 +159,7 @@ def refresh(through: date | None = None, backfill_days: int = BACKFILL_DAYS) -> 
         save_rows(start, end, rows)
         total += len(rows)
         logger.info("AI sales history %s..%s: %d rows", start, end, len(rows))
+    _mark(through)
     return {"status": "ok", "from": window[0].isoformat(), "to": window[1].isoformat(),
             "days": (window[1] - window[0]).days + 1, "rows": total}
 

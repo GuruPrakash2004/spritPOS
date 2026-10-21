@@ -35,6 +35,7 @@ HORIZON_DAYS = 14
 MIN_HISTORY_DAYS = 28
 MIN_DEMAND_DAYS = 3
 CLASS_WINDOW = 90
+SIGMA_WINDOW = 90    # days of history whose day-to-day variation sizes the safety stock
 FAST_DEMAND_RATIO = 0.5
 DOW_WEEKS = 8
 ALPHA = 0.1          # smoothing of the demand size (Croston, TSB)
@@ -51,6 +52,7 @@ class Forecast:
     start: date | None = None
     fallback: str | None = None       # "average" or "rol_roq" when no model was used
     history_days: int = 0
+    sigma: float = 0.0                # std. deviation of daily demand over the last SIGMA_WINDOW days (sizes the safety stock)
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -65,6 +67,15 @@ class Forecast:
 def demand(series: list[float]) -> list[float]:
     """Net sales with returns-only days as 0."""
     return [max(float(x), 0.0) for x in series]
+
+
+def sigma_of(series: list[float]) -> float:
+    """Standard deviation of the daily demand over the last SIGMA_WINDOW days (0 with fewer than 2 days)."""
+    w = demand(series)[-SIGMA_WINDOW:]
+    if len(w) < 2:
+        return 0.0
+    m = sum(w) / len(w)
+    return (sum((x - m) ** 2 for x in w) / (len(w) - 1)) ** 0.5
 
 
 def classify(series: list[float], is_accessory: bool = False) -> str:
@@ -132,15 +143,16 @@ def forecast_item(series: list[float], end: date, is_accessory: bool = False, ho
     cls = classify(series, is_accessory)
     d = demand(series)
     start = end + timedelta(days=1)
+    sg = sigma_of(series)
     if cls in (FAST, ACCESSORY):     # the backtest on the shop's sales: the day-of-week average has the least bias and fewest stockouts
-        return Forecast(cls, "dow_wma", dow_wma(series, end, horizon), start, history_days=len(d))
+        return Forecast(cls, "dow_wma", dow_wma(series, end, horizon), start, history_days=len(d), sigma=sg)
     if cls == SLOW:
-        return Forecast(cls, "tsb", [tsb(series)] * horizon, start, history_days=len(d))
+        return Forecast(cls, "tsb", [tsb(series)] * horizon, start, history_days=len(d), sigma=sg)
     # Not enough history: the existing formula if anything sold, else leave it to ROL / ROQ.
     window = d[-fallback_window:]
     if sum(window) > 0:
         rate = sum(window) / len(window)
-        return Forecast(cls, "average", [rate] * horizon, start, fallback="average", history_days=len(d),
+        return Forecast(cls, "average", [rate] * horizon, start, fallback="average", history_days=len(d), sigma=sg,
                         notes=["too little history for a model; average daily sales of the last %d days" % len(window)])
     return Forecast(cls, "rol_roq", [0.0] * horizon, start, fallback="rol_roq", history_days=len(d),
                     notes=["no sales to learn from; use the item's ROL / ROQ"])

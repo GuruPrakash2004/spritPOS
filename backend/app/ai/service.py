@@ -65,6 +65,8 @@ def _history_end() -> date:
         last = sales_history.last_loaded()
     except Exception as exc:
         raise HTTPException(503, f"ai.ItemDailySales cannot be read (was migrations/ai_001.sql run?): {db.safe_error(exc)[:200]}")
+    if sales_history.LOADED_THROUGH and (last is None or sales_history.LOADED_THROUGH > last):
+        last = sales_history.LOADED_THROUGH      # refreshed up to here; the days after the last sale simply had none
     if last is None:
         raise HTTPException(409, "The sales history is empty. Run: python -m app.ai.sales_history")
     if last < date.today() - timedelta(days=STALE_DAYS):

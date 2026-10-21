@@ -19,7 +19,7 @@ import { finYearLabel } from '../../lib/formatters';
 
 const RETRY_MS = 20_000;
 
-// â”€â”€â”€ REALISTIC WATER DROPLET FLOW & LIQUOR SPLASH DYNAMICS â”€â”€â”€
+// ─── REALISTIC WATER DROPLET FLOW & LIQUOR SPLASH DYNAMICS ───
 // Simulates individual liquor water droplets cascading downwards with gravity acceleration
 // and erupting in multi-bead splashes and concentric ripples upon hitting the roaming liquor surface.
 // Height of the liquor surface above the panel's bottom edge (px): where drops land and splash.
@@ -199,7 +199,7 @@ const LiquidDropletWaterfall = () => {
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden bottle-container-glass" style={{ containerType: 'size' }} aria-hidden="true">
-      {/* â”€â”€ 2. Roaming Liquor at the Bottom (Bottle Container Reservoir) â”€â”€ */}
+      {/* ── 2. Roaming Liquor at the Bottom (Bottle Container Reservoir) ── */}
       <div className="absolute inset-x-0 bottom-0 h-44 sm:h-56 overflow-hidden pointer-events-none">
         {/* Micro-bubbles floating upward */}
         {[
@@ -255,7 +255,7 @@ const LiquidDropletWaterfall = () => {
         </div>
       </div>
 
-      {/* â”€â”€ 1. Cascading Droplets with Splash Impact â”€â”€ */}
+      {/* ── 1. Cascading Droplets with Splash Impact ── */}
       {drops.map((drop, idx) => (
         <div key={`water-drop-${idx}`} className="absolute top-0 bottom-0" style={{ left: drop.left }}>
           {/* A falling drop: pointed at the top, round at the bottom, with a dark rim, a lit body and a bright highlight */}
@@ -333,7 +333,7 @@ const LiquidDropletWaterfall = () => {
 
       <PouringBottle />
 
-      {/* â”€â”€ 3. Glass reflections along container edges â”€â”€ */}
+      {/* ── 3. Glass reflections along container edges ── */}
       <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white/12 to-transparent pointer-events-none" />
       <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
     </div>
@@ -499,7 +499,7 @@ export default function Login({ onLogin, notice = '' }) {
                 {setup ? 'Set up SpiritPOS' : 'Welcome back'}
               </h1>
               <p className="mt-1 text-xs text-[#5F6B80] dark:text-stone-400">
-                {setup ? 'Connect this shop\'s database once, then sign in.' : `Sign in to SpiritPOS · ${company?.name || 'Company profile'} · ${company?.licence_type || 'Licence'}`}
+                {setup ? 'Connect this shop\'s database once, then sign in.' : `Sign in to SpiritPOS · ${company?.name || 'Company profile'}`}
               </p>
             </div>
 
@@ -508,7 +508,7 @@ export default function Login({ onLogin, notice = '' }) {
               <h1 className="text-xl font-bold text-[#1A2236] dark:text-white"
                   style={{ fontFamily: 'var(--font-display)' }}>Welcome back</h1>
               <p className="mt-1 text-xs text-[#5F6B80] dark:text-stone-400">
-                Sign in to SpiritPOS · {company?.name || 'Company profile'} · {company?.licence_type || 'Licence'}
+                Sign in to SpiritPOS · {company?.name || 'Company profile'}
               </p>
             </div>
 
@@ -571,7 +571,7 @@ export default function Login({ onLogin, notice = '' }) {
                 </p>
               )}
 
-              {/* â”€â”€ HIGH-CONTRAST LOGIN BUTTON IN BOTH THEMES â”€â”€ */}
+              {/* ── HIGH-CONTRAST LOGIN BUTTON IN BOTH THEMES ── */}
               <button
                 type="submit"
                 disabled={busy}
@@ -585,7 +585,7 @@ export default function Login({ onLogin, notice = '' }) {
                            dark:hover:shadow-[0_0_36px_rgba(212,168,71,0.75)] dark:hover:brightness-110"
               >
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-                {busy ? 'Signing inâ€¦' : 'Sign in'}
+                {busy ? 'Signing in…' : 'Sign in'}
               </button>
 
               <DevelopedBy className="mt-[clamp(0.5rem,2dvh,1.5rem)] border-t border-[#DDE3EC] pt-[clamp(0.5rem,1.6dvh,1.25rem)] dark:border-[#2A2A2A]" />
@@ -606,7 +606,7 @@ export default function Login({ onLogin, notice = '' }) {
         </main>
 
         <footer className="shrink-0 pb-[clamp(0.25rem,1.5dvh,1.5rem)] text-center text-[11px] text-[#8592A6] dark:text-stone-600">
-          Softvent SpiritPOS · Licence 827106637
+          Softvent SpiritPOS
         </footer>
       </div>
     </div>

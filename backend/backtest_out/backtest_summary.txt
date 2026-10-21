@@ -1,0 +1,14 @@
+Backtest to 2026-09-10: origins every 7 days over the last 120 days, 14-day forecasts.
+
+fast: most accurate = dow_wma; fewest missed stockouts = croston
+    croston  WAPE 0.4297  bias 2.5%  stockouts 14.6%  coverage 85.4%  short 8511  excess 116487  (2502 item-origins)
+    current  WAPE 0.4211  bias -0.8%  stockouts 17.9%  coverage 82.1%  short 11547  excess 105772  (2502 item-origins)
+    dow_wma  WAPE 0.402  bias -1.9%  stockouts 17.2%  coverage 82.8%  short 11375  excess 100400  (2502 item-origins)
+    tsb      WAPE 0.4179  bias 0.9%  stockouts 15.4%  coverage 84.6%  short 9110  excess 110407  (2502 item-origins)
+insufficient: most accurate = current; fewest missed stockouts = current
+    current  WAPE 1.344  bias -11.0%  stockouts 53.5%  coverage 46.5%  short 2977  excess 6047  (61117 item-origins)
+slow: most accurate = tsb; fewest missed stockouts = croston
+    croston  WAPE 2.6009  bias 119.3%  stockouts 9.6%  coverage 90.4%  short 5601  excess 116773  (11846 item-origins)
+    current  WAPE 1.4148  bias -4.2%  stockouts 16.9%  coverage 83.1%  short 7516  excess 52187  (11846 item-origins)
+    dow_wma  WAPE 1.444  bias -0.9%  stockouts 15.1%  coverage 84.9%  short 6910  excess 52198  (11846 item-origins)
+    tsb      WAPE 1.411  bias -1.4%  stockouts 13.8%  coverage 86.2%  short 6695  excess 52507  (11846 item-origins)

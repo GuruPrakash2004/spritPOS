@@ -1,10 +1,10 @@
-// Dashboard "Restock immediately" panel: up to 10 items as a sliding card carousel.
+// Dashboard "Restock immediately" panel: up to 15 items as a sliding card carousel.
 //
 // Rows come from GET /reports/restock (backend/app/routers/reports.py), already sorted by restock
 // priority: fast sellers that are out of stock or about to run out come first. The window is always the
 // last N days up to today, and with SQL Server connected the stock and sales are read live (real time).
-// The top 10 items that sell are shown: those that need restock first, then the next-lowest-stock
-// sellers. Items that didn't sell are never shown; if nothing sold, the panel says so.
+// The top 15 items that sell are shown: those that need restock first, then the next-lowest-stock
+// sellers. Items with no forecast demand are never shown; if nothing sold, the panel says so.
 //
 // Carousel: a horizontal scroll-snap track (swipe/trackpad work natively), prev/next arrows, clickable
 // dots (one per scroll stop), ←/→ keys on the focused track, and a gentle auto-advance every 5 s that
@@ -16,7 +16,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { iconButton, money } from '../../lib/styles';
 import { distinctProductPhotos } from '../../constants/images';
 
-const MAX_CARDS = 10;
+const MAX_CARDS = 15;
 const AUTO_ADVANCE_MS = 5000;
 
 const BADGE = {
@@ -24,6 +24,18 @@ const BADGE = {
   CRITICAL: 'bg-[#FBE3CF] text-[#A04A12] dark:bg-orange-500/90 dark:text-black',
   LOW: 'bg-[#F8EDDA] text-[#875D24] dark:bg-amber-500/90 dark:text-black',
   OK: 'bg-[#EAF1EA] text-[#426147] dark:bg-emerald-500/90 dark:text-white',
+};
+
+// Each card says how fast the item sells (Fast / Medium / Slow, compared with the shop's other sellers) and how
+// soon to order it (Urgent / High); the #number is its place in the priority order.
+const SPEED = {
+  Fast: 'bg-[#E3F1E5] text-[#2F6B3A] dark:bg-emerald-500/90 dark:text-black',
+  Medium: 'bg-[#EEF0F6] text-[#44506A] dark:bg-stone-600 dark:text-white',
+  Slow: 'bg-[#F1ECE4] text-[#7A6A55] dark:bg-stone-700 dark:text-stone-200',
+};
+const PRIORITY = {
+  Urgent: 'bg-[#9A4B45] text-white dark:bg-red-600',
+  High: 'bg-[#D99A2B] text-white dark:bg-amber-500 dark:text-black',
 };
 
 const num = (n) => String(Math.round(n * 100) / 100);
@@ -34,7 +46,7 @@ function badgeText(r) {
   if (r.status === 'OUT_OF_STOCK') return 'Out of stock';
   if (r.status === 'CRITICAL') return r.days_left !== null && r.days_left < 1 ? '< 1 day left' : `~${Math.round(r.days_left ?? 0)} days left`;
   if (r.status === 'LOW') return `${num(r.qoh)} left`;
-  if (r.days_left !== null) return `~${Math.round(r.days_left)} days left`;
+  if (r.days_left !== null) return r.days_left >= 365 ? '365+ days left' : `~${Math.round(r.days_left)} days left`;
   return `${num(r.qoh)} in stock`;
 }
 
@@ -204,7 +216,17 @@ export default function RestockCarousel({ rows, days, badge }) {
                     <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#FFFFFF] dark:from-[#141414] to-transparent" />
                   </div>
                   <div className="p-4">
-                    <p className="text-[10px] font-bold tracking-[0.15em] text-[#D99A2B] dark:text-[#D4A847] uppercase">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {r.speed && (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${SPEED[r.speed]}`}
+                          title="How fast it sells compared with the shop's other items">{r.speed} seller</span>
+                      )}
+                      {r.priority_level && PRIORITY[r.priority_level] && (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${PRIORITY[r.priority_level]}`}
+                          title="Urgent: out of stock or about to run out. High: running low.">{r.priority_level} priority</span>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-[10px] font-bold tracking-[0.15em] text-[#D99A2B] dark:text-[#D4A847] uppercase">
                       {clean(r.group || '') || 'LIQUOR'}
                     </p>
                     <h4 className="mt-1 truncate text-sm font-semibold text-[#1A2236] dark:text-white" title={r.item_name}>

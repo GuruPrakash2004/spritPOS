@@ -90,5 +90,5 @@ def forecast_many(items: dict[str, tuple[list[float], bool]], end: date, horizon
     name = model_name().split("/")[-1]
     for code, daily in zip(codes, predicted):
         old = result[code]
-        result[code] = fc.Forecast(old.item_class, name, daily, old.start, history_days=old.history_days)
+        result[code] = fc.Forecast(old.item_class, name, daily, old.start, history_days=old.history_days, sigma=old.sigma)
     return result

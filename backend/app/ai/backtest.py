@@ -68,12 +68,12 @@ def cover_days(cfg: reorder.ReorderConfig) -> int:
     return math.ceil(cfg.lead_time_days + cfg.cover_days)
 
 
-def score(daily: list[float], actual: list[float], cfg: reorder.ReorderConfig) -> dict:
+def score(daily: list[float], actual: list[float], cfg: reorder.ReorderConfig, sigma: float = 0.0) -> dict:
     """Errors of one forecast against the following days (len(actual) >= cover_days)."""
     a = fc.demand(actual)
     f14, a14 = daily[:HORIZON], a[:HORIZON]
     avg = sum(daily) / len(daily) if daily else 0.0
-    target = reorder.demand_over(daily, cfg.lead_time_days + cfg.cover_days) + avg * cfg.safety_days
+    target = reorder.demand_over(daily, cfg.lead_time_days + cfg.cover_days) + reorder.safety_stock(avg, sigma, cfg)
     needed = sum(a[:cover_days(cfg)])
     return {"abs_err": sum(abs(x - y) for x, y in zip(f14, a14)), "actual14": sum(a14), "forecast14": sum(f14),
             "needed": needed, "short": max(needed - target, 0.0), "excess": max(target - needed, 0.0)}
@@ -109,7 +109,7 @@ def run(series: dict[str, list[float]], accessory: dict[str, bool], end: date, m
         for name, items in by_method.items():
             preds = methods[name]([eligible[i] for i in items], [accessory.get(i, False) for i in items])
             for item, daily in zip(items, preds):
-                m = score(daily, series[item][t:t + need], cfg)
+                m = score(daily, series[item][t:t + need], cfg, fc.sigma_of(eligible[item]))
                 rows.append({"item": item, "origin": origin_day.isoformat(), "class": classes[item], "method": name, **m})
     return rows
 
@@ -127,6 +127,7 @@ def aggregate(rows: list[dict]) -> list[dict]:
             "wape": round(sum(r["abs_err"] for r in rs) / a14, 4) if a14 > 0 else None,
             "bias_pct": round((sum(r["forecast14"] for r in rs) - a14) / a14 * 100, 1) if a14 > 0 else None,
             "mae_per_day": round(sum(r["abs_err"] for r in rs) / (HORIZON * len(rs)), 3),
+            "coverage_pct": round(100 - 100 * sum(1 for r in with_demand if r["short"] >= 1) / len(with_demand), 1) if with_demand else None,
             "stockout_rate_pct": round(100 * sum(1 for r in with_demand if r["short"] >= 1) / len(with_demand), 1) if with_demand else None,
             "shortfall_units": round(sum(r["short"] for r in rs)),
             "excess_units": round(sum(r["excess"] for r in rs)),
@@ -151,6 +152,6 @@ def summary(agg: list[dict], end: date, days: int, step: int) -> str:
     for cls, w in winners(agg).items():
         lines.append(f"{cls}: most accurate = {w['most_accurate']}; fewest missed stockouts = {w['fewest_stockouts']}")
         for a in (x for x in agg if x["class"] == cls):
-            lines.append(f"    {a['method']:<8} WAPE {a['wape']}  bias {a['bias_pct']}%  stockouts {a['stockout_rate_pct']}%  "
+            lines.append(f"    {a['method']:<8} WAPE {a['wape']}  bias {a['bias_pct']}%  stockouts {a['stockout_rate_pct']}%  coverage {a['coverage_pct']}%  "
                          f"short {a['shortfall_units']}  excess {a['excess_units']}  ({a['item_origins']} item-origins)")
     return "\n".join(lines)

@@ -120,6 +120,7 @@ def reorder_list():
 # Restock analysis thresholds (days of stock left at the current sales rate).
 RESTOCK_CRITICAL_DAYS = 3    # runs out within 3 days -> CRITICAL
 RESTOCK_LOW_DAYS = 7         # runs out within a week (or qoh <= ROL) -> LOW
+RESTOCK_MAX_DAYS_LEFT = 365  # a longer cover means "no real demand" (a shop with no recent billing); shown as 365+
 RESTOCK_COVER_DAYS = 14      # suggested order covers two weeks of sales
 _STATUS_ORDER = {"OUT_OF_STOCK": 0, "CRITICAL": 1, "LOW": 2, "OK": 3}
 
@@ -194,9 +195,9 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
         if qoh <= 0:
             days_left = 0.0
         elif ai:
-            days_left = ai["days_remaining"]
+            days_left = None if ai["days_remaining"] is None else min(ai["days_remaining"], RESTOCK_MAX_DAYS_LEFT)
         elif avg_daily > 0:
-            days_left = round(qoh / avg_daily, 1)
+            days_left = min(round(qoh / avg_daily, 1), RESTOCK_MAX_DAYS_LEFT)
         else:
             days_left = None
 
@@ -223,6 +224,17 @@ def restock(days: int = Query(15, ge=1, le=365), limit: int | None = Query(None,
                              else max(roq, math.ceil(avg_daily * RESTOCK_COVER_DAYS - max(qoh, 0))),
             "forecast": "ai" if ai else "formula", "ai_reason": ai["reason"] if ai else None,
         })
+
+    # How fast each item sells compared with the shop's other sellers (so it suits any shop): the top fifth of the items
+    # that sold is "Fast", the next 30% "Medium", the rest "Slow". Priority says how soon to order.
+    rates = sorted((r["avg_daily"] for r in rows if r["avg_daily"] > 0), reverse=True)
+    fast_at = rates[max(int(len(rates) * 0.2) - 1, 0)] if rates else 0
+    medium_at = rates[max(int(len(rates) * 0.5) - 1, 0)] if rates else 0
+    for r in rows:
+        a = r["avg_daily"]
+        r["speed"] = None if a <= 0 else "Fast" if a >= fast_at else "Medium" if a >= medium_at else "Slow"
+        r["priority_level"] = ("Urgent" if r["status"] in ("OUT_OF_STOCK", "CRITICAL") else "High" if r["status"] == "LOW"
+                               else "Normal") if r["needs_restock"] else None
 
     # Items that need restock: by priority (fast sellers running out first). The rest (for filling the
     # Dashboard's top 10): fewest days of stock left first, items that didn't sell last.

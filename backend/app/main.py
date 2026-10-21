@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from . import admin_audit, boot, bridge_launcher, db, gsettings, shop_hours, sqlstore, store
-from .ai import enabled as ai_enabled, service as ai_service
+from .ai import bootstrap as ai_bootstrap, enabled as ai_enabled
 from .routers import ai as ai_router, auth, company_files, custom_reports, designer as designer_router, masters, party_info, printing, reports, setup, tools, transactions, utilities
 from .schemas import SettingsIn
 
@@ -219,8 +219,8 @@ def startup_event():
     bridge_launcher.start()   # the Crystal Reports bridge runs whenever the backend does (Windows, bridge on this PC); started first so it warms up while the data loads
     threading.Thread(target=_prepare_print_agent, daemon=True).start()   # the counter PCs' Print Agent is ready to download
     boot.load_data()
-    if ai_enabled():   # the restock list's AI forecasts are made in the background, so the first Dashboard load isn't slow
-        ai_service.warm()
+    if ai_enabled():   # tables, sales history and the forecasts are made in the background (app/ai/bootstrap.py)
+        ai_bootstrap.start()
 
 
 @app.on_event("shutdown")

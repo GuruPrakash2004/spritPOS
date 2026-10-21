@@ -39,6 +39,8 @@ def load(start: date, end: date) -> tuple[dict[str, list[float]], dict[str, bool
         cur = stop + timedelta(days=1)
     series = {str(i["id"]): zero_fill(rows.get(int(i["id"]), []), start, end) for i in items}
     accessory = {str(i["id"]): str(i["liq"]).strip().upper() != "Y" for i in items}
+    if all(accessory.values()):     # no group flagged liquor at all: the flag says nothing (as service._non_liquor_groups)
+        accessory = {k: False for k in accessory}
     return series, accessory
 
 
