@@ -7,11 +7,23 @@
 // columns out as the desktop's "Please Select Item" window does: ShortName, QOH, MRP, ItemCode, ItemName, ItemGroupName.
 
 import { useEffect, useRef } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { money } from '../../lib/styles';
 
 const cell = 'truncate px-2 py-1.5';
 
-export default function ItemPickGrid({ id, items, at, onPick, showStock = false, showRate = false, windowsOrder = false, className = 'max-h-72', empty = 'No items match.' }) {
+function Head({ k, label, sort, onSort, right }) {
+  if (!onSort) return <span className={`${cell} ${right ? 'text-right' : ''}`}>{label}</span>;
+  const on = sort?.key === k;
+  return (
+    <button type="button" tabIndex={-1} onMouseDown={e => { e.preventDefault(); onSort(k); }} title={`Sort by ${label}`} aria-sort={on ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined}
+      className={`${cell} flex items-center gap-1 font-semibold hover:underline ${right ? 'justify-end' : ''}`}>
+      {label}{on && (sort.dir === 1 ? <ChevronUp size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />)}
+    </button>
+  );
+}
+
+export default function ItemPickGrid({ id, items, at, onPick, showStock = false, showRate = false, windowsOrder = false, sort, onSort, className = 'max-h-72', empty = 'No items match.' }) {
   const box = useRef(null);
   useEffect(() => {
     box.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
@@ -23,7 +35,7 @@ export default function ItemPickGrid({ id, items, at, onPick, showStock = false,
   const cols = { gridTemplateColumns: narrow
     ? `minmax(0,6rem) minmax(0,1fr)${showStock ? ' 3rem' : ''}${showRate ? ' 4.5rem' : ''}`
     : `minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,0.6fr) minmax(0,2.6fr)${showStock ? ' 4.5rem' : ''}${showRate ? ' 5.5rem' : ''}` };
-  if (windowsOrder) return <WindowsGrid {...{ id, items, at, onPick, className, empty, box, narrow }} />;
+  if (windowsOrder) return <WindowsGrid {...{ id, items, at, onPick, className, empty, box, narrow, sort, onSort }} />;
   return (
     <div id={id} role="listbox" aria-label="Items" ref={box} className={`overflow-auto border border-line bg-surface text-xs ${className}`}>
       <div role="presentation" style={cols} className="sticky top-0 z-10 grid border-b border-line bg-[#F0F3F8] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
@@ -49,28 +61,38 @@ export default function ItemPickGrid({ id, items, at, onPick, showStock = false,
   );
 }
 
-// The desktop's own column order. A phone drops the ItemGroupName and ItemCode columns.
-function WindowsGrid({ id, items, at, onPick, className, empty, box, narrow }) {
-  const cols = { gridTemplateColumns: narrow
-    ? 'minmax(0,1fr) 3rem 4.5rem'
-    : 'minmax(0,1.5fr) 3.5rem 5rem minmax(0,1.2fr) minmax(0,2fr) minmax(0,1fr)' };
+// The desktop's own column order. A phone drops the ItemGroupName and ItemCode columns. An automatic-width table: every column is as wide as its
+// longest value (full names, never cut short or running into the next column), and the list scrolls sideways if it is wider than the window.
+const full = 'whitespace-nowrap px-3 py-1.5';
+function WindowsGrid({ id, items, at, onPick, className, empty, box, narrow, sort, onSort }) {
   return (
     <div id={id} role="listbox" aria-label="Items" ref={box} className={`overflow-auto border border-line bg-surface text-xs ${className}`}>
-      <div role="presentation" style={cols} className="sticky top-0 z-10 grid border-b border-line bg-[#F0F3F8] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
-        <span className={cell}>ShortName</span><span className={`${cell} text-right`}>QOH</span><span className={`${cell} text-right`}>MRP</span>
-        {!narrow && <><span className={cell}>ItemCode</span><span className={cell}>ItemName</span><span className={cell}>ItemGroupName</span></>}
-      </div>
-      {items.map((item, i) => (
-        <div key={item.code} id={`${id}-${i}`} role="option" aria-selected={i === at}
-          onMouseDown={e => { e.preventDefault(); onPick(item); }}
-          style={cols}
-          className={`grid cursor-pointer border-b border-line-soft ${i === at ? 'bg-[#BBD7F0] text-stone-900 dark:bg-[#27405A] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
-          <span className={cell}>{narrow ? (item.shortName || item.name) : item.shortName}</span>
-          <span className={`${cell} text-right tabular-nums`}>{item.clQty}</span>
-          <span className={`${cell} text-right tabular-nums`}>{money(item.rate)}</span>
-          {!narrow && <><span className={`${cell} font-mono`}>{item.code}</span><span className={cell}>{item.name}</span><span className={cell}>{item.group}</span></>}
-        </div>
-      ))}
+      <table role="presentation" className="w-max min-w-full border-collapse">
+        <thead className="sticky top-0 z-10 bg-[#F0F3F8] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
+          <tr className="border-b border-line">
+            <th className="text-left"><Head k="shortName" label="ShortName" sort={sort} onSort={onSort} /></th>
+            <th className="text-right"><Head k="clQty" label="QOH" right sort={sort} onSort={onSort} /></th>
+            <th className="text-right"><Head k="rate" label="MRP" right sort={sort} onSort={onSort} /></th>
+            {!narrow && <>
+              <th className="text-left"><Head k="code" label="ItemCode" sort={sort} onSort={onSort} /></th>
+              <th className="text-left"><Head k="name" label="ItemName" sort={sort} onSort={onSort} /></th>
+              <th className="text-left"><Head k="group" label="ItemGroupName" sort={sort} onSort={onSort} /></th>
+            </>}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, i) => (
+            <tr key={item.code} id={`${id}-${i}`} role="option" aria-selected={i === at}
+              onMouseDown={e => { e.preventDefault(); onPick(item); }}
+              className={`cursor-pointer border-b border-line-soft ${i === at ? 'bg-[#BBD7F0] text-stone-900 dark:bg-[#27405A] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
+              <td className={full}>{narrow ? (item.shortName || item.name) : item.shortName}</td>
+              <td className={`${full} text-right tabular-nums`}>{item.clQty}</td>
+              <td className={`${full} text-right tabular-nums`}>{money(item.rate)}</td>
+              {!narrow && <><td className={`${full} font-mono`}>{item.code}</td><td className={full}>{item.name}</td><td className={full}>{item.group}</td></>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {!items.length && <p className="px-3 py-6 text-center text-stone-500">{empty}</p>}
     </div>
   );

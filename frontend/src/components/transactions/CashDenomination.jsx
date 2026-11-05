@@ -5,6 +5,8 @@
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import Toast from '../common/Toast';
+import ActionBar, { ScreenFrame } from '../common/ActionBar';
+import { goHome } from '../../lib/nav';
 import Kbd from '../common/Kbd';
 import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
@@ -48,7 +50,18 @@ export default function CashDenomination() {
 
   useShortcuts({ 'Mod+S': () => { void save(); } });
 
+  // The record buttons walk through the days (a count is kept per date): First = the 1st of the month, Last = today.
+  const shift = (days) => { const d = new Date(`${on}T00:00:00`); d.setDate(d.getDate() + days); setOn(d.toLocaleDateString('en-CA')); };
+  const today = todayIso();
+  const bar = (
+    <ActionBar
+      onNew={() => setCounts({})} newLabel="New Count" onClose={goHome}
+      nav={{ onFirst: () => setOn(`${on.slice(0, 8)}01`), onPrev: () => shift(-1), onNext: () => shift(1), onLast: () => setOn(today), atStart: on.endsWith('-01'), atEnd: on >= today, label: on }}
+    />
+  );
+
   return (
+    <ScreenFrame bar={bar}>
     <div className="mx-auto flex max-w-3xl flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       <div className={pageHeader}>
@@ -103,5 +116,6 @@ export default function CashDenomination() {
         </div>
       </div>
     </div>
+    </ScreenFrame>
   );
 }

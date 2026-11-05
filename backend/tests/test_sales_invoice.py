@@ -126,3 +126,47 @@ async def test_a_formula_that_works_out_to_zero_keeps_the_built_in_amount(client
     res = (await client.post("/transactions/sales-invoice", json=bill(hold=True))).json()
     assert res["lines"][0]["amount"] == plain["lines"][0]["amount"] > 0
     assert res["totals"]["net"] == plain["totals"]["net"]
+
+
+async def test_litre_limit_per_bill(client):
+    """The desktop's AllowIMLinLtr / SPLITINV Global Settings: a bill over the limit is refused unless split billing is on."""
+    from app import store
+    from app.gsettings import _row
+    item = store.ITEMS[ITEM]
+    old = item.get("liqtype")
+    item["liqtype"] = "IML"
+    store.GSETTINGS["AllowIMLinLtr"] = _row("AllowIMLinLtr", "Invoice", "x", "0.8", "number", "", None, "desktop")
+    try:
+        res = await client.post("/transactions/sales-invoice", json=bill())
+        assert res.status_code == 422 and "IML quantity exceeds" in res.json()["detail"]
+        store.GSETTINGS["SPLITINV"] = _row("SPLITINV", "Invoice", "x", "Y", "yn", "", None, "desktop")
+        # split billing: 2 bottles of 0.75 L against a 0.8 L limit become two bills of one bottle
+        res = await client.post("/transactions/sales-invoice", json=bill())
+        assert res.status_code == 201
+        assert len(res.json()["split_bills"]) == 2 and res.json()["lines"][0]["qty"] == 1
+        bad = await client.post("/transactions/sales-invoice", json=bill(payment_type="SPLIT"))
+        assert bad.status_code == 422
+    finally:
+        item["liqtype"] = old
+        store.GSETTINGS.pop("AllowIMLinLtr", None)
+        store.GSETTINGS.pop("SPLITINV", None)
+
+
+async def test_denomination_config_and_bill_denominations(client):
+    cfg = (await client.get("/transactions/denominations/config")).json()
+    assert cfg["values"] == ["2000", "500", "200", "100", "50", "20", "10", "coins"]   # the desktop's Denomination window: seven notes and coins
+    res = await client.post("/transactions/sales-invoice", json=bill(denominations=[{"cur": "500", "nos": 1}, {"cur": "100", "nos": 0}, {"cur": "coins", "nos": 35}]))
+    assert res.status_code == 201
+    assert res.json()["denominations"][0] == {"cur": "500", "nos": 1}
+    assert {"cur": "coins", "nos": 35} in res.json()["denominations"]
+
+
+async def test_today_totals_counts_saved_bills_only(client):
+    before = (await client.get("/transactions/today-totals")).json()
+    res = await client.post("/transactions/sales-invoice", json=bill())
+    assert res.status_code == 201
+    after = (await client.get("/transactions/today-totals")).json()
+    assert after["total_bills"] == before["total_bills"] + 1
+    assert after["sales"] > before["sales"]
+    await client.post(f"/transactions/sales-invoice/{res.json()['doc_no']}/cancel", json={"remarks": "test"})
+    assert (await client.get("/transactions/today-totals")).json()["total_bills"] == before["total_bills"] + 1   # a cancelled bill still counts (as in the desktop)

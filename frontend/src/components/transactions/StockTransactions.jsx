@@ -37,6 +37,7 @@ export function PurchaseIndent() {
       rateField="purchase_rate"
       rateLabel="PB Rate"
       buildBody={lines => ({ date: dateLocked ? todayIso() : date, supplier, lines: toLines(lines) })}
+      onEditLoad={d => { setDate(d.date); setSupplier(d.supplier || ''); }}
       header={<>
         <div><label htmlFor="pi-date" className={label}>Indent Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="pi-date" type="date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div className="w-full min-w-0 sm:w-auto">
@@ -73,6 +74,7 @@ export function SalesReturn() {
       rateField="mrp"
       rateLabel="Rate"
       buildBody={lines => ({ date: dateLocked ? todayIso() : date, against_invoice: against || null, customer: invoice?.customer ?? 'CASH', remarks, lines: toLines(lines) })}
+      onEditLoad={d => { setDate(d.date); setAgainst(d.against_invoice || ''); setRemarks(d.remarks || ''); }}
       header={<>
         <div><label htmlFor="sr-date" className={label}>Return Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="sr-date" type="date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div className="w-full min-w-0 sm:w-auto">
@@ -107,6 +109,7 @@ export function StockDeduction() {
       rateField="purchase_rate"
       rateLabel="Purchase Rate"
       buildBody={lines => ({ date: dateLocked ? todayIso() : date, reason, remarks, lines: toLines(lines) })}
+      onEditLoad={d => { setDate(d.date); setReason(REASONS.includes(d.reason) ? d.reason : REASONS[0]); setRemarks(d.remarks || ''); }}
       header={<>
         <div><label htmlFor="sd-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="sd-date" type="date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div>

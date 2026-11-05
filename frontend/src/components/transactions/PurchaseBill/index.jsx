@@ -30,7 +30,7 @@ import { useScreenFields } from '../../../hooks/useScreenFields';
 import { applyGridDefinition } from '../../../lib/billGrid';
 import { formulaAmounts } from '../../../lib/billMaths';
 import { applyDefinition, ruleHolds, ruleValues } from '../../../lib/designerFields';
-import { errorText, getNextNumber, getPurchaseIndents, getSettingValues, getSuppliers, newIdempotencyKey, savePurchaseBill, } from '../../../lib/api';
+import { errorText, getNextNumber, getPurchaseIndents, getSettingValues, getSuppliers, newIdempotencyKey, savePurchaseBill, updatePurchaseBill, } from '../../../lib/api';
 import { loadStockItems, sellable, STOCK_ITEMS, stockIndex, useStockItems } from '../../../data/stockData';
 import { numberToWords } from '../../../lib/formatters';
 import {
@@ -74,6 +74,7 @@ export default function PurchaseBill() {
   }, []);
   useEffect(() => { loadNextNo(); }, [loadNextNo]);
   const [pbDate, setPbDate] = useState(today);
+  const [editing, setEditing] = useState(null);   // a saved bill opened from the List to change (PUT keeps its number): { no }
   // Transaction Settings for Purchase Bill: Copy From allowed, and whether the bill date can be changed.
   const docSettings = useDocSettings('purchase_bill');
   useStockItems();
@@ -303,6 +304,21 @@ export default function PurchaseBill() {
     setToast({ kind: 'ok', text: `Copied ${added.length} items from indent ${indent.doc_no}.` });
   };
 
+  // Load reorder items (the desktop's getROLItems): every active liquor item whose stock is below its reorder level goes onto the bill,
+  // for the reorder quantity (or what is needed to reach the level).
+  const loadReorderItems = () => {
+    const kept = rows.filter(isFilled);
+    const have = new Set(kept.map(r => r.stock));
+    const added = STOCK_ITEMS
+      .map((it, stock) => ({ it, stock }))
+      .filter(({ it, stock }) => it.active && it.cat !== 'Others' && it.rol > 0 && it.clQty < it.rol && !have.has(stock))
+      .map(({ it, stock }) => stockRow(stock, it.roq > 0 ? it.roq : Math.ceil(it.rol - it.clQty)));
+    if (!added.length) return setToast({ kind: 'ok', text: 'No item is below its reorder level.' });
+    setRows([...kept, ...added]);
+    setSelectedUid(added[0].uid);
+    setToast({ kind: 'ok', text: `Added ${added.length} item${added.length === 1 ? '' : 's'} below the reorder level.` });
+  };
+
   // The Add Item window's OK: the item with its total bottles and purchase rate goes into the selected empty row, or a new one.
   const addFromLookup = ({ stock, qty, rate }) => {
     const row = { ...stockRow(stock, qty), rate };
@@ -328,6 +344,8 @@ export default function PurchaseBill() {
   const resetBill = () => {
     saveKey.current = newIdempotencyKey();
     extrasBill.refresh();
+    setEditing(null);
+    setPbDate(today());
     const fresh = blankRow();
     setSupplier('');
     setBillingAddress('');
@@ -340,6 +358,40 @@ export default function PurchaseBill() {
     setSelectedUid(fresh.uid);
     setAttachments([]);
     setRemarks('');
+  };
+
+  // List → Edit Selected: the saved bill goes onto the screen to be changed. Saving sends PUT: the old bill's stock goes out, the changed bill comes in.
+  const loadForEdit = async (doc) => {
+    if (rows.some(isFilled) && !(await confirm(`Open ${doc.doc_no} for editing? The bill on the screen is cleared.`))) return;
+    const lines = [];
+    for (const l of doc.lines ?? []) {
+      const stock = STOCK_ITEMS.findIndex(i => i.code === l.item_code);
+      if (stock === -1) return setToast({ kind: 'error', text: `${doc.doc_no} has an item (${l.item_code}) that is no longer in Item Master, so it can't be edited here.` });
+      lines.push({ ...stockRow(stock, l.qty), rate: l.rate });
+    }
+    const basic = doc.totals?.basic ?? 0;
+    const supplierRow = suppliers.find(s => s.code === doc.supplier || s.name === doc.supplier);
+    saveKey.current = newIdempotencyKey();
+    setEditing({ no: doc.doc_no });
+    setPbDate(doc.date);
+    setSupplier(supplierRow?.name ?? doc.supplier ?? '');
+    setBillingAddress(supplierRow?.address ?? '');
+    setEditingAddress(false);
+    setInvNo(doc.supplier_inv_no ?? '');
+    setInvDate(doc.supplier_inv_date || doc.date);
+    setInvValue(doc.supplier_inv_value ? String(doc.supplier_inv_value) : '');
+    setPurchaseType(doc.purchase_type || PURCHASE_TYPES[0]);
+    setRemarks(doc.remarks ?? '');
+    setTcsPct(String(basic ? Math.round(((doc.totals?.tcs ?? 0) / basic) * 10000) / 100 : 0));
+    setRows(lines.length ? lines : [blankRow()]);
+    setSelectedUid((lines[0] ?? blankRow()).uid);
+    extrasBill.load(doc.extras);
+    setToast({ kind: 'ok', text: `Editing purchase bill ${doc.doc_no}. Save changes updates it.` });
+  };
+
+  const stopEditing = async () => {
+    if (!(await confirm(`Stop editing ${editing.no}? Your changes are thrown away.`))) return;
+    resetBill();
   };
 
   const saveBill = async (andPrint = false) => {
@@ -356,11 +408,23 @@ export default function PurchaseBill() {
     // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Save was pressed.
     const key = saveKey.current;
     const body = {
-      date: docSettings.allow_edit_date ? pbDate : today(), supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: Number(invValue) || 0,
+      date: editing || docSettings.allow_edit_date ? pbDate : today(), supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: Number(invValue) || 0,
       purchase_type: purchaseType, remarks, tcs: totals.tcs, cess: totals.cess + totals.compCess,
       lines: filled.map(r => ({ item_code: r.code, bottles: r.qty, rate: r.rate })),
       ...(extrasBill.fields.length ? { extras: extrasBill.body() } : {}),
     };
+    if (editing) {   // a saved bill changed in place: same number, stock follows
+      const no = editing.no;
+      if (!(await toastStore.defer('ok', `Purchase Bill ${no} (${filled.length} items) will be updated when this closes.`, 'Update cancelled. The bill is still open.'))) return;
+      updatePurchaseBill(no, body).then(doc => {
+        setToast({ kind: 'ok', text: `Purchase Bill ${doc.doc_no} updated — ${doc.totals.qty} bottles.` });
+        loadStockItems().catch(() => undefined);
+        loadNextNo();
+        resetBill();
+        if (andPrint) setPrintDocNo(doc.doc_no);
+      }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
+      return;
+    }
     if (!(await toastStore.defer('ok', `Purchase Bill for ${supplier} (${filled.length} items) will be saved when this closes.`, 'Save cancelled. The bill is still open.'))) return;
     savePurchaseBill(body, key).then(doc => {
       const moved = purchaseType === 'Purchase Return' ? 'returned to the supplier' : 'added to stock';
@@ -397,10 +461,16 @@ export default function PurchaseBill() {
   const sep = <span className="mx-1 h-5 w-px bg-line" aria-hidden="true" />;
 
   return (
-    <WithHistory kind="purchase_bill" title="purchase bills">
+    <WithHistory kind="purchase_bill" title="purchase bills" onNew={resetBill} onEdit={doc => void loadForEdit(doc)}>
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {dialog}
+      {editing && (
+        <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D99A2B]/60 bg-[#D99A2B]/10 px-4 py-2 text-xs font-semibold text-[#1B2B4B] dark:text-[#D4A847]">
+          <span>Editing purchase bill {editing.no}: Save updates it in place (the old bill's stock goes out, then the changed bill comes in).</span>
+          <button type="button" onClick={() => void stopEditing()} className={secondaryButton}>Stop editing</button>
+        </div>
+      )}
 
       {/* Document header */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
@@ -479,7 +549,7 @@ export default function PurchaseBill() {
               {!headDef('purchase_type').hidden && <div>
                 <label htmlFor="pb-type" className={cn(labelClass, headTone('purchase_type'))}>{headLabel('purchase_type')}</label>
                 <select id="pb-type" value={purchaseType} disabled={headDef('purchase_type').locked} onChange={e => setPurchaseType(e.target.value)} className={field}>
-                  {PURCHASE_TYPES.map(t => <option key={t}>{t}</option>)}
+                  {[...new Set([...PURCHASE_TYPES, purchaseType])].map(t => <option key={t}>{t}</option>)}   {/* the desktop has other types too (Stock Transfer, ...) */}
                 </select>
               </div>}
             </div>
@@ -517,6 +587,7 @@ export default function PurchaseBill() {
           <input ref={fileInput} type="file" multiple hidden onChange={e => setAttachments([...attachments, ...Array.from(e.target.files ?? []).map(f => f.name)])} />
           {sep}
           {docSettings.allow_copy_from && <button onClick={() => { setCopyOpen(true); openCopyFrom(); }} className={ghostButton} title="Copy lines from a Purchase Indent"><FileInput size={14} />Copy from indent</button>}
+          <button onClick={loadReorderItems} className={ghostButton} title="Add the items that are below their reorder level">Load reorder items</button>
           <span className="ml-auto rounded bg-yellow-200 px-2 py-0.5 text-[11px] font-semibold text-red-700">
             {ready ? 'Press F4 to Add Single Item' : 'Enter the bill date, supplier, invoice no. and the PB (invoice) value to add items'}
           </span>

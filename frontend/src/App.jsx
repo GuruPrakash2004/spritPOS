@@ -9,6 +9,7 @@
 // - To add a screen: add its name to MODULE_GROUPS/MODULE_KEYWORDS, the Sidebar, MATRIX_SCREENS,
 //   backend ROLES, and a `case` below.
 
+import { OPEN_MODULE } from './lib/nav';
 import { SnackbarContainer } from './components/common/Toast';
 import DesignerNotice from './components/common/DesignerNotice';
 import { Suspense, useEffect, useState } from 'react';
@@ -16,7 +17,8 @@ import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard,
 import ChangePasswordDialog from './components/auth/ChangePasswordDialog';
 import ScreenBoundary from './components/common/ScreenBoundary';
 import KeyboardShortcutsModal from './components/common/KeyboardShortcutsModal';
-import { getAuthToken, getDsr, getMe, requestTokenFromOtherTabs, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, } from './lib/api';
+import CalculatorDialog from './components/common/CalculatorDialog';
+import { getAuthToken, getDsr, getMe, getTodayTotals, requestTokenFromOtherTabs, setAuthRights, setAuthUser, setFieldRights, setSessionEndedHandler, todayIso, } from './lib/api';
 import { ADMIN_MASTER, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
 import { moduleForPath, pathForModule } from './lib/routes';
 import { iconButton, primaryButton } from './lib/styles';
@@ -27,6 +29,8 @@ import { withViewTransition } from './lib/viewTransition';
 import { useConfirm } from './components/common/ConfirmDialog';
 import CashDenomination from './components/transactions/CashDenomination';
 import ClosingStockEntry from './components/transactions/ClosingStockEntry';
+import VoucherEntry from './components/accounting/VoucherEntry';
+import PhysicalStockEntry from './components/transactions/PhysicalStockEntry';
 import CompanyMaster from './components/masters/CompanyMaster';
 import ExpenseEntry from './components/transactions/ExpenseEntry';
 import ItemMaster from './components/masters/ItemMaster';
@@ -45,7 +49,6 @@ import { finYearLabel } from './lib/formatters';
 import SalesInvoice from './components/transactions/SalesInvoice';
 import SalesInvoiceSetup from './components/transactions/SalesInvoiceSetup';
 import Sidebar from './components/layout/Sidebar';
-import SalesTodayPopover from './components/layout/SalesTodayPopover';
 import SupplierMaster from './components/masters/SupplierMaster';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { useCompanyProfile } from './hooks/useCompanyProfile';
@@ -66,6 +69,19 @@ const BulkMasterUpdate = lazyScreen('Bulk Master Update');
 const LabelPrinting = lazyScreen('Label Printing');
 const MergeItems = lazyScreen('Merge Items');
 const CompareStock = lazyScreen('Compare Stock');
+const UpdateItemStock = lazyScreen('Update Item Stock');
+const ItemVsBrand = lazyScreen('Item Vs Brand');
+const SmsScreen = lazyScreen('SMS');
+const CustomerVsItem = lazyScreen('Customer Vs Item Master');
+const SupplierVsItem = lazyScreen('Supplier Vs Item Master');
+const PdfGenerator = lazyScreen('PDF Generator');
+const Quotation = lazyScreen('Quotation');
+const GeneralLedger = lazyScreen('General Ledger');
+const PartyOutstanding = lazyScreen('Party wise OutStanding');
+const BillWiseOutstanding = lazyScreen('Bill wise OutStanding');
+const BillWiseAgeing = lazyScreen('Bill wise Ageing');
+const SharedDocuments = lazyScreen('Shared Documents');
+const DeleteNonLiquorItems = lazyScreen('Delete Non-Liquor Items');
 const ReportsDashboard = lazyScreen('Reports Dashboard');
 const DailySummaryReport = lazyScreen('Daily Summary Report');
 const StockBalanceReport = lazyScreen('Stock Balance Report');
@@ -74,14 +90,14 @@ const PriceListMaintenance = lazyScreen('Price List Maintenance');
 // Per-tab memory for a page refresh (sessionStorage; cleared when the tab closes).
 const FY_KEY = 'vlqms_fin_year';
 // Screens whose unsaved rows Alt+B would throw away.
-const ENTRY_SCREENS = ['Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Cash Denomination'];
+const ENTRY_SCREENS = ['Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher', 'Quotation', 'Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Physical Stock Entry', 'Cash Denomination'];
 const SESSION_CHECK_MS = 60_000;
 // Whether the left navigation is a narrow icon rail (a per-browser convenience, so localStorage).
 const NAV_COLLAPSED_KEY = 'vlqms_nav_collapsed';
 // Billing screens start with the rail so the item grid gets the width.
 const BILLING_SCREENS = ['Sales Invoice', 'Purchase Bill'];
 // Screens that open with no transition: the user starts typing at once (billing and the other entry screens).
-const QUIET_SCREENS = [...BILLING_SCREENS, 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Cash Denomination'];
+const QUIET_SCREENS = [...BILLING_SCREENS, 'Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher', 'Quotation', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Physical Stock Entry', 'Cash Denomination'];
 const readNavCollapsed = () => { try { return localStorage.getItem(NAV_COLLAPSED_KEY) === '1'; } catch { return false; } };
 const writeNavCollapsed = (on) => { try { localStorage.setItem(NAV_COLLAPSED_KEY, on ? '1' : '0'); } catch { /* storage blocked */ } };
 const readSaved = (key) => { try { return sessionStorage.getItem(key) || ''; } catch { return ''; } };
@@ -100,9 +116,11 @@ export default function App() {
   const [billOpen, setBillOpen] = useState(false);
   const [newCounter, setNewCounter] = useState(false);   // Sales Counter Master opened from Sales Invoice to add the first counter
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [changingPassword, setChangingPassword] = useState(false);
   const [dsr, setDsr] = useState(null);
+  const [totals, setTotals] = useState(null);   // the footer's Total Bills / Sales, read from the database
   const [session, setSession] = useState(null);
   const { company } = useCompanyProfile();
   // Why the last session ended (shown on the sign-in page), e.g. "Your session has expired".
@@ -167,7 +185,17 @@ export default function App() {
   // screen changes. The DSR needs a login token, so nothing is fetched on the sign-in page.
   useEffect(() => {
     if (!session) return;
-    getDsr(todayIso()).then(setDsr).catch(() => setDsr(null));
+    const load = () => {
+      getDsr(todayIso()).then(setDsr).catch(() => setDsr(null));
+      getTodayTotals().then(setTotals).catch(() => setTotals(null));
+    };
+    load();
+    // The footer's Total Bills / Sales follow a bill saved or cancelled here at once, and a bill made in the Windows vLQMS (or another PC)
+    // within 15 seconds or when this window gets the focus back.
+    window.addEventListener('vlqms:bills-changed', load);
+    window.addEventListener('focus', load);
+    const timer = window.setInterval(load, 15000);
+    return () => { window.removeEventListener('vlqms:bills-changed', load); window.removeEventListener('focus', load); window.clearInterval(timer); };
   }, [session, activeTab, billOpen]);
 
   // Dialogs and toasts are portalled to <body>, so the theme class lives on <html> as well.
@@ -200,6 +228,12 @@ export default function App() {
       if (window.innerWidth < 768) setSidebarOpen(false);
     }, !QUIET_SCREENS.includes(moduleName));
   };
+  // Screens (the action bar's Close, ...) ask to open another screen through lib/nav.js.
+  useEffect(() => {
+    const onOpen = (e) => openModule(String(e.detail));
+    window.addEventListener(OPEN_MODULE, onOpen);
+    return () => window.removeEventListener(OPEN_MODULE, onOpen);
+  });
 
   // App-wide keys: `?` shows the shortcuts sheet (not while typing); Alt+B starts a new sales bill from any screen,
   // asking first when it would leave an entry screen (its unsaved rows would be lost).
@@ -208,6 +242,7 @@ export default function App() {
     'Mod+B': e => { e.preventDefault(); toggleNav(); },
     'Shift+?': e => { if (!isTypingTarget(e.target)) setShowShortcuts(true); },
     '?': e => { if (!isTypingTarget(e.target)) setShowShortcuts(true); },
+    'Alt+K': () => setShowCalc(true),   // the desktop's calculator
     'Alt+B': () => {
       if (!session || !canOpen(session.user.modules, session.user.role, 'Sales Invoice')) return;
       if (activeTab === 'Sales Invoice' && billOpen) return;   // already billing: F7 starts a new bill
@@ -262,6 +297,7 @@ export default function App() {
       case 'Purchase Indent': return <PurchaseIndent />;
       case 'Sales Return': return <SalesReturn />;
       case 'Closing Stock Entry': return <ClosingStockEntry />;
+      case 'Physical Stock Entry': return <PhysicalStockEntry />;
       case 'Cash Denomination': return <CashDenomination />;
       case 'Daily Summary Report': return <DailySummaryReport />;
       case 'Stock Balance Report': return <StockBalanceReport />;
@@ -277,6 +313,25 @@ export default function App() {
       case 'Replace and Remove Duplicate items': return <MergeItems key="replace" mode="replace" />;
       case 'Merge Items': return <MergeItems key="merge" mode="merge" />;
       case 'Compare Stock': return <CompareStock />;
+      case 'Update Item Stock': return <UpdateItemStock />;
+      case 'Item Vs Brand': return <ItemVsBrand />;
+      case 'SMS': return <SmsScreen />;
+      case 'Customer Vs Item Master': return <CustomerVsItem />;
+      case 'Supplier Vs Item Master': return <SupplierVsItem />;
+      case 'PDF Generator': return <PdfGenerator />;
+      case 'Quotation': return <Quotation />;
+      case 'General Ledger': return <GeneralLedger />;
+      case 'Party wise OutStanding': return <PartyOutstanding />;
+      case 'Bill wise OutStanding': return <BillWiseOutstanding />;
+      case 'Bill wise Ageing': return <BillWiseAgeing />;
+      case 'Payment Voucher': return <VoucherEntry kind="payment" title="Payment Voucher" />;
+      case 'Receipt Voucher': return <VoucherEntry kind="receipt" title="Receipt Voucher" />;
+      case 'Credit Note': return <VoucherEntry kind="credit-note" title="Credit Note" />;
+      case 'Debit Note': return <VoucherEntry kind="debit-note" title="Debit Note" />;
+      case 'Contra Voucher': return <VoucherEntry kind="contra" title="Contra Voucher" />;
+      case 'Journal Voucher': return <VoucherEntry kind="journal" title="Journal Voucher" />;
+      case 'Shared Documents': return <SharedDocuments />;
+      case 'Delete Non-Liquor Items': return <DeleteNonLiquorItems />;
       case 'Web Sync': return <WebSync />;
       case 'Bulk Master Update': return <BulkMasterUpdate />;
       case 'Label Printing': return <LabelPrinting />;
@@ -383,14 +438,15 @@ export default function App() {
          <div className="flex items-center gap-2 sm:gap-3">
             <span className="flex items-center gap-1.5 font-medium">
               <span className={`h-1.5 w-1.5 rounded-full ${dsr ? 'bg-[#55745A] dark:bg-emerald-500 dark:shadow-[0_0_6px_rgba(16,185,129,0.5)]' : 'bg-[#9A4B45]'}`} />
-              {dsr ? 'Connected' : 'Offline'}
+              {dsr ? 'Licensed' : 'Offline'}
             </span>
             <span className="text-[#A4998E] dark:text-stone-600">·</span>
-            <span>Licence 827106637</span>
+            <span>Licence No. 827106637</span>
           </div>
           <div className="flex items-center gap-4 tabular-nums">
-            <span className="hidden sm:inline">Bills today <span className="font-medium text-[#1A2236] dark:text-stone-200">{dsr?.total_bills ?? '—'}</span></span>
-            <SalesTodayPopover dsr={dsr} />
+            {/* The desktop's status bar: today's saved bills (cancelled / deleted / held ones left out) and their value. */}
+            <span className="font-semibold text-[#1A2236] dark:text-stone-200">Total Bills: {totals?.total_bills ?? '—'}</span>
+            <span className="font-semibold text-[#1A2236] dark:text-stone-200">Sales: {totals ? Math.round(Number(totals.sales) || 0) : '—'}</span>
           </div>
         </footer>
       </div>
@@ -399,6 +455,7 @@ export default function App() {
       {changingPassword && !user.must_change_password && <ChangePasswordDialog user={user.user} onClose={() => setChangingPassword(false)} />}
       {user.must_change_password && <ChangePasswordDialog forced user={user.user}
         onClose={() => setSession(s => (s ? { ...s, user: { ...s.user, must_change_password: false } } : s))} />}
+      {showCalc && <CalculatorDialog onClose={() => setShowCalc(false)} />}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
       {confirmDialog}
     </div>

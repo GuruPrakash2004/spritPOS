@@ -112,7 +112,7 @@ export default function About() {
           </>
         )}
         {!about && !error && <p className="flex items-center gap-2 text-xs text-stone-500"><Info size={14} />Loading…</p>}
-        <DevelopedBy className="mt-2 border-t border-[#DDE3EC] pt-4 dark:border-line" />
+        <DevelopedBy className="mt-2" />
         <a href="https://www.softvent.com" target="_blank" rel="noreferrer noopener" className="text-xs font-medium text-[#1B2B4B] underline-offset-2 hover:underline dark:text-[#D4A847]">www.softvent.com</a>
       </section>
     </div>

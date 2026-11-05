@@ -17,9 +17,9 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from .. import db_store, security, sqlstore, store
+from .. import db, db_store, security, sqlstore, store
 from ..ai import service as ai_service
-from .auth import get_current_user, hides_cost, require_module
+from .auth import get_current_user, hides_cost, require_admin, require_module
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 RPTS_DIR = Path(__file__).resolve().parent.parent.parent / "Rpts"
@@ -272,8 +272,8 @@ def daily_summary_report(on: date, current_user: dict = Depends(get_current_user
             by_group[it["group"]] += l["amount"]
             profit += l["amount"] - l["qty"] * it["purchase_rate"]
     pbs = [p for p in store.DOCS["purchase_bill"].values() if p["date"] == d]
-    returns = [r for r in store.DOCS["sales_return"].values() if r["date"] == d]
-    exps = [e for e in store.DOCS["expense"].values() if e["date"] == d]
+    returns = [r for r in store.DOCS["sales_return"].values() if r["date"] == d and r.get("status") != "CANCELLED"]
+    exps = [e for e in store.DOCS["expense"].values() if e["date"] == d and e.get("status") != "CANCELLED"]
     exp_by_ledger = defaultdict(float)
     for e in exps:
         for l in e["lines"]:
@@ -295,7 +295,8 @@ def daily_summary_report(on: date, current_user: dict = Depends(get_current_user
                      "incl_gst": round(sum(p["totals"]["net"] for p in pbs), 2)},
         "sales_returns": round(sum(r["totals"]["net"] for r in returns), 2),
         "expenses": round(sum(e["total"] for e in exps), 2),
-        "cash_balance": round(pay["cash"] - sum(e["total"] for e in exps if e["paid_from"] == "CASH"), 2),
+        "cash_opening": store.EXP_OPENING.get(d, 0.0),
+        "cash_balance": round(store.EXP_OPENING.get(d, 0.0) + pay["cash"] - sum(e["total"] for e in exps if e["paid_from"] == "CASH"), 2),
         "redemption": round(sum(i["totals"].get("points_redeemed", 0) for i in saved), 2),
         "counter_wise": dict(by_counter),
         "salesperson_wise": dict(by_person),
@@ -566,6 +567,136 @@ def package_wise_purchase(from_date: date, to_date: date, current_user: dict = D
     return sorted(({"package": k, **v, **({"amount": None} if hide else {})} for k, v in pk.items()), key=lambda r: -r["litres"])
 
 
+# ─── Drops reports (legacy frmRptsDrops: frmRptDropsDSR, frmRptDropsPur, frmRptDropsPettyCash) ──────────────────────────
+# One-day statements the desktop shows in a plain grid. Rows are {particulars, ...}; "bold" marks the total rows.
+
+def _drops_sales_rows(a: date, b: date) -> list[dict]:
+    invs = _saved_invoices(a, b)
+    liquor = {"qty": 0.0, "amount": 0.0}
+    others = defaultdict(lambda: {"qty": 0.0, "amount": 0.0})
+    for inv in invs:
+        for l in inv["lines"]:
+            it = _item(l["item_code"])
+            row = liquor if _is_liquor(it) else others[it["group"] or "-"]
+            row["qty"] += l["qty"]
+            row["amount"] += l["amount"]
+    total = round(sum(i["totals"]["net"] for i in invs), 2)
+    lines_total = liquor["amount"] + sum(r["amount"] for r in others.values())
+    pay = defaultdict(float)
+    for inv in invs:
+        for k, v in inv["payment"].items():
+            pay[k] += v
+    rows = [{"particulars": "LIQUOR", "qty": liquor["qty"], "amount": round(liquor["amount"], 2)}]
+    rows += [{"particulars": g, "qty": r["qty"], "amount": round(r["amount"], 2)} for g, r in sorted(others.items())]
+    rows.append({"particulars": "Round Off", "qty": None, "amount": round(total - lines_total, 2)})
+    for key, label in (("cash", "Payment Mode: Cash"), ("card", "Card"), ("upi", "UPI"), ("credit", "Credit Amt")):
+        if key == "cash" or pay.get(key):
+            rows.append({"particulars": label, "qty": None, "amount": round(pay.get(key, 0), 2)})
+    rows.append({"particulars": "Total Sales", "qty": None, "amount": total, "bold": True})
+    return rows
+
+
+def _drops_purchase_rows(a: date, b: date, hide: bool) -> list[dict]:
+    db_store.ensure_days(a, b, purchases=True)
+    rows, total = [], 0.0
+    for bill in store.DOCS["purchase_bill"].values():
+        if not a.isoformat() <= bill["date"] <= b.isoformat():
+            continue
+        sign = -1 if bill.get("purchase_type") == "Purchase Return" else 1
+        first = _item(bill["lines"][0]["item_code"]) if bill["lines"] else None
+        sup = store.SUPPLIERS.get(bill.get("supplier"), {}).get("name", bill.get("supplier") or "")
+        amt = sign * bill["totals"]["net"]
+        total += amt
+        rows.append({"group": "NON LIQUOR" if first and not _is_liquor(first) else "LIQUOR", "supplier": sup,
+                     "bill_no": f"{bill.get('supplier_inv_no', bill['doc_no'])}-{bill.get('supplier_inv_date', bill['date'])}",
+                     "amount": None if hide else round(amt, 2)})
+    rows.sort(key=lambda r: (r["group"], r["supplier"]))
+    rows.append({"group": "Total Purchase", "supplier": "", "bill_no": "", "amount": None if hide else round(total, 2), "bold": True})
+    return rows
+
+
+def _drops_petty_rows(a: date, b: date) -> list[dict]:
+    """Opening balance (receipts minus expenses before `a`), the period's expense and receipt per ledger, closing balance (up to `b`).
+    Entries made in the desktop come from its tables by SQL (the whole history, as its Drops Petty Cash does), entries made in the web
+    app from memory (their receipt side is always 0); without a database all of it comes from memory."""
+    desktop_before = db_store.expense_balance_before(a)
+    desktop_rows = db_store.expense_by_ledger(a, b) if desktop_before is not None else None
+    opening = desktop_before or 0.0
+    by_ledger: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    for name, e, r in ((x["name"], x["expense"], x["receipt"]) for x in (desktop_rows or [])):
+        by_ledger[name][0] += e
+        by_ledger[name][1] += r
+    for e in store.DOCS["expense"].values():
+        if e.get("status") == "CANCELLED" or (desktop_rows is not None and e.get("origin") == "db"):
+            continue    # the desktop's entries are already counted by SQL when there is a database
+        net = e.get("receipts", 0.0) - e["total"]
+        if e["date"] < a.isoformat():
+            opening += net
+        elif e["date"] <= b.isoformat():
+            for l in e["lines"]:
+                name = l.get("ledger_name") or store.LEDGERS.get(l["ledger"], {}).get("name") or l["ledger"]
+                by_ledger[name][0] += l["amount"]
+                by_ledger[name][1] += l.get("receipt", 0.0)
+    rows = [{"particulars": "OP Balance", "expense": None, "receipt": round(opening, 2)}]
+    rows += [{"particulars": n, "expense": round(v[0], 2), "receipt": round(v[1], 2)} for n, v in sorted(by_ledger.items())]
+    closing = opening + sum(v[1] - v[0] for v in by_ledger.values())
+    rows.append({"particulars": "Closing Balance", "expense": None, "receipt": round(closing, 2), "bold": True})
+    return rows
+
+
+@router.get("/drops/sales-summary")
+def drops_sales_summary(on: date):
+    """Drops - Sales Summary: LIQUOR as one line, each non-liquor group, round off, payment modes and total sales for the day."""
+    return _drops_sales_rows(on, on)
+
+
+@router.get("/drops/purchase")
+def drops_purchase(on: date, current_user: dict = Depends(get_current_user)):
+    """Drops - Purchase: each purchase bill of the day (LIQUOR / NON LIQUOR from its first line), then Total Purchase. At cost, so hidden from roles without cost access."""
+    return _drops_purchase_rows(on, on, hides_cost(current_user))
+
+
+@router.get("/drops/petty-cash")
+def drops_petty_cash(on: date):
+    """Drops - Petty Cash: opening balance, the day's expense by ledger, closing balance."""
+    return _drops_petty_rows(on, on)
+
+
+@router.get("/drops/consolidated")
+def drops_consolidated(from_date: date, to_date: date, current_user: dict = Depends(get_current_user)):
+    """Drops - Consolidated Report (legacy frmRptDropsCons): Sales Data, Petty Cash Data, Purchase Data and the group-wise
+    opening / closing stock value for a period, as one list. Rows carry a, b, c, d (grid columns) and `head` for section titles.
+    Stock is valued at the purchase rate (the desktop uses its FIFO rate), so values are hidden from roles without cost access."""
+    _check_range(from_date, to_date)
+    hide = hides_cost(current_user)
+    out: list[dict] = []
+
+    def title(text, *cols):
+        out.append({"a": text, "b": "", "c": "", "d": "", "head": True})
+        if cols:
+            out.append({"a": cols[0], "b": cols[1], "c": cols[2], "d": cols[3] if len(cols) > 3 else "", "head": True})
+
+    title("Sales Data", "Group", "Qty", "Amount")
+    out += [{"a": r["particulars"], "b": r["qty"], "c": r["amount"], "d": ""} for r in _drops_sales_rows(from_date, to_date)]
+    title("Petty Cash Data", "Particulars", "Expense", "Receipt")
+    out += [{"a": r["particulars"], "b": r["expense"], "c": r["receipt"], "d": ""} for r in _drops_petty_rows(from_date, to_date)]
+    title("Purchase Data", "Group", "Supplier", "Bill No.", "Amount")
+    out += [{"a": r["group"], "b": r["supplier"], "c": r["bill_no"], "d": r["amount"]} for r in _drops_purchase_rows(from_date, to_date, hide)]
+    title("Group Wise Summary Balance", "Category", "ItemGroup Name", "Opening Value", "Closing Value")
+    vals = defaultdict(lambda: [0.0, 0.0])
+    for r in stock_balance(from_date, to_date, None, current_user):
+        it = _item(r["item_code"])
+        liquor = _is_liquor(it)
+        key = ("Liquor", it["group"] or "-") if liquor else ("Non-Liquor", "")
+        vals[key][0] += r["op_qty"] * it["purchase_rate"]
+        vals[key][1] += r["cl_qty"] * it["purchase_rate"]
+    for (cat, grp), (op, cl) in sorted(vals.items()):
+        out.append({"a": cat, "b": grp, "c": None if hide else round(op, 2), "d": None if hide else round(cl, 2)})
+    out.append({"a": "", "b": "Total", "c": None if hide else round(sum(v[0] for v in vals.values()), 2),
+                "d": None if hide else round(sum(v[1] for v in vals.values()), 2), "bold": True})
+    return out
+
+
 @router.get("/loyalty")
 def loyalty_report(from_date: date, to_date: date):
     """Loyalty points per customer: balance now, and what the saved bills of the period earned and redeemed."""
@@ -581,6 +712,65 @@ def loyalty_report(from_date: date, to_date: date):
         rows.append({"customer": c["code"], "name": c["name"], "mobile": c.get("mobile", ""), "card_no": c.get("loyalty_card_no", ""),
                      "earned": round(earned[c["code"]], 2), "redeemed": round(redeemed[c["code"]], 2), "balance": round(c.get("points") or 0, 2)})
     return sorted(rows, key=lambda r: -r["balance"])
+
+
+@router.get("/loyalty/detail")
+def loyalty_detail(from_date: date, to_date: date):
+    """Detailed loyalty report (legacy frmRptLoyalty, Detailed): one row per saved bill that added or redeemed points."""
+    _check_range(from_date, to_date)
+    rows = []
+    for inv in sorted(_saved_invoices(from_date, to_date), key=lambda i: (i["date"], i["doc_no"])):
+        added, redeemed = inv["totals"].get("points_earned", 0), inv["totals"].get("points_redeemed", 0)
+        if inv["customer"] == "CASH" or not (added or redeemed):
+            continue
+        c = store.CUSTOMERS.get(inv["customer"], {})
+        rows.append({"customer": inv["customer"], "name": c.get("name", ""), "mobile": c.get("mobile", ""),
+                     "card_no": c.get("loyalty_card_no", ""), "doc_date": inv["date"], "doc_type": "Sales Invoice",
+                     "doc_ref": inv["doc_no"], "added": round(added, 2), "redeemed": round(redeemed, 2)})
+    return rows
+
+
+@router.get("/item-rate-history")
+def item_rate_history(from_date: date, to_date: date, item_code: str | None = None, user: dict = Depends(get_current_user)):
+    """Every MRP / purchase-rate change made in the period, from the shop's own MstItemAudit (the desktop writes a row on each rate update).
+    Purchase rates are left out for roles without cost access. The desktop has no screen for this table; it is new in the web app."""
+    _check_range(from_date, to_date)
+    if not db.configured():
+        return []
+    try:
+        rows = db.fetchall("""SELECT ItemCode, ItemName, ISource, OldMRP, newMRP, OldPurRate, NewPurRate, CUserName, CSystemName, cDateTime
+                              FROM MstItemAudit WITH (NOLOCK) WHERE cDateTime >= ? AND cDateTime < ? AND (? IS NULL OR ItemCode = ?)
+                              ORDER BY cDateTime DESC""",
+                           (from_date.isoformat(), (to_date + timedelta(days=1)).isoformat(), item_code, item_code))
+    except Exception:   # noqa: BLE001 - a database without the table
+        return []
+    cost = not hides_cost(user)
+    return [{"item_code": (r["ItemCode"] or "").strip(), "item_name": (r["ItemName"] or "").strip(), "source": (r["ISource"] or "").strip(),
+             "old_mrp": float(r["OldMRP"] or 0), "new_mrp": float(r["newMRP"] or 0),
+             "old_pur_rate": float(r["OldPurRate"] or 0) if cost else None, "new_pur_rate": float(r["NewPurRate"] or 0) if cost else None,
+             "changed_by": (r["CUserName"] or "").strip(), "system": (r["CSystemName"] or "").strip(), "changed_on": str(r["cDateTime"])[:16]} for r in rows]
+
+
+@router.get("/audit-trail")
+def audit_trail(from_date: date, to_date: date, admin: dict = Depends(require_admin)):
+    """The desktop's Audit Trail (frmUtlAuditLog / UtlAudit): who added, changed or deleted which document, and when. One row per action with the
+    document's name and number, the user, the PC and its address when the desktop logged them. The before / after values the desktop keeps in
+    a separate log database are not in this database, so only the action itself is listed."""
+    _check_range(from_date, to_date)
+    if not db.configured():
+        return []
+    try:
+        rows = db.fetchall("""SELECT a.ActionDateTime, a.DocId, a.UserId, a.UserAction, a.DocNo, a.LogSysName, a.LogIPAddress, u.UserCode
+                              FROM UtlAudit a WITH (NOLOCK) LEFT JOIN MstUser u WITH (NOLOCK) ON u.UserID = a.UserId
+                              WHERE a.ActionDateTime >= ? AND a.ActionDateTime < ? ORDER BY a.ActionDateTime DESC""",
+                           (from_date.isoformat(), (to_date + timedelta(days=1)).isoformat()))
+    except Exception:   # noqa: BLE001 - a database without the table
+        return []
+    docs = {int(d["DocID"]): str(d.get("DocName") or "").strip() for d in store.UTL_DOCS.values()}
+    actions = {"A": "Added", "I": "Added", "M": "Modified", "E": "Modified", "D": "Deleted", "C": "Cancelled", "V": "Viewed", "P": "Printed"}
+    return [{"at": str(r["ActionDateTime"])[:16], "document": docs.get(int(r["DocId"] or 0), str(int(r["DocId"] or 0))), "doc_no": (r["DocNo"] or "").strip(),
+             "action": actions.get((r["UserAction"] or "").strip().upper(), (r["UserAction"] or "").strip()), "user": (r["UserCode"] or "").strip(),
+             "system": (r["LogSysName"] or "").strip(), "ip": (r["LogIPAddress"] or "").strip()} for r in rows]
 
 
 @router.get("/excise-stock")

@@ -89,6 +89,94 @@ def _row(code, group, caption, value, kind, remarks, effect, source="web") -> di
             "effect": effect, "hidden": code in _HIDDEN, "source": source}
 
 
+def _plain(kind: str, raw: str) -> str:
+    """A UtlGSettings value in the form check_value expects (the desktop writes dates as '30 Jun 2026')."""
+    if kind == "date" and raw:
+        from datetime import datetime
+        for fmt in ("%d %b %Y", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d %B %Y"):
+            try:
+                return datetime.strptime(raw, fmt).date().isoformat()
+            except ValueError:
+                continue
+    return raw.upper() if kind == "yn" else raw
+
+
+def load_from_db() -> int:
+    """The shop's own Global Settings (UtlGSettings: SetName, SetValue) for the rows the web app acts on, e.g. FreezeDate (no document on or
+    before it can be saved), SPID (salesperson required) and the loyalty rules. A row the table lacks keeps the built-in default.
+    Returns how many were read."""
+    from . import db
+    n = 0
+    try:
+        rows = db.fetchall("SELECT SetName, SetValue FROM UtlGSettings WITH (NOLOCK)")
+    except Exception:   # noqa: BLE001 - a database without the table
+        return 0
+    for r in rows:
+        code = (r.get("SetName") or "").strip()
+        cur = store.GSETTINGS.get(code)
+        if not code:
+            continue
+        if cur is None:   # a setting only the desktop has: shown and editable like the desktop's own grid (the web app does not act on it)
+            raw = (r.get("SetValue") or "").strip()
+            kind = "yn" if raw.upper() in ("Y", "N") else "text"
+            store.GSETTINGS[code] = _row(code, (r.get("SetGroup") or "").strip(), (r.get("SetCaption") or code).strip(), raw, kind,
+                                         (r.get("Remarks") or "").strip(), None, "desktop")
+            store.GSETTINGS[code]["hidden"] = (r.get("HideSetting") or "N").strip().upper() == "Y"
+            n += 1
+            continue
+        if cur.get("source") == "custom":
+            continue
+        try:
+            cur["value"] = check_value(cur["kind"], _plain(cur["kind"], (r.get("SetValue") or "").strip()), code)
+            n += 1
+        except HTTPException:
+            pass
+    sync_legacy()
+    return n
+
+
+_last_read = 0.0
+
+
+def refresh_from_db(max_age: float = 5.0) -> None:
+    """Read the shop's Global Settings again (at most every `max_age` seconds), so a value changed in the Windows vLQMS or straight in
+    the database shows here without a restart. Does nothing with the database off."""
+    import time
+    from . import db
+    global _last_read
+    if time.monotonic() - _last_read < max_age or not db.is_db_available():
+        return
+    _last_read = time.monotonic()
+    try:
+        load_from_db()
+    except Exception:   # noqa: BLE001 - the values already in memory stay
+        pass
+
+
+def _db_value(kind: str, v: str) -> str:
+    """The form the desktop keeps a value in (dates as '30 Jun 2026')."""
+    if kind == "date" and v:
+        return date.fromisoformat(v).strftime("%d %b %Y")
+    return v
+
+
+def save_to_db(code: str) -> None:
+    """Write one Global Setting into the shop's own UtlGSettings (value, caption, hide flag); a row the table lacks is added.
+    Direct mode only: the generic save has no table for settings."""
+    from . import db
+    if not db.configured() or db.use_web_tables():
+        return
+    row = store.GSETTINGS[code]
+    vals = (_db_value(row["kind"], row["value"])[:250], str(row["caption"])[:250], "Y" if row.get("hidden") else "N")
+    with db.direct_writes():
+        with db.transaction() as cur:
+            changed = cur.execute("UPDATE UtlGSettings SET SetValue = ?, SetCaption = ?, HideSetting = ? WHERE SetName = ?", (*vals, code))
+            if not changed:
+                cur.execute("INSERT INTO UtlGSettings (SetGroup, SetName, SetValue, SetCaption, Remarks, HideSetting, DropDownList, AddnlInterface, "
+                            "Mandatory, DefaultValue, MaxWidth, DataType) VALUES (?, ?, ?, ?, ?, ?, 'N', 'N', 'N', '', 0, '')",
+                            (str(row.get("group", ""))[:200], code, vals[0], vals[1], str(row.get("remarks", ""))[:250], vals[2]))
+
+
 def restore(saved: dict) -> None:
     """Lay saved rows over the seeded ones. For seeded rows only the value, caption and hidden flag are taken
     (what a row means and does comes from this file, so a changed or dropped seeded row isn't brought back);

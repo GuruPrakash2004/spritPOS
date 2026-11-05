@@ -70,7 +70,8 @@ def load_company() -> None:
 
 
 def load_items() -> None:
-    rows = db.fetchall("""
+    _nonstk = _optional("MstITEM", ("NonStkable",), "i.")   # a client without the column reads NULL
+    rows = db.fetchall(f"""
         SELECT
             i.ITEMID, i.ITEMCODE, i.ITEMNAME, i.ShortName,
             i.HSNCode, ig.ITEMGROUPNAME as GROUPNAME,
@@ -81,14 +82,14 @@ def load_items() -> None:
             i.ROL, i.ROQ,
             COALESCE(i.BotPerCases, 12) as BPC,
             COALESCE(q.CLBal, 0) as QOH,
-            i.InActive
+            i.InActive{_nonstk}
         FROM MstITEM i
         LEFT JOIN MstITEMGROUP ig ON ig.ITEMGROUPID = i.ITEMGroupID
         LEFT JOIN MstBrand b ON b.BRANDID = i.BrandID
         LEFT JOIN MstPKG p ON p.PKGID = i.PKGID
         LEFT JOIN MstUOM u ON u.UOMID = i.UOMID
         LEFT JOIN TrnQOH q ON q.ITEMID = i.ITEMID AND q.LOCID = 1
-        WHERE i.ITEMID > 0 AND i.InActive = 'N'
+        WHERE i.ITEMID > 0
     """)
     if not rows:
         logger.warning("No items in MstITEM")
@@ -126,6 +127,7 @@ def load_items() -> None:
             "roq": _f(r.get("ROQ"), 48),
             "qoh": _f(r.get("QOH")),
             "active": _s(r.get("InActive")) != "Y",
+            "non_stockable": _s(r.get("NonStkable")) == "Y",   # the Item Master's "Non Stockable" tick
             **({"aliases": aliases.get(int(r.get("ITEMID") or 0), [])} if aliases is not None else {}),
         }
     logger.info("Loaded %d items from DB", len(store.ITEMS))
@@ -149,9 +151,9 @@ def load_packages() -> None:
 
 def load_customers() -> None:
     rows = db.fetchall("""
-        SELECT CUSTID, CUSTCODE, CUSTNAME, MOBNO, CARDNO, SENDSMS, InActive
-        FROM MstCUST
-        WHERE CUSTID >= 0
+        SELECT c.CUSTID, c.CUSTCODE, c.CUSTNAME, c.MOBNO, c.CARDNO, c.SENDSMS, c.InActive, c.GSTNO, u.CURCODE
+        FROM MstCUST c LEFT JOIN MstCUR u ON u.CURID = c.CURID
+        WHERE c.CUSTID >= 0
     """)
     store.CUSTOMERS.clear()
     for r in rows:
@@ -165,6 +167,8 @@ def load_customers() -> None:
             "loyalty_card_no": _s(r.get("CARDNO")),
             "send_sms": _s(r.get("SENDSMS")) == "Y",
             "points": 0.0,
+            "gstin": _s(r.get("GSTNO")),
+            "currency": _s(r.get("CURCODE")),
         }
     logger.info("Loaded %d customers from DB", len(store.CUSTOMERS))
 
@@ -192,7 +196,7 @@ def load_item_groups() -> None:
     rows = db.fetchall("""
         SELECT ITEMGROUPID, ITEMGROUPCODE, ITEMGROUPNAME, LOYALTY, LiqItem, InActive
         FROM MstITEMGROUP
-        WHERE ITEMGROUPID > 0 AND InActive = 'N'
+        WHERE ITEMGROUPID > 0
     """)
     store.ITEM_GROUPS.clear()
     for r in rows:
@@ -344,7 +348,7 @@ MANAGER_ROLE_NAMES = {"MANAGER", "MANAGERS", "STORE MANAGER", "SHOP MANAGER"}
 def _role_for(user_code: str, role_code: str, role_name: str) -> str:
     """The web role of a desktop user, from their desktop role (MstROLE)."""
     names = {role_code.strip().upper(), role_name.strip().upper()} - {""}
-    if names & ADMIN_ROLE_NAMES:
+    if user_code.strip().upper() == "ADMIN" or names & ADMIN_ROLE_NAMES:   # the exe gives the user code ADMIN every right (svtModule, frmMain)
         return store.ADMIN_ROLE
     if names & MANAGER_ROLE_NAMES or user_code in ("OFFICE", "MANAGER"):
         return "Manager"
@@ -423,7 +427,7 @@ def _recent_sinv_numbers(limit: int) -> list[str] | None:
         for pre in series:
             for r in db.fetchall(
                     f"SELECT TOP {int(limit)} SINVID, SINVNO FROM TrnHdrSINV WITH (NOLOCK) WHERE SINVNO LIKE CAST(? AS VARCHAR(30)) "
-                    "AND Cancelled = 'N' AND ISNULL(BILLSYSTEM, '') <> 'WEB' ORDER BY SINVNO DESC", (pre + "%",)):
+                    "" + _not_web() + " ORDER BY SINVNO DESC", (pre + "%",)):
                 found.append((int(r["SINVID"]), _s(r["SINVNO"])))
         found.sort(reverse=True)
         return [no for _, no in found[:limit]] or None
@@ -432,24 +436,75 @@ def _recent_sinv_numbers(limit: int) -> list[str] | None:
         return None
 
 
+def _not_web() -> str:
+    """Older mode only: bills made by the web app came whole from Web_AppDoc, so the desktop-table read left them out. In direct mode (no Web_
+    tables) they are rows of the desktop's own tables like any other bill and are read here."""
+    from . import db as _db
+    return "" if not _db.use_web_tables() else " AND ISNULL(BILLSYSTEM, '') <> 'WEB'"
+
+
+_col_cache: dict[tuple, set] = {}
+
+
+def _has(table: str) -> set:
+    """The lower-case column names of a table, read once per connection (client databases differ in their optional columns)."""
+    key = (db.DB_NAME, table)   # per database: the app can be pointed at another one
+    if key not in _col_cache:
+        try:
+            _col_cache[key] = {r["name"].lower() for r in db.fetchall("SELECT name FROM sys.columns WHERE object_id = OBJECT_ID(?)", (f"dbo.{table}",))}
+        except Exception:   # noqa: BLE001
+            return set()
+    return _col_cache[key]
+
+
+def _optional(table: str, names: tuple, prefix: str = "") -> str:
+    """', h.A, NULL AS B ...': each optional column the table has, and NULL in its place for one it lacks, so a query never names a missing column."""
+    have = _has(table)
+    return "".join(f", {prefix}{n}" if n.lower() in have else f", NULL AS {n}" for n in names)
+
+
+def _other_payments(sinv_ids: set) -> dict[int, dict]:
+    """The split of a bill's OTHPAYAMT into UPI and credit, from TrnMultiAmt (the rows the exe and the web write for it); {} when the table or
+    the designer document is not there (the whole amount is then shown as UPI)."""
+    out: dict[int, dict] = {}
+    if not sinv_ids:
+        return out
+    try:
+        from . import doc_engine
+        doc_id = doc_engine.doc_id_of("Sales Invoice")
+        if doc_id is None:
+            return out
+        ids = sorted(sinv_ids)
+        for i in range(0, len(ids), 500):
+            chunk = ids[i:i + 500]
+            for r in db.fetchall(f"SELECT TrnID, Particulars, Amount FROM TrnMultiAmt WITH (NOLOCK) WHERE DocID = ? AND FldCode = 'OTHPAYAMT' AND TrnID IN ({','.join('?' * len(chunk))})",
+                                 (doc_id, *chunk)):
+                p = out.setdefault(int(r["TrnID"]), {"upi": 0.0, "credit": 0.0})
+                p["credit" if "CREDIT" in _s(r.get("Particulars")).upper() else "upi"] += _f(r.get("Amount"))
+    except Exception as e:   # noqa: BLE001 - no such table: the other payments stay one amount
+        logger.warning("TrnMultiAmt not read: %s", e)
+    return out
+
+
 def load_sales_invoices(limit: int = 200, days: tuple[date, date] | None = None) -> None:
     """Load the most recent sales invoices into DOCS['sales_invoice'] fast. `days` (first, last) loads the bills of those dates instead
     and keeps what is already loaded (used by `ensure_days` for dates older than the latest bills)."""
     numbers = None if days else _recent_sinv_numbers(limit)
+    opt = _optional("TrnHdrSINV", ("TOTDISCAMT", "GRNDTOT", "OTHPAYAMT", "SALTYP", "IsDelete", "CancelRmks"))
     if days:
-        recent = (f"SELECT SINVID, SINVNO, SINVDate, CUSTID, TOTAMT, CASHAMT, CARDAMT, TOTQTY, SPID, SCID, AddedBy, Cancelled, SINVTime "
-                  f"FROM TrnHdrSINV WITH (NOLOCK) WHERE SINVDate >= '{days[0].isoformat()}' AND SINVDate < '{(days[1] + timedelta(days=1)).isoformat()}' "
-                  "AND Cancelled = 'N' AND ISNULL(BILLSYSTEM, '') <> 'WEB'")
+        recent = (f"SELECT SINVID, SINVNO, SINVDate, CUSTID, TOTAMT, CASHAMT, CARDAMT, TOTQTY, SPID, SCID, AddedBy, Cancelled, SINVTime{opt} "
+                  f"FROM TrnHdrSINV WITH (NOLOCK) WHERE SINVDate >= '{days[0].isoformat()}' AND SINVDate < '{(days[1] + timedelta(days=1)).isoformat()}'"
+                  + _not_web())   # cancelled and deleted bills are read too: the Re-Print / Edit list shows them (status CANCELLED / DELETED)
     elif numbers:
         in_list = ", ".join("'" + n.replace("'", "''") + "'" for n in numbers)   # literals: the index is used (see above)
-        recent = f"SELECT SINVID, SINVNO, SINVDate, CUSTID, TOTAMT, CASHAMT, CARDAMT, TOTQTY, SPID, SCID, AddedBy, Cancelled, SINVTime FROM TrnHdrSINV WITH (NOLOCK) WHERE SINVNO IN ({in_list})"
+        recent = f"SELECT SINVID, SINVNO, SINVDate, CUSTID, TOTAMT, CASHAMT, CARDAMT, TOTQTY, SPID, SCID, AddedBy, Cancelled, SINVTime{opt} FROM TrnHdrSINV WITH (NOLOCK) WHERE SINVNO IN ({in_list})"
     else:
         recent = f"""SELECT TOP {limit}
                 SINVID, SINVNO, SINVDate, CUSTID,
                 TOTAMT, CASHAMT, CARDAMT, TOTQTY,
-                SPID, SCID, AddedBy, Cancelled, SINVTime
+                SPID, SCID, AddedBy, Cancelled, SINVTime{opt}
             FROM TrnHdrSINV WITH (NOLOCK)
-            WHERE Cancelled = 'N' AND ISNULL(BILLSYSTEM, '') <> 'WEB'   -- web bills come whole from Web_AppDoc
+            WHERE 1 = 1{_not_web()}
             ORDER BY SINVID DESC"""
     rows = db.fetchall(f"""
         WITH RecentHdr AS ({recent})
@@ -457,11 +512,12 @@ def load_sales_invoices(limit: int = 200, days: tuple[date, date] | None = None)
             h.SINVID, h.SINVNO, h.SINVDate, h.CUSTID,
             h.TOTAMT, h.CASHAMT, h.CARDAMT, h.TOTQTY,
             h.SPID, h.SCID, h.AddedBy,
-            h.Cancelled, h.SINVTime,
+            h.Cancelled, h.IsDelete, h.CancelRmks, h.SINVTime, h.TOTDISCAMT, h.GRNDTOT, h.OTHPAYAMT, h.SALTYP, cu.CUSTCODE,
             d.SINVDtlID, d.ITEMID, d.SINVQty, d.SINVRate, d.SINVAmt,
             d.CGSTPER, d.CGSTAMT, d.SGSTPER, d.SGSTAMT
         FROM RecentHdr h
         JOIN TrnDtlSINV d WITH (NOLOCK) ON d.SINVID = h.SINVID
+        LEFT JOIN MstCUST cu WITH (NOLOCK) ON cu.CUSTID = h.CUSTID
         ORDER BY h.SINVID DESC
     """)
 
@@ -478,20 +534,31 @@ def load_sales_invoices(limit: int = 200, days: tuple[date, date] | None = None)
     if not days:
         _drop_loaded(docs)
 
+    parts = _other_payments({int(r["SINVID"]) for r in rows})   # SINVID -> {'upi': .., 'credit': ..} (the split of OTHPAYAMT)
     bills: dict = {}
     for r in rows:
         sinv_no = _s(r.get("SINVNO"))
         if sinv_no not in bills:
             t = _f(r.get("TOTAMT"))
+            cash, card, other = _f(r.get("CASHAMT")), _f(r.get("CARDAMT")), _f(r.get("OTHPAYAMT"))
+            split = parts.get(int(r["SINVID"])) or ({"upi": other, "credit": 0.0} if other else {"upi": 0.0, "credit": 0.0})
+            paid = {"cash": cash, "card": card, "upi": split["upi"], "credit": split["credit"]}
+            used = [k for k, v in paid.items() if v > 0]
+            saltyp = _s(r.get("SALTYP")).upper()
+            cust_code = _s(r.get("CUSTCODE"))
             bills[sinv_no] = {
                 "doc_no": sinv_no,
                 "date": str(r.get("SINVDate", ""))[:10],
                 "time": _s(r.get("SINVTime")) or "00:00:00",
                 "counter": counter_by_id.get(_s(r.get("SCID")), _s(r.get("SCID"))),
-                "customer": "CASH",
+                "customer": cust_code if cust_code and cust_code != "-" and int(r.get("CUSTID") or 0) > 0 else "CASH",
                 "salesperson": person_by_id.get(_s(r.get("SPID"))) or _s(r.get("AddedBy")),
-                "status": "SAVED",
-                "payment_type": "CASH" if _f(r.get("CASHAMT")) >= t * 0.5 else "UPI",
+                "status": "DELETED" if _s(r.get("IsDelete")).upper() == "Y" else "CANCELLED" if _s(r.get("Cancelled")).upper() == "Y" else "SAVED",
+                "added_by": _s(r.get("AddedBy")),
+                "cancel_remarks": _s(r.get("CancelRmks")).strip(),
+                "cancelled": _s(r.get("Cancelled")).upper() == "Y",   # the two columns as the desktop's Re-Print list shows them (a deleted bill can have Cancelled N)
+                "deleted": _s(r.get("IsDelete")).upper() == "Y",
+                "payment_type": saltyp if saltyp in ("CASH", "CARD", "UPI", "CREDIT", "SPLIT") else (used[0].upper() if len(used) == 1 else "SPLIT" if used else "CASH"),
                 "lines": [],
                 "totals": {
                     "qty": _f(r.get("TOTQTY")),
@@ -499,17 +566,12 @@ def load_sales_invoices(limit: int = 200, days: tuple[date, date] | None = None)
                     "basic": t,
                     "cgst": 0.0,
                     "sgst": 0.0,
-                    "discount": 0.0,
+                    "discount": _f(r.get("TOTDISCAMT")),
                     "points_redeemed": 0.0,
                     "points_earned": 0.0,
-                    "net": t,
+                    "net": _f(r.get("GRNDTOT")) or t,
                 },
-                "payment": {
-                    "cash": _f(r.get("CASHAMT")),
-                    "card": _f(r.get("CARDAMT")),
-                    "upi": max(0.0, t - _f(r.get("CASHAMT")) - _f(r.get("CARDAMT"))),
-                    "credit": 0.0,
-                },
+                "payment": paid,
             }
 
         qty = _f(r.get("SINVQty"))
@@ -533,6 +595,8 @@ def load_sales_invoices(limit: int = 200, days: tuple[date, date] | None = None)
             "qty": qty,
             "rate": rate,
             "amount": amt,
+            "cgst": _f(r.get("CGSTAMT")),
+            "sgst": _f(r.get("SGSTAMT")),
             "litres": round(qty * ltr_per_btl, 3),
         }
         bills[sinv_no]["lines"].append(line)
@@ -543,25 +607,34 @@ def load_sales_invoices(limit: int = 200, days: tuple[date, date] | None = None)
     for b in bills.values():
         b["origin"] = "db"
     _add_loaded(docs, bills)
+    # The status a desktop bill already has in SQL Server counts as written: without this, every cancelled / deleted bill read above would
+    # look changed and be re-written (remark blanked, "changed by" stamped) on the first save.
+    from . import sqlstore
+    for no, b in bills.items():
+        if docs.get(no) is b:
+            sqlstore._doc_status[("sales_invoice", no)] = b["status"]
     logger.info("Loaded %d sales invoices from DB", len(docs))
 
 
 def load_purchase_bills(limit: int = 100, days: tuple[date, date] | None = None) -> None:
     """Load the most recent purchase bills fast (or, with `days`, those of that first..last date, keeping what is loaded)."""
     pick = (f"TOP {limit}" if not days else "")
+    names = ("SUPPINVNO", "SUPPINVDATE", "SUPPINVVALUE", "PURCHASETYPE", "TCSAMT", "TOTCESS", "GRNDTOT", "RMKS")
+    opt, hopt, dopt = _optional("TrnHdrPB", names), _optional("TrnHdrPB", names, "h."), _optional("TrnDtlPB", ("CGSTAMT", "SGSTAMT"), "d.")
     where = (f"WHERE PBDate >= '{days[0].isoformat()}' AND PBDate < '{(days[1] + timedelta(days=1)).isoformat()}'" if days else "")
     rows = db.fetchall(f"""
         WITH RecentPB AS (
-            SELECT {pick} PBID, PBNO, PBDate, SUPPID, PartyName
+            SELECT {pick} PBID, PBNO, PBDate, SUPPID, PartyName{opt}
             FROM TrnHdrPB WITH (NOLOCK)
             {where}
             ORDER BY PBID DESC
         )
         SELECT
-            h.PBID, h.PBNO, h.PBDate, h.SUPPID, h.PartyName,
-            d.PBDtlID, d.ITEMID, d.PBQty, d.PBRate, d.PBAmt, d.NOOFCASES
+            h.PBID, h.PBNO, h.PBDate, h.SUPPID, h.PartyName{hopt},
+            su.SUPPCODE, d.PBDtlID, d.ITEMID, d.PBQty, d.PBRate, d.PBAmt, d.NOOFCASES{dopt}
         FROM RecentPB h
         JOIN TrnDtlPB d WITH (NOLOCK) ON d.PBID = h.PBID
+        LEFT JOIN MstSUPP su WITH (NOLOCK) ON su.SUPPID = h.SUPPID
         ORDER BY h.PBID DESC
     """)
 
@@ -579,10 +652,15 @@ def load_purchase_bills(limit: int = 100, days: tuple[date, date] | None = None)
             bills[pb_no] = {
                 "doc_no": pb_no,
                 "date": str(r.get("PBDate", ""))[:10],
-                "supplier": _s(r.get("PartyName")),
-                "purchase_type": "Purchase",
+                "supplier": _s(r.get("SUPPCODE")) or _s(r.get("PartyName")),
+                "supplier_inv_no": _s(r.get("SUPPINVNO")),
+                "supplier_inv_date": str(r.get("SUPPINVDATE") or "")[:10] or str(r.get("PBDate", ""))[:10],
+                "supplier_inv_value": _f(r.get("SUPPINVVALUE")),
+                "purchase_type": _s(r.get("PURCHASETYPE")) or "Purchase",
+                "remarks": _s(r.get("RMKS")),
+                "tcs": _f(r.get("TCSAMT")), "cess": _f(r.get("TOTCESS")),
                 "lines": [],
-                "totals": {"qty": 0, "basic": 0.0, "cgst": 0, "sgst": 0, "tcs": 0, "cess": 0, "net": 0.0},
+                "totals": {"qty": 0, "basic": 0.0, "cgst": 0, "sgst": 0, "tcs": _f(r.get("TCSAMT")), "cess": _f(r.get("TOTCESS")), "net": 0.0},
             }
         qty = _f(r.get("PBQty"))
         rate = _f(r.get("PBRate"))
@@ -599,16 +677,217 @@ def load_purchase_bills(limit: int = 100, days: tuple[date, date] | None = None)
             "qty": qty,
             "rate": rate,
             "amount": amt,
+            "cgst": _f(r.get("CGSTAMT")),
+            "sgst": _f(r.get("SGSTAMT")),
             "litres": round(qty * 0.75, 3),
         })
+        bills[pb_no]["totals"]["cgst"] = round(bills[pb_no]["totals"]["cgst"] + _f(r.get("CGSTAMT")), 2)
+        bills[pb_no]["totals"]["sgst"] = round(bills[pb_no]["totals"]["sgst"] + _f(r.get("SGSTAMT")), 2)
         bills[pb_no]["totals"]["qty"] += qty
         bills[pb_no]["totals"]["basic"] = round(bills[pb_no]["totals"]["basic"] + amt, 2)
         bills[pb_no]["totals"]["net"] = bills[pb_no]["totals"]["basic"]
+        if _f(r.get("GRNDTOT")):
+            bills[pb_no]["totals"]["net"] = _f(r.get("GRNDTOT"))
 
     for b in bills.values():
         b["origin"] = "db"
     _add_loaded(docs, bills)
     logger.info("Loaded %d purchase bills from DB", len(docs))
+
+
+def load_expenses(limit: int = 5000) -> None:
+    """Expense entries made in the desktop (TrnHdrEXP / TrnDtlEXP), newest `limit`. A line's AMT is an expense and its RAMT a
+    receipt into the petty cash fund. They are read-only here (origin "db"); entries made in the web app live in Web_AppDoc."""
+    rows = db.fetchall(f"""
+        WITH Recent AS (
+            SELECT TOP {int(limit)} EXPID, EXPNO, PrintEXPNO, EXPDate, Cancelled, AddedBy, RMKS
+            FROM TrnHdrEXP WITH (NOLOCK) ORDER BY EXPID DESC
+        )
+        SELECT h.EXPID, h.EXPNO, h.PrintEXPNO, h.EXPDate, h.Cancelled, h.AddedBy, h.RMKS,
+               d.AMT, d.RAMT, d.REMARKS, l.LEDCODE, l.LEDNAME
+        FROM Recent h
+        JOIN TrnDtlEXP d WITH (NOLOCK) ON d.EXPID = h.EXPID
+        LEFT JOIN MstLed l WITH (NOLOCK) ON l.LEDID = d.LEDID
+        ORDER BY h.EXPID DESC, d.SlNo
+    """)
+    docs: dict = {}
+    for r in rows:
+        no = _s(r.get("PrintEXPNO")) or _s(r.get("EXPNO"))
+        doc = docs.setdefault(no, {"doc_no": no, "date": str(r.get("EXPDate", ""))[:10], "paid_from": "CASH", "lines": [], "total": 0.0,
+                                   "receipts": 0.0, "added_by": _s(r.get("AddedBy")), "remarks": _s(r.get("RMKS")).strip(),
+                                   "status": "CANCELLED" if _s(r.get("Cancelled")) == "Y" else "SAVED", "origin": "db"})
+        amt, rcpt = _f(r.get("AMT")), _f(r.get("RAMT"))
+        name = _s(r.get("LEDNAME"))
+        doc["lines"].append({"ledger": _s(r.get("LEDCODE")) or name, "ledger_name": name, "amount": amt, "receipt": rcpt,
+                             "narration": _s(r.get("REMARKS")).strip()})
+        doc["total"] = round(doc["total"] + amt, 2)
+        doc["receipts"] = round(doc["receipts"] + rcpt, 2)
+    mine = store.DOCS["expense"]
+    for no in [no for no, d in mine.items() if d.get("origin") == "db"]:
+        del mine[no]
+    mine.update(docs)
+    logger.info("Loaded %d desktop expense entries", len(docs))
+
+
+# ─── Other documents the desktop keeps (read-only): sales returns, stock deductions, purchase indents, closing stock, physical stock ───
+
+def _doc_line(item_by_id: dict, item_id, qty: float, rate: float, amount: float | None = None, litres: float | None = None) -> dict:
+    """One document line in the shape the web screens and reports use, from a desktop detail row."""
+    code = store.merged_code(store.MERGED_ITEM_IDS.get(str(item_id)) or item_by_id.get(str(item_id), str(item_id)))
+    item = store.ITEMS.get(code, {})
+    per_case = max(int(item.get("bottles_per_case", 12)), 1)
+    return {"item_code": code, "item_name": item.get("name", code), "cases": int(qty) // per_case, "bottles": int(qty) % per_case, "qty": qty,
+            "rate": rate, "amount": round(qty * rate, 2) if amount is None else amount,
+            "litres": round(qty * item.get("litres_per_bottle", 0), 3) if litres is None else litres}
+
+
+def _totals(lines: list[dict], net: float | None = None) -> dict:
+    basic = round(sum(l["amount"] for l in lines), 2)
+    return {"qty": sum(l["qty"] for l in lines), "basic": basic, "cgst": 0, "sgst": 0, "net": basic if net is None else net,
+            "litres": round(sum(l["litres"] for l in lines), 3)}
+
+
+def _replace_loaded(kind: str, docs: dict) -> None:
+    """Swap the documents read from the database for a fresh set; documents made in the web app are never touched."""
+    mine = store.DOCS[kind]
+    for no in [no for no, d in mine.items() if d.get("origin") == "db"]:
+        del mine[no]
+    for no, d in docs.items():
+        if no not in mine:
+            d["origin"] = "db"
+            mine[no] = d
+
+
+def load_desktop_documents(limit: int = 5000) -> None:
+    """Sales returns, stock deductions, purchase indents, closing stock and physical stock entries made in the desktop (newest `limit` of
+    each). Each kind is read on its own, so a client database without one of the tables still loads the rest."""
+    item_by_id = {str(it.get("_itemid", "")): code for code, it in store.ITEMS.items()}
+    rate_of = lambda code: store.ITEMS.get(code, {}).get("purchase_rate", 0.0)   # noqa: E731
+
+    def run(name: str, fn) -> None:
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001 - this client's database lacks the table, or has it differently
+            logger.warning("%s not loaded: %s", name, str(e)[:160])
+
+    def sales_returns():
+        rows = db.fetchall(f"""
+            WITH R AS (SELECT TOP {int(limit)} SRID, SRNO, PrintSRNO, SRDate, Cancelled, AddedBy, TOTAMT FROM TrnHdrSR WITH (NOLOCK) ORDER BY SRID DESC)
+            SELECT h.SRID, h.SRNO, h.PrintSRNO, h.SRDate, h.Cancelled, h.AddedBy, h.TOTAMT, d.ITEMID, d.SRQty, d.SRRate, d.SRAmt, d.SRQTYINLTRS
+            FROM R h JOIN TrnDtlSR d WITH (NOLOCK) ON d.SRID = h.SRID ORDER BY h.SRID DESC, d.SlNo""")
+        docs: dict = {}
+        for r in rows:
+            no = _s(r.get("PrintSRNO")) or _s(r.get("SRNO"))
+            d = docs.setdefault(no, {"doc_no": no, "date": str(r.get("SRDate", ""))[:10], "customer": "CASH", "against_invoice": None, "lines": [],
+                                     "remarks": "", "added_by": _s(r.get("AddedBy")), "head_total": _f(r.get("TOTAMT")),
+                                     "status": "CANCELLED" if _s(r.get("Cancelled")) == "Y" else "SAVED"})
+            d["lines"].append(_doc_line(item_by_id, r.get("ITEMID"), _f(r.get("SRQty")), _f(r.get("SRRate")), _f(r.get("SRAmt")), _f(r.get("SRQTYINLTRS"))))
+        for d in docs.values():
+            d["totals"] = _totals(d["lines"], d.pop("head_total"))
+        _replace_loaded("sales_return", docs)
+        logger.info("Loaded %d desktop sales returns", len(docs))
+
+    def stock_deductions():
+        rows = db.fetchall(f"""
+            WITH R AS (SELECT TOP {int(limit)} STKDEDID, STKDEDNO, PrintSTKDEDNO, STKDEDDate, Cancelled, AddedBy FROM TrnHdrSTKDED WITH (NOLOCK) ORDER BY STKDEDID DESC)
+            SELECT h.STKDEDID, h.STKDEDNO, h.PrintSTKDEDNO, h.STKDEDDate, h.Cancelled, h.AddedBy, d.ITEMID, d.STKDEDQty, d.STKDEDQTYINLTRS
+            FROM R h JOIN TrnDtlSTKDED d WITH (NOLOCK) ON d.STKDEDID = h.STKDEDID ORDER BY h.STKDEDID DESC, d.SlNo""")
+        docs: dict = {}
+        for r in rows:
+            no = _s(r.get("PrintSTKDEDNO")) or _s(r.get("STKDEDNO"))
+            d = docs.setdefault(no, {"doc_no": no, "date": str(r.get("STKDEDDate", ""))[:10], "reason": "Other", "lines": [], "remarks": "",
+                                     "added_by": _s(r.get("AddedBy")), "status": "CANCELLED" if _s(r.get("Cancelled")) == "Y" else "SAVED"})
+            item_code = store.merged_code(store.MERGED_ITEM_IDS.get(str(r.get("ITEMID"))) or item_by_id.get(str(r.get("ITEMID")), str(r.get("ITEMID"))))
+            d["lines"].append(_doc_line(item_by_id, r.get("ITEMID"), _f(r.get("STKDEDQty")), rate_of(item_code), litres=_f(r.get("STKDEDQTYINLTRS"))))
+        for d in docs.values():
+            d["totals"] = _totals(d["lines"])
+        _replace_loaded("stock_deduction", docs)
+        logger.info("Loaded %d desktop stock deductions", len(docs))
+
+    def purchase_indents():
+        rows = db.fetchall(f"""
+            WITH R AS (SELECT TOP {int(limit)} PIID, PINO, PrintPINO, PIDate, SUPPID, PartyName, Cancelled, AddedBy, RMKS, GRNDTOT FROM TrnHdrPI WITH (NOLOCK) ORDER BY PIID DESC)
+            SELECT h.PIID, h.PINO, h.PrintPINO, h.PIDate, h.PartyName, su.SUPPCODE, h.Cancelled, h.AddedBy, h.RMKS, h.GRNDTOT, d.ITEMID, d.PIQty, d.PIRate, d.PIAmt
+            FROM R h JOIN TrnDtlPI d WITH (NOLOCK) ON d.PIID = h.PIID LEFT JOIN MstSUPP su WITH (NOLOCK) ON su.SUPPID = h.SUPPID ORDER BY h.PIID DESC, d.SlNo""")
+        docs: dict = {}
+        for r in rows:
+            no = _s(r.get("PrintPINO")) or _s(r.get("PINO"))
+            d = docs.setdefault(no, {"doc_no": no, "date": str(r.get("PIDate", ""))[:10], "supplier": _s(r.get("SUPPCODE")) or _s(r.get("PartyName")), "lines": [],
+                                     "remarks": _s(r.get("RMKS")).strip(), "added_by": _s(r.get("AddedBy")), "head_total": _f(r.get("GRNDTOT")),
+                                     "status": "CANCELLED" if _s(r.get("Cancelled")) == "Y" else "SAVED"})
+            d["lines"].append(_doc_line(item_by_id, r.get("ITEMID"), _f(r.get("PIQty")), _f(r.get("PIRate")), _f(r.get("PIAmt"))))
+        for d in docs.values():
+            d["totals"] = _totals(d["lines"], d.pop("head_total"))
+        _replace_loaded("purchase_indent", docs)
+        logger.info("Loaded %d desktop purchase indents", len(docs))
+
+    def closing_stock():
+        rows = db.fetchall(f"""
+            WITH R AS (SELECT TOP {int(limit)} CSEID, CSENO, PrintCSENO, CSEDate, ASONDT, INVNO FROM TrnHdrCSE WITH (NOLOCK) ORDER BY CSEID DESC)
+            SELECT h.CSEID, h.CSENO, h.PrintCSENO, h.CSEDate, h.ASONDT, h.INVNO, d.ITEMID, d.OPQTY, d.CLQTY, d.INVQTY
+            FROM R h JOIN TrnDtlCSE d WITH (NOLOCK) ON d.CSEID = h.CSEID ORDER BY h.CSEID DESC, d.SlNo""")
+        docs: dict = {}
+        for r in rows:
+            no = _s(r.get("PrintCSENO")) or _s(r.get("CSENO"))
+            d = docs.setdefault(no, {"doc_no": no, "date": str(r.get("ASONDT") or r.get("CSEDate") or "")[:10], "lines": [],
+                                     "invoice_no": _s(r.get("INVNO")) or None, "total_amount": 0.0})
+            code = store.merged_code(store.MERGED_ITEM_IDS.get(str(r.get("ITEMID"))) or item_by_id.get(str(r.get("ITEMID")), str(r.get("ITEMID"))))
+            mrp = store.ITEMS.get(code, {}).get("mrp", 0.0)
+            sold = _f(r.get("INVQTY"))
+            d["lines"].append({"item_code": code, "op_qty": _f(r.get("OPQTY")), "closing_qty": _f(r.get("CLQTY")), "sales_qty": sold,
+                               "mrp": mrp, "amount": round(sold * mrp, 2)})
+            d["total_amount"] = round(d["total_amount"] + sold * mrp, 2)
+        _replace_loaded("closing_stock", docs)
+        logger.info("Loaded %d desktop closing stock entries", len(docs))
+
+    def physical_stock():
+        rows = db.fetchall(f"""
+            WITH R AS (SELECT TOP {int(limit)} PSEID, PSEDATE, SYSNAME, USERNAME FROM TrnHdrPSE WITH (NOLOCK) ORDER BY PSEID DESC)
+            SELECT h.PSEID, h.PSEDATE, h.SYSNAME, h.USERNAME, d.ItemID, d.PRate, d.MRate, d.ClQty, d.QOH, d.DiffQty, d.PBNO, d.StkDedNo
+            FROM R h JOIN TrnDtlPSE d WITH (NOLOCK) ON d.PSEID = h.PSEID ORDER BY h.PSEID DESC, d.Slno""")
+        docs: dict = {}
+        for r in rows:
+            no = f"PSE-{r.get('PSEID')}"
+            d = docs.setdefault(no, {"doc_no": no, "date": str(r.get("PSEDATE", ""))[:10], "added_by": _s(r.get("USERNAME")),
+                                     "sys_name": _s(r.get("SYSNAME")), "reduced_as_sales": False, "lines": []})
+            code = store.merged_code(store.MERGED_ITEM_IDS.get(str(r.get("ItemID"))) or item_by_id.get(str(r.get("ItemID")), str(r.get("ItemID"))))
+            d["lines"].append({"item_code": code, "old_pur_rate": None, "old_mrp": None, "pur_rate": _f(r.get("PRate")), "mrp": _f(r.get("MRate")),
+                               "physical_qty": _f(r.get("ClQty")), "system_qty": _f(r.get("QOH")), "diff_qty": _f(r.get("DiffQty")),
+                               "pb_no": _s(r.get("PBNO")), "stkded_no": _s(r.get("StkDedNo"))})
+        _replace_loaded("physical_stock", docs)
+        logger.info("Loaded %d desktop physical stock entries", len(docs))
+
+    for name, fn in (("Sales returns", sales_returns), ("Stock deductions", stock_deductions), ("Purchase indents", purchase_indents),
+                     ("Closing stock entries", closing_stock), ("Physical stock entries", physical_stock)):
+        run(name, fn)
+
+
+def expense_balance_before(on: date) -> float | None:
+    """The petty cash balance before a date from the desktop's tables (sum of receipts minus expenses), as its Drops Petty Cash
+    report works it out; None when the database is not available or has no such tables."""
+    if not db.is_db_available():
+        return None
+    try:
+        row = db.fetchone(f"""SELECT SUM(ISNULL(d.RAMT,0) - ISNULL(d.AMT,0)) AS b FROM TrnHdrEXP h WITH (NOLOCK)
+                              JOIN TrnDtlEXP d WITH (NOLOCK) ON d.EXPID = h.EXPID WHERE h.EXPDate < '{on.isoformat()}'""")
+    except Exception as e:  # noqa: BLE001 - a database without the expense tables
+        logger.warning("Petty cash balance not read: %s", e)
+        return None
+    return round(_f((row or {}).get("b")), 2)
+
+
+def expense_by_ledger(first: date, last: date) -> list[dict] | None:
+    """Desktop expense and receipt totals per ledger name between two dates (None when the database is not available)."""
+    if not db.is_db_available():
+        return None
+    try:
+        rows = db.fetchall(f"""SELECT l.LEDNAME, SUM(d.AMT) AS e, SUM(d.RAMT) AS r FROM TrnHdrEXP h WITH (NOLOCK)
+                               JOIN TrnDtlEXP d WITH (NOLOCK) ON d.EXPID = h.EXPID JOIN MstLed l WITH (NOLOCK) ON l.LEDID = d.LEDID
+                               WHERE h.EXPDate >= '{first.isoformat()}' AND h.EXPDate <= '{last.isoformat()}' GROUP BY l.LEDNAME ORDER BY 1""")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Petty cash ledger totals not read: %s", e)
+        return None
+    return [{"name": _s(r.get("LEDNAME")), "expense": round(_f(r.get("e")), 2), "receipt": round(_f(r.get("r")), 2)} for r in rows]
 
 
 # ─── Live sales and stock (read on demand, for the Dashboard restock panel) ──────────────────────
@@ -676,12 +955,18 @@ def live_sales_and_stock(start: date, end: date) -> dict | None:
         return data
 
 
+def load_desktop_rights() -> None:
+    """Each user's Add / Edit / Delete and screen rights from the desktop's MstUserRights / MstRoleRights (app/desktop_rights.py)."""
+    from . import desktop_rights
+    desktop_rights.load()
+
+
 def load_masters() -> None:
     """Load all master tables from SQL Server (runs in < 0.2s)."""
     t_all = time.perf_counter()
     for fn in (load_company, load_fin_year, load_item_groups, load_brands, load_uoms, load_packages, load_items,
                load_customers, load_suppliers, load_ledger_groups, load_ledgers, load_counters, load_sales_persons,
-               load_simple_masters, load_last_purchase, load_users):
+               load_simple_masters, load_last_purchase, load_users, load_desktop_rights):
         t0 = time.perf_counter()
         try:
             fn()
@@ -722,6 +1007,13 @@ def load_transactions() -> None:
     except Exception as e:
         logger.error("load_purchase_bills failed: %s", e)
     logger.info("Bill history read in %.1fs (latest %d sales invoices, %d purchase bills asked for)", time.perf_counter() - t0, sales, purchases)
+    try:
+        load_expenses(_count("RECENT_EXPENSES", 5000))
+    except Exception as e:  # noqa: BLE001 - a database without the expense tables keeps the web's own entries only
+        logger.warning("load_expenses failed: %s", e)
+    load_desktop_documents(_count("RECENT_DOCUMENTS", 5000))
+    from . import expense_db
+    expense_db.load_opening()   # Day's OP-Balance (TrnExpOPBal)
     _remember_oldest()
     logger.info("Transaction data loaded: %d sales invoices, %d purchase bills", len(store.DOCS["sales_invoice"]), len(store.DOCS["purchase_bill"]))
 
@@ -769,6 +1061,29 @@ def ensure_days(first: date, last: date, purchases: bool = False) -> None:
             return
         done.update(d.isoformat() for d in missing)
         logger.info("Read older %s bills for %s to %s in %.1fs", kind, span[0], span[1], time.perf_counter() - t0)
+
+
+_recent_lock = threading.Lock()
+_recent_at = 0.0
+
+
+def refresh_recent_sales(max_age: float = 5.0) -> None:
+    """Bring in the bills other PCs made since start-up (the Windows vLQMS, another web counter): the bills of yesterday and today are read again,
+    at most once every `max_age` seconds, so a bill saved elsewhere shows in the history list and the List window. Bills this app made itself
+    are never replaced (see _add_loaded). Does nothing when the database is off."""
+    global _recent_at
+    if not db.is_db_available() or time.monotonic() - _recent_at < max_age:
+        return
+    if not _recent_lock.acquire(blocking=False):   # another request is reading them right now
+        return
+    try:
+        _recent_at = time.monotonic()
+        today = date.today()
+        load_sales_invoices(days=(today - timedelta(days=1), today))
+    except Exception as e:  # noqa: BLE001 - the list shows what is in memory
+        logger.warning("Refreshing the latest bills failed: %s", e)
+    finally:
+        _recent_lock.release()
 
 
 def load_all() -> None:

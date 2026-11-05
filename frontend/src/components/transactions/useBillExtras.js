@@ -8,7 +8,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useScreenFields } from '../../hooks/useScreenFields';
 import { extraProblem, ruleHolds, ruleValues, valueOf } from '../../lib/designerFields';
 
-export function useBillExtras(table, idPrefix) {
+// `omit`: a pattern matched against a field's column name and caption; matching fields are not drawn or sent
+// (Sales Invoice leaves out "Amount In Words" and "Remarks", which the desktop's bill screen does not show).
+const dropped = (omit, list) => (omit ? list.filter(f => !omit.test(`${f.key} ${f.label ?? ''}`)) : list);
+
+export function useBillExtras(table, idPrefix, omit) {
   const live = useScreenFields(`table:${table}`);
   const [taken, setTaken] = useState(null);   // null until the first definition arrives
   const frozen = taken ?? [];
@@ -17,12 +21,12 @@ export function useBillExtras(table, idPrefix) {
   const [errors, setErrors] = useState({});
 
   // Take the first definition that arrives; later changes wait for the next bill.
-  if (taken === null && live.screen) setTaken(live.fields);
+  if (taken === null && live.screen) setTaken(dropped(omit, live.fields));
 
-  const latest = useRef(live.fields);   // refresh is called from async save callbacks: it must see the newest definition
-  useEffect(() => { latest.current = live.fields; }, [live.fields]);
+  const latest = useRef(dropped(omit, live.fields));   // refresh is called from async save callbacks: it must see the newest definition
+  useEffect(() => { latest.current = dropped(omit, live.fields); }, [live.fields, omit]);
   const refresh = useCallback(() => { setTaken(latest.current); setForm({ extras: {} }); setErrors({}); }, []);
-  const changed = ready && live.fields !== frozen && JSON.stringify(live.fields) !== JSON.stringify(frozen);
+  const changed = ready && JSON.stringify(dropped(omit, live.fields)) !== JSON.stringify(frozen);
 
   /** Check the extras (mandatory / number / length); true when fine. Sets the inline errors otherwise. */
   const check = () => {

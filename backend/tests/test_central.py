@@ -121,7 +121,7 @@ async def test_an_oversized_push_is_refused(shops):
         assert res.status_code == 413
 
 
-async def test_login_needs_an_encrypted_password_and_a_new_user_must_change_it(repo):
+async def test_login_needs_an_encrypted_password_and_a_new_user_must_change_it(repo, strict_encryption):
     repo.add_user("NEWBIE", passwords.hash_password("Temp1234"), cauth.OWNER)
     async with _client() as c:
         assert (await c.post("/auth/login", json={"user": "NEWBIE", "password": "Temp1234"})).status_code in (400, 422)

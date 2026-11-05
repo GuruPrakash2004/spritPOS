@@ -46,6 +46,12 @@ class FakeMeta(dict):
                 "is_nullable": 1, "has_default": 1}
 
 
+@pytest.fixture(autouse=True)
+def older_mode_with_web_tables(monkeypatch):
+    """These tests check the older saving mode (the web's own Web_ tables beside the desktop's); direct mode is tested in test_direct_mode.py."""
+    monkeypatch.setattr(db, "USE_WEB_TABLES", True)
+
+
 @pytest.fixture
 def sql(monkeypatch):
     """sqlstore switched on, with every transaction going to a FakeCursor. Returns the statement log."""

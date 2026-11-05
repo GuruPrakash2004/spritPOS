@@ -1,0 +1,907 @@
+﻿Imports System.Data.oledb
+Imports C1.Win.C1FlexGrid
+
+Public Class frmRptSalesPkgwise
+    Dim clsSVT As New svtLibrary
+
+    Public strList As String
+    Dim strItemGroupList As String
+    Dim strItemList As String
+    Dim strValMethod As String
+    Dim arrRctps(4, 1) As String
+    Dim arrFlds() As String
+    Dim intAdnlFldCount As String
+
+    Const vItemCancel = 0
+    Const vItemID = 1
+    Const vItemShortName = 2
+    Const vItemCode = 3
+    Const vItemTotCol = 4
+
+    Const vPkgCancel = 0
+    Const vPkgID = 1
+    Const vPkgName = 2
+    Const vPkgCode = 3
+    Const vPkgTotCol = 4
+
+    Private Sub btnClose_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles btnClose.Click
+        frmMain.CloseSelectedTabPage(Me)
+    End Sub
+
+    Private Function ValidateFlds() As Boolean
+        ValidateFlds = False
+
+        If dtpFrom.Value < CDate(gSettings.gCompStDt) Then
+            MsgBox("From date cannot be less than " & gSettings.gCompStDt, MsgBoxStyle.Critical, Me.Text)
+            Exit Function
+        End If
+
+        If dtpTo.Value > CDate(gSettings.gCompEndDt) Then
+            MsgBox("To date cannot be greater than " & gSettings.gCompEndDt, MsgBoxStyle.Critical, Me.Text)
+            Exit Function
+        End If
+
+        'check the date range
+        If CDate(dtpTo.Value) < CDate(dtpFrom.Value) Then
+            MsgBox("Invalid Date Range!", MsgBoxStyle.Critical, Me.Text)
+            Exit Function
+        End If
+
+        If chkItemGroup.Checked Then
+            If strItemGroupList = "" Then
+                MsgBox("Item Group Selection required from the list ", MsgBoxStyle.Critical, Me.Text)
+                Exit Function
+            End If
+        End If
+
+        'If chkItem.Checked Then
+        '    If strItemList = "" Then
+        '        MsgBox("Item Selection required from the list ", MsgBoxStyle.Critical, Me.Text)
+        '        Exit Function
+        '    End If
+        'End If
+
+        ''Chk for additional fields
+        'If chkAddnlItemFlds.value = vbChecked And Trim(strItemFldList) = "" Then
+        '    MsgBox "Please select required Additional Item Fields from the list ",
+        '        vbExclamation, Me.Caption
+        '    chkAddnlItemFlds.SetFocus
+        '    Exit Function
+        'End If
+
+        ValidateFlds = True
+    End Function
+
+    Private Sub btnView_Click(ByVal sender As System.Object, ByVal e As System.EventArgs)
+        If Not ValidateFlds() Then
+            Exit Sub
+        End If
+        'Dim intLocId As Integer = clsSVT.getDataLongValue("Select LocID from MstLoc where LocCode='" & GetVal(cboLocation.Text, 0) & "'", 0, False)
+        strValMethod = getGsettings("Inventory", "VaulationMethod", "S")
+        Try
+            Using cmd As New oledbCommand("mSp_stkBal")
+                cmd.Connection = svtConn
+                cmd.CommandType = CommandType.StoredProcedure
+                cmd.Parameters.AddWithValue("@mOPdt", CDate(gSettings.gCompStDt))
+                cmd.Parameters.AddWithValue("@mFdt", dtpFrom.Value)
+                cmd.Parameters.AddWithValue("@mTdt", dtpTo.Value)
+                ' cmd.Parameters.AddWithValue("@mLocID", intLocId)
+                cmd.Parameters.AddWithValue("@mUserName", gUserCode)
+                cmd.ExecuteScalar()
+            End Using
+        Catch ex As Exception
+            MsgBox("Error during processing stock" & vbCrLf & ex.Message, MsgBoxStyle.Critical, "Stock report error")
+            Exit Sub
+        End Try
+
+        'If chkItem.Checked Then
+        '    If strItemList <> "" Then
+        '        clsSVT.execSQLStatement("Delete from rptStkBal where UserName = '" & gUserCode & "' and ItemID not in  (" & strItemList & ")")
+        '    End If
+        'End If
+
+        If chkItemGroup.Checked Then
+            If strItemGroupList <> "" Then
+                clsSVT.execSQLStatement("Delete from rptStkBal where UserName = '" & gUserCode & "' and ItemID  in  (select ItemId from MstItem i, MstItemGroup g " _
+                    & " where i.ItemGroupID = g.ItemGroupID and  i.itemgroupid not in (" & strItemGroupList & "))")
+            End If
+        End If
+
+        Call initGrid()
+        Call RetreiveData()
+    End Sub
+
+    Private Sub RetreiveData()
+        Dim strsql As String, iCount As Integer
+        Dim rs As oledbDataReader
+        Dim sngClQty As Double, sngClVal As Double
+        Dim intItemId As Integer, i As Integer
+
+        strsql = "update rptStkbal set stkBalColName = 'OP Bal',  DocDate = " & getDateFormatInCond(dtpFrom.Value) & ", docOrderBy = 1 "
+        strsql = strsql & " where docDate < " & getDateFormatInCond(dtpFrom.Value) & ""
+        clsSVT.execSQLStatement(strsql)
+
+        strsql = "select i.itemID, ItemCode, ItemDesc, itemName, i.UomID "
+
+        'If Trim(txtAdnlFlds.Text) <> "" And chkAdditionalFlds.Checked Then
+        '    strsql = strsql & "," & Trim(txtAdnlFlds.Text)
+        'End If
+
+        strsql = strsql & " ,UOMCode, ItemGroupName, stkBalColName, "
+        strsql = strsql & " IsNull(sum(docQty),0) as qtyDoc, IsNull(sum(DocValue),0) as valDoc"
+        strsql = strsql & " From rptStkBal r, mstItem i, MstItemGroup g, MstUOM u"
+        strsql = strsql & " where userName = '" & gUserCode & "' and "
+        strsql = strsql & " r.ItemID = i.ItemID and"
+        strsql = strsql & " i.NonStkable<>'Y' and "
+        strsql = strsql & " u.UomID = i.UomID and "
+        'strsql = strsql & " u.UomID = i.UomID and "
+        strsql = strsql & " g.ItemGroupID = i.ItemGroupID "
+
+        'If chkItem.Checked Then
+        '    If strItemList <> "" Then
+        '        strsql = strsql & " and i.ItemID in (" & strItemList & ") "
+        '    End If
+        'End If
+
+        If chkItemGroup.Checked Then
+            If strItemGroupList <> "" Then
+                strsql = strsql & " and i.ItemGroupID in (" & strItemGroupList & ") "
+            End If
+        End If
+
+        'If Trim(txtItemCode.Text) <> "" Then
+        '    strsql = strsql & " and I.itemCode like '%" & txtItemCode.Text & "%'"
+        'End If
+
+        strsql = strsql & " group by i.itemID, stkBalColName,itemName, itemdesc,i.UomID,ItemCode,UOMcode, ItemGroupName"
+
+        'If Trim(txtAdnlFlds.Text) <> "" And chkAdditionalFlds.Checked Then
+        '    strsql = strsql & "," & Trim(txtAdnlFlds.Text)
+        'End If
+
+        '' strsql = strsql & " Having IsNull(sum(docQty),0) > 0"
+        'strsql = strsql & " Union"
+
+        'strsql = strsql & " select i.itemID, ItemCode, ItemDesc, itemName, i.UomID  "
+
+        'If Trim(txtAdnlFlds.Text) <> "" And chkAdditionalFlds.Checked Then
+        '    strsql = strsql & "," & Trim(txtAdnlFlds.Text)
+        'End If
+
+        strsql = strsql & " ,UOMCode, ItemGroupName, '', 0, 0"
+        strsql = strsql & " From mstItem i, MstItemGroup g, MstUOM u"
+        strsql = strsql & " where i.NonStkable<>'Y' and  u.UomID = i.UomID and  g.ItemGroupID = i.ItemGroupID"
+        strsql = strsql & " and itemid not in (select itemid from rptstkbal where username = '" & gUserCode & "')"
+        strsql = strsql & " and itemid > 0"
+
+        'If chkItem.Checked Then
+        '    If strItemList <> "" Then
+        '        strsql = strsql & " and i.ItemID in (" & strItemList & ") "
+        '    End If
+        'End If
+
+        If chkItemGroup.Checked Then
+            If strItemGroupList <> "" Then
+                strsql = strsql & " and i.ItemGroupID in (" & strItemGroupList & ") "
+            End If
+        End If
+
+        'If Trim(txtItemCode.Text) <> "" Then
+        '    strsql = strsql & " and I.itemCode like '%" & txtItemCode.Text & "%'"
+        'End If
+
+        strsql = strsql & " Order by itemGroupName, i.ItemID "
+        rs = clsSVT.getDataReaderFromSQL(strsql)
+
+        If Not rs.HasRows Then
+            rs.Close()
+            Exit Sub
+        End If
+
+        intItemId = -1
+        With rs
+            'Dim iFld As Integer
+            Do While .Read
+                If intItemId <> !ItemID Then
+                    sngClQty = 0 : sngClVal = 0
+                    'vsfView.Rows.Count = vsfView.Rows.Count + 1
+                    'vsfView.SetData(vsfView.Rows.Count - 1, 0, !ItemGroupName)
+                    'vsfView.SetData(vsfView.Rows.Count - 1, 1, !ItemCode)
+                    'vsfView.SetData(vsfView.Rows.Count - 1, 2, !ItemName)
+                    'vsfView.SetData(vsfView.Rows.Count - 1, 3, GetVal(!ItemDesc, ""))
+                End If
+                intItemId = !itemid
+                iCount = 3
+                'here you have to add additional flds of item IF ANY
+                'If Trim(txtAdnlFlds.Text) <> "" And chkAdditionalFlds.Checked Then
+                '    arrFlds = txtAdnlFlds.Text.Split(",")
+                '    For i = 0 To arrFlds.Length - 1
+                '        iCount = iCount + 1
+                '        vsfView.SetData(vsfView.Rows.Count - 1, iCount, GetVal(rs(arrFlds(i)), ""))
+                '    Next i
+                'End If
+                iCount = iCount + 1
+                '    vsfView.SetData(vsfView.Rows.Count - 1, iCount, !Uomcode)
+                '    For i = iCount + 1 To (vsfView.Cols.Count - 1)
+                '        If !StkbalColName & " Qty" = vsfView.GetData(0, i) Then
+                '            If !StkbalColName = "OP Bal" Then
+                '                vsfView.SetData(vsfView.Rows.Count - 1, i, !QtyDoc)
+                '                vsfView.SetData(vsfView.Rows.Count - 1, i + 1, GetVal(!ValDoc, 0))
+                '            Else
+                '                vsfView.SetData(vsfView.Rows.Count - 1, i, Math.Abs(Val(!QtyDoc)))
+                '                vsfView.SetData(vsfView.Rows.Count - 1, i + 1, GetVal(Math.Abs(GetVal(rs!ValDoc, 0)), 0))
+                '            End If
+                '            Exit For
+                '        End If
+                '    Next i
+                '    sngClQty = sngClQty + !QtyDoc
+                '    sngClVal = sngClVal + Math.Round(GetVal(!ValDoc, 0), 2)
+                '    vsfView.SetData(vsfView.Rows.Count - 1, vsfView.Cols.Count - 2, Math.Round(sngClQty, 2))
+                '    vsfView.SetData(vsfView.Rows.Count - 1, vsfView.Cols.Count - 1, Math.Round(sngClVal, 2))
+                '    intItemId = !ItemID
+            Loop
+            'vsfView.ColFormat(vsfView.Cols - 1) = "#.00"
+            'vsfView.ColFormat(vsfView.Cols - 2) = "#.00"
+            .Close()
+        End With
+
+        Dim k As Integer
+        'With vsfView
+        '    .SubtotalPosition = C1.Win.C1FlexGrid.SubtotalPositionEnum.BelowData
+        '    For k = iCount + 1 To .Cols.Count - 1
+        '        .Subtotal(C1.Win.C1FlexGrid.AggregateEnum.Sum, 0, -1, k)
+        '    Next k
+        '    .AllowMerging = C1.Win.C1FlexGrid.AllowMergingEnum.RestrictAll
+        '    .Cols(0).AllowMerging = True
+        'End With
+        'If chkAdditionalFlds.Checked And Trim(txtAdnlFlds.Text) <> "" Then
+        '    Call clsSVT.execSQLStatement("Update UtlGSettings set SetValue = '" & txtAdnlFlds.Text & "' where SetName= 'STKBALADNLFLDS' and SetGroup = 'Inventory'")
+        'End If
+    End Sub
+
+    '    Private Sub RemoveVsfRows(argVSF As C1.Win.C1FlexGrid.C1FlexGrid)
+    '        Dim i As Integer
+    '        With argVSF
+    'Repeat:
+    '            For i = 1 To (.Rows.Count - 1)
+    '                If chkZeroBal.Checked Then
+    '                    If Val(.GetData(i, .Cols.Count - 2)) = 0 Then
+    '                        .RemoveItem(i)
+    '                        GoTo Repeat
+    '                    End If
+    '                End If
+    '                If chkZeroValue.Checked Then
+    '                    If Val(.GetData(i, .Cols.Count - 1)) < Val(txtValBelow.Text) Then
+    '                        .RemoveItem(i)
+    '                        GoTo Repeat
+    '                    End If
+    '                End If
+    '            Next i
+    '        End With
+    '    End Sub
+
+    Private Sub frmRptStock_Load(ByVal sender As Object, ByVal e As System.EventArgs) Handles MyBase.Load
+        Me.KeyPreview = True
+        '  txtAdnlFlds.Text = getGsettings("Inventory", "STKBALADNLFLDS", "")
+        'Call initFormSize(Me, Me.Text, False, 958, 579, 0, 0)
+        'Call initFormVsfDet(Me, Me.Text, vsfView, "DET")
+        'Call initFormVsfDet(Me, Me.Text, vsfItem, "ITEM")
+        'Call initFormVsfDet(Me, Me.Text, vsfPkgItem, "PKG")
+        Call fillFormProperties(Me)
+        Call initGridStyles(Me)
+        Call initScreen()
+        '  txtAdnlFlds.Visible = False
+    End Sub
+
+    Private Sub initScreen()
+        'With vsfItem
+        '    .Rows.Count = 1
+        '    .Cols.Count = vItemTotCol
+        '    .Rows.Fixed = 1
+        '    .SetData(0, vItemCancel, "Selected Item")
+        '    .SetData(0, vItemID, "Selected Item")
+        '    .SetData(0, vItemShortName, "Selected Item")
+        '    .SetData(0, vItemCode, "Selected Item")
+        '    .Rows(0).AllowMerging = True
+        '    SetRowAlign(vsfItem, svtAlign.Center, 0)
+        '    SetColAlign(vsfItem, svtAlign.Left, vItemShortName)
+        '    SetHideCol(vsfItem, True, vItemID, vItemCode)
+        'End With
+
+        'With vsfPkgItem
+        '    .Rows.Count = 1
+        '    .Cols.Count = vPkgTotCol
+        '    .Rows.Fixed = 1
+        '    .SetData(0, vPkgCancel, "Selected Package")
+        '    .SetData(0, vPkgID, "Selected Package")
+        '    .SetData(0, vPkgName, "Selected Package")
+        '    .SetData(0, vPkgCode, "Selected Package")
+        '    .Rows(0).AllowMerging = True
+        '    SetRowAlign(vsfPkgItem, svtAlign.Center, 0)
+        '    SetColAlign(vsfPkgItem, svtAlign.Left, vPkgName)
+        '    SetHideCol(vsfPkgItem, True, vPkgID, vPkgCode)
+        'End With
+
+        ' dtpFrom.Value = getFirstDateInMonth(getSystemDate)
+        dtpFrom.Value = gSettings.gCompStDt
+        dtpTo.Value = getSystemDate()
+        ' Call bindCombo(cboLocation, "LocID", "LocName", "Select locid, LocName from MstLoc where LocID > 0 order by 1")
+    End Sub
+
+    Private Sub btnExportToXL_Click(ByVal sender As System.Object, ByVal e As System.EventArgs)
+        'Call ExportToXL(vsfView)
+    End Sub
+
+    Private Sub chkItemGroup_CheckedChanged(sender As Object, e As System.EventArgs) Handles chkItemGroup.CheckedChanged
+        Dim strSQL As String
+        If chkItemGroup.Checked = False Then
+            strList = ""
+            strItemGroupList = ""
+            Exit Sub
+        End If
+
+        Dim frmSel As New frmUtlMultiSelection
+
+        strSQL = "Select distinct 0 as sel, ItemGroupID, ItemGroupCode from MstItemGroup where ItemGroupID > 0 and "
+        strSQL = strSQL & " InActive = 'N' order by ItemGroupCode"
+        Call frmSel.InitVsfSel(strSQL, 1, 1, True, Me, False)
+        frmSel.Text = "Select [Multiple] Item Groups"
+        frmSel.vsfDet.SetData(0, 0, "Sel")
+        frmSel.ShowDialog()
+        strItemGroupList = strList
+
+        If Trim(strItemGroupList) = "" Then chkItemGroup.Checked = False
+    End Sub
+
+    Private Sub vsfDet_BeforeEdit(ByVal sender As Object, ByVal e As C1.Win.C1FlexGrid.RowColEventArgs)
+        e.Cancel = True
+    End Sub
+
+    'Private Sub vsfView_DoubleClick(sender As Object, e As EventArgs) Handles vsfView.DoubleClick
+    '    If vsfView.Row <= 0 Then Exit Sub
+    '    Dim frmD As New frmUtlViewExport, strFormat As String, strSQL As String
+    '    With frmD
+    '        .Text = "Customer wise Listing of Item " & vsfView.GetData(vsfView.Row, 1)
+
+    '        strFormat = " Customer|  Doc Type| Doc Date| Doc No| Pending Qty"
+
+    '        strSQL = "Select CustCode, DocType, docdate, "
+    '        strSQL = strSQL & " case when docType = 'GRN' then (select GrnNo from TrnHdrGRN h where h.GrnID = t.DocID) else '' end  as docNo, "
+    '        strSQL = strSQL & " pendQty"
+    '        strSQL = strSQL & " From trnstock t, mstcust c, mstitem i"
+    '        strSQL = strSQL & " where t.custid = c.custid"
+    '        strSQL = strSQL & " And i.itemid =t.ItemID"
+    '        strSQL = strSQL & " and i.ItemCode = '" & vsfView.GetData(vsfView.Row, 1) & "'"
+    '        strSQL = strSQL & " order by docDate, 4"
+
+    '        Call .initScreenSQL(True, strFormat, strSQL, False, "", "", "", "", 0, 1, 2)
+    '        'Call SetColWidth(.vsfView, 1200, 1050, 1830, 1305, 1230)
+    '        .Show()
+    '    End With
+    'End Sub
+
+    Private Sub frmRptStock_KeyUp(sender As Object, e As KeyEventArgs) Handles MyBase.KeyUp
+        If e.KeyCode = Keys.F9 And e.Control = True Then
+            Call initFormSize(Me, Me.Text, True, 958, 579, 0, 0)
+            MsgBox("Restored Form & Grid Layout Successfully!!", vbInformation, Me.Text)
+        End If
+
+        If e.KeyCode = Keys.F8 And e.Control = True Then
+            Call SaveActFormSettings(Me, Me.Text)
+            'Call SaveActFormVsfDet(Me, Me.Text, "DET", vsfView)
+            'Call SaveActFormVsfDet(Me, Me.Text, "ITEM", vsfItem)
+            'Call SaveActFormVsfDet(Me, Me.Text, "PKG", vsfPkgItem)
+            MsgBox("Saved Form & Grid Layout Successfully!!", vbInformation, Me.Text)
+        End If
+
+        If e.Control = False And e.Alt = True And e.KeyCode = Keys.E Then
+            'Call ExportToXL(vsfView)
+        End If
+
+        If e.Alt = True AndAlso e.KeyCode = Keys.I Then
+            Call btnItem_Click(sender, e)
+        End If
+
+        'If e.Alt = True AndAlso e.KeyCode = Keys.P Then
+        '    Call btnPkgItem_Click(sender, e)
+        'End If
+    End Sub
+
+    'Private Sub chkAdditionalFlds_CheckedChanged(sender As Object, e As EventArgs)
+    '    If chkAdditionalFlds.Checked Then
+    '        txtAdnlFlds.Visible = True
+    '    Else
+    '        txtAdnlFlds.Visible = False
+    '    End If
+    'End Sub
+
+    Private Sub updateValuesWtAvg()
+        Dim strsql As String
+        Dim sngQty As Double, sngValue As Double
+        Dim sngClBalQty As Double, sngClBalValue As Double
+        Dim sngRate As Double, sngLastRate As Double
+        Dim rs As oledbDataReader
+        Dim rsStk As oledbDataReader
+        strsql = "Select distinct itemID from rptStkBal  where userName = '" & gUserCode & "' and DocValuationReq = 'Y' order by ItemID"
+        rs = clsSVT.getDataReaderFromSQL(strsql)
+        With rs
+            Do While .Read
+                strsql = "Select * from rptStkBal "
+                strsql = strsql & " where itemID = " & rs!ItemID
+                strsql = strsql & " and UserName = '" & gUserCode & "'"
+                strsql = strsql & " order by DocDate, DocOrderBy"
+                rsStk = clsSVT.getDataReaderFromSQL(strsql)
+                sngQty = 0 : sngValue = 0
+                sngClBalQty = 0 : sngClBalValue = 0
+                sngRate = 0 : sngLastRate = 0
+                With rsStk
+                    Do While .Read
+                        If !docValuationReq <> "Y" Then
+                            sngClBalQty = sngClBalQty + !DocQty
+                            sngClBalValue = sngClBalValue + !DocValue
+                        Else
+                            sngClBalQty = sngClBalQty + !DocQty
+                            sngClBalValue = sngClBalValue + Math.Round((!DocQty * sngRate), 2)
+                            clsSVT.execSQLStatement("Update rptStkBal set DocValue = " & Math.Round((!DocQty * sngRate), 2) & " where RowID = " & !RowID)
+                        End If
+                        If sngClBalQty > 0 Then sngRate = Math.Round(sngClBalValue / sngClBalQty, 4)
+                        If sngRate = 0 Then sngRate = sngLastRate
+                        If sngRate > 0 Then sngLastRate = sngRate
+                    Loop
+                End With
+            Loop
+        End With
+    End Sub
+
+    Private Sub updateValuesStdRate()
+        Dim strsql As String, strRateFld As String
+        strRateFld = getGsettings("Inventory", "ItemStdRate", "")
+        If strRateFld = "" Then Exit Sub
+        strsql = "update rptStkBal set "
+        strsql = strsql & " docValue = DocQty * i." & strRateFld
+        strsql = strsql & " from mstItem i"
+        strsql = strsql & " Where rptStkBal.ItemID = i.ItemID"
+        strsql = strsql & " and userName = '" & gUserCode & "'"
+        clsSVT.execSQLStatement(strsql)
+    End Sub
+
+    Private Sub initGrid()
+        'Dim rsDummy As oledbDataReader
+        'Dim blnFound As Boolean
+        'Dim i As Integer
+        'With vsfView
+        '    'strTag1 = "Stock Balance Report"
+        '    'strTag2 = "For the Period of {" & dtFdt.value & "} To {" & dtTDt.value & "}"
+        '    vsfView.Cols.Count = 4
+        '    vsfView.Rows.Count = 1
+        '    vsfView.SetData(0, 0, "Item Group")
+        '    vsfView.SetData(0, 1, "Item Code")
+        '    vsfView.Cols(1).TextAlign = C1.Win.C1FlexGrid.TextAlignEnum.LeftCenter
+        '    vsfView.Cols(2).TextAlign = C1.Win.C1FlexGrid.TextAlignEnum.LeftCenter
+        '    vsfView.SetData(0, 2, "Item Name")
+        '    vsfView.SetData(0, 3, "Item Desc")
+
+        '    'here you have to add additional flds of item IF ANY
+        '    'If Trim(txtAdnlFlds.Text) <> "" And chkAdditionalFlds.Checked Then
+        '    '    arrFlds = txtAdnlFlds.Text.Split(",")
+        '    '    For i = 0 To arrFlds.Length - 1
+        '    '        vsfView.Cols.Count = vsfView.Cols.Count + 1
+        '    '        vsfView.Col = vsfView.Cols.Count - 1
+        '    '        vsfView.SetData(0, vsfView.Col, arrFlds(i))
+        '    '    Next i
+        '    'End If
+        '    vsfView.Cols.Count = vsfView.Cols.Count + 1
+        '    vsfView.Col = vsfView.Cols.Count - 1
+        '    vsfView.SetData(0, vsfView.Col, "UOM")
+        'End With
+
+        'rsDummy = clsSVT.getDataReaderFromSQL("Select DocOrderBy, StkBalColName from utlStock order by DocOrderBy")
+        'With vsfView
+        '    Do While rsDummy.Read
+        '        blnFound = False
+        '        For i = 1 To .Cols.Count - 1
+        '            If .GetData(0, i) = rsDummy!StkbalColName & " Qty" Then
+        '                blnFound = True
+        '                Exit For
+        '            End If
+        '        Next i
+
+        '        If Not blnFound Then
+        '            .Cols.Count = .Cols.Count + 1
+        '            .SetData(0, .Cols.Count - 1, rsDummy!StkbalColName & " Qty")
+        '            .Cols.Count = .Cols.Count + 1
+        '            .SetData(0, .Cols.Count - 1, rsDummy!StkbalColName & " Value")
+        '            'If Not chkValues.Checked Then .Cols(.Cols.Count - 1).Visible = False
+        '        End If
+        '    Loop
+        '    .Cols.Count = .Cols.Count + 1
+        '    .SetData(0, .Cols.Count - 1, "Cl Qty")
+        '    .Cols.Count = .Cols.Count + 1
+        '    .SetData(0, .Cols.Count - 1, "Cl Value")
+        '    'If Not chkValues.Checked Then .Cols(.Cols.Count - 1).Visible = False
+        '    rsDummy.Close()
+        'End With
+    End Sub
+
+    Private Sub updateValuesFIFO()
+        Dim strsql As String, blnFlag As Boolean
+        Dim intFactor As Integer, sngPrevRate As Single
+        Dim intItemId As Long, i As Integer
+        Dim rsDummy As oledbDataReader, rsItem As oledbDataReader
+        Dim sngIssQty As Double, sngIssValue As Double, sngBalQty As Double
+
+        strsql = "Select distinct itemid from rptStkBal where userName = '" & gUserCode & "' and DocValuationReq = 'Y' order by ItemID"
+        rsItem = clsSVT.getDataReaderFromSQL(strsql)
+        With rsItem
+            Do While .Read
+                StMsg("Valuating for item " & intItemId)
+                intItemId = !ItemID
+                blnFlag = fillRcptsArr(intItemId)
+                sngIssValue = 0
+                sngPrevRate = 0
+                strsql = "Select * from rptStkBal where itemid = " & !ItemID & " and userName = '" & gUserCode & "' and DocValuationReq = 'Y' order by ItemID, docdate, DocOrderBy, docno"
+                rsDummy = clsSVT.getDataReaderFromSQL(strsql)
+                With rsDummy
+                    Do While .Read
+                        sngIssQty = Math.Abs(GetVal(!DocQty, 0))
+                        'If sngIssQty <> 0 Then
+                        intFactor = sngIssQty / GetVal(!DocQty, 0)
+                        'End If
+                        If blnFlag Then
+                            For i = 0 To UBound(arrRctps, 2)
+                                If Val(arrRctps(2, i)) > 0 And CDate(arrRctps(4, i)) <= CDate(!DocDate) Then
+                                    sngBalQty = arrRctps(2, i)
+                                    If sngIssQty <= sngBalQty Then
+                                        sngIssValue = sngIssValue + (sngIssQty * arrRctps(3, i))
+                                        sngPrevRate = arrRctps(3, i)
+                                        sngBalQty = sngBalQty - sngIssQty
+                                        arrRctps(2, i) = sngBalQty
+                                        sngIssQty = 0
+                                        Exit For
+                                    Else
+                                        sngIssValue = sngIssValue + (sngBalQty * arrRctps(3, i))
+                                        sngPrevRate = arrRctps(3, i)
+                                        sngIssQty = sngIssQty - sngBalQty
+                                        arrRctps(2, i) = 0
+                                    End If
+                                End If
+                            Next i
+                        End If
+                        If sngIssQty > 0 Then
+                            sngIssValue = sngIssValue + (sngIssQty * sngPrevRate)
+                        End If
+                        clsSVT.execSQLStatement("Update rptStkBal set DocValue = " & intFactor * Math.Round(sngIssValue, 2) & " where RowID = " & !RowID)
+                        sngIssValue = 0
+                    Loop
+                    .Close()
+                End With
+
+            Loop
+        End With
+
+        StMsg()
+    End Sub
+
+    Private Function fillRcptsArr(argItemID As Long) As Boolean
+        Dim intCtr As Integer, strSQL As String
+        Dim rsR As oledbDataReader
+        Dim sgTot As Double
+        strSQL = "Select * from rptStkBal where userName = '" & gUserCode & "'" _
+            & " and itemID = " & argItemID _
+            & " and docValuationReq <> 'Y' order by docDate"
+        rsR = clsSVT.getDataReaderFromSQL(strSQL)
+        fillRcptsArr = False
+        With rsR
+            intCtr = -1
+            sgTot = 0
+            Do While .Read
+                intCtr = intCtr + 1
+                fillRcptsArr = True
+                ReDim Preserve arrRctps(4, intCtr)
+                arrRctps(0, intCtr) = GetVal(!DocQty, 0)
+                sgTot = sgTot + GetVal(!DocQty, 0)
+                arrRctps(1, intCtr) = GetVal(!DocValue, 0)
+                arrRctps(2, intCtr) = arrRctps(0, intCtr)
+                If arrRctps(0, intCtr) > 0 Then
+                    arrRctps(3, intCtr) = Math.Round(CDbl(arrRctps(1, intCtr) / arrRctps(0, intCtr)), 6)
+                Else
+                    arrRctps(3, intCtr) = 0
+                End If
+                arrRctps(4, intCtr) = GetVal(!DocDate, "")
+            Loop
+        End With
+    End Function
+
+    Private Sub chkItem_Click(sender As Object, e As EventArgs)
+        Dim strSQL As String
+        'If chkItem.Checked = False Then
+        '    strList = ""
+        '    strItemList = ""
+        '    Exit Sub
+        'End If
+
+        Dim frmSel As New frmUtlMultiSelection
+
+        strSQL = "Select 0 as sel, ItemID, ItemCode, ItemName from MstItem where ItemID > 0 and "
+        strSQL = strSQL & " InActive = 'N' order by ItemCode"
+        Call frmSel.InitVsfSel(strSQL, 1, 1, True, Me, False)
+        frmSel.Text = "Select [Multiple] Item"
+        frmSel.vsfDet.SetData(0, 0, "Sel")
+        frmSel.ShowDialog()
+        strItemList = strList
+        'If Trim(strItemList) = "" Then chkItem.Checked = False
+    End Sub
+
+    Private Sub txtValBelow_KeyPress(sender As Object, e As KeyPressEventArgs)
+        If Not KeyValidate("Integer", e.KeyChar) Then
+            e.Handled = True
+        End If
+    End Sub
+
+    Private Sub btnItemCodelike_Click(sender As Object, e As EventArgs)
+        Dim strSql As String
+        strSql = "Select  ItemID ,ItemCode, ItemName,UOMName "
+        strSql = strSql & " from MstItem i,Mstuom u"
+        strSql = strSql & " Where i.InActive = 'N' and u.uomid=i.uomid"
+        strSql = strSql & " order by 2"
+
+
+        Dim frmDisplay As New frmUtlSingleSel
+        With frmDisplay
+            .Text = "Select Short Name... "
+            'Call .FillViewVsf(Me, strSql, txtItemCode, 2, 0)
+            .ShowDialog()
+            .Close()
+        End With
+    End Sub
+
+    Private Sub btnItemName_Click(sender As Object, e As EventArgs)
+        Dim strSql As String
+        strSql = "Select  ItemID , ItemName, ItemCode,UOMName "
+        strSql = strSql & " from MstItem i,Mstuom u"
+        strSql = strSql & " Where i.InActive = 'N' and u.uomid=i.uomid "
+        strSql = strSql & " order by 2"
+
+
+        Dim frmDisplay As New frmUtlSingleSel
+        With frmDisplay
+            .Text = "Select Short Name... "
+            'Call .FillViewVsf(Me, strSql, txtItemName, 2, 0)
+            .ShowDialog()
+            .Close()
+        End With
+    End Sub
+
+    Private Sub txtItem_KeyUp(sender As Object, e As KeyEventArgs)
+        'If e.KeyCode = Keys.Enter Then
+        '    If Trim(txtItem.Text) = "" Then Exit Sub
+        '    fillItemDtls(Trim(txtItem.Text))
+        '    txtItem.Text = ""
+        'End If
+
+        If e.KeyCode = Keys.Down Then
+            showItemPopup()
+        End If
+    End Sub
+
+    Public Sub fillItemDtls(ByVal argItem As String)
+        Dim rs As oledbDataReader
+        Dim strSQL As String
+
+        strSQL = "Select ItemID, ShortName, ItemCode from MstItem "
+        strSQL &= " Where ItemName = '" & Trim(argItem) & "'"
+        strSQL &= " Or ItemCode = '" & Trim(argItem) & "'"
+        strSQL &= " Or ShortName = '" & Trim(argItem) & "'"
+        strSQL &= " Or HotKey = '" & Trim(argItem) & "'"
+
+        rs = clsSVT.getDataReaderFromSQL(strSQL)
+
+        If Not rs.HasRows Then
+            MsgBox("Invalid item", vbExclamation, Me.Text)
+            'txtItem.Text = ""
+            Exit Sub
+        End If
+
+        rs.Read()
+
+        'With vsfItem
+        '    .Rows.Count += 1
+        '    .SetCellImage(.Rows.Count - 1, vItemCancel, My.Resources.cancel)
+        '    .SetData(.Rows.Count - 1, vItemID, Val(rs!ItemID))
+        '    .SetData(.Rows.Count - 1, vItemShortName, GetVal(rs!ShortName))
+        '    .SetData(.Rows.Count - 1, vItemCode, GetVal(rs!ITEMCODE))
+        '    .Row = .Rows.Count - 1
+        'End With
+
+        rs.Close()
+    End Sub
+
+    Private Sub txtPkgItem_KeyUp(sender As Object, e As KeyEventArgs)
+        'If e.KeyCode = Keys.Enter Then
+        '    If Trim(txtPkgItem.Text) = "" Then Exit Sub
+        '    fillPkgDtls(Trim(txtPkgItem.Text))
+        '    txtPkgItem.Text = ""
+        'End If
+
+        If e.KeyCode = Keys.Down Then
+            showPkgPopup()
+        End If
+    End Sub
+
+    Public Sub fillPkgDtls(ByVal argPkg As String)
+        Dim rs As oledbDataReader
+        Dim strSQL As String
+
+        strSQL = "Select PKGID, PKGNAME, PKGCODE from MstPKG"
+        strSQL &= " Where PKGCode = '" & Trim(argPkg) & "'"
+        strSQL &= " Or PKGName = '" & Trim(argPkg) & "'"
+
+        rs = clsSVT.getDataReaderFromSQL(strSQL)
+
+        If Not rs.HasRows Then
+            MsgBox("Invalid package item", vbExclamation, Me.Text)
+            'txtPkgItem.Text = ""
+            Exit Sub
+        End If
+
+        rs.Read()
+
+        'With vsfPkgItem
+        '    .Rows.Count += 1
+        '    .SetCellImage(.Rows.Count - 1, vPkgCancel, My.Resources.cancel)
+        '    .SetData(.Rows.Count - 1, vPkgID, Val(rs!PKGID))
+        '    .SetData(.Rows.Count - 1, vPkgName, GetVal(rs!PKGNAME))
+        '    .SetData(.Rows.Count - 1, vPkgCode, GetVal(rs!PKGCODE))
+        '    .Row = .Rows.Count - 1
+        'End With
+        rs.Close()
+    End Sub
+
+    Private Sub txtItem_KeyPress(sender As Object, e As KeyPressEventArgs)
+        If e.KeyChar = "'" Then
+            e.Handled = True
+        End If
+    End Sub
+
+    Private Sub txtPkgItem_KeyPress(sender As Object, e As KeyPressEventArgs)
+        If e.KeyChar = "'" Then
+            e.Handled = True
+        End If
+    End Sub
+
+    Private Sub vsfItem_BeforeEdit(sender As Object, e As RowColEventArgs)
+        Select Case e.Col
+            Case vItemID, vItemCancel, vItemShortName
+                e.Cancel = True
+        End Select
+    End Sub
+
+    Private Sub vsfPkgItem_BeforeEdit(sender As Object, e As RowColEventArgs)
+        Select Case e.Col
+            Case vPkgID, vPkgCancel, vPkgName
+                e.Cancel = True
+        End Select
+    End Sub
+
+    Private Sub vsfItem_MouseClick(sender As Object, e As MouseEventArgs)
+        'Dim ht = vsfItem.HitTest
+
+        'With vsfItem
+        '    If ht.Row < 1 Then Exit Sub
+        '    If Val(.GetData(ht.Row, vItemID)) = 0 Then Exit Sub
+        '    If ht.Column <> vItemCancel Then Exit Sub
+        '    .RemoveItem(ht.Row)
+        'End With
+    End Sub
+
+    Private Sub vsfPkgItem_MouseClick(sender As Object, e As MouseEventArgs)
+        'Dim ht = vsfPkgItem.HitTest
+
+        'With vsfPkgItem
+        '    If ht.Row < 1 Then Exit Sub
+        '    If Val(.GetData(ht.Row, vItemID)) = 0 Then Exit Sub
+        '    If ht.Column <> vItemCancel Then Exit Sub
+        '    .RemoveItem(ht.Row)
+        'End With
+    End Sub
+
+    Private Sub btnItem_Click(sender As Object, e As EventArgs)
+        Dim obj As New frmUtlAddRptItems
+        obj.Text = "Add Items"
+        obj.frm = Me
+        obj.strType = "I"
+        obj.argItemCode = vItemShortName
+        obj.ShowDialog()
+        obj.Dispose()
+        obj.Close()
+    End Sub
+
+    Private Sub btnPkgItem_Click(sender As Object, e As EventArgs) Handles btnPkgItem.Click
+        'Dim obj As New frmUtlAddRptItems
+        'obj.Text = "Add Packages"
+        'obj.frm = Me
+        'obj.strType = "P"
+        'obj.argItemCode = vPkgName
+        'obj.ShowDialog()
+        'obj.Dispose()
+        'obj.Close()
+    End Sub
+
+    Private Sub showItemPopup()
+        Dim strSQL As String
+
+        strSQL = "Select i.ItemID, ShortName, 0 as QOH, MRP, ItemCode, ItemName, ItemGroupName"
+        strSQL &= " From MstItem i, MstItemGroup g"
+        strSQL &= " where g.ItemGroupID=i.ItemGroupID "
+        strSQL &= " And i.InActive = 'N' "
+        strSQL &= " order by 1"
+
+        txtDummy.Text = ""
+        txtDummy2.Text = ""
+
+        Dim objfrm As New frmUtlSelection
+
+        With objfrm
+            .blnMultiColSearch = True
+            .FillViewVsf(Me, False, Nothing, strSQL, txtDummy, 0, txtDummy2, 1)
+            .Text = " Please Select Item"
+            .Tag = " frmRptSales "
+            .ShowDialog()
+            .Close()
+        End With
+
+        If Trim(txtDummy2.Text) <> "" Then
+            fillItemDtls(Trim(txtDummy2.Text))
+        End If
+    End Sub
+
+    Private Sub showPkgPopup()
+        Dim strSQL As String
+
+        strSQL = "Select PKGID, PKGCode, PKGName "
+        strSQL &= " From MstPKG"
+        strSQL &= " where InActive = 'N'"
+        strSQL &= " order by 1"
+
+        txtDummy.Text = ""
+        txtDummy2.Text = ""
+
+        Dim objfrm As New frmUtlSelection
+
+        With objfrm
+            .blnMultiColSearch = True
+            .FillViewVsf(Me, False, Nothing, strSQL, txtDummy, 0, txtDummy2, 2)
+            .Text = " Please Select Package"
+            .Tag = " frmRptSales "
+            .ShowDialog()
+            .Close()
+        End With
+
+        If Trim(txtDummy2.Text) <> "" Then
+            fillPkgDtls(Trim(txtDummy2.Text))
+        End If
+    End Sub
+
+    Private Sub btnPrint_Click(sender As Object, e As EventArgs) Handles btnPrint.Click
+        Dim strCond As String = ""
+        Dim strFormulaFld As String = "", strFormulaVal As String = "", strSelFormula As String = ""
+        Dim strPkgIDlist As String = ""
+
+        strCond = "{TrnHdrSInv.SINVDate} >= " & getCrptDateFmt(dtpFrom.Value) & " AND {TrnHdrSInv.SINVDate} <= " & getCrptDateFmt(dtpTo.Value)
+
+        If strItemGroupList <> "" Then
+            strCond = strCond & " and {MstItem.ItemGroupID} in [" & strItemGroupList & "]"
+        End If
+
+        strSelFormula = strCond
+
+        Dim frmv As New frmUtlReportViewer
+        With frmv
+            .StartPosition = FormStartPosition.CenterScreen
+            strFormulaFld = "mrptheader"
+            strFormulaVal = Me.Text
+            .ShowRptFile(Me.Text, "RptSalesPkg.rpt", strFormulaFld, strFormulaVal, strSelFormula)
+            .Show()
+        End With
+    End Sub
+End Class

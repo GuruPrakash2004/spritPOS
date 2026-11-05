@@ -57,6 +57,7 @@ export default function DailySummaryReport() {
     ['Purchase (incl. GST)', `₹ ${money(dsr.purchase.incl_gst)}`],
     ['Sales Returns', `₹ ${money(dsr.sales_returns)}`],
     ['Expenses', `₹ ${money(dsr.expenses)}`],
+    ['Cash Opening', `₹ ${money(dsr.cash_opening ?? 0)}`],
     ['Cash Balance', `₹ ${money(dsr.cash_balance)}`],
     ['Points Redeemed', `₹ ${money(dsr.redemption)}`],
   ] : [];

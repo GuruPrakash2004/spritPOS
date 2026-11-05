@@ -2,7 +2,7 @@
 // (pick the template saved as .xls → preview with duplicates in red → POST /masters/items/import).
 
 import { useRef, useState } from 'react';
-import { FileDown, FileUp, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import MasterCrud from './MasterCrud';
 import Modal from '../common/Modal';
 import { toastStore } from '../common/toastStore';
@@ -91,12 +91,12 @@ export default function ItemMaster() {
         path="items"
         fields={ITEM_FIELDS}
         reloadKey={reloadKey}
-        toolbar={<>
-          <button onClick={downloadTemplate} className={secondaryButton}><FileDown size={14} />Download Template</button>
-          <button onClick={() => fileInput.current?.click()} className={secondaryButton}><FileUp size={14} />Import Items</button>
-          <input ref={fileInput} type="file" accept=".xls,.xlsx,.csv" hidden onChange={e => { const f = e.target.files?.[0]; if (f) void loadFile(f); e.target.value = ''; }} />
-        </>}
+        options={[
+          { label: 'Download Template', onClick: downloadTemplate },
+          { label: 'Import Item from Excel', onClick: () => fileInput.current?.click() },
+        ]}
       />
+      <input ref={fileInput} type="file" accept=".xls,.xlsx,.csv" hidden onChange={e => { const f = e.target.files?.[0]; if (f) void loadFile(f); e.target.value = ''; }} />
       {message && !preview && (
         <p role="status" className="mx-auto mt-3 max-w-6xl rounded-lg bg-accent/10 px-4 py-2 text-xs font-medium text-accent-ink">{message}</p>
       )}

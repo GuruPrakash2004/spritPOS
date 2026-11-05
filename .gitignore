@@ -64,8 +64,3 @@ backend/uploads/
 *.pfx
 !frontend/public/**/*.pem
 
-# Crystal Reports bridge shared secret
-backend/tools/rptbridge/*.key
-backend/tools/rptbridge/bridgekey*.txt
-f
-/App/

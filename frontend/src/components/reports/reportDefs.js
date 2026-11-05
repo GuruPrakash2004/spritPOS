@@ -79,12 +79,71 @@ export const REPORTS = {
       { key: 'balance', label: 'Balance', kind: 'number', total: true },
     ],
   },
+  'Loyalty Detail': {
+    title: 'Loyalty Detail', subtitle: 'Every saved bill in the period that added or redeemed loyalty points.',
+    endpoint: '/reports/loyalty/detail', filters: ['range'],
+    columns: [
+      { key: 'customer', label: 'Customer' }, { key: 'name', label: 'Name' }, { key: 'mobile', label: 'Phone No' }, { key: 'card_no', label: 'Card No' },
+      { key: 'doc_date', label: 'Doc Date' }, { key: 'doc_type', label: 'Doc Type' }, { key: 'doc_ref', label: 'Doc Ref' },
+      { key: 'added', label: 'Points Added', kind: 'number', total: true }, { key: 'redeemed', label: 'Redeemed', kind: 'number', total: true },
+    ],
+  },
+  'Item Rate History': {
+    title: 'Item Rate History', subtitle: 'Every MRP and purchase-rate change in the period, from the shop\'s own rate-change log (who, when, from which PC).',
+    endpoint: '/reports/item-rate-history', filters: ['range', 'item'],
+    columns: [
+      { key: 'changed_on', label: 'Changed On' }, { key: 'item_code', label: 'Item Code' }, { key: 'item_name', label: 'Item' }, { key: 'source', label: 'Source' },
+      { key: 'old_mrp', label: 'Old MRP', kind: 'money' }, { key: 'new_mrp', label: 'New MRP', kind: 'money' },
+      { key: 'old_pur_rate', label: 'Old Pur Rate', kind: 'money' }, { key: 'new_pur_rate', label: 'New Pur Rate', kind: 'money' },
+      { key: 'changed_by', label: 'By' }, { key: 'system', label: 'PC' },
+    ],
+  },
+  'Audit Trail': {
+    title: 'Audit Trail', subtitle: 'Who added, changed or deleted which document, and when (the desktop\'s audit log of actions). Administrator only.',
+    endpoint: '/reports/audit-trail', filters: ['range'],
+    columns: [
+      { key: 'at', label: 'When' }, { key: 'document', label: 'Document' }, { key: 'doc_no', label: 'Doc No' }, { key: 'action', label: 'Action' },
+      { key: 'user', label: 'User' }, { key: 'system', label: 'PC' }, { key: 'ip', label: 'IP Address' },
+    ],
+  },
   'Excise Stock': {
     title: 'Excise Stock', subtitle: 'Closing stock in bottles and litres by liquor type and bottle size.',
     endpoint: '/reports/excise-stock', filters: ['on'],
     columns: [
       { key: 'liqtype', label: 'Liquor Type' }, { key: 'package', label: 'Package' },
       { key: 'qty', label: 'Bottles', kind: 'number', total: true }, { key: 'litres', label: 'Litres', kind: 'number', total: true },
+    ],
+  },
+  'Drops Sales Summary': {
+    title: 'Drops - Sales Summary', subtitle: 'One day: liquor, each other group, round off, payment modes and total sales.',
+    endpoint: '/reports/drops/sales-summary', filters: ['on'],
+    columns: [
+      { key: 'particulars', label: 'Group' }, { key: 'qty', label: 'Qty', kind: 'number' },
+      { key: 'amount', label: 'Amount (₹)', kind: 'money' },
+    ],
+  },
+  'Drops Consolidated': {
+    title: 'Drops - Consolidated Report', subtitle: 'Sales, petty cash, purchase and group-wise stock value for the period (stock at purchase rate).',
+    endpoint: '/reports/drops/consolidated', filters: ['range'],
+    columns: [
+      { key: 'a', label: 'Particulars' }, { key: 'b', label: 'Qty / Expense / Supplier' },
+      { key: 'c', label: 'Amount / Receipt / Opening' }, { key: 'd', label: 'Amount / Closing' },
+    ],
+  },
+  'Drops Purchase': {
+    title: 'Drops - Purchase', subtitle: 'One day: each purchase bill (supplier invoice no. - date) and the total.',
+    endpoint: '/reports/drops/purchase', filters: ['on'],
+    columns: [
+      { key: 'group', label: 'Group' }, { key: 'supplier', label: 'Supplier' }, { key: 'bill_no', label: 'Bill No' },
+      { key: 'amount', label: 'Amount (₹)', kind: 'money' },
+    ],
+  },
+  'Drops Petty Cash': {
+    title: 'Drops - Petty Cash', subtitle: 'One day: opening balance, expense by ledger, closing balance.',
+    endpoint: '/reports/drops/petty-cash', filters: ['on'],
+    columns: [
+      { key: 'particulars', label: 'Particulars' }, { key: 'expense', label: 'Expense (₹)', kind: 'money' },
+      { key: 'receipt', label: 'Receipt / Balance (₹)', kind: 'money' },
     ],
   },
   'Brand-wise Sales': {

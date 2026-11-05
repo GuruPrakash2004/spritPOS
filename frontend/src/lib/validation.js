@@ -40,7 +40,7 @@ export function cleanInput(key, value) {
 export function fieldProblem(key, value) {
   const text = String(value ?? '').trim();
   const rule = FIELD_RULES[key];
-  if (rule && text) {
+  if (rule && text && !(key === 'gstin' && text === '-')) {   // '-' is the desktop's own "none" in a customer's GSTNO
     const kept = rule.upper ? text.toUpperCase() : text;
     if (!rule.pattern.test(kept)) return `${rule.label} ${rule.wrong}.`;
   }

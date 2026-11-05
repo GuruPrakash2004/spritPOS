@@ -33,7 +33,7 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .. import admin_audit, db, secure_fields, security, sqlstore, store, validation
+from .. import admin_audit, db, legacy_crypto, secure_fields, security, sqlstore, store, validation
 from ..passwords import hash_password, verify_password
 from ..schemas import (
     AdnlAdminPasswordIn, ChangePasswordIn, FieldRightsIn, LoginIn, LoginSettingsIn, MasterApprovalIn, ReportRightsIn, RoleIn,
@@ -144,7 +144,7 @@ def require_module(*modules: str):
     return check
 
 
-ACTION_WORDS = {"add": "add in", "edit": "change", "delete": "delete in"}
+ACTION_WORDS = {"add": "add in", "edit": "change", "delete": "delete in", "print": "print from"}
 
 
 def has_right(user: dict, action: str, *modules: str) -> bool:
@@ -221,10 +221,15 @@ def _verify_password(u: dict, entered: str) -> bool:
         return verify_password(entered, u["password_hash"])
     legacy_ok = False
     if u.get("legacy_password"):
-        try:
-            legacy_ok = secrets.compare_digest(base64.b64decode(u["legacy_password"]), entered.encode())
-        except (binascii.Error, ValueError):
-            legacy_ok = False
+        # MstUser.LoginPwd as the desktop writes it (TripleDES, app/legacy_crypto.py); the older plain-base64 form is still accepted.
+        plain = legacy_crypto.decrypt(u["legacy_password"])
+        if plain is not None:
+            legacy_ok = secrets.compare_digest(plain.encode(), entered.encode())
+        else:
+            try:
+                legacy_ok = secrets.compare_digest(base64.b64decode(u["legacy_password"]), entered.encode())
+            except (binascii.Error, ValueError):
+                legacy_ok = False
     # The lowercase user code is never a password for an Administrator (it would be ADMIN/admin all over again).
     default_ok = (bool(u.get("default_password")) and u.get("role") != store.ADMIN_ROLE
                   and secrets.compare_digest(u["user"].lower().encode(), entered.encode()))
@@ -233,7 +238,8 @@ def _verify_password(u: dict, entered: str) -> bool:
         u["password_set_on"] = date.today().isoformat()
         u.pop("legacy_password", None)
         u.pop("default_password", None)
-        store.touch("USERS", u["user"])
+        if db.use_web_tables() or not db.configured():   # the hash is kept in memory only without the web tables
+            store.touch("USERS", u["user"])
         return True
     return False
 
@@ -306,6 +312,20 @@ def login(body: LoginIn, request: Request):
     return {**_session(u), "access_token": token, "token": token, "token_type": "bearer"}
 
 
+def _write_desktop_password(code: str, new: str) -> None:
+    """Direct mode keeps no password of the web's own: the new password is written to the desktop's MstUser.LoginPwd (the exe's cipher), so the
+    desktop and the web app go on using the same one and a restart doesn't lose it. LoginPwd is varchar(50): the cipher text of at most 31 ASCII characters."""
+    if not db.configured() or db.use_web_tables():
+        return
+    if not new.isascii() or len(new) > 31:
+        raise HTTPException(422, "The desktop keeps passwords of at most 31 plain (English) characters; choose a shorter one")
+    with db.direct_writes():
+        with db.transaction() as cur:
+            changed = cur.execute("UPDATE MstUser SET LoginPwd = ?, PwdResetDt = ? WHERE UserCode = ?", (legacy_crypto.encrypt(new), date.today().isoformat(), code))
+    if not changed:
+        raise HTTPException(409, "This user is not in the desktop's user table, so the password can't be changed here")
+
+
 @router.post("/auth/change-password")
 def change_password(body: ChangePasswordIn, request: Request, current_user: dict = Depends(get_current_user)):
     """Any logged-in user changes their own password. Needs the current password (and counts wrong
@@ -322,6 +342,7 @@ def change_password(body: ChangePasswordIn, request: Request, current_user: dict
     if new == current:
         raise HTTPException(422, "Choose a password different from the current one")
     _check_new_password(new, name)
+    _write_desktop_password(name, new)
     _set_password(current_user, new)
     store.touch("USERS", name)
     admin_audit.record("Admin Master (Security)", "Password changed", name, "", "own password changed")

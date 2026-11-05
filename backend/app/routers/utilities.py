@@ -22,7 +22,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, db, db_backup, doc_settings, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store, websync
+from .. import admin_audit, db, db_backup, delete_nonliquor, doc_settings, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store, websync
 from .auth import get_current_user, hides_cost, require_admin, require_module
 
 router = APIRouter(prefix="/utilities", tags=["Utilities"])
@@ -50,6 +50,7 @@ class SettingNew(SettingUpdate):
 @values_router.get("/settings/values")
 def setting_values():
     """code -> value of every Global Setting row, for the screens (login only; no secrets and no server details)."""
+    gsettings.refresh_from_db()
     return gsettings.values()
 
 
@@ -57,6 +58,7 @@ def setting_values():
 def list_settings(all: bool = False, admin: dict = Depends(require_admin)):
     """The settings grid: group, code, caption, value, help text and what each changes in the web app.
     `all=true` also lists hidden rows (legacy Hide Settings)."""
+    gsettings.refresh_from_db()
     return gsettings.all_rows(include_hidden=all)
 
 
@@ -93,7 +95,12 @@ def update_setting(code: str, body: SettingUpdate, admin: dict = Depends(require
                                         {k: new[k] for k in ("caption", "value", "hidden")})
     if changed:
         admin_audit.record("Global Settings", "Edited", code, earlier, changed)
-    store.GSETTINGS[code] = new
+    try:
+        store.GSETTINGS[code] = new
+        gsettings.save_to_db(code)
+    except Exception:
+        store.GSETTINGS[code] = row
+        raise
     gsettings.sync_legacy()
     return dict(new, readonly=False)
 
@@ -112,6 +119,11 @@ def add_setting(body: SettingNew, admin: dict = Depends(require_admin)):
            "value": gsettings.check_value(body.kind, body.value), "kind": body.kind, "remarks": body.remarks.strip(),
            "effect": None, "hidden": body.hidden, "source": "custom"}
     store.GSETTINGS[code] = row
+    try:
+        gsettings.save_to_db(code)
+    except Exception:
+        store.GSETTINGS.pop(code, None)
+        raise
     admin_audit.record("Global Settings", "Added", code, "", f"{row['group']}: {row['caption']} = {row['value']}")
     return dict(row, readonly=False)
 
@@ -262,6 +274,43 @@ def duplicate_invoice_list(from_date: date = Query(default_factory=date.today), 
 def remove_duplicate_invoices(body: RemoveInvoicesIn, user: dict = Depends(require_module("Remove Duplicate Invoice"))):
     security.check_admin_password(user, body.admin_password)
     return duplicate_invoices.remove(body.doc_nos)
+
+
+# ─── Shared Documents (legacy frmUtlSharedDocuments, table UtlSharedDocs) ──────
+
+@router.get("/shared-documents")
+def shared_documents(user: dict = Depends(require_module("Shared Documents"))):
+    """The documents the shop lists as shared (group, file name, remarks), read from UtlSharedDocs. The files themselves stay on the
+    desktop's shared folder; the list is read-only here."""
+    if not sqlstore.enabled():
+        return []
+    try:
+        rows = db.fetchall("SELECT DocID, GroupName, DocFileName, Remarks FROM UtlSharedDocs WITH (NOLOCK) ORDER BY GroupName, DocFileName")
+    except Exception:   # noqa: BLE001 - a database without the table
+        return []
+    return [{"id": int(r["DocID"]), "group": (r.get("GroupName") or "").strip(), "file": (r.get("DocFileName") or "").strip(),
+             "remarks": (r.get("Remarks") or "").strip()} for r in rows]
+
+
+# ─── Delete Non-Liquor Items (legacy frmUtlDeleteNonLiqItems) ─────────────────
+
+class DeleteNonLiquorIn(BaseModel):
+    group: str = Field(min_length=1, max_length=40)
+    confirm: str = Field(max_length=40, description="The item group code typed again")
+    admin_password: str | None = Field(None, max_length=1000, description='Encrypted for "admin" (see RemoveInvoicesIn)')
+
+
+@router.get("/delete-non-liquor/preview")
+def delete_non_liquor_preview(group: str, user: dict = Depends(require_admin)):
+    """The group's items and what deleting them would remove (bills, lines, stock rows), with anything that blocks it."""
+    return delete_nonliquor.preview(group.strip())
+
+
+@router.post("/delete-non-liquor")
+def delete_non_liquor(body: DeleteNonLiquorIn, user: dict = Depends(require_admin)):
+    """Delete the group's items, the group, their bill lines and stock. Back the database up first."""
+    security.check_admin_password(user, body.admin_password)
+    return delete_nonliquor.delete(body.group.strip(), body.confirm, user)
 
 
 # ─── Merge Items (713) / Replace and Remove Duplicate items (712) ─────────────

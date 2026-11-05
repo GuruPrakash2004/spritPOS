@@ -9,13 +9,13 @@ quantity per item across all lines, so stock can't go below zero.
 Documents are saved to SQL Server's Web_ tables when the request succeeds (app/sqlstore.py); sales invoices
 and purchase bills also in the desktop's format. Held bills are saved whole but not posted until released."""
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import admin_audit, doc_engine, doc_meta, doc_settings, gsettings, schema_meta, security, sqlstore, store
+from .. import admin_audit, sms, db, db_store, doc_engine, expense_db, doc_meta, doc_settings, gsettings, schema_meta, security, sqlstore, store
 from ..schemas import (
-    CancelIn, ClosingStockIn, DenominationIn, ExpenseIn, GenerateInvoiceIn, Line, PurchaseBillIn, PurchaseIndentIn, SalesInvoiceIn,
+    CancelIn, ClosingStockIn, DenominationIn, ExpenseIn, ExpenseOpeningIn, GenerateInvoiceIn, Line, PurchaseBillIn, PurchaseIndentIn, SalesInvoiceIn,
     SalesReturnIn, StockDeductionIn,
 )
 from .auth import get_current_user, hides_cost, require_right
@@ -39,6 +39,8 @@ def next_number(kind: str, counter: str = "", current_user: dict = Depends(get_c
         prefix = row["prefix"]
     else:
         prefix = doc_settings.prefix(kind)
+    if store.NUMBER_SYNC:
+        store.NUMBER_SYNC(kind)   # other PCs may have saved since start-up
     seq = store._seq.setdefault(kind, store.Seq(1))
     return {"doc_no": f"{store.FY_PREFIX}/{prefix}-{seq.value:07d}", "fy_prefix": store.FY_PREFIX, "prefix": prefix,
             "number": seq.value}
@@ -94,6 +96,21 @@ def _check_stock(lines: list[dict]) -> None:
             raise HTTPException(422, f"Insufficient stock for {code}: {qoh:g} in stock, {qty:g} needed")
 
 
+def _check_liquor_limits(lines: list[dict]) -> None:
+    """The desktop's per-bill litre limits (Global Settings AllowBeerInLtr / AllowWineInLtr / AllowIMLinLtr, group Invoice): a bill with more
+    Beer, Wine or IML litres than the limit is refused unless split billing is on (SPLITINV = Y). A limit the shop has no row for is not applied."""
+    if gsettings.yes("SPLITINV"):
+        return
+    litres: dict[str, float] = defaultdict(float)
+    for l in lines:
+        kind = (store.ITEMS.get(l["item_code"], {}).get("liqtype") or "").strip().upper()
+        if kind in ("BEER", "WINE", "IML"):
+            litres[kind] += float(l.get("litres") or 0)
+    for kind, code in (("BEER", "AllowBeerInLtr"), ("WINE", "AllowWineInLtr"), ("IML", "AllowIMLinLtr")):
+        if code in store.GSETTINGS and litres[kind] > gsettings.number(code):
+            raise HTTPException(422, f"{kind.title() if kind != 'IML' else 'IML'} quantity exceeds the limit of {gsettings.number(code):g} Ltr ({litres[kind]:g} Ltr on this bill)")
+
+
 def _is_liquor(item: dict) -> bool:
     return store.ITEM_GROUPS.get(item.get("group"), {}).get("liquor", True)
 
@@ -127,6 +144,8 @@ def _listing(kind: str, tag: str):
     @router.get(f"/{kind.replace('_', '-')}", tags=[tag], name=f"List {tag}")
     def list_docs(from_date: date | None = None, to_date: date | None = None, status: str | None = None,
                   current_user: dict = Depends(get_current_user)):
+        if kind == "sales_invoice":
+            db_store.refresh_recent_sales()   # bills made on other PCs since start-up
         return [_shown(kind, d, current_user) for d in store.DOCS[kind].values()
                 if (not from_date or d["date"] >= from_date.isoformat()) and (not to_date or d["date"] <= to_date.isoformat())
                 and (not status or d.get("status") == status)]
@@ -143,8 +162,8 @@ def create_indent(body: PurchaseIndentIn):
     return create_indent_doc(body)
 
 
-def create_indent_doc(body: PurchaseIndentIn) -> dict:
-    """The indent logic itself (also used by app/routers/ai.py when a suggestion is approved)."""
+def create_indent_doc(body: PurchaseIndentIn, doc_no: str | None = None, base: dict | None = None) -> dict:
+    """The indent logic itself (also used by app/routers/ai.py when a suggestion is approved). With `doc_no` / `base` it edits that saved indent."""
     gsettings.check_not_frozen(body.date, "This purchase indent")
     _doc_extras("TrnHdrPI", body)
     doc_settings.check_lines("purchase_indent", body.lines, body.date)
@@ -154,12 +173,31 @@ def create_indent_doc(body: PurchaseIndentIn) -> dict:
     security.check_authorised("suppliers", sup["code"], "Supplier")
     body.supplier = sup["code"]
     lines, tot = _price_lines(body.lines, "purchase_rate", with_gst=False)
-    doc_no = store.next_doc_no("purchase_indent", doc_settings.prefix("purchase_indent"))
+    doc_no = doc_no or store.next_doc_no("purchase_indent", doc_settings.prefix("purchase_indent"))
     store.DOCS["purchase_indent"][doc_no] = {"doc_no": doc_no, "date": body.date.isoformat(), "supplier": body.supplier,
                                              "lines": lines, "totals": tot, "remarks": body.remarks, "extras": body.extras}
-    admin_audit.record("Purchase Indent", "Added", doc_no, "", f"supplier {body.supplier}",
+    admin_audit.record("Purchase Indent", "Edited" if base else "Added", doc_no, "", f"supplier {body.supplier}",
                        admin_audit.doc_items(store.DOCS["purchase_indent"][doc_no], "Added"))
     return store.DOCS["purchase_indent"][doc_no]
+
+
+def _editable(kind: str, doc_no: str, label: str) -> dict:
+    """The saved document to edit: it must exist, not be cancelled / removed, and not be dated on or before the freeze date (or past the edit-days limit)."""
+    old = _get(kind, doc_no)
+    gsettings.check_not_frozen(old["date"], f"{label} {doc_no}")
+    doc_settings.check_edit_days(kind, old["date"], f"{label} {doc_no}")
+    if old.get("status") in ("CANCELLED", "DELETED"):
+        raise HTTPException(409, f"{label} {doc_no} is cancelled; it can't be edited")
+    return old
+
+
+@router.put("/purchase-indent/{doc_no:path}", tags=["Purchase Indent"], dependencies=[Depends(require_right("edit", "Purchase Indent", "Purchase Bill"))])
+def edit_indent(doc_no: str, body: PurchaseIndentIn):
+    """Change a saved purchase indent in place (it moves no stock): same number, its rows rewritten."""
+    old = _editable("purchase_indent", doc_no, "Purchase indent")
+    doc = create_indent_doc(body, doc_no=doc_no, base=old)
+    doc["revision"] = int(old.get("revision", 0)) + 1
+    return doc
 
 
 # ---------- Purchase Bill (adds stock) ----------
@@ -184,6 +222,11 @@ def _doc_extras(table: str, body, hold: bool = False) -> None:
 
 @router.post("/purchase-bill", status_code=201, tags=["Purchase Bill"], dependencies=[Depends(require_right("add", "Purchase Bill"))])
 def create_purchase_bill(body: PurchaseBillIn):
+    return _build_purchase_bill(body)
+
+
+def _build_purchase_bill(body: PurchaseBillIn, doc_no: str | None = None, base: dict | None = None) -> dict:
+    """Check, price and post a purchase bill. With `doc_no` / `base` it is an edit of that saved bill: same number, same place in the list."""
     gsettings.check_not_frozen(body.date, "This purchase bill")
     _doc_extras("TrnHdrPB", body)
     if body.copy_from_indent and not doc_settings.settings("purchase_bill")["allow_copy_from"]:
@@ -204,7 +247,7 @@ def create_purchase_bill(body: PurchaseBillIn):
     tot["tcs"], tot["cess"] = body.tcs, body.cess
     tot["net"] = round(tot["net"] + body.tcs + body.cess, 2)
     tot["balance_vs_supplier_value"] = round(body.supplier_inv_value - tot["net"], 2)
-    doc_no = store.next_doc_no("purchase_bill", doc_settings.prefix("purchase_bill"))
+    doc_no = doc_no or store.next_doc_no("purchase_bill", doc_settings.prefix("purchase_bill"))
     sign = -1 if body.purchase_type == "Purchase Return" else 1
     if sign < 0:
         _check_stock(lines)
@@ -221,8 +264,53 @@ def create_purchase_bill(body: PurchaseBillIn):
                                    f"purchase_rate: {item.get('purchase_rate')}", f"purchase_rate: {l['rate']} ({doc_no})")
                 item["purchase_rate"] = l["rate"]
                 store.touch("ITEMS", l["item_code"])
-    admin_audit.record("Purchase Bill", "Added", doc_no, "", f"{body.purchase_type}; supplier {sup['code']}; net {tot['net']}",
-                       admin_audit.doc_items(doc, "Added"))
+    admin_audit.record("Purchase Bill", "Edited" if base else "Added", doc_no, f"net {base['totals']['net']}" if base else "",
+                       f"{body.purchase_type}; supplier {sup['code']}; net {tot['net']}", admin_audit.doc_items(doc, "Added"))
+    return doc
+
+
+def _undo_edit(snap: dict, kind: str, doc_no: str, old: dict) -> None:
+    """An edit failed after the old bill's effects were taken back: put stock, points, rates and the bill itself back as they were."""
+    for code, v in snap["qoh"].items():
+        store.ITEMS[code]["qoh"] = v
+    for code, v in snap.get("rate", {}).items():
+        store.ITEMS[code]["purchase_rate"] = v
+    del store.MOVEMENTS[snap["moves"]:]
+    for code, v in snap.get("custs", {}).items():
+        if code in store.CUSTOMERS:
+            store.CUSTOMERS[code]["points"] = v
+    store.DOCS[kind][doc_no] = old
+
+
+def _snapshot(codes, custs=()) -> dict:
+    return {"qoh": {c: store.ITEMS[c]["qoh"] for c in codes if c in store.ITEMS}, "rate": {c: store.ITEMS[c].get("purchase_rate") for c in codes if c in store.ITEMS},
+            "moves": len(store.MOVEMENTS), "custs": {c["code"]: c["points"] for c in custs if c}}
+
+
+@router.put("/purchase-bill/{doc_no:path}", tags=["Purchase Bill"], dependencies=[Depends(require_right("edit", "Purchase Bill"))])
+def edit_purchase_bill(doc_no: str, body: PurchaseBillIn):
+    """Change a saved purchase bill in place (same number): the old bill's stock goes out, the new lines come in, and the bill's rows are rewritten.
+    Refused when the old or new date is on or before the freeze date, or when the stock the old bill added has been sold since."""
+    old = _get("purchase_bill", doc_no)
+    gsettings.check_not_frozen(old["date"], f"Purchase bill {doc_no}")
+    doc_settings.check_edit_days("purchase_bill", old["date"], f"Purchase bill {doc_no}")
+    if body.copy_from_indent:
+        raise HTTPException(422, "Copy From is for a new bill")
+    codes = {l["item_code"] for l in old["lines"]} | {l.item_code for l in body.lines}
+    snap = _snapshot(codes)
+    old_sign = -1 if old.get("purchase_type") == "Purchase Return" else 1
+    for l in old["lines"]:   # take the old bill's stock effect back (its rows in the stock list go, as in the desktop's edit)
+        store.move_stock(l["item_code"], -old_sign * l["qty"], "purchase", doc_no, date.fromisoformat(old["date"]), l["rate"])
+        store.MOVEMENTS[-1]["reverses"] = True
+    try:
+        doc = _build_purchase_bill(body, doc_no=doc_no, base=old)
+        short = [c for c in codes if c in store.ITEMS and store.ITEMS[c]["qoh"] < 0]
+        if short:
+            raise HTTPException(409, f"This change would leave {', '.join(sorted(short)[:3])} below zero stock (the stock the old bill added was sold since)")
+    except Exception:
+        _undo_edit(snap, "purchase_bill", doc_no, old)
+        raise
+    doc["revision"] = int(old.get("revision", 0)) + 1
     return doc
 
 
@@ -243,6 +331,94 @@ def _post_sale(doc: dict, cust: dict) -> None:
 
 @router.post("/sales-invoice", status_code=201, tags=["Sales Invoice"], dependencies=[SALES])
 def create_sales_invoice(body: SalesInvoiceIn, current_user: dict = Depends(get_current_user)):
+    if not body.hold and gsettings.yes("SPLITINV"):
+        parts = _split_parts(body)
+        if len(parts) > 1:
+            return _create_split_bills(body, parts, current_user)
+    doc = _build_sales_invoice(body, current_user)
+    _loyalty_sms(doc)
+    return doc
+
+
+def _loyalty_sms(doc: dict) -> None:
+    """The desktop's loyalty SMS (LoyaltySENDMAIL): a customer marked "Send SMS" with a mobile is told the points the bill earned and, when
+    points were redeemed, the balance. Sent in the background, only when the shop has SMS on; a failure never touches the bill."""
+    if doc.get("status") != "SAVED":
+        return
+    cust = store.CUSTOMERS.get(doc.get("customer") or "") or {}
+    tot = doc.get("totals", {})
+    if cust.get("code") in (None, "CASH") or not cust.get("send_sms") or not cust.get("mobile"):
+        return
+    for text in sms.loyalty_message(tot.get("points_earned", 0), tot.get("net", 0), tot.get("points_redeemed", 0), cust.get("points", 0)):
+        sms.send_later(text, cust["mobile"])
+
+
+_LIMIT_CODES = {"BEER": "AllowBeerInLtr", "WINE": "AllowWineInLtr", "IML": "AllowIMLinLtr"}
+
+
+def _split_parts(body: SalesInvoiceIn) -> list[list[tuple[str, int, float]]]:
+    """The desktop's split billing (frmTrnPosInv.saveSplitBills): when split billing is on (SPLITINV = Y) and the bill has more Beer, Wine or IML
+    litres than the per-bill limit, it is saved as several bills, each within the limits. Every bottle is taken in the order of the lines and put
+    in the current bill if its type still fits, else it waits for the next one; other items go in the first bill. Returns the parts as
+    [(item_code, qty, rate), ...] each; one part when no split is needed."""
+    lines, _tot = _price_lines(body.lines, "mrp", with_gst=True, kind="sales_invoice")
+    units = []   # one entry per bottle: (item_code, rate, litres, type)
+    for l in lines:
+        kind = (store.ITEMS.get(l["item_code"], {}).get("liqtype") or "").strip().upper()
+        each = float(l["litres"]) / l["qty"] if l["qty"] else 0.0
+        units += [(l["item_code"], l["rate"], each, kind)] * int(l["qty"])
+    limits = {k: gsettings.number(c) for k, c in _LIMIT_CODES.items() if c in store.GSETTINGS}
+    parts, waiting = [], units
+    while waiting:
+        used: dict[str, float] = defaultdict(float)
+        part, rest = [], []
+        for u in waiting:
+            kind = u[3]
+            if kind in limits:
+                add = round(u[2], 3)
+                if used[kind] + add <= limits[kind]:
+                    used[kind] += add
+                    part.append(u)
+                else:
+                    rest.append(u)
+            else:
+                part.append(u)
+        if not part:   # one bottle alone is over the limit: it can never fit, so save the rest as it is (the normal check then refuses it)
+            return [[(u[0], 1, u[1]) for u in units]]
+        merged: dict[str, list] = {}
+        for code, rate, _lt, _k in part:
+            merged.setdefault(code, [code, 0, rate])[1] += 1
+        parts.append([tuple(m) for m in merged.values()])
+        waiting = rest
+    return parts
+
+
+def _create_split_bills(body: SalesInvoiceIn, parts: list, current_user: dict) -> dict:
+    """Save each part of a split bill as its own bill (own number). The discount, redeemed points and cash count go on the first bill."""
+    if body.payment is not None or body.payment_type == "SPLIT":
+        raise HTTPException(422, "This bill is over the litre limit and must be saved as several bills: choose one payment type (Cash, Card or UPI), not a split payment")
+    if not gsettings.yes("AllowNegative"):
+        _check_stock(_price_lines(body.lines, "mrp", with_gst=True, kind="sales_invoice")[0])
+    docs = []
+    try:
+        for n, part in enumerate(parts):
+            sub = body.model_copy(update={
+                "lines": [Line(item_code=c, bottles=q, rate=r) for c, q, r in part],
+                "discount": body.discount if n == 0 else 0, "redeem_points": body.redeem_points if n == 0 else 0,
+                "denominations": body.denominations if n == 0 else [], "collected": body.collected if n == 0 and len(parts) == 1 else None,
+            })
+            docs.append(_build_sales_invoice(sub, current_user))
+    except Exception:
+        if docs:   # an earlier part is already posted in memory: put the store back to what the database holds, as a failed save does
+            sqlstore.reload()
+        raise
+    for d in docs:
+        _loyalty_sms(d)
+    return docs[0] | {"split_bills": [d["doc_no"] for d in docs]}
+
+
+def _build_sales_invoice(body: SalesInvoiceIn, current_user: dict, doc_no: str | None = None, base: dict | None = None) -> dict:
+    """Check, price and post a bill. With `doc_no` / `base` it is an edit of that saved bill: same number, time and author."""
     gsettings.check_not_frozen(body.date, "This bill")
     _doc_extras("TrnHdrSINV", body, body.hold)
     doc_settings.check_lines("sales_invoice", body.lines, body.date)
@@ -260,7 +436,9 @@ def create_sales_invoice(body: SalesInvoiceIn, current_user: dict = Depends(get_
     body.customer = cust["code"]
     lines, tot = _price_lines(body.lines, "mrp", with_gst=True, kind="sales_invoice")
     if not body.hold:
-        _check_stock(lines)
+        if not gsettings.yes("AllowNegative"):   # the desktop's AllowNegative setting: Y sells below zero stock
+            _check_stock(lines)
+        _check_liquor_limits(lines)
     if body.redeem_points > cust["points"]:
         raise HTTPException(422, f"Customer has only {cust['points']} points")
     if body.redeem_points and cust["code"] == "CASH":
@@ -285,17 +463,49 @@ def create_sales_invoice(body: SalesInvoiceIn, current_user: dict = Depends(get_
         payment = {"cash": 0, "card": 0, "upi": 0, "credit": 0}
         payment[{"CASH": "cash", "CARD": "card", "UPI": "upi", "CREDIT": "credit", "SPLIT": "cash"}[body.payment_type]] = tot["net"]
     tot["points_earned"] = 0.0
-    doc_no = f"HOLD-{next(store._seq['hold']):04d}" if body.hold else store.next_doc_no("sales_invoice", counter["prefix"])
+    doc_no = doc_no or (f"HOLD-{next(store._seq['hold']):04d}" if body.hold else store.next_doc_no("sales_invoice", counter["prefix"]))
     doc = body.model_dump(mode="json", exclude={"lines", "payment"}) | {
         "doc_no": doc_no, "status": "HOLD" if body.hold else "SAVED", "lines": lines, "totals": tot, "payment": payment,
-        "time": datetime.now().strftime("%H:%M:%S"), "added_by": current_user["user"],
+        "time": (base or {}).get("time") or datetime.now().strftime("%H:%M:%S"), "added_by": (base or {}).get("added_by") or current_user["user"],
     }
     if not body.hold:
         _post_sale(doc, cust)
     store.DOCS["sales_invoice"][doc_no] = doc
-    admin_audit.record("Sales Invoice", "Held" if body.hold else "Added", doc_no, "",
+    admin_audit.record("Sales Invoice", "Edited" if base else ("Held" if body.hold else "Added"), doc_no, f"net {base['totals']['net']}" if base else "",
                        f"counter {doc['counter']}; customer {doc['customer']}; net {tot['net']}",
                        admin_audit.doc_items(doc, "Added"))
+    return doc
+
+
+@router.put("/sales-invoice/{doc_no:path}", tags=["Sales Invoice"], dependencies=[Depends(require_right("edit", "Sales Invoice"))])
+def edit_sales_invoice(doc_no: str, body: SalesInvoiceIn, current_user: dict = Depends(get_current_user)):
+    """Change a saved bill in place (same number): its stock and loyalty points are taken back, the new bill is checked and posted as a new one
+    would be, and the bill's rows are rewritten. A bill that was cancelled, removed, held or already returned against can't be edited."""
+    old = _get("sales_invoice", doc_no)
+    gsettings.check_not_frozen(old["date"], f"Bill {doc_no}")
+    doc_settings.check_edit_days("sales_invoice", old["date"], f"Bill {doc_no}")
+    if old["status"] != "SAVED":
+        raise HTTPException(409, {"HOLD": "Held bills are changed on the counter: recall them", "CANCELLED": "A cancelled bill can't be edited",
+                                  "DELETED": "This bill was removed as a duplicate"}.get(old["status"], "Only a saved bill can be edited"))
+    if body.hold:
+        raise HTTPException(422, "A saved bill can't be put on hold")
+    if _returned_qty(doc_no):
+        raise HTTPException(409, "Goods from this bill were already returned (Sales Return); it can't be edited")
+    old_cust = store.CUSTOMERS.get(old["customer"])
+    new_cust = store.find(store.CUSTOMERS, body.customer)
+    codes = {l["item_code"] for l in old["lines"]} | {l.item_code for l in body.lines}
+    snap = _snapshot(codes, (old_cust, new_cust))
+    for l in old["lines"]:   # put the old bill's stock back (its stock-list rows go, as a cancel does) ...
+        store.move_stock(l["item_code"], l["qty"], "sale-cancel", doc_no, date.fromisoformat(old["date"]), l["rate"])
+    if old_cust:   # ... and give back the points it redeemed, take back the ones it earned
+        old_cust["points"] = round(old_cust["points"] + old["totals"]["points_redeemed"] - old["totals"]["points_earned"], 2)
+    try:
+        doc = _build_sales_invoice(body, current_user, doc_no=doc_no, base=old)
+    except Exception:
+        _undo_edit(snap, "sales_invoice", doc_no, old)
+        raise
+    doc["revision"] = int(old.get("revision", 0)) + 1
+    doc["edited_by"] = current_user["user"]
     return doc
 
 
@@ -365,11 +575,11 @@ def cancel_invoice(doc_no: str, body: CancelIn):
     return doc
 
 
-def _returned_qty(invoice_no: str) -> dict[str, float]:
-    """Quantity per item already returned against an invoice."""
+def _returned_qty(invoice_no: str, skip: str | None = None) -> dict[str, float]:
+    """Quantity per item already returned against an invoice (`skip`: a return being edited, which is not counted against itself)."""
     done: dict[str, float] = defaultdict(float)
     for r in store.DOCS["sales_return"].values():
-        if r.get("against_invoice") == invoice_no:
+        if r.get("against_invoice") == invoice_no and r.get("doc_no") != skip:
             for l in r["lines"]:
                 done[l["item_code"]] += l["qty"]
     return done
@@ -385,6 +595,11 @@ def reprint_invoice(doc_no: str):
 # ---------- Sales Return (adds stock) ----------
 @router.post("/sales-return", status_code=201, tags=["Sales Return"], dependencies=[Depends(require_right("add", "Sales Return"))])
 def create_sales_return(body: SalesReturnIn):
+    return _build_sales_return(body)
+
+
+def _build_sales_return(body: SalesReturnIn, doc_no: str | None = None, base: dict | None = None) -> dict:
+    """Check and post a sales return; with `doc_no` / `base` it edits that saved return."""
     gsettings.check_not_frozen(body.date, "This sales return")
     _doc_extras("TrnHdrSR", body)
     doc_settings.check_lines("sales_return", body.lines, body.date)
@@ -398,7 +613,7 @@ def create_sales_return(body: SalesReturnIn):
         sold: dict[str, float] = defaultdict(float)
         for l in inv["lines"]:
             sold[l["item_code"]] += l["qty"]
-        done = _returned_qty(body.against_invoice)
+        done = _returned_qty(body.against_invoice, skip=doc_no)
         asked: dict[str, float] = defaultdict(float)
         for l in lines:
             asked[l["item_code"]] += l["qty"]
@@ -407,12 +622,12 @@ def create_sales_return(body: SalesReturnIn):
             if qty > left:
                 raise HTTPException(422, f"Only {left:g} of {code} can be returned against {body.against_invoice}")
         body.customer = inv["customer"]
-    doc_no = store.next_doc_no("sales_return", doc_settings.prefix("sales_return"))
+    doc_no = doc_no or store.next_doc_no("sales_return", doc_settings.prefix("sales_return"))
     for l in lines:
         store.move_stock(l["item_code"], l["qty"], "sales-return", doc_no, body.date, l["rate"])
     doc = body.model_dump(mode="json", exclude={"lines"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
     store.DOCS["sales_return"][doc_no] = doc
-    admin_audit.record("Sales Return", "Added", doc_no, "",
+    admin_audit.record("Sales Return", "Edited" if base else "Added", doc_no, "",
                        f"against {body.against_invoice}" if body.against_invoice else "without an invoice",
                        admin_audit.doc_items(doc, "Added"))
     return doc
@@ -420,7 +635,9 @@ def create_sales_return(body: SalesReturnIn):
 
 # ---------- Expense Entry ----------
 @router.post("/expense", status_code=201, tags=["Expense Entry"], dependencies=[Depends(require_right("add", "Expense Entry"))])
-def create_expense(body: ExpenseIn):
+def create_expense(body: ExpenseIn, current_user: dict = Depends(get_current_user)):
+    if db.configured():   # a real database: straight into the shop's own TrnHdrEXP / TrnDtlEXP (no Web_ tables)
+        return expense_db.create_expense(body, current_user["user"])
     gsettings.check_not_frozen(body.date, "This expense entry")
     doc_settings.check_lines("expense", [], body.date)
     for l in body.lines:
@@ -435,21 +652,72 @@ def create_expense(body: ExpenseIn):
     return doc
 
 
+@router.put("/expense/{doc_no:path}", tags=["Expense Entry"], dependencies=[Depends(require_right("edit", "Expense Entry"))])
+def edit_expense(doc_no: str, body: ExpenseIn, current_user: dict = Depends(get_current_user)):
+    """Change a saved expense entry in place (same number): its date and lines are rewritten. Receipts into the petty cash fund are kept."""
+    if db.configured():
+        return expense_db.update_expense(doc_no, body, current_user["user"])
+    old = _editable("expense", doc_no, "Expense entry")
+    for l in body.lines:
+        if l.ledger not in store.LEDGERS:
+            raise HTTPException(422, f"Unknown ledger '{l.ledger}'")
+    doc = body.model_dump(mode="json") | {"doc_no": doc_no, "total": round(sum(l.amount for l in body.lines), 2), "revision": int(old.get("revision", 0)) + 1}
+    store.DOCS["expense"][doc_no] = doc
+    admin_audit.record("Expense Entry", "Edited", doc_no, f"total {old.get('total')}", f"total {doc['total']}", [])
+    return doc
+
+
 # ---------- Stock Deduction (reduces stock) ----------
 @router.post("/stock-deduction", status_code=201, tags=["Stock Deduction"], dependencies=[Depends(require_right("add", "Stock Deduction"))])
 def create_stock_deduction(body: StockDeductionIn):
+    return _build_stock_deduction(body)
+
+
+def _build_stock_deduction(body: StockDeductionIn, doc_no: str | None = None, base: dict | None = None) -> dict:
+    """Check and post a stock deduction; with `doc_no` / `base` it edits that saved one."""
     gsettings.check_not_frozen(body.date, "This stock deduction")
     _doc_extras("TrnHdrSTKDED", body)
     doc_settings.check_lines("stock_deduction", body.lines, body.date)
     lines, tot = _price_lines(body.lines, "purchase_rate", with_gst=False)
     _check_stock(lines)
-    doc_no = store.next_doc_no("stock_deduction", doc_settings.prefix("stock_deduction"))
+    doc_no = doc_no or store.next_doc_no("stock_deduction", doc_settings.prefix("stock_deduction"))
     for l in lines:
         store.move_stock(l["item_code"], -l["qty"], "deduction", doc_no, body.date, l["rate"])
     doc = body.model_dump(mode="json", exclude={"lines"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
     store.DOCS["stock_deduction"][doc_no] = doc
-    admin_audit.record("Stock Deduction", "Added", doc_no, "", "", admin_audit.doc_items(doc, "Added"))
+    admin_audit.record("Stock Deduction", "Edited" if base else "Added", doc_no, "", "", admin_audit.doc_items(doc, "Added"))
     return doc
+
+
+def _edit_stock_doc(kind: str, doc_no: str, label: str, body, build, move_kind: str, sign: int) -> dict:
+    """Edit a saved sales return (+stock) or stock deduction (-stock): the old document's stock effect is taken back (its stock-list rows go), the new one is
+    checked and posted, and nothing changes when it fails or would leave an item below zero."""
+    old = _editable(kind, doc_no, label)
+    codes = {l["item_code"] for l in old["lines"]} | {l.item_code for l in body.lines}
+    snap = _snapshot(codes)
+    for l in old["lines"]:
+        store.move_stock(l["item_code"], -sign * l["qty"], move_kind, doc_no, date.fromisoformat(old["date"]), l["rate"])
+        store.MOVEMENTS[-1]["reverses"] = True
+    try:
+        doc = build(body, doc_no=doc_no, base=old)
+        short = sorted(c for c in codes if c in store.ITEMS and store.ITEMS[c]["qoh"] < 0)
+        if short:
+            raise HTTPException(409, f"This change would leave {', '.join(short[:3])} below zero stock (the stock this {label.lower()} added was sold since)")
+    except Exception:
+        _undo_edit(snap, kind, doc_no, old)
+        raise
+    doc["revision"] = int(old.get("revision", 0)) + 1
+    return doc
+
+
+@router.put("/sales-return/{doc_no:path}", tags=["Sales Return"], dependencies=[Depends(require_right("edit", "Sales Return"))])
+def edit_sales_return(doc_no: str, body: SalesReturnIn):
+    return _edit_stock_doc("sales_return", doc_no, "Sales return", body, _build_sales_return, "sales-return", +1)
+
+
+@router.put("/stock-deduction/{doc_no:path}", tags=["Stock Deduction"], dependencies=[Depends(require_right("edit", "Stock Deduction"))])
+def edit_stock_deduction(doc_no: str, body: StockDeductionIn):
+    return _edit_stock_doc("stock_deduction", doc_no, "Stock deduction", body, _build_stock_deduction, "deduction", -1)
 
 
 # ---------- Closing Stock Entry ----------
@@ -505,6 +773,34 @@ def generate_invoice_from_cse(doc_no: str, body: GenerateInvoiceIn, current_user
     return inv
 
 
+@router.get("/today-totals", tags=["Sales Invoice"])
+def today_totals(on: date | None = None):
+    """The footer's "Total Bills / Sales" as the desktop's status bar shows them: today's bills in SQL Server's TrnHdrSINV, cancelled ones
+    included (as the desktop counts them) but not deleted ones, on every counter and PC (so a bill made in the Windows vLQMS shows at once). Read straight from the database;
+    with it off, from the bills in memory (the same rule)."""
+    day = on or date.today()
+    if db.is_db_available():
+        try:
+            from ..db_store import _has
+            net = "ISNULL(NULLIF(GRNDTOT, 0), TOTAMT)" if "grndtot" in _has("TrnHdrSINV") else "TOTAMT"
+            gone = " AND ISNULL(IsDelete, 'N') <> 'Y'" if "isdelete" in _has("TrnHdrSINV") else ""
+            row = db.fetchall(
+                f"SELECT COUNT(*) AS n, ISNULL(SUM({net}), 0) AS amt FROM dbo.TrnHdrSINV WITH (NOLOCK) "
+                f"WHERE SINVDate >= '{day.isoformat()}' AND SINVDate < '{(day + timedelta(days=1)).isoformat()}' {gone}")[0]
+            return {"date": day.isoformat(), "total_bills": int(row["n"]), "sales": round(float(row["amt"]), 2), "source": "db"}
+        except Exception:   # noqa: BLE001 - fall back to the bills in memory
+            pass
+    saved = [d for d in store.DOCS["sales_invoice"].values() if d.get("date") == day.isoformat() and d.get("status") in ("SAVED", "CANCELLED")]
+    return {"date": day.isoformat(), "total_bills": len(saved), "sales": round(sum(d["totals"]["net"] for d in saved), 2), "source": "memory"}
+
+
+@router.get("/denominations/config", tags=["Sales Invoice"])
+def denomination_config():
+    """The notes and coin row of the desktop's Denomination window (frmUtlDenom's grid): a fixed set, as the exe draws it with a picture per
+    note. The shop's UtlDenom table is not read: it is a settings list some shops fill with other numbers (1500, 3000, ...)."""
+    return {"values": ["2000", "500", "200", "100", "50", "20", "10", "coins"]}
+
+
 # ---------- Cash Denomination (day-end cash count) ----------
 @router.get("/denomination", tags=["Cash Denomination"])
 def get_denomination(on: date):
@@ -524,6 +820,27 @@ def save_denomination(body: DenominationIn):
                        f"total {old['total']}" if old else "", f"total {doc['total']}")
     store.DENOMINATIONS[doc["date"]] = doc
     return doc
+
+
+# ---------- Expense Entry: Day's OP-Balance (legacy frmUtlDaysExpOPBalance, table TrnExpOPBal) ----------
+@router.get("/expense/opening-balance", tags=["Expense Entry"])
+def get_expense_opening(on: date):
+    return {"date": on.isoformat(), "amount": store.EXP_OPENING.get(on.isoformat(), 0.0)}
+
+
+@router.post("/expense/opening-balance", tags=["Expense Entry"], dependencies=[Depends(require_right("add", "Expense Entry"))])
+def save_expense_opening(body: ExpenseOpeningIn):
+    """The cash in hand at the start of a day. Like the desktop, a date later than tomorrow is refused; saving again replaces it."""
+    if body.date > date.today() + timedelta(days=1):
+        raise HTTPException(422, "Date cannot be greater than tomorrow!")
+    gsettings.check_not_frozen(body.date, "This opening balance")
+    if db.configured():   # TrnExpOPBal, the desktop's own table
+        return {"date": body.date.isoformat(), "amount": expense_db.save_opening(body.date, body.amount)}
+    old = store.EXP_OPENING.get(body.date.isoformat())
+    admin_audit.record("Expense Entry", "Edited" if old is not None else "Added", body.date.isoformat(),
+                       f"opening {old}" if old is not None else "", f"opening {body.amount}")
+    store.EXP_OPENING[body.date.isoformat()] = round(body.amount, 2)
+    return {"date": body.date.isoformat(), "amount": round(body.amount, 2)}
 
 
 for _kind, _tag in [("purchase_indent", "Purchase Indent"), ("purchase_bill", "Purchase Bill"),

@@ -94,7 +94,7 @@ def no_admin(monkeypatch):
     yield
 
 
-async def test_setup_creates_the_first_administrator(anon_client, no_admin):
+async def test_setup_creates_the_first_administrator(anon_client, no_admin, strict_encryption):
     assert (await anon_client.get("/setup/status")).json()["needs_admin"] is True
     body = {"user": "owner", "password": enc("Shop#2026", "new")}
     assert (await anon_client.post("/setup/admin", json={**body, "password": "Shop#2026"})).status_code in (400, 422)
@@ -197,7 +197,7 @@ def test_a_date_older_than_the_loaded_bills_is_read_from_sql_server_once(monkeyp
            "TOTQTY": 1, "SPID": 1, "SCID": 1, "AddedBy": "ADMIN", "Cancelled": "N", "SINVTime": "10:00:00",
            "SINVDtlID": 1, "ITEMID": 1, "SINVQty": 1, "SINVRate": 500, "SINVAmt": 500, "CGSTPER": 0, "CGSTAMT": 0, "SGSTPER": 0, "SGSTAMT": 0}
     monkeypatch.setattr(db, "is_db_available", lambda: True)
-    monkeypatch.setattr(db, "fetchall", lambda sql, *a: asked.append(sql) or [row])
+    monkeypatch.setattr(db, "fetchall", lambda sql, *a: ([] if "sys.columns" in sql or "TrnMultiAmt" in sql else asked.append(sql) or [row]))   # column look-ups are not bill reads
     monkeypatch.setitem(db_store._oldest, "sales_invoice", "2026-09-01")
     db_store._covered.clear()
     db_store.ensure_days(date(2026, 1, 5), date(2026, 1, 6))

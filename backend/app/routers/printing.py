@@ -24,7 +24,18 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from .. import designer, mailer, rpt_bridge, rpt_custom, rpt_dsr, rpt_print, rpt_stock, sqlstore, store
-from .auth import get_current_user, require_admin
+from .auth import get_current_user, has_right, require_admin, require_module
+
+# The documents whose screens in the desktop check the Print right (frmTrnPBM, frmTrnPartyDoc, frmTrnCloseStk): print kind -> module. The sales
+# invoice screens do not check it in the exe, so a bill can always be printed by whoever may bill.
+PRINT_RIGHT = {"purchase_bill": "Purchase Bill", "purchase_indent": "Purchase Indent", "sales_return": "Sales Return",
+               "stock_deduction": "Stock Deduction", "closing_stock": "Closing Stock Entry"}
+
+
+def _check_print_right(user: dict, kind: str) -> None:
+    module = PRINT_RIGHT.get(kind)
+    if module and not has_right(user, "print", module):
+        raise HTTPException(403, f"Access Denied!! Your rights do not allow printing {module} (Print right in the desktop's rights)")
 
 router = APIRouter(tags=["Printing"])
 EMAIL_PER_HOUR = 10   # per user, like Customised Reports → Email
@@ -166,6 +177,8 @@ async def print_custom_report(body: CustomPrintIn, user: dict = Depends(get_curr
     directly and JSON back."""
     from .custom_reports import _check_report_right   # the same right as running the report
     _check_report_right(user, body.name)
+    if not has_right(user, "print", "Reports Dashboard"):   # frmRptCustomiseRptView checks the Print right
+        raise HTTPException(403, "Access Denied!! Your rights do not allow printing Customised Reports")
     if body.from_date > body.to_date:
         raise HTTPException(422, "From Date cannot be after To Date")
     flt = {"ledger": set(body.ledger), "supplier": set(body.supplier), "group": set(body.group)}
@@ -193,6 +206,7 @@ def _job(body: PrintIn) -> dict:
 @router.post("/print/render")
 async def render(body: PrintIn, user: dict = Depends(get_current_user)):
     """PDF bytes for a preview; for a direct print the report goes to the option's printer and the reply is JSON."""
+    _check_print_right(user, body.kind)
     job = await run_in_threadpool(_job, body)
     if job["action"] == "direct":
         await run_in_threadpool(rpt_bridge.print_direct, job)
@@ -205,6 +219,44 @@ async def render(body: PrintIn, user: dict = Depends(get_current_user)):
     return Response(pdf, media_type="application/pdf", headers={
         "Content-Disposition": f'inline; filename="{name}"', "X-Print-Rpt": job["rpt"], "X-Print-Option": job["option"],
         "X-Page-Size": size})
+
+
+class BulkPdfIn(BaseModel):
+    kind: str
+    doc_nos: list[str]
+    option: str = ""
+
+
+BULK_PDF_MAX = 100   # each one is a Crystal run; more than this would hold the request for minutes
+
+
+@router.post("/print/bulk-pdf")
+async def bulk_pdf(body: BulkPdfIn, user: dict = Depends(require_module("PDF Generator"))):
+    """The desktop's PDF Generator (frmUtlBulkPDFGenerator): the chosen documents, each laid out by its print option's .rpt file, as one ZIP of PDFs.
+    A document that cannot be drawn is named in the zip's `errors.txt` instead of stopping the rest."""
+    import io
+    import zipfile
+    _check_print_right(user, body.kind)
+    _doc_info(body.kind)
+    nos = list(dict.fromkeys(n.strip() for n in body.doc_nos if n.strip()))
+    if not nos:
+        raise HTTPException(422, "Select at least one document")
+    if len(nos) > BULK_PDF_MAX:
+        raise HTTPException(422, f"At most {BULK_PDF_MAX} documents at a time")
+    buf, errors = io.BytesIO(), []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for no in nos:
+            try:
+                job = await run_in_threadpool(_job, PrintIn(kind=body.kind, doc_no=no, option=body.option, action="preview"))
+                pdf = await run_in_threadpool(rpt_bridge.render_pdf, job)
+                pdf, _size = await run_in_threadpool(rpt_bridge.preview_pdf, pdf)
+                z.writestr(re.sub(r"[^A-Za-z0-9._-]+", "_", no) + ".pdf", pdf)
+            except Exception as e:   # noqa: BLE001 - one bad document must not lose the others
+                errors.append(f"{no}: {getattr(e, 'detail', None) or e}")
+        if errors:
+            z.writestr("errors.txt", "\n".join(errors))
+    return Response(buf.getvalue(), media_type="application/zip", headers={
+        "Content-Disposition": 'attachment; filename="documents.zip"', "X-Pdf-Count": str(len(nos) - len(errors)), "X-Pdf-Errors": str(len(errors))})
 
 
 class PagesIn(PrintIn):
@@ -230,6 +282,7 @@ def _rasterize(pdf: bytes, dpi: int) -> list[dict]:
 async def render_pages(body: PagesIn, user: dict = Depends(get_current_user)):
     """The report as page pictures (PNG, the page size in points) for the Print Agent on a counter PC, which prints them
     silently on that PC's own printer. The same layout as the preview (Crystal through the bridge, trimmed to what is drawn)."""
+    _check_print_right(user, body.kind)
     body.action, body.printer = "preview", ""
     job = await run_in_threadpool(_job, body)
     pdf = await run_in_threadpool(rpt_bridge.render_pdf, job)
@@ -305,6 +358,7 @@ def _mail_text(text: str, sh: str, doc_no: str) -> str:
 
 @router.post("/print/email")
 async def email(body: EmailIn, user: dict = Depends(get_current_user)):
+    _check_print_right(user, body.kind)
     if not mailer.configured():
         raise HTTPException(409, "Email isn't set up on this server (SMTP_HOST in backend/.env).")
     now = time.time()

@@ -1,0 +1,465 @@
+<?xml version="1.0" encoding="utf-8"?>
+<C1FlexGrid version="4.6.20132.786">
+  <Control>
+    <VisualStyle>Custom</VisualStyle>
+    <AllowDragging>None</AllowDragging>
+    <AllowSorting>None</AllowSorting>
+    <SelectionMode>RowRange</SelectionMode>
+    <KeyActionEnter>None</KeyActionEnter>
+    <KeyActionTab>MoveAcross</KeyActionTab>
+    <DrawMode>OwnerDraw</DrawMode>
+    <AutoResize>True</AutoResize>
+    <BackColor>255, 255, 255</BackColor>
+    <ForeColor>0, 0, 0</ForeColor>
+    <Cursor>Default</Cursor>
+    <Font>Microsoft Sans Serif, 9pt</Font>
+    <Margin>3, 4, 3, 4</Margin>
+    <MaximumSize>0, 0</MaximumSize>
+    <MinimumSize>0, 0</MinimumSize>
+    <RightToLeft>No</RightToLeft>
+    <Padding>0, 0, 0, 0</Padding>
+    <ImeMode>NoControl</ImeMode>
+  </Control>
+  <ColumnInfo>
+    <Count>39</Count>
+    <Fixed>1</Fixed>
+    <DefaultSize>100</DefaultSize>
+  </ColumnInfo>
+  <Columns>
+    <Column index="0">
+      <Width>40</Width>
+      <Style>26</Style>
+    </Column>
+    <Column index="1">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="2">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="3">
+      <Width>217</Width>
+      <Style>27</Style>
+    </Column>
+    <Column index="4">
+      <Width>365</Width>
+      <Style>28</Style>
+    </Column>
+    <Column index="5">
+      <Width>49</Width>
+      <Visible>False</Visible>
+    </Column>
+    <Column index="6">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="7">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="8">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="9">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="10">
+      <Width>94</Width>
+    </Column>
+    <Column index="11">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="12">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="13">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="14">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="15">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="16">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="17">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="18">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="19">
+      <Width>59</Width>
+      <Visible>False</Visible>
+    </Column>
+    <Column index="20">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="21">
+      <Width>68</Width>
+      <Visible>False</Visible>
+    </Column>
+    <Column index="22">
+      <Visible>False</Visible>
+    </Column>
+    <Column index="23">
+      <Width>63</Width>
+      <Visible>False</Visible>
+      <Style>29</Style>
+    </Column>
+    <Column index="24">
+      <Width>85</Width>
+      <Style>30</Style>
+    </Column>
+    <Column index="25">
+      <Width>112</Width>
+      <Style>31</Style>
+    </Column>
+    <Column index="26">
+      <Width>66</Width>
+      <Style>32</Style>
+    </Column>
+    <Column index="27">
+      <Width>70</Width>
+      <Style>33</Style>
+    </Column>
+    <Column index="28">
+      <Width>61</Width>
+      <Style>34</Style>
+    </Column>
+    <Column index="29">
+      <Width>78</Width>
+      <Style>35</Style>
+    </Column>
+    <Column index="30">
+      <Width>56</Width>
+      <Style>36</Style>
+    </Column>
+    <Column index="31">
+      <Width>61</Width>
+      <Style>37</Style>
+    </Column>
+    <Column index="32">
+      <Style>38</Style>
+    </Column>
+    <Column index="33">
+      <Visible>False</Visible>
+      <Style>39</Style>
+    </Column>
+    <Column index="34">
+      <Visible>False</Visible>
+      <Style>40</Style>
+    </Column>
+    <Column index="35">
+      <Style>41</Style>
+    </Column>
+    <Column index="36">
+      <Style>42</Style>
+    </Column>
+    <Column index="37">
+      <Style>43</Style>
+    </Column>
+    <Column index="38">
+      <Style>44</Style>
+    </Column>
+  </Columns>
+  <RowInfo>
+    <Count>2</Count>
+    <Fixed>1</Fixed>
+    <DefaultSize>20</DefaultSize>
+  </RowInfo>
+  <Rows />
+  <Cells>
+    <Cell index="0,0">
+      <Data>Sl No</Data>
+    </Cell>
+    <Cell index="0,2">
+      <Data>ITEMSlno</Data>
+    </Cell>
+    <Cell index="0,3">
+      <Data>Item Code</Data>
+    </Cell>
+    <Cell index="0,4">
+      <Style>24</Style>
+      <Data>Item Name</Data>
+    </Cell>
+    <Cell index="0,5">
+      <Data>UOM</Data>
+    </Cell>
+    <Cell index="0,6">
+      <Style>24</Style>
+      <Data>ShortClosed</Data>
+    </Cell>
+    <Cell index="0,7">
+      <Style>24</Style>
+      <Data>ShortClosed Date</Data>
+    </Cell>
+    <Cell index="0,8">
+      <Style>24</Style>
+      <Data>ShortClosed By</Data>
+    </Cell>
+    <Cell index="0,9">
+      <Style>24</Style>
+      <Data>ShortClosed Qty</Data>
+    </Cell>
+    <Cell index="0,10">
+      <Style>24</Style>
+      <Data>QOH</Data>
+    </Cell>
+    <Cell index="0,12">
+      <Style>24</Style>
+    </Cell>
+    <Cell index="0,13">
+      <Data> Slno</Data>
+    </Cell>
+    <Cell index="0,14">
+      <Style>24</Style>
+    </Cell>
+    <Cell index="0,15">
+      <Style>24</Style>
+      <Data>Cum Qty</Data>
+    </Cell>
+    <Cell index="0,16">
+      <Style>24</Style>
+      <Data>Pend Qty</Data>
+    </Cell>
+    <Cell index="0,17">
+      <Data>Conv Fact</Data>
+    </Cell>
+    <Cell index="0,18">
+      <Style>24</Style>
+      <Data>Doc Cum Qty</Data>
+    </Cell>
+    <Cell index="0,21">
+      <Style>24</Style>
+      <Data>Number Of Cases</Data>
+    </Cell>
+    <Cell index="0,22">
+      <Style>24</Style>
+      <Data>Number Of Bottles</Data>
+    </Cell>
+    <Cell index="0,23">
+      <Style>24</Style>
+      <Data>STKPB Qty</Data>
+    </Cell>
+    <Cell index="0,24">
+      <Style>23</Style>
+      <Data>PB Qty</Data>
+    </Cell>
+    <Cell index="0,25">
+      <Style>23</Style>
+      <Data>PB Rate</Data>
+    </Cell>
+    <Cell index="0,26">
+      <Style>24</Style>
+      <Data>PB Amt</Data>
+    </Cell>
+    <Cell index="0,27">
+      <Style>22</Style>
+      <Data>CGST %</Data>
+    </Cell>
+    <Cell index="0,28">
+      <Style>24</Style>
+      <Data>CGST Amount</Data>
+    </Cell>
+    <Cell index="0,29">
+      <Style>22</Style>
+      <Data>SGST %</Data>
+    </Cell>
+    <Cell index="0,30">
+      <Style>24</Style>
+      <Data>SGST Amount</Data>
+    </Cell>
+    <Cell index="0,31">
+      <Style>22</Style>
+      <Data>CESS %</Data>
+    </Cell>
+    <Cell index="0,32">
+      <Style>24</Style>
+      <Data>Cess Amount</Data>
+    </Cell>
+    <Cell index="0,33">
+      <Style>22</Style>
+      <Data>IGST Per</Data>
+    </Cell>
+    <Cell index="0,34">
+      <Style>24</Style>
+      <Data>IGST Amount</Data>
+    </Cell>
+    <Cell index="0,35">
+      <Style>22</Style>
+      <Data>Comp.Cess</Data>
+    </Cell>
+    <Cell index="0,36">
+      <Style>24</Style>
+      <Data>GST Amt</Data>
+    </Cell>
+    <Cell index="0,37">
+      <Style>24</Style>
+      <Data>Net Amount</Data>
+    </Cell>
+    <Cell index="0,38">
+      <Style>24</Style>
+      <Data>MRP</Data>
+    </Cell>
+    <Cell index="1,0">
+      <Data type="System.Int32">1</Data>
+    </Cell>
+  </Cells>
+  <Styles>
+    <Style>
+      <Name>Normal</Name>
+      <Definition>Font:Microsoft Sans Serif, 9pt;BackColor:255, 255, 255;ForeColor:0, 0, 0;Border:Flat,1,Black,Both;</Definition>
+    </Style>
+    <Style>
+      <Name>Alternate</Name>
+      <Definition>BackColor:255, 255, 255;ForeColor:0, 0, 0;</Definition>
+    </Style>
+    <Style>
+      <Name>Fixed</Name>
+      <Definition>Font:Microsoft Sans Serif, 9pt;BackColor:240, 240, 240;ForeColor:0, 0, 0;Border:Flat,1,Black,Both;BackgroundImageLayout:Hide;</Definition>
+    </Style>
+    <Style>
+      <Name>Highlight</Name>
+      <Definition>BackColor:255, 128, 0;ForeColor:255, 255, 255;</Definition>
+    </Style>
+    <Style>
+      <Name>Focus</Name>
+      <Definition>BackColor:255, 255, 128;ForeColor:0, 0, 0;</Definition>
+    </Style>
+    <Style>
+      <Name>Editor</Name>
+    </Style>
+    <Style>
+      <Name>Search</Name>
+      <Definition>BackColor:Highlight;ForeColor:HighlightText;</Definition>
+    </Style>
+    <Style>
+      <Name>Frozen</Name>
+      <Definition>BackColor:Beige;</Definition>
+    </Style>
+    <Style>
+      <Name>NewRow</Name>
+      <Definition>ForeColor:GrayText;</Definition>
+    </Style>
+    <Style>
+      <Name>EmptyArea</Name>
+      <Definition>BackColor:AppWorkspace;Border:Flat,1,ControlDarkDark,Both;</Definition>
+    </Style>
+    <Style>
+      <Name>SelectedColumnHeader</Name>
+    </Style>
+    <Style>
+      <Name>SelectedRowHeader</Name>
+    </Style>
+    <Style>
+      <Name>GrandTotal</Name>
+      <Definition>BackColor:Black;ForeColor:White;</Definition>
+    </Style>
+    <Style>
+      <Name>Subtotal0</Name>
+      <Definition>BackColor:ControlDarkDark;ForeColor:White;</Definition>
+    </Style>
+    <Style>
+      <Name>Subtotal1</Name>
+      <Definition>BackColor:ControlDarkDark;ForeColor:White;</Definition>
+    </Style>
+    <Style>
+      <Name>Subtotal2</Name>
+      <Definition>BackColor:ControlDarkDark;ForeColor:White;</Definition>
+    </Style>
+    <Style>
+      <Name>Subtotal3</Name>
+      <Definition>BackColor:ControlDarkDark;ForeColor:White;</Definition>
+    </Style>
+    <Style>
+      <Name>Subtotal4</Name>
+      <Definition>BackColor:ControlDarkDark;ForeColor:White;</Definition>
+    </Style>
+    <Style>
+      <Name>Subtotal5</Name>
+      <Definition>BackColor:ControlDarkDark;ForeColor:White;</Definition>
+    </Style>
+    <Style>
+      <Name>FilterEditor</Name>
+    </Style>
+    <Style>
+      <Name>FirstCustomStyle</Name>
+    </Style>
+    <Style>
+      <Name>CustomStyle1</Name>
+    </Style>
+    <Style>
+      <Name>BLACK</Name>
+      <Definition>ForeColor:Black;</Definition>
+    </Style>
+    <Style>
+      <Name>RED</Name>
+      <Definition>ForeColor:Brown;</Definition>
+    </Style>
+    <Style>
+      <Name>BLUE</Name>
+      <Definition>ForeColor:Blue;</Definition>
+    </Style>
+    <Style>
+      <Name>bold</Name>
+      <Definition>Font:Microsoft Sans Serif, 8.25pt, style=Bold;</Definition>
+    </Style>
+    <Style>
+      <Definition>TextAlign:LeftCenter;</Definition>
+    </Style>
+    <Style>
+      <Definition>TextAlign:LeftCenter;</Definition>
+    </Style>
+    <Style>
+      <Definition>TextAlign:LeftCenter;</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+    <Style>
+      <Definition>Format:"0.00";</Definition>
+    </Style>
+  </Styles>
+</C1FlexGrid>

@@ -96,6 +96,7 @@ class Item(MasterRow):
     roq: float = 0
     qoh: float = 0
     active: bool = True
+    non_stockable: bool = False   # MstItem.NonStkable: a service / non-stock item
     aliases: list[str] = Field(default_factory=list, description="Other names the item is found by (MstItemAlias)")
 
 
@@ -161,6 +162,8 @@ class Customer(MasterRow):
     loyalty_card_no: str = ""
     send_sms: bool = False
     points: float = 0
+    gstin: str = ""
+    currency: str = ""   # a Currency Master code (MstCUR); mandatory in the desktop's Customer Master
 
 
 class FinYear(BaseModel):
@@ -229,6 +232,26 @@ class PriceUpdate(BaseModel):
     change_by: float = Field(description="Amount to add (negative to reduce)")
 
 
+class PriceSetRow(BaseModel):
+    item_code: str
+    values: dict[str, float] = Field(description="Rate column key -> its new value (the keys GET /masters/items/rate-columns gives)")
+
+
+class PriceSet(BaseModel):
+    """The new rates themselves (the desktop's Update to DB): for each item, the new value of each chosen rate column."""
+    rows: list[PriceSetRow] = Field(min_length=1, max_length=5000)
+
+
+class ItemBrandRow(BaseModel):
+    item_code: str = Field(max_length=60)
+    brand: str = Field("", max_length=40, description="Brand code; empty unlinks the item")
+
+
+class ItemBrandIn(BaseModel):
+    """Item Vs Brand (legacy frmUtlItemVsBrand): link items to brands."""
+    assignments: list[ItemBrandRow] = Field(min_length=1, max_length=5000)
+
+
 class BulkItemUpdate(BaseModel):
     """Bulk Master Update (legacy frmUtlBulkUpdate): set one Item Master field to one value on many items."""
     item_codes: list[str] = Field(min_length=1, max_length=5000)
@@ -262,7 +285,7 @@ class PurchaseBillIn(BaseModel):
     supplier_inv_no: str
     supplier_inv_date: date_type
     supplier_inv_value: float = Field(0, ge=0)
-    purchase_type: Literal["Purchase", "Purchase Return", "Stock Transfer In"] = "Purchase"
+    purchase_type: Literal["Purchase", "Purchase Return", "Stock Transfer In", "Stock Transfer", "Stock Addition"] = "Purchase"
     copy_from_indent: str | None = Field(None, description="Indent doc no; its lines are used when `lines` is empty")
     lines: list[Line] = Field([], max_length=MAX_LINES)
     tcs: float = Field(0, ge=0)
@@ -278,6 +301,12 @@ class Payment(BaseModel):
     credit: float = Field(0, ge=0)
 
 
+class BillDenom(BaseModel):
+    """One row of the cash counted for a bill (the desktop's TrnDtlSINVDenom): note/coin value and how many."""
+    cur: str = Field(max_length=20)
+    nos: int = Field(ge=0, le=100000)
+
+
 class SalesInvoiceIn(BaseModel):
     date: date_type
     counter: str
@@ -290,6 +319,7 @@ class SalesInvoiceIn(BaseModel):
     redeem_points: float = Field(0, ge=0)
     payment: Payment | None = None
     hold: bool = False
+    denominations: list[BillDenom] = Field(default_factory=list, max_length=40, description="Notes and coins counted for the cash tendered")
     extras: dict[str, object] = Field(default_factory=dict, description="Header columns the database / Doc Designer added")
 
 
@@ -306,6 +336,11 @@ class ExpenseLine(BaseModel):
     ledger: str
     amount: float = Field(gt=0)
     narration: str = ""
+
+
+class ExpenseOpeningIn(BaseModel):
+    date: date_type
+    amount: float = Field(ge=0, le=100_000_000)
 
 
 class ExpenseIn(BaseModel):

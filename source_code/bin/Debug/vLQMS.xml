@@ -1,0 +1,1305 @@
+﻿<?xml version="1.0"?>
+<doc>
+<assembly>
+<name>
+vLQMS
+</name>
+</assembly>
+<members>
+<member name="T:vLQMS.My.Resources.Resources">
+<summary>
+  A strongly-typed resource class, for looking up localized strings, etc.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ResourceManager">
+<summary>
+  Returns the cached ResourceManager instance used by this class.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Culture">
+<summary>
+  Overrides the current thread's CurrentUICulture property for all
+  resource lookups using this strongly typed resource class.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources._1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources._10">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources._100">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources._20">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources._200">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources._2000">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources._50">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources._500">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources._exit">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.actions">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.add">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Add_Black_White">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Add_Items">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ammendment">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.attach">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.attach_20">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.attachG_20">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.calci">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.CalculateTotal">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.cancel">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Change">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.clear">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.clipboard">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.clipboardW">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.comp">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.copyFrom">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_CANCEL">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_CLOSE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_DELETE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_EDIT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_FIND">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_FIRST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_LAST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_NEW">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_NEXT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_OPTIONS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_PREVIOUS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_PRINT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.D_SAVE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.dashbrd2">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.doc">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.docDesigner2">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.docexport_xl">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.dot">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.download">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.DownLoadImg">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.DownloadPDF">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.entities">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ErrorsAndSolutionsvLQMSSoftware">
+<summary>
+  Looks up a localized resource of type System.Byte[].
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.exitW">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.EXP">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.eye">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.freeze">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Gif7">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.GridPin">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.hotkey1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ImageIcon">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.images">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.imgDontShow">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.imgShow">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.info">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Info1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.info3">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.INR">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.INRr">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.insertdoc">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.K">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.loadfromBOM">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.lockscreen1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.login_img">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.magnifier">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Master">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.MIC">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.msg">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.multidoc">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.NoImage">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Paste">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.picture_save">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.PinDownArrow">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.PinUpArrow">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Plus">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.projecticon">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.PUR">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.pwd">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.RCPT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.red">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.refresh">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Remove">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.replace">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.rounded_rectangle_20">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Rupee">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.S">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.SALES">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.select_all">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.setting1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.setting11">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.small_tick">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.softventLogo_Black">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.softventLogo_Black1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.Splash">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_CANCEL">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_CLOSE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_DELETE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_EDIT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_FIND">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_FIRST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_LAST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_NEW">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_NEXT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_OPTIONS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_PREVIOUS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_PRINT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T1_SAVE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_CANCEL">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_CLOSE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_DELETE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_EDIT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_FIND">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_FIRST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_LAST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_NEW">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_NEXT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_OPTIONS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_PREVIOUS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_PRINT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T2_SAVE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_CANCEL">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_CLOSE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_DELETE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_EDIT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_FIND">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_FIRST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_LAST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_load">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_NEW">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_NEXT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_ok">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_OPTIONS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_PREVIOUS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_PRINT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T3_SAVE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_CANCEL">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_CLOSE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_DELETE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_EDIT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_FIND">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_FIRST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_LAST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_NEW">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_NEXT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_OPTIONS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_PREVIOUS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_PRINT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T4_SAVE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_CANCEL">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_CLOSE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_DELETE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_EDIT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_FIND">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_FIRST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_LAST">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_NEW">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_NEXT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_OPTIONS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_PREVIOUS">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_PRINT">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.T5_SAVE">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.tally1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.tenderChange">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ToolTipInfo">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucAdd_Items">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucAmmendment">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucAttach">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucAttachment">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucBOM">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucCamera">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucCopy">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucCopy_From">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucCopy_Row">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucDocument_Export">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucDown">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucExcel_Template">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucExport">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucexport_to_XL">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucfreeze">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucfreeze1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucImport">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucimport_to_XL">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucInsert">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucInsert_Doc">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucInsert_Row">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucMove_Down">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucMove_Up">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucMulti_Doc">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucPaste">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucPaste_Row">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucRemove_Row">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucReplace">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucReplace_Rest">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucrestore">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucRestore1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucTemplate">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucTender">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.ucUp">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.user">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.users">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.VoiceRecon">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.whatsapp_icon">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.whatsapp_icon2">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.X1">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="P:vLQMS.My.Resources.Resources.X11">
+<summary>
+  Looks up a localized resource of type System.Drawing.Bitmap.
+</summary>
+</member>
+<member name="M:vLQMS.getHWInfo.GetDiskVolumeSerialNumber">
+ <summary>
+ Get volume serial number of drive C
+ </summary>
+ <returns></returns>
+</member>
+<member name="M:vLQMS.getHWInfo.GetProcessorId">
+ <summary>
+ Get CPU ID
+ </summary>
+ <returns></returns>
+</member>
+<member name="M:vLQMS.getHWInfo.GetMotherboardID">
+ <summary>
+ Get motherboard serial number
+ </summary>
+ <returns></returns>
+</member>
+<member name="M:vLQMS.getHWInfo.GenerateUID(System.String)">
+ <summary>
+ Combine CPU ID, Disk C Volume Serial Number and Motherboard Serial Number as device Id
+ </summary>
+ <returns></returns>
+</member>
+<member name="M:vLQMS.Hotkey.RegisterHotKey(System.IntPtr,System.Int32,System.Int32,System.Int32)">
+ <summary>
+ Declaration of winAPI function wrappers. The winAPI functions are used to register / unregister a hotkey
+ </summary>
+</member>
+<member name="T:vLQMS.CButton">
+ <summary>
+ Custom Button Control with Gradient Colors and Extra Image (VB.NET)
+ </summary>
+ <remarks>v3.5</remarks>
+</member>
+<member name="P:vLQMS.CButton.Shape">
+ <summary>
+ The Shape of the Button as eShape choices (Ellipse, Rectangle, and Triangles)
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.DimFactorHover">
+ <summary>
+ Get or Set how much to dim the color on mouse rollover. Positive to Lighten and negative to Darken
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.DimFactorClick">
+ <summary>
+ Get or Set how much to dim the color on mouse down. Positive to Lighten and negative to Darken
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.BorderColor">
+ <summary>
+ Get or Set the Border color
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.BorderShow">
+ <summary>
+ Get or Set whether to show the Border
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.ShowFocus">
+ <summary>
+ Get or Set the Focus queue
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.FillType">
+ <summary>
+ The eFillType Fill Type to apply to the CButton
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.FillTypeLinear">
+ <summary>
+ The Linear Blend type
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.ColorFillSolid">
+ <summary>
+ The Solid Color to fill the CButton
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.ColorFillBlend">
+ <summary>
+ The ColorBlend used to fill the CButton
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.Text">
+ <summary>
+ Get or Set the Button Text
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.TextSmoothingMode">
+ <summary>
+ Get or Set the TextrenderingHint fot the button text
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.TextAlign">
+ <summary>
+ Get or Set the alignment for the text
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.TextMargin">
+ <summary>
+ Get or Set the margion between the text and the button edge
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.TextImageRelation">
+ <summary>
+ Get or Set the Relationship of the Text to the Image
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.TextShadowShow">
+ <summary>
+ Get or Set if the Text has a shadow
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.TextShadow">
+ <summary>
+ Get or Set the color of the Shadow Text
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.Image">
+ <summary>
+ Get or Set the small Image next to text
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.ImageAlign">
+ <summary>
+ Get or Set the placement of the Image
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.ImageSize">
+ <summary>
+ Get or Set the Size of the Image
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.Imagelist">
+ <summary>
+ Get or Set the ImageList control
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.ImageIndex">
+ <summary>
+ Get or Set the ImageList control
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.SideImage">
+ <summary>
+ Get or Set the Side Image
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.SideImageSize">
+ <summary>
+ Get or Set the Size of the Side Image
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.SideImageIsClickable">
+ <summary>
+ Get or Set if the Side Image raises its own click event
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.SideImageBehindText">
+ <summary>
+ Get or Set if the Side Image is in front or behind the Text
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.SideImageAlign">
+ <summary>
+ Get or Set the Side Image Alignment
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.FocalPoints">
+ <summary>
+ The CenterPoint and FocusScales for the ColorBlend
+ </summary>
+</member>
+<member name="P:vLQMS.CButton.UseMnemonic">
+ <summary>
+ If true, the first character proceeded by an ampersand will be used as the button's mnemonic key.
+ </summary>
+</member>
+<member name="M:vLQMS.CButton.DimTheColor(System.Drawing.Color,System.Int32)">
+ <summary>
+ This function takes the given color and Lightens or Darkens it by the given value 
+ </summary>
+ <param name="DimColor">Base Color object to be changed</param>
+ <param name="DimDegree">Positive value to darken and negative value to lighten DimColor</param>
+</member>
+<member name="M:vLQMS.CButton.GrayTheColor(System.Drawing.Color)">
+ <summary>
+ This function takes the given color and returns its gray equivilant
+ </summary>
+ <param name="GrayColor">Color object to be grayed</param>
+</member>
+<member name="M:vLQMS.CustomButton.CustomButton.SetNormalValues">
+ <summary>
+ To Set button properties when not active.i.e when button not in focus.
+ </summary>
+</member>
+<member name="M:vLQMS.CustomButton.CustomButton.SetValuesOnFocus">
+ <summary>
+ Set attributes to highlight button when it is under focus/active.
+ Change the cursor also as Hand type
+ </summary>
+</member>
+<member name="M:vLQMS.CustomButton.CustomButton.OnPaint(System.Windows.Forms.PaintEventArgs)">
+ <summary>
+ Default handler.Nothing to do here since we don't need to repaint the button.
+ </summary>
+ <param name="pe"></param>
+</member>
+<member name="M:vLQMS.CustomButton.CustomButton.OnMouseHover(System.EventArgs)">
+ <summary>
+ Event handler which call SetValuesOnFocus() method to give apecial
+ effect to button while active
+ </summary>
+ <param name="e"></param>
+</member>
+<member name="M:vLQMS.CustomButton.CustomButton.OnMouseLeave(System.EventArgs)">
+ <summary>
+ Event handler which call SetNormalValues() method to set back the button
+ to normal state
+ </summary>
+ <param name="e"></param>
+</member>
+</members>
+</doc>

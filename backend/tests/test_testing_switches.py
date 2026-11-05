@@ -9,6 +9,7 @@ async def test_disconnect_needs_an_admin_and_a_database(client, cashier_client):
 
 
 def test_a_manual_disconnect_is_not_undone_by_itself(monkeypatch):
+    monkeypatch.setattr(db, "READ_ONLY", False)   # the older saving mode
     monkeypatch.setattr(db, "configured", lambda: True)
     tried = []
     monkeypatch.setattr(db, "reconnect", lambda: tried.append(1) or False)

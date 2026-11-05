@@ -30,6 +30,8 @@ export const CUSTOMER_FIELDS = [
   { key: 'code', label: 'Customer Code', required: true },
   { key: 'name', label: 'Customer Name', required: true },
   { key: 'mobile', label: 'Mobile No' },
+  { key: 'gstin', label: 'GSTIN', required: true, showInList: false },
+  { key: 'currency', label: 'Currency', optionsFrom: 'currencies', required: true, default: 'Rupees', showInList: false },
   { key: 'loyalty_card_no', label: 'Loyalty Card Number' },
   { key: 'points', label: 'Loyalty Points', type: 'number' },
   { key: 'send_sms', label: 'Send SMS to customer', type: 'bool', showInList: false },
@@ -76,6 +78,7 @@ export const ITEM_FIELDS = [
   // Opening stock: used only when the item is created. After that, stock changes through transactions
   // (the backend ignores QOH on edits so the stock ledger stays complete).
   { key: 'qoh', label: 'Opening stock (new items only)', type: 'number', showInList: false, newOnly: true, section: 'Stock' },
+  { key: 'non_stockable', label: 'Non Stockable', type: 'bool', showInList: false, default: false, section: 'Stock' },
   { key: 'active', label: 'Active', type: 'bool', showInList: false, default: true, section: 'Stock' },
 ];
 

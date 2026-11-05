@@ -113,3 +113,33 @@ async def test_item_reorder_level_and_quantity_may_have_decimals(client):
     assert res.status_code == 200
     row = next(r for r in res.json() if r["code"] == code)
     assert row["roq"] == 83.4 and row["rol"] == 12.5
+
+
+async def test_party_item_rates_need_the_database(client):
+    res = await client.get("/masters/customers/CASH/item-rates")
+    assert res.status_code in (404, 503)
+
+
+async def test_price_set_changes_rates_and_refuses_bad_ones(client):
+    code = (await client.get("/masters/items")).json()[0]["code"]
+    cols = (await client.get("/masters/items/rate-columns")).json()
+    assert {"mrp", "purchase_rate"} <= {c["key"] for c in cols}
+    row = lambda **v: {"rows": [{"item_code": code, "values": v}]}
+    assert (await client.post("/masters/items/price-set", json=row(mrp=0))).status_code == 422
+    assert (await client.post("/masters/items/price-set", json=row(rol=-1))).status_code == 422
+    assert (await client.post("/masters/items/price-set", json=row(nothing=5))).status_code == 422
+    ok = await client.post("/masters/items/price-set", json=row(mrp=777.5))
+    assert ok.status_code == 200 and ok.json()["changed"] == 1
+    assert (await client.get(f"/masters/items/{code}")).json()["mrp"] == 777.5
+    assert (await client.post("/masters/items/price-set", json={"rows": [{"item_code": "NOPE", "values": {"mrp": 5}}]})).status_code == 404
+
+
+async def test_master_code_can_be_changed(client):
+    body = {"code": "ZZRENAME", "name": "Rename me"}
+    res = await client.post("/masters/supplier-groups", json=body)
+    assert res.status_code == 201, res.text
+    res = await client.put("/masters/supplier-groups/ZZRENAME", json={**body, "code": "ZZRENAMED"})
+    assert res.status_code == 200, res.text
+    assert (await client.get("/masters/supplier-groups/ZZRENAMED")).status_code == 200
+    assert (await client.get("/masters/supplier-groups/ZZRENAME")).status_code == 404
+    assert (await client.delete("/masters/supplier-groups/ZZRENAMED")).status_code == 204

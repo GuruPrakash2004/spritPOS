@@ -17,8 +17,11 @@ const SHORTCUT_GROUPS = [
     icon: Receipt,
     shortcuts: [
       { keys: ['Alt', 'B'], description: 'New sales bill from any screen' },
+      { keys: ['Alt', 'K'], description: 'Calculator (Esc copies the result)' },
+      { keys: ['Alt', 'T'], description: 'Load an item template onto the bill' },
       { keys: ['Enter'], description: 'Bill setup: open the bill' },
       { keys: ['F2'], description: 'Item search (barcode, code or name)' },
+      { keys: ['↓'], description: 'In the empty search: the Please Select Item list (Enter / Ok picks, then Qty)' },
       { keys: ['↑', '↓', 'Enter'], description: 'Choose a suggested item and add it' },
       { keys: ['3', '*'], description: 'Quantity 3 for the next item' },
       { keys: ['F3'], description: 'Quick pick list' },
@@ -31,7 +34,6 @@ const SHORTCUT_GROUPS = [
       { keys: ['F8'], description: 'Held bills (↑↓, Enter recalls)' },
       { keys: ['Alt', 'R'], description: 'Re-print a saved bill' },
       { keys: ['Alt', 'C'], description: 'Cancel a saved invoice' },
-      { keys: ['Alt', 'X'], description: 'Cancel this bill (asks first)' },
     ],
   },
   {

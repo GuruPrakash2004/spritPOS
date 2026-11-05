@@ -25,7 +25,7 @@ import { detectAgent, PC_PREFIX, printDocumentOnThisPc, rememberPrinter, savedPr
 
 // A printer is either one of THIS PC (value "pc:Name", through the Print Agent, lib/localPrint.js) or one of the server (its plain name).
 
-export default function PrintDialog({ kind, docNo, title, onClose }
+export default function PrintDialog({ kind, docNo, title, onClose, initialFormat = '' }
 
 ) {
   const [info, setInfo] = useState(null);
@@ -44,14 +44,16 @@ export default function PrintDialog({ kind, docNo, title, onClose }
     fetchPrintOptions(kind).then(o => {
       setInfo(o);
       const usable = o.options.filter(x => x.available);
-      const pick = o.designed
+      // A format picked before (Re-Print Bill's Print Format) opens selected when this document has it.
+      const wanted = initialFormat && (o.designed ? usable.some(x => x.name === initialFormat) : o.files.includes(initialFormat)) ? initialFormat : '';
+      const pick = wanted || (o.designed
         ? (usable.find(x => x.name === o.preferred)?.name ?? usable.find(x => x.name === o.default)?.name ?? usable[0]?.name ?? o.default ?? o.options[0]?.name ?? '')
-        : (o.files.find(f => f === savedFormat(kind)) ?? o.files[0] ?? '');
+        : (o.files.find(f => f === savedFormat(kind)) ?? o.files[0] ?? ''));
       setChosen(pick);
     }).catch(e => setError(errorText(e)));
     getPrintBridge().then(b => setPrinters(b.printers ?? [])).catch(() => { /* the preview says why */ });
     void detectAgent(true).then(setAgent);
-  }, [kind]);
+  }, [kind]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Until the Print Agent is found, look again every few seconds: right after its one-time setup the list of this PC's printers appears by itself.
   useEffect(() => {

@@ -10,7 +10,7 @@ import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { PlusCircle, Save, Trash2, XCircle, Printer } from 'lucide-react';
 import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
-import { errorText, getItems, saveStockDocument, } from '../../lib/api';
+import { errorText, getItems, saveStockDocument, updateDocument, } from '../../lib/api';
 import { field, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader, printButton } from '../../lib/styles';
 import PrintDialog from '../print/PrintDialog';
 import { afterSavePlan, } from '../../lib/printing';
@@ -37,7 +37,7 @@ const blankLine = () => ({ item_code: '', cases: 0, bottles: 0, rate: 0 });
 
 // Shared cases + bottles grid for the stock transactions (Purchase Indent, Sales Return, Stock Deduction).
 // The screen supplies its own header fields and turns the lines into the request body.
-export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, rateLabel, header, buildBody }
+export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, rateLabel, header, buildBody, onEditLoad }
 
 
 
@@ -50,6 +50,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   const [lines, setLines] = useState([blankLine()]);
   const [toast, setToast] = useState(null);
   const [printDocNo, setPrintDocNo] = useState(null);
+  const [editing, setEditing] = useState(null);   // a saved document opened from the List to change (PUT keeps its number): { no, date }
   // Print Settings for this document: print after save (none / ask / preview) and the default format.
   const kind = endpoint.replace('/transactions/', '').replace(/-/g, '_') ;
   const docSettings = useDocSettings(kind);
@@ -99,10 +100,36 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
     return next;
   }));
 
+  // List → Edit Selected: the saved document goes onto the screen; the screen's own header boxes are filled by `onEditLoad`.
+  const loadForEdit = async (saved) => {
+    if (filled.length && !(await confirm(`Open ${saved.doc_no} for editing? What is on the screen is cleared.`))) return;
+    const missing = (saved.lines ?? []).find(l => !byCode.has(l.item_code));
+    if (missing) return setToast({ kind: 'error', text: `${saved.doc_no} has an item (${missing.item_code}) that is no longer an active item, so it can't be edited here.` });
+    setLines((saved.lines ?? []).map(l => ({ item_code: l.item_code, cases: l.cases ?? 0, bottles: l.bottles ?? l.qty, rate: l.rate ?? 0 })));
+    onEditLoad?.(saved);
+    setEditing({ no: saved.doc_no, date: saved.date });
+    setToast({ kind: 'ok', text: `Editing ${title} ${saved.doc_no}. Save updates it.` });
+  };
+  const newDocument = () => { setEditing(null); setLines([blankLine()]); };
+  const stopEditing = async () => {
+    if (filled.length && !(await confirm(`Stop editing ${editing.no}? Your changes are thrown away.`))) return;
+    newDocument();
+  };
+
   const save = async (andPrint = false) => {
     if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one item.' });
     if (filled.some(l => qty(l) <= 0)) return setToast({ kind: 'error', text: 'Every item needs cases or bottles.' });
     if (!doc.check()) return setToast({ kind: 'error', text: 'Fill the additional details marked in red.' });
+    if (editing) {   // a saved document changed in place: same number
+      if (!(await toastStore.defer('ok', `${title} ${editing.no} (${filled.length} items) will be updated when this closes.`, 'Update cancelled. Nothing was changed.'))) return;
+      updateDocument(`${endpoint}/${editing.no}`, { ...buildBody(filled), ...doc.body(), date: editing.date }).then(saved => {
+        setToast({ kind: 'ok', text: `${title} ${saved.doc_no} updated — ${saved.totals.qty} bottles.` });
+        if (andPrint) setPrintDocNo(saved.doc_no);
+        newDocument();
+        doc.refresh();
+      }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
+      return;
+    }
     if (!(await toastStore.defer('ok', `${title} with ${filled.length} items will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
     saveStockDocument(endpoint, { ...buildBody(filled), ...doc.body() })
       .then(saved => {
@@ -125,10 +152,16 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   });
 
   return (
-    <WithHistory kind={kind} title="documents">
+    <WithHistory kind={kind} title="documents" onNew={newDocument} onEdit={saved => void loadForEdit(saved)}>
     <div className="mx-auto flex max-w-6xl flex-col gap-4" onKeyDown={e => enterMovesNext(e, addRow)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {confirmDialog}
+      {editing && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D99A2B]/60 bg-[#D99A2B]/10 px-4 py-2 text-xs font-semibold text-[#1B2B4B] dark:text-[#D4A847]">
+          <span>Editing {title} {editing.no}: Save updates it in place (stock follows the change).</span>
+          <button type="button" onClick={() => void stopEditing()} className={secondaryButton}>Stop editing</button>
+        </div>
+      )}
       <div className={pageHeader}>
         <div>
           <h1 className={pageTitle}>{title}</h1>
@@ -137,7 +170,7 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
         <div className="flex flex-wrap gap-2">
           <button onClick={() => save(true)} className={printButton}><Printer size={14} />Save & Print<Kbd combo="F10" /></button>
           <button onClick={() => save(false)} className={primaryButton}><Save size={14} />Save<Kbd combo="Mod+S" /></button>
-          <button onClick={() => setLines([blankLine()])} className={secondaryButton}><XCircle size={14} />Clear</button>
+          <button onClick={newDocument} className={secondaryButton}><XCircle size={14} />Clear</button>
         </div>
       </div>
 

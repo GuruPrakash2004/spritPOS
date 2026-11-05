@@ -18,12 +18,13 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
-from . import admin_audit, boot, bridge_launcher, db, gsettings, shop_hours, sqlstore, store
+from . import admin_audit, boot, bridge_launcher, db, gsettings, held_bills, shop_hours, sqlstore, store
 from .ai import bootstrap as ai_bootstrap, enabled as ai_enabled
-from .routers import ai as ai_router, auth, company_files, custom_reports, designer as designer_router, masters, party_info, printing, reports, setup, tools, transactions, utilities
+from .routers import accounting as accounting_router, ai as ai_router, auth, quotation as quotation_router, quick_selection, sms as sms_router, attachments, rights_admin, company_files, custom_reports, designer as designer_router, masters, party_info, printing, physical_stock, reports, setup, tools, transactions, utilities
 from .schemas import SettingsIn
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -50,7 +51,9 @@ IDEMPOTENT_KEEP = 500   # replies remembered for Idempotency-Key replays
 # Connection switches (Utilities → About → Disconnect / Reconnect database): run one at a time like writes, but
 # never refused for a database that is offline (they are how it is reconnected) and nothing is saved after them.
 CONTROL_PATHS = {"/utilities/database/disconnect", "/utilities/database/reconnect"}
-NOT_WRITES = {"/print/render", "/print/pages", "/setup/scan", "/utilities/backup", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/email", "/designer/refresh", "/designer/reload", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/rpt-folder", "/setup/smtp", "/setup/smtp/test", "/setup/print-printer", "/setup/print-printer/add",
+# Features that write straight into the shop's own tables (db.direct_writes) and never use the generic save (no Web_ tables).
+DIRECT_WRITE_PATHS = ("/accounting/", "/transactions/quotation", "/transactions/expense", "/quick-selection", "/item-templates", "/sms/", "/admin/desktop-rights")
+NOT_WRITES = {"/auth/login", "/print/bulk-pdf", "/print/render", "/print/pages", "/setup/scan", "/utilities/backup", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/email", "/designer/refresh", "/designer/reload", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/rpt-folder", "/setup/smtp", "/setup/smtp/test", "/setup/print-printer", "/setup/print-printer/add",
               "/utilities/web-sync",
               # AI suggestions: generating may take a while (the forecast) and rejecting changes only the ai.* tables.
               "/ai/suggestions/generate"}
@@ -79,7 +82,7 @@ def _still_signed_in(request: Request) -> bool:
 async def serialise_and_save_writes(request: Request, call_next):
     if request.method not in WRITE_METHODS or request.url.path in NOT_WRITES:
         return await call_next(request)
-    if request.url.path in CONTROL_PATHS:
+    if request.url.path in CONTROL_PATHS or request.url.path.startswith(DIRECT_WRITE_PATHS):
         async with _write_lock:
             return await call_next(request)
     async with _write_lock:
@@ -100,6 +103,7 @@ async def serialise_and_save_writes(request: Request, call_next):
         if blocked:   # the database is set up but offline: nothing may change
             return JSONResponse({"detail": blocked}, status_code=503)
         admin_audit.begin()
+        sqlstore.begin_request()
         response = await call_next(request)
         if response.status_code >= 400:
             admin_audit.discard()
@@ -107,6 +111,8 @@ async def serialise_and_save_writes(request: Request, call_next):
         admin_audit.commit(getattr(request.state, "user", None))
         try:
             await run_in_threadpool(sqlstore.save, getattr(request.state, "user", None))
+            if not db.use_web_tables():
+                await run_in_threadpool(held_bills.dump_if_changed)   # held bills are kept in a file beside the backend (direct mode)
         except sqlstore.SaveFailed as exc:
             # SQL Server didn't take the change: undo it in memory too, and say so (nothing was saved).
             await run_in_threadpool(sqlstore.reload)
@@ -145,24 +151,6 @@ def _dist_file(path: str) -> Path | None:
     return target
 
 
-@app.middleware("http")
-async def serve_frontend(request: Request, call_next):
-    path = request.scope["path"]
-    if path == "/api" or path.startswith("/api/"):
-        stripped = path[4:] or "/"
-        request.scope["path"] = stripped
-        request.scope["raw_path"] = stripped.encode()
-        return await call_next(request)
-    if (request.method in ("GET", "HEAD") and os.environ.get("SERVE_FRONTEND", "1") != "0"
-            and (FRONTEND_DIST / "index.html").is_file()):
-        file = _dist_file(path)
-        if file is not None:
-            return FileResponse(file)
-        if "text/html" in request.headers.get("accept", "") and path not in API_PAGES:   # a page load: the app
-            return FileResponse(FRONTEND_DIST / "index.html", headers={"Cache-Control": "no-cache"})
-    return await call_next(request)
-
-
 # Registered after the write middleware so they wrap it: replayed replies get the same headers.
 # Cross-origin requests are allowed from anywhere (any origin, method and header): the frontend is opened from
 # another address than the backend's (its VITE_API_URL). The API uses a Bearer token, never cookies, so no
@@ -176,16 +164,49 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
-    """Browser hardening headers on every response (no sniffing, no framing)."""
-    response = await call_next(request)
-    response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Cross-Origin-Resource-Policy", "cross-origin")   # company images load from the frontend's page
-    if request.url.path.startswith(("/auth", "/admin")):
-        response.headers.setdefault("Cache-Control", "no-store")
-    return response
+class FrontendAndHeaders:
+    """Pure ASGI (no BaseHTTPMiddleware, which costs several task hops per request): takes the /api prefix off,
+    serves the built frontend on a page load, and adds the browser hardening headers to every response (no
+    sniffing, no framing). Outermost layer, so every reply gets the headers."""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.inner(scope, receive, send)
+        path = scope["path"]
+        method = scope["method"]
+        no_store = path.startswith(("/auth", "/admin"))
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = message.setdefault("headers", [])
+                have = {k.lower() for k, _ in headers}
+                extra = [(b"x-content-type-options", b"nosniff"), (b"x-frame-options", b"DENY"),
+                         (b"cross-origin-resource-policy", b"cross-origin")]   # company images load from the frontend's page
+                if no_store:
+                    extra.append((b"cache-control", b"no-store"))
+                headers.extend(h for h in extra if h[0] not in have)
+            await send(message)
+
+        if path == "/api" or path.startswith("/api/"):
+            stripped = path[4:] or "/"
+            scope = dict(scope, path=stripped, raw_path=stripped.encode())
+            return await self.inner(scope, receive, send_with_headers)
+        if method in ("GET", "HEAD") and os.environ.get("SERVE_FRONTEND", "1") != "0" and (FRONTEND_DIST / "index.html").is_file():
+            file = _dist_file(path)
+            if file is not None:
+                return await FileResponse(file)(scope, receive, send_with_headers)
+            accept = dict(scope["headers"]).get(b"accept", b"").decode("latin-1")
+            if "text/html" in accept and path not in API_PAGES:   # a page load: the app
+                return await FileResponse(FRONTEND_DIST / "index.html", headers={"Cache-Control": "no-cache"})(scope, receive, send_with_headers)
+        return await self.inner(scope, receive, send_with_headers)
+
+
+# Big lists (items, bills, reports) shrink a lot: less to send when many counters ask at once.
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=4)
+app.add_middleware(FrontendAndHeaders)
 
 
 app.include_router(auth.router)
@@ -194,6 +215,15 @@ app.include_router(company_files.router)
 app.include_router(masters.router)
 app.include_router(party_info.router)
 app.include_router(transactions.router)
+app.include_router(accounting_router.router)
+app.include_router(quotation_router.router)
+app.include_router(quick_selection.router)
+app.include_router(quick_selection.templates_router)
+app.include_router(sms_router.router)
+app.include_router(attachments.router)
+app.include_router(rights_admin.router)
+app.include_router(physical_stock.router)
+app.include_router(physical_stock.stock_router)
 app.include_router(reports.router)
 app.include_router(custom_reports.router)
 app.include_router(tools.router)
@@ -226,6 +256,11 @@ def startup_event():
 @app.on_event("shutdown")
 def shutdown_event():
     bridge_launcher.stop()
+
+
+@app.exception_handler(db.ReadOnlyDatabase)
+async def read_only_database_handler(request, exc):
+    return JSONResponse({"detail": str(exc)}, status_code=503)
 
 
 @app.get("/", tags=["Health"])

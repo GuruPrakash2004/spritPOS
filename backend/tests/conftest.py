@@ -135,3 +135,10 @@ async def cashier_client():
     """Logged in as a seeded Cashier (RAVI/ravi)."""
     async with _app_client() as c:
         yield await _log_in(c, "RAVI", "ravi")
+
+
+@pytest.fixture
+def strict_encryption(monkeypatch):
+    """The shop accepts plain passwords (owner's decision); these tests check the stricter setting, so switch it on for them."""
+    from app import secure_fields
+    monkeypatch.setattr(secure_fields, "REQUIRE_ENCRYPTED", True)

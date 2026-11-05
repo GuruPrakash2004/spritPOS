@@ -17,11 +17,11 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, db_store, gsettings, schema_meta, security, sqlstore, store, validation
+from .. import admin_audit, doc_engine, db_store, gsettings, schema_meta, security, sqlstore, store, validation
 from ..master_specs import SPECS
 from ..schemas import SIMPLE_MODELS
 from ..schemas import (
-    Brand, Company, CompanyOut, Customer, Item, ItemGroup, Ledger, LedgerGroup, Package, PriceUpdate, BulkItemUpdate, SalesCounter, SalesPerson, Supplier, Uom,
+    Brand, Company, CompanyOut, Customer, Item, ItemGroup, Ledger, LedgerGroup, Package, PriceUpdate, PriceSet, BulkItemUpdate, ItemBrandIn, SalesCounter, SalesPerson, Supplier, Uom,
 )
 from .auth import can_see_cost, get_current_user, hides_cost, require_admin, require_right
 
@@ -119,7 +119,8 @@ def _clean(path: str, body: BaseModel, table: dict, original: str | None = None)
                 raise HTTPException(422, str(e))
         else:
             body.extras = {}
-    for key, value in validation.check(body.model_dump()).items():   # mobile / phone / PIN / GSTIN / PAN / HSN / e-mail / tax %
+    skip = {"gstin"} if path == "customers" and body.gstin.strip() == "-" else set()   # '-' is the desktop's own "none" in a customer's GSTNO
+    for key, value in validation.check(body.model_dump(), skip=skip).items():   # mobile / phone / PIN / GSTIN / PAN / HSN / e-mail / tax %
         if hasattr(body, key):
             setattr(body, key, value)
     if path == "items":
@@ -130,6 +131,10 @@ def _clean(path: str, body: BaseModel, table: dict, original: str | None = None)
         raise HTTPException(422, "Bill prefix cannot be blank")
     elif path == "customers" and body.points < 0:
         raise HTTPException(422, "Points cannot be negative")
+    elif path == "customers" and body.code != "CASH" and not body.gstin.strip():
+        raise HTTPException(422, "GSTIN is mandatory for a customer")   # the desktop Customer Master marks GSTNO mandatory
+    elif path == "customers" and body.code != "CASH" and not body.currency.strip():
+        raise HTTPException(422, "Currency is mandatory for a customer")   # ... and CURID
     elif path == "holidays":
         try:
             date.fromisoformat(body.code)
@@ -236,6 +241,8 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
             admin_audit.record(tag, "Edited", code if body.code == code else f"{code} → {body.code}", earlier, changed)
         table.pop(code)
         table[body.code] = row
+        if body.code != code:
+            store.RENAMED[(store_name, body.code)] = store.RENAMED.get((store_name, code), code)
         if path == "items" and body.code != code:
             store.rename_item_stock(code, body.code)
         store.touch(store_name, code)
@@ -383,6 +390,28 @@ def remove_fin_year(start: date, admin: dict = Depends(require_admin)):
     return _company()
 
 
+@router.put("/company/fin-years/{start}/activate", status_code=200, tags=["Company Master"])
+def activate_fin_year(start: date, admin: dict = Depends(require_admin)):
+    """Make a financial year (e.g. the previous one) the active one: exactly one year is Active in MstCompFinYear, and the
+    active year gives document numbers their prefix. It is the same for every user until another year is made active."""
+    target = next((y for y in store.FIN_YEARS if y["start"] == start.isoformat()), None)
+    if target is None:
+        raise HTTPException(404, "Invalid year")
+    if target["active"]:
+        return _company()
+    if not sqlstore.enabled():
+        raise HTTPException(503, "The database is offline")
+    from .. import db
+    was = next((y for y in store.FIN_YEARS if y["active"]), None)
+    with db.transaction() as cur:
+        cur.execute("UPDATE dbo.MstCompFinYear SET Active = CASE WHEN yrFdate = ? AND yrTdate = ? THEN 'Y' ELSE 'N' END",
+                    (target["start"], target["end"]))
+    admin_audit.write_now(admin["user"], "Company Master", "Changed", "Active financial year",
+                          f"{was['start']} to {was['end']}" if was else "", f"{target['start']} to {target['end']}")
+    db_store.load_fin_year()
+    return _company()
+
+
 @router.post("/items/price-list", response_model=list[Item], tags=["Item Price List Maintenance"],
              dependencies=[Depends(require_right("edit", "Price List Maintenance"))])
 def bulk_update_rates(body: PriceUpdate, current_user: dict = Depends(get_current_user)):
@@ -403,6 +432,76 @@ def bulk_update_rates(body: PriceUpdate, current_user: dict = Depends(get_curren
         store.touch("ITEMS", i["code"])
         admin_audit.record("Price List Maintenance", "Edited", i["code"], f"{body.column}: {old}", f"{body.column}: {i[body.column]}")
     return [_shown("items", i, current_user) for i in targets]
+
+
+# Typed Item Master fields the rate columns can name (key -> desktop column); the rest of the numeric designer fields are the item's extras.
+_RATE_TYPED = {"mrp": "MRP", "purchase_rate": "PURRATE", "cgst_per": "CGSTPER", "sgst_per": "SGSTPER", "rol": "ROL", "roq": "ROQ"}
+_RATE_FALLBACK = [("mrp", "MRP"), ("purchase_rate", "Item Purchase Rate"), ("cgst_per", "CGST %"), ("sgst_per", "SGST %"), ("rol", "Reorder Level"), ("roq", "Reorder Qty")]
+
+
+def _rate_columns(user: dict) -> list[dict]:
+    """The Item Rate Columns list of Price List Maintenance (frmMstPriceMaintenance.LoadSelItemCol): the Item Master's numeric fields from the Doc
+    Designer (UtlDocDsgrFlds, FldDataType Numeric, not an ID), as {key, caption, typed}. `key` is the web field for a typed column, else the
+    column's own name (it lives in the item's extras). The purchase rate is left out for a role with no cost access."""
+    from .. import designer
+    doc_id = doc_engine.doc_id_of("Item Master")
+    wanted = [f for f in (designer.fields_for(doc_id) if doc_id else []) if str(f.get("FldDataType") or "").lower() == "numeric" and not str(f.get("FldCode") or "").upper().endswith("ID")]
+    by_col = {v: k for k, v in _RATE_TYPED.items()}
+    out = []
+    for f in wanted:
+        col = str(f["FldCode"]).strip()
+        typed = by_col.get(col.upper())
+        out.append({"key": typed or col, "caption": str(f.get("FldCaption") or col).strip(), "typed": bool(typed)})
+    if not out:
+        out = [{"key": k, "caption": c, "typed": True} for k, c in _RATE_FALLBACK]
+    if not can_see_cost(user):
+        out = [c for c in out if c["key"] != "purchase_rate"]
+    return out
+
+
+@router.get("/items/rate-columns", tags=["Item Price List Maintenance"])
+def rate_columns(current_user: dict = Depends(get_current_user)):
+    return _rate_columns(current_user)
+
+
+@router.post("/items/price-set", tags=["Item Price List Maintenance"], dependencies=[Depends(require_right("edit", "Price List Maintenance"))])
+def set_rates(body: PriceSet, current_user: dict = Depends(get_current_user)):
+    """Update to DB (frmMstPriceMaintenance.btnUpdtToDB): set the chosen rate columns of each item. Every row is checked first and nothing changes
+    unless all pass: the item and the column must exist, a rate may not be negative, a new MRP must be above zero, a column that is read-only for
+    the role (Admin Master field rights) or the cost (no cost access) is refused. Changed items of a master that needs approval wait for it
+    again; each change is audited."""
+    allowed = {c["key"]: c for c in _rate_columns(current_user)}
+    rights = security.field_rights(current_user, "items")
+    plan = []
+    for r in body.rows:
+        item = store.ITEMS.get(r.item_code)
+        if not item:
+            raise HTTPException(404, f"Unknown item '{r.item_code}'")
+        for key, new in r.values.items():
+            if key not in allowed:
+                raise HTTPException(422, f"'{key}' is not a rate column you can change")
+            if new < 0:
+                raise HTTPException(422, f"Rates cannot go Negative ({r.item_code})")
+            if key == "mrp" and new <= 0:
+                raise HTTPException(422, f"Price cannot be negative or zero. Please enter a valid Price ({r.item_code})")
+            if allowed[key]["typed"] and rights.get(key):
+                raise HTTPException(403, f"You may not change {key.replace('_', ' ')} (Field Level Rights for your role)")
+            plan.append((item, key, round(new, 2), allowed[key]["typed"]))
+    changed, touched = 0, {}
+    for item, key, new, typed in plan:
+        holder = item if typed else item.setdefault("extras", {})
+        old = holder.get(key)
+        if old is not None and round(float(old or 0), 2) == new:
+            continue
+        holder[key] = new
+        admin_audit.record("Price List Maintenance", "Edited", item["code"], f"{key}: {old}", f"{key}: {new}")
+        changed += 1
+        touched[item["code"]] = item
+    for item in touched.values():
+        security.mark_approval(current_user, "items", item)
+        item["changed_by"] = current_user["user"]
+        store.touch("ITEMS", item["code"])
+    return {"items": len(body.rows), "changed": changed}
 
 
 # Fields Bulk Master Update can set (the desktop's UtlItemBulkUpdate lists these as HSNCode, BrandID, LiqType, BotPerCases, MRP,
@@ -448,6 +547,35 @@ def bulk_update_items(body: BulkItemUpdate, current_user: dict = Depends(get_cur
         store.touch("ITEMS", i["code"])
         admin_audit.record("Bulk Master Update", "Edited", i["code"], f"{body.field}: {old}", f"{body.field}: {value}")
     return {"changed": len(targets), "field": body.field, "value": value}
+
+
+@router.post("/items/brands", tags=["Item Vs Brand"], dependencies=[Depends(require_right("edit", "Item Vs Brand"))])
+def assign_item_brands(body: ItemBrandIn, current_user: dict = Depends(get_current_user)):
+    """Link items to brands (an empty brand unlinks). Like Bulk Master Update, Field Level Rights for the brand apply, a master that
+    needs approval waits again, and each change goes to the ADMIN Audit Log. Nothing changes unless every row passes."""
+    if security.field_rights(current_user, "items").get("brand"):
+        raise HTTPException(403, "You may not change brand (Field Level Rights for your role)")
+    changes = {}
+    for r in body.assignments:
+        item, brand = store.ITEMS.get(r.item_code), r.brand.strip()
+        if not item:
+            raise HTTPException(404, f"Unknown item '{r.item_code}'")
+        if brand and brand not in store.BRANDS:
+            raise HTTPException(422, f"Unknown brand '{brand}'")
+        changes[item["code"]] = brand
+    done = 0
+    for code, brand in changes.items():
+        item = store.ITEMS[code]
+        if (item.get("brand") or "") == brand:
+            continue
+        old = item.get("brand") or ""
+        item["brand"] = brand
+        security.mark_approval(current_user, "items", item)
+        item["changed_by"] = current_user["user"]
+        store.touch("ITEMS", code)
+        admin_audit.record("Item Vs Brand", "Edited", code, f"brand: {old}", f"brand: {brand}")
+        done += 1
+    return {"changed": done}
 
 
 @router.post("/items/import", tags=["Item Master"], dependencies=[Depends(require_right("add", "Item Master"))])

@@ -105,15 +105,29 @@ def login_settings() -> dict:
 
 # ─── Rights (role based) ──────────────────────────────────────────────────────
 
+# Screens only an Administrator may open (the same set as frontend/src/lib/modules.js ADMIN_ONLY): a desktop menu right never opens them.
+ADMIN_ONLY_MODULES = {"Admin Master", "SQL Query Execution", "Screen Preview", "Global Settings", "Global Settings...", "ADMIN Audit Log", "Audit Trail",
+                      "Delete Non-Liquor Items"}
+
+
+def _desktop(user: dict) -> dict | None:
+    """The user's rights from the desktop's own tables (app/desktop_rights.py), unless the Administrator set their role in the web."""
+    return None if user.get("role_set_in_web") else user.get("desktop")
+
+
 def modules_for(user: dict) -> list[str]:
     if user.get("role") == store.ADMIN_ROLE:
         return store.ROLES.get(store.ADMIN_ROLE, ["*"])
-    return store.ROLES.get(user.get("role", ""), [])
+    d = _desktop(user)
+    return [m for m in d["modules"] if m not in ADMIN_ONLY_MODULES] if d else store.ROLES.get(user.get("role", ""), [])
 
 
 def rights_for_user(user: dict) -> dict:
     if user.get("role") == store.ADMIN_ROLE:
         return {}
+    d = _desktop(user)
+    if d:   # {module: {add, edit, delete}}: the desktop's flags (a module without a menu row, e.g. a web-only screen, keeps full rights)
+        return {m: {"add": f["add"], "edit": f["edit"], "delete": f["delete"], "print": f["print"]} for m, f in d["rights"].items()}
     return store.ROLE_RIGHTS.get(user.get("role", ""), {})
 
 

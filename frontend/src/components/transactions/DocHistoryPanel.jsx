@@ -15,8 +15,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Ban, ChevronDown, History, Printer, RefreshCw, Search, X } from 'lucide-react';
 import PrintDialog from '../print/PrintDialog';
+import ActionBar, { ScreenFrame } from '../common/ActionBar';
+import ListModal from '../common/ListModal';
+import DocViewDialog from './DocViewDialog';
+import { goHome } from '../../lib/nav';
 import { badge, iconButton, money, panel } from '../../lib/styles';
-import { DOCS_CHANGED, errorText, listDocuments } from '../../lib/api';
+import { DOCS_CHANGED, canDo, errorText, listDocuments } from '../../lib/api';
 import { getPurchaseDays, setPurchaseDays } from '../../lib/localPrefs';
 import { toast } from '../common/toastStore';
 import { CancelInvoiceDialog } from './SalesInvoiceDialogs';
@@ -28,8 +32,22 @@ const SHOWN = 60;   // the latest documents listed
 const wide = () => (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 1536px)').matches) || false;
 const initiallyOpen = () => {
   if (!wide()) return false;
-  try { const saved = localStorage.getItem(KEY); return saved === null ? true : saved === '1'; } catch { return true; }
+  // With no choice remembered it opens by itself only on a really wide window (1760px+); below that the bill gets the whole width and the
+  // right-edge History tab / Alt+H opens it.
+  const roomy = window.matchMedia?.('(min-width: 1760px)').matches ?? false;
+  try { const saved = localStorage.getItem(KEY); return saved === null ? roomy : saved === '1'; } catch { return roomy; }
 };
+
+// The screen (module) each kind of document is entered on, for the action bar's Add / Delete rights.
+const MODULES = { sales_invoice: 'Sales Invoice', purchase_bill: 'Purchase Bill', purchase_indent: 'Purchase Indent', sales_return: 'Sales Return',
+  stock_deduction: 'Stock Deduction', expense: 'Expense Entry', closing_stock: 'Closing Stock Entry', physical_stock: 'Physical Stock Entry' };
+// Columns of the List window; the party column is the customer, supplier, reason or paid-from of the kind of document.
+const LIST_COLUMNS = [
+  { key: 'doc_no', label: 'Doc No' }, { key: 'date', label: 'Date' }, { key: 'time', label: 'Time' }, { key: 'party', label: 'Party' }, { key: 'status', label: 'Status' },
+  { key: 'qty', label: 'Qty', kind: 'number' }, { key: 'amount', label: 'Amount', kind: 'money' }, { key: 'added_by', label: 'Added By' },
+];
+const listRow = (d) => ({ doc_no: d.doc_no, date: d.date ?? '', time: d.time ? String(d.time).slice(0, 5) : '', party: d.customer || d.supplier || d.reason || d.paid_from || '',
+  status: d.status ?? '', qty: d.totals?.qty ?? '', amount: d.total ?? d.totals?.net ?? d.totals?.basic ?? '', added_by: d.added_by ?? '' });
 
 const TITLES = { sales_invoice: 'Previous bills', purchase_bill: 'Previous purchase bills', purchase_indent: 'Previous indents',
   sales_return: 'Previous returns', stock_deduction: 'Previous deductions', expense: 'Previous expenses', closing_stock: 'Previous entries' };
@@ -48,7 +66,10 @@ function describe(doc) {
   };
 }
 
-export default function WithHistory({ kind, title, children }) {
+/** `onNew` starts a blank document on the screen (the action bar's New); `options` are the screen's extra actions for the bar's Options menu;
+ *  `fetchDoc(no)` loads the whole document when the list only carries a summary (Physical Stock); `onEdit(doc)` loads a saved document into the
+ *  screen to change it (Sales Invoice, Purchase Bill): List → Edit Selected, the viewer's Edit and the bar's Edit all call it */
+export default function WithHistory({ kind, title, children, onNew, options = [], fetchDoc, onEdit }) {
   const [open, setOpen] = useState(initiallyOpen);
   const [docs, setDocs] = useState(null);
   const [error, setError] = useState('');
@@ -59,7 +80,10 @@ export default function WithHistory({ kind, title, children }) {
   const [days, setDays] = useState(getPurchaseDays);
   const changeDays = (v) => { const n = Math.max(0, Math.min(3650, Math.floor(Number(v)) || 0)); setDays(n); setPurchaseDays(n); };
   const [printNo, setPrintNo] = useState('');
-  const [cancelNo, setCancelNo] = useState('');   // Sales Invoice: the bill whose "reason" window is open
+  const [cancelNo, setCancelNo] = useState(null);   // Sales Invoice: the bill whose "reason" window is open (null = closed, '' = no bill picked yet)
+  const [listOpen, setListOpen] = useState(false);   // the action bar's List window
+  const [viewNo, setViewNo] = useState('');
+  const [full, setFull] = useState(null);   // the whole document behind viewNo, when `fetchDoc` is given   // the document shown read-only (List → Open Selected, First / Previous / Next / Last)
 
   const toggle = useCallback(() => setOpen(o => {
     if (wide()) { try { localStorage.setItem(KEY, o ? '0' : '1'); } catch { /* the choice just isn't remembered */ } }
@@ -73,14 +97,14 @@ export default function WithHistory({ kind, title, children }) {
     .catch(e => setError(errorText(e))), [kind]);
   const refresh = async () => { setBusy(true); await fetchDocs(); setBusy(false); };
 
-  // Loaded when the panel opens, and again whenever a document is saved or cancelled anywhere in the app.
+  // Loaded when the panel or the List window opens, and again whenever a document is saved or cancelled anywhere in the app.
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open && !listOpen) return undefined;
     void fetchDocs();
     const onChange = () => { void fetchDocs(); };
     window.addEventListener(DOCS_CHANGED, onChange);
     return () => window.removeEventListener(DOCS_CHANGED, onChange);
-  }, [open, fetchDocs]);
+  }, [open, listOpen, fetchDocs]);
 
   const rows = useMemo(() => {
     const q = find.trim().toLowerCase();
@@ -92,7 +116,33 @@ export default function WithHistory({ kind, title, children }) {
     return days ? list : list.slice(0, SHOWN);
   }, [docs, find, days]);
 
+  // The documents the bar's List and record buttons walk through: oldest first, held bills left out (they have their own list).
+  const walk = useMemo(() => (docs ?? []).filter(d => d.status !== 'HOLD').sort((a, b) => (`${a.date ?? ''} ${a.time ?? ''} ${a.doc_no}` < `${b.date ?? ''} ${b.time ?? ''} ${b.doc_no}` ? -1 : 1)), [docs]);
+  const at = walk.findIndex(d => d.doc_no === viewNo);
+  const showDoc = (no) => {
+    setViewNo(no);
+    setFull(null);
+    if (fetchDoc && no) fetchDoc(no).then(setFull).catch(() => undefined);
+  };
+  const moduleName = MODULES[kind] ?? title;
+  const found = walk.find(d => d.doc_no === viewNo);
+  const viewDoc = found && full?.doc_no === viewNo ? { ...found, ...full } : found;
+  // Sales Invoice has no action bar: its saved bills are found, re-printed, edited and cancelled in its Re-print / Edit window (SalesInvoiceDialogs.jsx).
+  const sales = kind === 'sales_invoice';
+  const bar = sales ? null : (
+    <ActionBar
+      onNew={sales ? undefined : onNew} canNew={canDo(moduleName, 'add')}
+      listLabel={sales ? 'Edit' : 'List'}
+      onEdit={!sales && onEdit && canDo(moduleName, 'edit') ? () => viewDoc && onEdit(viewDoc) : undefined} canEdit={!!viewDoc && !['CANCELLED', 'DELETED', 'HOLD'].includes(viewDoc.status)}
+      noEditReason="Open a saved one from the List first (a cancelled one can't be edited)"
+      onDelete={kind === 'sales_invoice' ? () => setCancelNo(viewNo || '') : undefined} deleteLabel="Cancel Bill" canDelete={canDo(moduleName, 'delete')}
+      onList={() => setListOpen(true)} onClose={goHome}
+      options={[...options, { label: open ? 'Hide history' : 'Show history', onClick: toggle }]}
+    />
+  );
+
   return (
+    <ScreenFrame bar={bar}>
     <div className="flex items-start gap-4">
       <div className="min-w-0 flex-1">{children}</div>
 
@@ -176,9 +226,23 @@ export default function WithHistory({ kind, title, children }) {
         </aside>
       )}
 
-      {cancelNo && <CancelInvoiceDialog initialNo={cancelNo} onClose={() => setCancelNo('')}
-        onDone={(msg) => { setCancelNo(''); toast.ok(msg); void fetchDocs(); }} />}
+      {listOpen && (
+        <ListModal title={title ? `${title[0].toUpperCase()}${title.slice(1)}` : 'Documents'} subtitle={`Listing of ${title ?? 'documents'}`} columns={LIST_COLUMNS} defaultKeys={['doc_no', 'date', 'party', 'status', 'amount']}
+          rows={walk.map(listRow).reverse()} rowKey={r => r.doc_no} loading={docs === null} error={error} storageKey={`doc-${kind}`} exportName={title ?? kind}
+          onRefresh={() => void refresh()} onOpen={r => showDoc(r.doc_no)} onClose={() => setListOpen(false)} openLabel="Open Selected"
+          onEdit={onEdit && canDo(moduleName, 'edit') ? r => { const d = walk.find(x => x.doc_no === r.doc_no); if (d) onEdit(d); } : undefined}
+          canEditRow={r => !['CANCELLED', 'DELETED', 'HOLD'].includes(r.status)}
+          renderDetail={r => { const d = walk.find(x => x.doc_no === r.doc_no); return d?.lines?.length ? <p className="leading-5">{d.lines.map(l => `${l.item_code ?? l.ledger ?? ''} × ${l.qty ?? l.amount ?? ''}`).join(' · ')}</p> : <p className="text-stone-500">No lines.</p>; }} />
+      )}
+      {viewDoc && (
+        <DocViewDialog doc={viewDoc} kind={kind} title={title ? `${title[0].toUpperCase()}${title.slice(1)}` : 'Document'} position={at >= 0 ? `${at + 1} / ${walk.length}` : ''}
+          onClose={() => showDoc('')} onPrint={() => setPrintNo(viewDoc.doc_no)} onCancelBill={() => setCancelNo(viewDoc.doc_no)}
+          onEdit={onEdit && canDo(moduleName, 'edit') ? () => { const d = viewDoc; showDoc(''); onEdit(d); } : undefined} />
+      )}
+      {cancelNo !== null && <CancelInvoiceDialog initialNo={cancelNo} onClose={() => setCancelNo(null)}
+        onDone={(msg) => { setCancelNo(null); toast.ok(msg); void fetchDocs(); }} />}
       {printNo && <PrintDialog kind={kind} docNo={printNo} title={`Print (${printNo})`} onClose={() => setPrintNo('')} />}
     </div>
+    </ScreenFrame>
   );
 }

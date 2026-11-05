@@ -11,21 +11,25 @@
 // print format.
 //
 // Keyboard first (the counter rarely uses a mouse; the full list is in the Shortcuts sheet, `?`):
-//   F2 item search · F3 quick pick · F4 customer · F6 or Alt+P next payment type · F7 hold / new · F8 held bills
+//   F2 item search · F3 quick pick · Alt+T load template · F4 customer · F6 or Alt+P next payment type · F7 hold / new · F8 held bills
 //   F9 cash tendered · F10 save & print · ⌘/Ctrl+S save only
-//   Alt+R re-print · Alt+C cancel a saved invoice · Alt+X cancel this bill
+//   Alt+R re-print · Alt+C cancel a saved invoice
 //   In the empty item search: ↑/↓ choose a line, + / − change its qty, Delete removes it, Enter edits its qty,
 //   and "3*" sets the qty for the next item. In a line: ↑/↓ move between lines, Enter or Esc back to the search.
 //   Waiting popups: Enter saves now, Esc cancels.
 
 import { Fragment, useEffect, useMemo, useRef, useState, } from 'react';
-import { ChevronDown, ChevronUp, PauseCircle, Search, Trash2, Undo2, XCircle, Eraser, Save, DoorOpen, PanelLeftOpen, PanelLeftClose, X, Printer, Ban, Gift, ScanLine } from 'lucide-react';
+import ColumnPicker from '../common/ColumnPicker';
+import QuickSelectionPanel from './QuickSelectionPanel';
+import CashCountDialog from './CashCountDialog';
+import { ChevronDown, ChevronUp, Columns3, Trash2, Undo2, Eraser, DoorOpen, PanelLeftOpen, PanelLeftClose, Printer, Ban, Gift, ScanLine } from 'lucide-react';
 import Kbd from '../common/Kbd';
 import { useColumnTone } from '../../hooks/useColumnTone';
 import { useGridWidths } from '../../hooks/useGridWidths';
 import { GRID_OUTLINE } from '../../hooks/useResizableTable';
 import { cn } from '../../lib/utils';
 import ItemSearchBox, { } from './ItemSearchBox';
+import ItemPickerModal from './ItemPickerModal';
 import { focusField, useShortcuts } from '../../lib/keys';
 import { useConfirm } from '../common/ConfirmDialog';
 import {  badge, field as baseField, fieldTone, ghostButton, iconButton, label as labelClass, panel, primaryButton, secondaryButton, tableHead , printButton } from '../../lib/styles';
@@ -34,10 +38,9 @@ import { toastStore } from '../common/toastStore';
 import BillExtras from './BillExtras';
 import CustomerPicker from './CustomerPicker';
 import { useBillExtras } from './useBillExtras';
-import { deleteSalesInvoice, errorText, getCustomers, getNextNumber, getPartyRecords, getSalesPersons, getSettingValues, newIdempotencyKey, saveSalesInvoice, todayIso, } from '../../lib/api';
+import { deleteSalesInvoice, errorText, getCustomers, getNextNumber, getPartyRecords, getSalesPersons, getSettingValues, listSalesInvoices, newIdempotencyKey, saveSalesInvoice, todayIso, updateSalesInvoice, } from '../../lib/api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
-import { STOCK_ITEMS, lineName, litresPerBottle, loadStockItems, sellable, stockIndex, useStockItems } from '../../data/stockData';
-import { numberToWords } from '../../lib/formatters';
+import { STOCK_ITEMS, lineName, litresPerBottle, loadStockItems, stockIndex, useStockItems } from '../../data/stockData';
 import { PAYMENT_TYPES, } from '../../data/salesCounters';
 import PrintDialog from '../print/PrintDialog';
 import WithHistory from './DocHistoryPanel';
@@ -78,9 +81,9 @@ const cellInput = 'w-full min-w-0 rounded-md border border-transparent bg-transp
 // The bill grid's columns in the desktop's order (id, caption, field-tone code, starting width in px). The user can drag
 // a header's right edge to resize; the widths are remembered on this computer (hooks/useGridWidths.js).
 const GRID_COLS = [
-  ['sl', 'Sl No', null, 78], ['item', 'Item', null, 260], ['qoh', 'QOH', null, 64], ['qty', 'Qty', 'SINVQTY', 78],
-  ['rate', 'MRP', 'SINVRATE', 88], ['discPct', 'Disc.%', 'DISCPER', 72], ['disc', 'Disc.Amt', 'DISCAMT', 90],
-  ['amount', 'Amount', 'SINVAMT', 100], ['total', 'Total Item Amt', null, 110], ['cgstPct', 'CGST%', 'CGSTPER', 70],
+  ['sl', 'Sl No', null, 64], ['item', 'Item', null, 240], ['qoh', 'QOH', null, 58], ['qty', 'Qty', 'SINVQTY', 70],
+  ['rate', 'MRP', 'SINVRATE', 84], ['discPct', 'Disc.%', 'DISCPER', 66], ['disc', 'Disc.Amt', 'DISCAMT', 80],
+  ['amount', 'Amount', 'SINVAMT', 92], ['total', 'Total Item Amt', null, 112], ['cgstPct', 'CGST%', 'CGSTPER', 70],
   ['cgst', 'CGST Amt', 'CGSTAMT', 86], ['sgstPct', 'SGST%', 'SGSTPER', 70], ['sgst', 'SGST Amt', 'SGSTAMT', 86],
   ['cessPct', 'Cess%', 'CESSPER', 66], ['cess', 'Cess Amt', 'CESSAMT', 80], ['compCess', 'Comp.Cess', 'COMPCESSAMT', 86],
   ['itemAmt', 'Item Amt', 'ITEMAMT', 104],
@@ -88,8 +91,17 @@ const GRID_COLS = [
 const GRID_DEFAULTS = Object.fromEntries(GRID_COLS.map(([id, , , w]) => [id, w]));
 // Columns the bill can't work without (the designer may rename or reorder them, never hide them); Qty can't be locked either.
 const GRID_KEEP = new Set(['sl', 'item', 'qty', 'rate', 'lock:qty']);
+// What a column sorts by (the line's own figure); Sl No sorts as the order the items were added.
+const SORT_VALUE = {
+  item: l => l.name, qoh: l => l.qoh, qty: l => l.qty, rate: l => l.rate, discPct: l => l.discPct, disc: discAmt, amount: gross,
+  total: l => gross(l) - discAmt(l), cgstPct: l => l.cgstPct ?? 0, cgst: cgstAmt, sgstPct: l => l.sgstPct ?? 0, sgst: sgstAmt, itemAmt,
+};
+const COLS_PREF = 'vlqms_si_cols';   // the clerk's own column choice for the bill grid, kept on this computer
+const readColsPref = () => { try { return JSON.parse(localStorage.getItem(COLS_PREF) ?? 'null'); } catch { return null; } };
 // The header boxes drawn here (the setup step has counter, payment mode and customer); the designer's captions, mandatory,
 // read-only and hidden flags are laid over them (Doc Designer rows of TrnHdrSINV).
+// Header columns the desktop's bill screen does not show (Amount In Words, Remarks).
+const NOT_ON_BILL = /amount\s*_?in\s*_?words|amtinwords|remarks?|rmks/i;
 const HEADER_TYPED = [{ key: 'customer', label: 'Customer' }, { key: 'salesperson', label: 'Sales person' }];
 
 export default function SalesInvoice({ setup, onClose }) {
@@ -99,30 +111,60 @@ export default function SalesInvoice({ setup, onClose }) {
   const [now, setNow] = useState(() => new Date());
   const [seq, setSeq] = useState(numbering?.seq ?? 1);
   const [prevBill, setPrevBill] = useState(null);
+  // The previous bill comes from the database: the latest saved bill of this counter in the last week (any counter's when this one has none), so
+  // a bill made on another PC or in the Windows vLQMS shows too. A bill saved on this screen replaces it (below).
+  useEffect(() => {
+    let live = true;
+    const from = new Date(Date.now() - 7 * 86400000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    listSalesInvoices('SAVED', from, todayIso()).then(list => {
+      if (!live || !list.length) return;
+      const mine = list.filter(b => b.counter === setup.counter.code);
+      const latest = (mine.length ? mine : list).reduce((a, b) => (parseInvoiceNo(b.doc_no).seq > parseInvoiceNo(a.doc_no).seq ? b : a));
+      setPrevBill(cur => cur ?? { no: latest.doc_no, time: latest.time ?? '', amount: latest.totals?.net ?? latest.total ?? 0 });
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [setup.counter.code]);
   const [party, setParty] = useState(setup.customer);
   useStockItems();
   const [salesPersons, setSalesPersons] = useState([]);
-  const [salesPerson, setSalesPerson] = useState('');
+  const [salesPerson, setSalesPerson] = useState(setup.salesPerson ?? '');
   const [lines, setLines] = useState([]);
+  // Draft auto-save (the desktop's AutoSaveGrid / RestoreData): the unsaved bill is kept on this PC as items are added, and offered back
+  // after a refresh or a crash. A saved, cancelled or cleared bill removes it.
+  const draftKey = `vlqms_si_draft_${setup.counter?.code ?? ''}`;
+  const [draft, setDraft] = useState(() => { try { return JSON.parse(localStorage.getItem(draftKey) ?? 'null'); } catch { return null; } });
   const [selectedId, setSelectedId] = useState(null);
   const [barcode, setBarcode] = useState('');
   const [scanQty, setScanQty] = useState('1');
-  const [quickFilter, setQuickFilter] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);   // the "Please Select Item" window
+  const pickFromList = (item) => {   // Ok in that window: the code goes into the Scan Barcode box and the cursor to Qty (desktop)
+    setPickerOpen(false);
+    setBarcode(item.code);
+    setScanQty('1');
+    focusField('si-qty');
+  };
   // The customer / sales person box can be folded away (remembered on this computer); F4 opens it again.
   const [partyOpen, setPartyOpen] = useState(() => { try { return localStorage.getItem('vlqms_si_party_open') !== '0'; } catch { return true; } });
   const togglePartyBox = () => setPartyOpen(o => { try { localStorage.setItem('vlqms_si_party_open', o ? '0' : '1'); } catch { /* not remembered */ } return !o; });
   const [findLine, setFindLine] = useState('');   // narrows the bill grid to lines matching this text
-  const { widths, startResize, reset: resetWidths } = useGridWidths('sales-invoice', GRID_DEFAULTS);
+  const { widths, startResize, reset: resetWidths } = useGridWidths('sales-invoice-v2', GRID_DEFAULTS);
   const [quickOpen, setQuickOpen] = useState(false);
-  const [quickAt, setQuickAt] = useState(0);
+  const [tplOpen, setTplOpen] = useState(false);   // the desktop's F6 Load Template (MstItemTemp), Alt+T here because F6 changes the payment type
   const [writeOff, setWriteOff] = useState('0');
   const [paymentType, setPaymentType] = useState(setup.paymentType);
   const [otherPay, setOtherPay] = useState('0');
   const [cardInput, setCardInput] = useState('0');
   const [collected, setCollected] = useState('');
+  const [denoms, setDenoms] = useState({});   // the cash count { '500': 2 } saved with the bill
+  const [countOpen, setCountOpen] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [redeem, setRedeem] = useState('');
   const [dialog, setDialog] = useState(null);
+  const [printFormat, setPrintFormat] = useState('');   // the Print Format picked in Re-Print Bill
+  // A saved bill opened from the List to change (PUT keeps its number): its number, date and counter, and how many of each item it already
+  // holds (that stock is the bill's own, so it counts as available while the bill is edited).
+  const [editing, setEditing] = useState(null);
+  const [editQty, setEditQty] = useState({});
   const [toast, setToast] = useState(null);
   const [printDocNo, setPrintDocNo] = useState(null);
   const barcodeRef = useRef(null);
@@ -143,11 +185,39 @@ export default function SalesInvoice({ setup, onClose }) {
   // One key per bill: pressing Save twice (or a retry) can't make two bills. Renewed for each new bill.
   const saveKey = useRef(newIdempotencyKey());
   const { confirm, dialog: confirmDialog } = useConfirm();
-  const extrasBill = useBillExtras('TrnHdrSINV', 'si');
+  const extrasBill = useBillExtras('TrnHdrSINV', 'si', NOT_ON_BILL);
   const tone = useColumnTone('TrnHdrSINV');   // red = mandatory, blue = read-only, from the Doc Designer
   const live = useScreenFields('table:TrnHdrSINV');
   const cols = useMemo(() => applyGridDefinition(GRID_COLS, live.screen, GRID_KEEP), [live.screen]);   // the grid as the designer lays it out
   const colOf = (id) => cols.find(c => c.id === id);
+  // Select Columns (as the desktop's Column Extend): the clerk's own order and choice laid over the designer's grid; the columns the bill
+  // can't work without always stay. Sort: click a header (ascending, descending, off); it only changes how the lines are shown.
+  const [colPref, setColPref] = useState(readColsPref);
+  const [pickCols, setPickCols] = useState(false);
+  const [sort, setSort] = useState({ id: '', dir: 1 });
+  const shownCols = useMemo(() => {
+    if (!colPref) return cols;
+    const byId = new Map(cols.map(c => [c.id, c]));
+    const ordered = [...(colPref.order ?? []).filter(id => byId.has(id)), ...cols.map(c => c.id).filter(id => !(colPref.order ?? []).includes(id))];
+    return ordered.filter(id => (colPref.visible ?? []).includes(id) || GRID_KEEP.has(id)).map(id => byId.get(id));
+  }, [cols, colPref]);
+  const applyCols = ({ order, visible }) => {
+    const next = { order, visible: [...new Set([...visible, ...order.filter(id => GRID_KEEP.has(id))])] };
+    setColPref(next);
+    try { localStorage.setItem(COLS_PREF, JSON.stringify(next)); } catch { /* not remembered */ }
+    setPickCols(false);
+  };
+  // Hold the left mouse button on the grid and drag to move it sideways (and up / down); boxes, buttons and the resize edges keep their own mouse use.
+  const panGrid = (e) => {
+    if (e.button !== 0 || e.target.closest('input, button, select, textarea, [role="separator"]')) return;
+    const box = e.currentTarget;
+    const from = { x: e.clientX, y: e.clientY, left: box.scrollLeft, top: box.scrollTop };
+    const move = (m) => { box.scrollLeft = from.left - (m.clientX - from.x); box.scrollTop = from.top - (m.clientY - from.y); };
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+  const sortBy = (id) => setSort(s => (s.id === id ? (s.dir === 1 ? { id, dir: -1 } : { id: '', dir: 1 }) : { id, dir: 1 }));
   const head = useMemo(() => applyDefinition(HEADER_TYPED, live.screen), [live.screen]);
   // The lines with the designer's formula figures (line amount, CGST, SGST) laid over them; the screen's totals and cells read these.
   const priced = useMemo(() => {
@@ -155,6 +225,18 @@ export default function SalesInvoice({ setup, onClose }) {
     const itemOf = (code) => { const it = STOCK_ITEMS[stockIndex(code)]; return it && { cgst_per: it.cgstPct, sgst_per: it.sgstPct, mrp: it.rate, bottles_per_case: it.bottlesPerCase }; };
     return formulaAmounts('sales_invoice', live.screen, asked, itemOf).map((f, i) => ({ ...lines[i], fAmount: f.amount, fCgst: f.cgst, fSgst: f.sgst }));
   }, [lines, live.screen]);
+  // The lines in the order the grid shows them: the "Find in bill" filter, then the chosen sort. Each entry keeps the line's own index.
+  const displayed = useMemo(() => {
+    const q = findLine.trim().toLowerCase();
+    let list = priced.map((line, i) => ({ line, i })).filter(({ line }) => !q || `${line.name} ${STOCK_ITEMS[line.id].code}`.toLowerCase().includes(q));
+    const by = SORT_VALUE[sort.id];
+    if (by) list = [...list].sort((a, b) => {
+      const x = by(a.line), y = by(b.line);
+      return (typeof x === 'string' ? x.localeCompare(y, undefined, { sensitivity: 'base' }) : (x ?? 0) - (y ?? 0)) * sort.dir;
+    });
+    else if (sort.id === 'sl' && sort.dir === -1) list = [...list].reverse();
+    return list;
+  }, [priced, findLine, sort]);
   const headDef = (key) => {
     const f = head.find(h => h.key === key) ?? { label: key };
     const values = ruleValues({ customer: party, salesperson: salesPerson });
@@ -162,6 +244,8 @@ export default function SalesInvoice({ setup, onClose }) {
   };
   // Global Settings values (GET /settings/values); until they load, a scan adds the item at once.
   const [gsettings, setGsettings] = useState({});
+  // AllowNegative = Y (Global Settings, the desktop's setting): bills may take an item below zero stock, so the stock caps are off.
+  const negativeOk = String(gsettings.AllowNegative ?? '').toUpperCase() === 'Y';
   const qtyAfterScan = gsettings.QTYSELINV?.toUpperCase() === 'Y';
   const docSettings = useDocSettings('sales_invoice');
 
@@ -173,10 +257,14 @@ export default function SalesInvoice({ setup, onClose }) {
   // Customers come from Customer Master so loyalty points are current; salespeople from the backend.
   useEffect(() => {
     getCustomers().then(setCustomers).catch(e => toastStore.add('error', errorText(e)));
-    getSettingValues().then(v => { if (v && typeof v === 'object') setGsettings(v); }).catch(() => undefined);
+    // The Global Settings are read again from the database when the window gets the focus back, so a change made in the Windows vLQMS applies.
+    const loadSettings = () => getSettingValues().then(v => { if (v && typeof v === 'object') setGsettings(v); }).catch(() => undefined);
+    loadSettings();
+    window.addEventListener('focus', loadSettings);
     getSalesPersons()
       .then(list => { setSalesPersons(list); setSalesPerson(p => (list.includes(p) ? p : list[0] ?? '')); })
       .catch(e => toastStore.add('error', errorText(e)));
+    return () => window.removeEventListener('focus', loadSettings);
   }, []);
 
   useEffect(() => {
@@ -215,6 +303,24 @@ export default function SalesInvoice({ setup, onClose }) {
     return { basic, disc, cgst, sgst, cess, compCess, total, points, invoice, card, other, cash, qty, litres };
   }, [lines, priced, writeOff, redeem, paymentType, cardInput, otherPay]);
 
+  // Beer / Wine / IML litres on the bill against the shop's per-bill limits (Global Settings AllowBeerInLtr, AllowWineInLtr, AllowIMLinLtr);
+  // split billing (SPLITINV = Y) lifts them, as in the desktop. A limit the shop has no setting for is not applied.
+  const liqLimits = useMemo(() => {
+    const sums = { BEER: 0, WINE: 0, IML: 0 };
+    for (const l of lines) {
+      const it = STOCK_ITEMS[l.id];
+      const kind = String(it?.cat ?? '').trim().toUpperCase();
+      if (kind in sums) sums[kind] += l.qty * litresPerBottle(it.pkg);
+    }
+    const split = String(gsettings.SPLITINV ?? '').toUpperCase() === 'Y';
+    return [['BEER', 'Beer', 'AllowBeerInLtr'], ['WINE', 'Wine', 'AllowWineInLtr'], ['IML', 'IML', 'AllowIMLinLtr']]
+      .filter(([k]) => sums[k] > 0)
+      .map(([k, label, code]) => {
+        const limit = gsettings[code] === undefined ? null : Number(gsettings[code]);
+        return { label, litres: Math.round(sums[k] * 1000) / 1000, limit, over: !split && limit !== null && sums[k] > limit };
+      });
+  }, [lines, gsettings]);
+
   const customer = customers.find(c => c.name.toLowerCase() === party.trim().toLowerCase() || c.code.toLowerCase() === party.trim().toLowerCase());
   // The alert messages kept on the customer (MstPartyAlertMessage) are shown when the customer is picked, as vLQMS.exe does.
   const alertFor = useRef('');
@@ -232,16 +338,15 @@ export default function SalesInvoice({ setup, onClose }) {
   const due = totals.cash > 0 ? totals.cash : totals.invoice;
   const change = collected === '' ? 0 : (Number(collected) || 0) - due;
 
-  const quickItems = sellable()
-    .filter(item => item.clQty > 0 && `${item.brand} ${item.name} ${item.code}`.toLowerCase().includes(quickFilter.toLowerCase()));
-
-  const addItem = (stock, qty, current = lines) => {
+  // setQty: the quantity typed replaces the one already on the bill's line (desktop behaviour) instead of being added to it.
+  const addItem = (stock, qty, current = lines, setQty = false) => {
     if (locked()) return current;
     const item = STOCK_ITEMS[stock];
     const existing = current.find(l => l.id === stock);
-    const nextQty = (existing?.qty ?? 0) + qty;
-    if (nextQty > item.clQty) {
-      setToast({ kind: 'error', text: `Only ${item.clQty} in stock for ${item.brand} ${item.pkg}.` });
+    const nextQty = setQty ? qty : (existing?.qty ?? 0) + qty;
+    const available = item.clQty + (editQty[stock] ?? 0);
+    if (!negativeOk && nextQty > available) {
+      setToast({ kind: 'error', text: `Only ${available} in stock for ${item.brand} ${item.pkg}.` });
       return current;
     }
     const next = existing
@@ -252,17 +357,47 @@ export default function SalesInvoice({ setup, onClose }) {
     return next;
   };
 
+  // The item the scan box holds right now (its code is typed, scanned or picked from the list): its name shows beside OK until it is added.
+  const pickedItem = barcode.trim() ? STOCK_ITEMS.find(i => i.active && i.code.toLowerCase() === barcode.trim().toLowerCase()) : null;
+  const pickedName = pickedItem ? `${pickedItem.brand} ${pickedItem.name}`.trim() : '';
+
   const scan = (code) => {
     if (locked()) return;
     const term = (code ?? barcode).trim().toLowerCase();
     const qty = Math.floor(Number(scanQty));
-    if (!term) return;
+    if (!term) {
+      // Nothing in the scan box: the quantity typed in Qty is the new quantity of the selected line (click a line, type the quantity, Enter).
+      const line = lines.find(l => l.id === selectedId);
+      if (!line) return;
+      if (!qty || qty < 1) return setToast({ kind: 'error', text: 'Enter a quantity of at least 1.' });
+      if (!negativeOk && qty > line.qoh) return setToast({ kind: 'error', text: `Only ${line.qoh} in stock for ${line.name}.` });
+      updateLine(line.id, { qty });
+      setScanQty('1');
+      focusSearch();
+      return;
+    }
     if (!qty || qty < 1) return setToast({ kind: 'error', text: 'Enter a quantity of at least 1.' });
+    // A QR code that carries several items, "CODE,QTY;CODE,QTY" (the desktop's MultiItemsFromQRCode): each goes onto the bill.
+    if (/;/.test(term) || /^[^,;\s]+,\s*\d+$/.test(term)) {
+      let cur = lines, added = 0;
+      for (const part of (code ?? barcode).split(';')) {
+        const [c, q] = part.split(',').map(x => x.trim());
+        if (!c) continue;
+        const at = STOCK_ITEMS.findIndex(i => i.active && (i.code.toLowerCase() === c.toLowerCase() || (i.aliases ?? []).some(a => String(a).toLowerCase() === c.toLowerCase())));
+        if (at === -1) return setToast({ kind: 'error', text: `${c} Item not found!!` });
+        cur = addItem(at, Math.max(1, Math.floor(Number(q)) || 1), cur);
+        added += 1;
+      }
+      setBarcode('');
+      if (added) setToast({ kind: 'ok', text: `${added} item${added === 1 ? '' : 's'} added from the code.` });
+      return;
+    }
     // Exact item code first (barcode scanners send the code), then a brand/name match.
     const exact = STOCK_ITEMS.findIndex(i => i.active && (i.code.toLowerCase() === term || (i.hotKey && i.hotKey.toLowerCase() === term) || (i.shortName && i.shortName.toLowerCase() === term) || (i.aliases ?? []).some(a => String(a).toLowerCase() === term)));
     const stock = exact !== -1 ? exact : STOCK_ITEMS.findIndex(i => i.active && `${i.brand} ${i.name}`.toLowerCase().includes(term));
     if (stock === -1) return setToast({ kind: 'error', text: `No item found for "${code ?? barcode}".` });
-    addItem(stock, qty);
+    // A quantity typed on purpose (not the default 1) for an item already on the bill sets that line's quantity.
+    addItem(stock, qty, lines, qty !== 1 && lines.some(l => l.id === stock));
     setBarcode('');
     setScanQty('1');
     barcodeRef.current?.focus();
@@ -270,10 +405,10 @@ export default function SalesInvoice({ setup, onClose }) {
 
   const updateLine = (id, patch) => {
     if (sending.current) return;
-    setLines(lines.map(l => {
+    setLines(cur => cur.map(l => {
     if (l.id !== id) return l;
     const next = { ...l, ...patch };
-    next.qty = Math.max(0, Math.min(next.qoh, Math.floor(next.qty) || 0));
+    next.qty = Math.max(0, Math.min(negativeOk ? 1e6 : next.qoh, Math.floor(next.qty) || 0));
     next.rate = Math.max(0, next.rate || 0);
     next.discPct = Math.max(0, Math.min(100, next.discPct || 0));
     return next;
@@ -289,6 +424,22 @@ export default function SalesInvoice({ setup, onClose }) {
       scan(item.code);
     }
   };
+
+  useEffect(() => {
+    if (!lines.length || editing) return;
+    try { localStorage.setItem(draftKey, JSON.stringify(lines.map(l => ({ code: STOCK_ITEMS[l.id]?.code, qty: l.qty, rate: l.rate })))); } catch { /* not kept */ }
+  }, [lines, editing, draftKey]);
+  const restoreDraft = () => {
+    let cur = lines;
+    for (const d of draft ?? []) {
+      const stock = stockIndex(d.code);
+      if (stock !== -1) cur = addItem(stock, d.qty, cur);
+    }
+    setLines(cur.map(l => { const d = draft.find(x => x.code === STOCK_ITEMS[l.id]?.code); return d ? { ...l, rate: d.rate } : l; }));
+    setDraft(null);
+    focusSearch();
+  };
+  const discardDraft = () => { try { localStorage.removeItem(draftKey); } catch { /* not kept */ } setDraft(null); };
 
   const selectedIndex = lines.findIndex(l => l.id === selectedId);
   const focusSearch = () => focusField('si-barcode');
@@ -316,7 +467,7 @@ export default function SalesInvoice({ setup, onClose }) {
       setSelectedId(lines[next].id);
     } else if (e.key === '+' || e.key === '-') {
       e.preventDefault();
-      if (e.key === '+' && line.qty + 1 > line.qoh) return setToast({ kind: 'error', text: `Only ${line.qoh} in stock for ${line.name}.` });
+      if (e.key === '+' && !negativeOk && line.qty + 1 > line.qoh) return setToast({ kind: 'error', text: `Only ${line.qoh} in stock for ${line.name}.` });
       if (e.key === '-' && line.qty <= 1) return;
       updateLine(line.id, { qty: line.qty + (e.key === '+' ? 1 : -1) });
       setSelectedId(line.id);
@@ -337,8 +488,15 @@ export default function SalesInvoice({ setup, onClose }) {
       focusSearch();
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
-      const next = row + (e.key === 'ArrowDown' ? 1 : -1);
-      if (next >= 0 && next < lines.length) { setSelectedId(lines[next].id); focusLineCell(next, col); }
+      const at = displayed.findIndex(d => d.i === row);   // up / down follow the lines as shown (sorted or filtered)
+      const next = displayed[at + (e.key === 'ArrowDown' ? 1 : -1)]?.i;
+      if (next !== undefined) { setSelectedId(lines[next].id); focusLineCell(next, col); }
+    } else if (col === 'qty' && (e.key === '+' || e.key === '-')) {   // same + / − as in the search box
+      e.preventDefault();
+      const line = lines[row];
+      if (e.key === '+' && !negativeOk && line.qty + 1 > line.qoh) return setToast({ kind: 'error', text: `Only ${line.qoh} in stock for ${line.name}.` });
+      if (e.key === '-' && line.qty <= 1) return;
+      updateLine(line.id, { qty: line.qty + (e.key === '+' ? 1 : -1) });
     }
   };
 
@@ -347,12 +505,19 @@ export default function SalesInvoice({ setup, onClose }) {
     setPaymentType(p => PAYMENT_TYPES[(PAYMENT_TYPES.indexOf(p) + step + PAYMENT_TYPES.length) % PAYMENT_TYPES.length]);
 
   const toggleQuick = () => {
-    if (quickOpen) { setQuickOpen(false); focusSearch(); } else { setQuickOpen(true); setQuickAt(0); }
+    if (quickOpen) { setQuickOpen(false); focusSearch(); } else { setTplOpen(false); setQuickOpen(true); }
+  };
+  const toggleTemplate = () => {
+    if (tplOpen) { setTplOpen(false); focusSearch(); } else { setQuickOpen(false); setTplOpen(true); }
   };
 
   const resetBill = () => {
+    try { localStorage.removeItem(draftKey); } catch { /* not kept */ }
+    setDraft(null);
     saveKey.current = newIdempotencyKey();
     extrasBill.refresh();
+    setEditing(null);
+    setEditQty({});
     setLines([]);
     setSelectedId(null);
     setParty(setup.customer);
@@ -361,7 +526,13 @@ export default function SalesInvoice({ setup, onClose }) {
     setOtherPay('0');
     setCardInput('0');
     setCollected('');
+    setDenoms({});
     setRedeem('');
+    setBarcode('');
+    setScanQty('1');
+    setFindLine('');
+    setQuickOpen(false);
+    alertFor.current = '';
     barcodeRef.current?.focus();
   };
 
@@ -393,13 +564,14 @@ export default function SalesInvoice({ setup, onClose }) {
   };
 
   const billBody = (hold) => ({
-    date: todayIso(), counter: setup.counter.code, customer: party || 'CASH', salesperson: salesPerson,
+    date: editing?.date ?? todayIso(), counter: editing?.counter ?? setup.counter.code, customer: party || 'CASH', salesperson: salesPerson,
     payment_type: paymentType,
     lines: lines.map(l => ({ item_code: STOCK_ITEMS[l.id].code, bottles: l.qty, rate: l.rate })),
     discount: totals.disc + (Number(writeOff) || 0),
     redeem_points: totals.points,
     payment: { cash: totals.cash, card: totals.card, upi: totals.other, credit: 0 },
     collected: !hold && collected !== '' ? Number(collected) || 0 : undefined,
+    ...(!hold && Object.keys(denoms).length ? { denominations: Object.entries(denoms).map(([cur, nos]) => ({ cur, nos })) } : {}),
     hold,
     ...(extrasBill.fields.length ? { extras: extrasBill.body(hold) } : {}),
   });
@@ -407,6 +579,7 @@ export default function SalesInvoice({ setup, onClose }) {
   // Held bills are parked on the backend so any counter session can recall them.
   const holdOrNew = async () => {
     if (locked()) return;
+    if (editing) return setToast({ kind: 'error', text: `Bill ${editing.no} is a saved bill: finish editing it (Save), or Stop editing.` });
     if (!lines.length) return resetBill();
     // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Hold was pressed.
     const body = billBody(true);
@@ -443,9 +616,41 @@ export default function SalesInvoice({ setup, onClose }) {
       : { kind: 'ok', text: `Recalled held bill ${inv.doc_no}.` });
   };
 
-  const cancelBill = async () => {
-    if (locked()) return;
-    if (lines.length && !(await confirm('Cancel this bill? All items will be removed.'))) return;
+  // List → Edit Selected: the saved bill goes onto the screen to be changed. Items and rates are the bill's own; the bill's discount is kept as one
+  // amount (Write-off) and its payment as it was. Saving sends PUT, which puts the old stock and points back and posts the new bill.
+  const loadForEdit = async (doc) => {
+    if (sending.current) return setToast({ kind: 'error', text: 'Saving the last bill. Try again in a moment.' });
+    if (lines.length && !(await confirm(`Open ${doc.doc_no} for editing? The bill on the screen is cleared.`))) return;
+    const merged = new Map();   // one line per item, as the screen keeps them
+    for (const l of doc.lines ?? []) {
+      const stock = stockIndex(l.item_code);
+      if (stock === -1) return setToast({ kind: 'error', text: `${doc.doc_no} has an item (${l.item_code}) that is no longer in Item Master, so it can't be edited here.` });
+      const was = merged.get(stock);
+      merged.set(stock, { stock, qty: (was?.qty ?? 0) + l.qty, rate: was?.rate ?? l.rate });
+    }
+    const bonus = Object.fromEntries([...merged.values()].map(m => [m.stock, m.qty]));
+    saveKey.current = newIdempotencyKey();
+    setLines([...merged.values()].map(m => ({ ...toLine(m.stock, m.qty), rate: m.rate, qoh: STOCK_ITEMS[m.stock].clQty + m.qty })));
+    setSelectedId(null);
+    setEditQty(bonus);
+    setEditing({ no: doc.doc_no, date: doc.date, counter: doc.counter && !/^\d+$/.test(String(doc.counter)) ? doc.counter : setup.counter.code });
+    extrasBill.load(doc.extras);
+    setParty(customers.find(c => c.code === doc.customer)?.name ?? doc.customer ?? 'CASH');
+    if (doc.salesperson && salesPersons.includes(doc.salesperson)) setSalesPerson(doc.salesperson);
+    const pay = doc.payment ?? {};
+    setPaymentType(PAYMENT_TYPES.includes(doc.payment_type) ? doc.payment_type : 'CASH');
+    setCardInput(String(pay.card ?? 0));
+    setOtherPay(String((pay.upi ?? 0) + (pay.credit ?? 0)));
+    setWriteOff(String(doc.totals?.discount ?? 0));
+    setDenoms(Object.fromEntries((doc.denominations ?? []).map(d => [d.cur, d.nos])));
+    setRedeem(doc.totals?.points_redeemed ? String(doc.totals.points_redeemed) : '');
+    setCollected('');
+    setToast({ kind: 'ok', text: `Editing bill ${doc.doc_no}. Save changes updates it.` });
+    barcodeRef.current?.focus();
+  };
+
+  const stopEditing = async () => {
+    if (lines.length && !(await confirm(`Stop editing ${editing.no}? Your changes are thrown away.`))) return;
     resetBill();
   };
 
@@ -458,10 +663,27 @@ export default function SalesInvoice({ setup, onClose }) {
     if (totals.points > (customer?.points ?? 0)) return setToast({ kind: 'error', text: `Only ${customer?.points ?? 0} points available to redeem.` });
     if (headDef('customer').required && !party.trim()) return setToast({ kind: 'error', text: `Enter the ${headDef('customer').label}.` });
     if (headDef('salesperson').required && !salesPerson) return setToast({ kind: 'error', text: `Choose the ${headDef('salesperson').label}.` });
+    const overLimit = liqLimits.find(x => x.over);
+    if (overLimit) return setToast({ kind: 'error', text: `${overLimit.label} quantity exceeds the limit of ${overLimit.limit} Ltr.` });
     if (!extrasBill.check()) return setToast({ kind: 'error', text: 'Fill the additional details marked in red.' });
     // Waits for its popup (Cancel keeps the bill open). The bill is taken as it was when Save was pressed.
     const body = billBody(false);
     const key = saveKey.current;
+    if (editing) {   // a saved bill changed in place: same number, stock and points follow
+      const no = editing.no;
+      if (!(await toastStore.defer('ok', `Bill ${no} (₹ ${money(totals.invoice)}) will be updated when this closes.`, 'Update cancelled. The bill is still open.'))) return;
+      if (locked()) return;
+      sending.current = true;
+      setBusy(true);
+      updateSalesInvoice(no, body).then(doc => {
+        getCustomers().then(setCustomers).catch(() => undefined);
+        loadStockItems().catch(() => undefined);
+        setToast({ kind: 'ok', text: `Bill ${doc.doc_no} updated — ₹ ${money(doc.totals.net)}.` });
+        if (andPrint) setPrintDocNo(doc.doc_no);
+        resetBill();
+      }).catch(e => setToast({ kind: 'error', text: errorText(e) })).finally(() => { sending.current = false; setBusy(false); });
+      return;
+    }
     if (!(await toastStore.defer('ok', `Bill of ₹ ${money(totals.invoice)} will be saved when this closes.`, 'Save cancelled. The bill is still open.'))) return;
     if (locked()) return;   // a second F10 whose popup closed while the first save was still going
     // The backend numbers the bill and moves stock; show its doc no rather than the local preview.
@@ -470,18 +692,19 @@ export default function SalesInvoice({ setup, onClose }) {
       getCustomers().then(setCustomers).catch(() => undefined);
       loadStockItems().catch(() => undefined);
       setPrevBill({ no: doc.doc_no, time: now.toLocaleTimeString('en-IN'), amount: doc.totals.net });
-      setToast({ kind: 'ok', text: `Bill ${doc.doc_no} saved — ₹ ${money(doc.totals.net)}.` });
+      setToast({ kind: 'ok', text: doc.split_bills?.length > 1 ? `Over the litre limit: saved as ${doc.split_bills.length} bills (${doc.split_bills.join(', ')}).` : `Bill ${doc.doc_no} saved — ₹ ${money(doc.totals.net)}.` });
       // Print the bill exactly as the server saved it (number, totals, points).
       // What printing follows a save comes from the Doc Designer's default print option (Global Settings is the fallback).
       const fallback = gsettings.InvPreview?.toUpperCase() === 'Y' ? 'preview' : docSettings.after_save;
       afterSavePlan('sales_invoice', fallback, andPrint).then(({ plan, option }) => {
         if (plan === 'dialog') setPrintDocNo(doc.doc_no);
-        else if (plan === 'ask') confirm('Do you want to print the invoice..?').then(ok => { if (ok) setPrintDocNo(doc.doc_no); });
+        else if (plan === 'ask') confirm('Do you want to print the invoice..?').then(ok => { if (ok) setPrintDocNo(doc.doc_no); else setTimeout(focusSearch, 60); });
         else if (plan === 'direct' && option) {
           runPrint({ kind: 'sales_invoice', doc_no: doc.doc_no, option: option.name, action: 'direct' })
             .then(r => setToast({ kind: 'ok', text: r.text }))
-            .catch(e => setToast({ kind: 'error', text: errorText(e) }));
-        }
+            .catch(e => setToast({ kind: 'error', text: errorText(e) }))
+            .finally(() => setTimeout(focusSearch, 60));
+        } else setTimeout(focusSearch, 60);
       });
       const given = parseInvoiceNo(doc.doc_no);   // the next preview follows the number the server gave
       setNumbering(given);
@@ -493,6 +716,7 @@ export default function SalesInvoice({ setup, onClose }) {
   useShortcuts({
     F2: focusSearch,
     F3: toggleQuick,
+    'Alt+T': toggleTemplate,
     F4: () => { if (!partyOpen) togglePartyBox(); setTimeout(() => focusField('si-party'), 0); },
     F6: () => nextPayment(1),
     'Shift+F6': () => nextPayment(-1),
@@ -504,7 +728,6 @@ export default function SalesInvoice({ setup, onClose }) {
     'Mod+S': () => { void saveBill(false); },
     'Alt+R': () => setDialog('reprint'),
     'Alt+C': () => setDialog('cancel'),
-    'Alt+X': () => { void cancelBill(); },
     Escape: focusSearch,
   });
 
@@ -514,14 +737,25 @@ export default function SalesInvoice({ setup, onClose }) {
   ];
 
   return (
-    <WithHistory kind="sales_invoice" title="bills">
-    <div className="mx-auto flex max-w-[1440px] flex-col gap-4">
+    <WithHistory kind="sales_invoice" title="bills" onNew={resetBill} onEdit={doc => void loadForEdit(doc)}>
+    <div className="mx-auto flex max-w-[1760px] flex-col gap-3 xl:h-[max(calc(100dvh-9.5rem),33.5rem)]">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {confirmDialog}
+      {pickCols && (
+        <ColumnPicker columns={cols.map(c => ({ key: c.id, label: c.caption }))} order={colPref?.order ?? cols.map(c => c.id)}
+          visible={shownCols.map(c => c.id)} defaults={cols.map(c => c.id)}
+          onApply={applyCols} onClose={() => { setPickCols(false); }} />
+      )}
+      {editing && (
+        <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D99A2B]/60 bg-[#D99A2B]/10 px-4 py-2 text-xs font-semibold text-[#1B2B4B] dark:text-[#D4A847]">
+          <span>Editing bill {editing.no}: Save updates it in place (its stock and points are put back first, then the changed bill is posted).</span>
+          <button type="button" onClick={() => void stopEditing()} className={secondaryButton}>Stop editing</button>
+        </div>
+      )}
 
-      {/* Document header: bill no, time, counter, previous bill */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <div>
+      {/* Document header: bill no, time and counter on the left; last bill and the actions on the right, one tidy row */}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Sales invoice</h1>
             <span className={badge('accent')}>{busy ? 'Saving…' : 'Draft'}</span>
@@ -529,84 +763,74 @@ export default function SalesInvoice({ setup, onClose }) {
           <p className="mt-0.5 text-xs tabular-nums text-stone-500 dark:text-stone-400">
             <span className="font-mono font-medium text-stone-800 dark:text-stone-200">{billNo}</span> · {now.toLocaleDateString('en-GB')} {now.toLocaleTimeString('en-IN')} · Counter <span className="font-mono">{counter.code}</span>
           </p>
+          <p className="mt-0.5 hidden text-xs text-stone-500 lg:block dark:text-stone-400">
+            Last bill {prevBill ? <><span className="font-mono text-stone-700 dark:text-stone-300">{prevBill.no}</span> · {prevBill.time} · <span className="font-medium tabular-nums text-stone-800 dark:text-stone-200">₹ {money(prevBill.amount)}</span></> : '—'}
+          </p>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <span className="hidden text-xs text-stone-500 lg:inline dark:text-stone-400">
-            Last bill {prevBill ? <><span className="font-mono text-stone-700 dark:text-stone-300">{prevBill.no}</span> · {prevBill.time} · <span className="tabular-nums font-medium text-stone-800 dark:text-stone-200">₹ {money(prevBill.amount)}</span></> : '—'}
-          </span>
-          <button onClick={() => setDialog('held')} className={secondaryButton}><Undo2 size={14} />Held bills<Kbd combo="F8" /></button>
-          <button onClick={() => setDialog('reprint')} className={printButton}><Printer size={14} />Re-print<Kbd combo="Alt+R" /></button>
-          <button onClick={() => setDialog('cancel')} className={`${ghostButton} hover:!text-red-600 dark:hover:!text-red-400`}><Ban size={14} />Cancel invoice<Kbd combo="Alt+C" /></button>
-          <button onClick={onClose} className={ghostButton}><DoorOpen size={14} />Close</button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <button onClick={() => setDialog('held')} className={`${secondaryButton} h-9`}><Undo2 size={14} /><span className="max-xl:sr-only">Held bills</span><Kbd combo="F8" /></button>
+          <button onClick={() => setDialog('reprint')} className={`${printButton} h-9`}><Printer size={14} /><span className="max-xl:sr-only">Re-print / Edit</span><Kbd combo="Alt+R" /></button>
+          <button onClick={() => setDialog('cancel')} className={`${ghostButton} h-9 hover:!text-red-600 dark:hover:!text-red-400`}><Ban size={14} /><span className="max-xl:sr-only">Cancel invoice</span><Kbd combo="Alt+C" /></button>
+          <button onClick={onClose} className={`${ghostButton} h-9`}><DoorOpen size={14} /><span className="max-xl:sr-only">Close</span></button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 items-start gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_360px] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch">
         {/* LEFT: scan + lines */}
-        <div className="flex min-w-0 flex-col gap-4">
-          <div className={`${panel} flex flex-wrap items-end gap-3 p-4`}>
-            <div className="min-w-0 flex-1 basis-64">
-              <label htmlFor="si-barcode" className={labelClass}>Scan or search item <span className="font-normal text-stone-400">(F2)</span></label>
-              <ItemSearchBox id="si-barcode" ref={barcodeRef} value={barcode} onChange={setBarcode} onPick={pickItem} listOnArrow={!lines.length}
-                onEnterNoMatch={() => scan()} onKeyDown={searchKeys}
-                placeholder="Barcode, item code or name, then Enter" />
+        <div className="flex min-w-0 flex-col gap-3 xl:min-h-0">
+          {draft?.length > 0 && !lines.length && !editing && (
+            <div role="status" className="flex shrink-0 flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+              <span className="flex-1">An unsaved bill with {draft.length} item{draft.length === 1 ? '' : 's'} was found on this computer.</span>
+              <button onClick={restoreDraft} className={`${primaryButton} !px-3 !py-1 text-xs`}>Restore</button>
+              <button onClick={discardDraft} className={`${secondaryButton} !px-3 !py-1 text-xs`}>Discard</button>
             </div>
-            <div className="w-20">
-              <label htmlFor="si-qty" className={labelClass}>Qty</label>
-              <input id="si-qty" type="number" min={1} value={scanQty} onChange={e => setScanQty(e.target.value)} onFocus={e => e.target.select()} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (barcode.trim()) scan(); else focusSearch(); } if (e.key === 'Escape') focusSearch(); }} className={`${field} h-10 text-right text-sm tabular-nums`} />
+          )}
+          <div className={`${panel} relative shrink-0 px-4 pb-3 pt-3`}>
+            {/* The picked item: one small line at the top right, above the buttons */}
+            {pickedItem && (
+              <p className="absolute right-4 top-2 hidden max-w-[45%] truncate text-[11px] text-stone-500 lg:block dark:text-stone-400" aria-live="polite" title={pickedName}>
+                <span className="font-semibold text-[#1B2B4B] dark:text-[#D4A847]">{pickedName}</span>
+              </p>
+            )}
+            <div className="flex flex-wrap items-end gap-2.5">
+              <div className="min-w-[14rem] max-w-md flex-1">
+                <label htmlFor="si-barcode" className={labelClass}>Scan or search item <span className="font-normal text-stone-400">(F2)</span></label>
+                <ItemSearchBox id="si-barcode" ref={barcodeRef} value={barcode} onChange={setBarcode} onPick={pickItem} listOnArrow onBrowse={() => setPickerOpen(true)}
+                  onEnterNoMatch={() => scan()} onKeyDown={searchKeys}
+                  placeholder="Barcode, item code or name, then Enter" />
+              </div>
+              <div className="w-20 shrink-0">
+                <label htmlFor="si-qty" className={labelClass}>Qty</label>
+                <input id="si-qty" type="number" min={1} value={scanQty} onChange={e => setScanQty(e.target.value)} onFocus={e => e.target.select()} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); scan(); if (!barcode.trim()) focusSearch(); } if (e.key === 'Escape') focusSearch(); }} className={`${field} h-10 text-right text-sm tabular-nums`} />
+              </div>
+              <button onClick={() => scan()} tabIndex={-1} className={`${primaryButton} h-10 shrink-0 px-5`}>OK</button>
+              <button onClick={toggleQuick} tabIndex={-1} aria-expanded={quickOpen} aria-controls="si-quick" className={`${secondaryButton} h-10 text-xs ${quickOpen ? '!border-accent !bg-accent-soft !text-accent-ink' : ''}`}>
+                {quickOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}Quick pick<Kbd combo="F3" />
+              </button>
+              <button onClick={toggleTemplate} tabIndex={-1} aria-expanded={tplOpen} className={`${secondaryButton} h-10 text-xs ${tplOpen ? '!border-accent !bg-accent-soft !text-accent-ink' : ''}`}>
+                Template<Kbd combo="Alt+T" />
+              </button>
+              <button onClick={() => setPickCols(true)} tabIndex={-1} className={`${ghostButton} h-10`} title="Choose and order the grid's columns"><Columns3 size={14} />Columns</button>
             </div>
-            <button onClick={() => scan()} tabIndex={-1} className={`${primaryButton} h-10 px-4`}>Add</button>
-            <button
-              onClick={toggleQuick}
-              tabIndex={-1}
-              aria-expanded={quickOpen}
-              aria-controls="si-quick"
-              className={`${secondaryButton} h-10 ${quickOpen ? '!border-accent !bg-accent-soft !text-accent-ink' : ''}`}
-            >
-              {quickOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}Quick pick<Kbd combo="F3" />
-            </button>
+            {pickerOpen && <ItemPickerModal onPick={pickFromList} onClose={() => { setPickerOpen(false); focusSearch(); }} />}
           </div>
 
-          <div className={`grid grid-cols-1 gap-4 ${quickOpen ? 'lg:grid-cols-[240px_minmax(0,1fr)]' : ''}`}>
-            {quickOpen && (
-              <div id="si-quick" className={`${panel} flex max-h-[480px] flex-col overflow-hidden`}>
-                <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
-                  <span className="text-xs font-semibold text-stone-900 dark:text-stone-50">Quick pick</span>
-                  <button onClick={() => setQuickOpen(false)} className={`${iconButton} h-7 w-7`} aria-label="Close quick pick"><X size={14} /></button>
-                </div>
-                <div className="relative border-b border-line p-2">
-                  <Search size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
-                  <input autoFocus value={quickFilter} onChange={e => { setQuickFilter(e.target.value); setQuickAt(0); }} onKeyDown={e => {
-                    if (e.key === 'Escape') { e.preventDefault(); setQuickOpen(false); focusSearch(); }
-                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setQuickAt(a => Math.max(0, Math.min(quickItems.length - 1, a + (e.key === 'ArrowDown' ? 1 : -1)))); }
-                    if (e.key === 'Enter' && quickItems[quickAt]) { e.preventDefault(); addItem(quickItems[quickAt].stock, 1); }
-                  }} placeholder="Filter, ↑↓, Enter adds" aria-label="Filter items" className={`${field} pl-8`} />
-                </div>
-                <ul className="flex-1 overflow-auto p-1 text-xs">
-                  {quickItems.map((item, qi) => (
-                    <li key={item.code}>
-                      <button tabIndex={-1} onClick={() => addItem(item.stock, 1)} ref={qi === quickAt ? el => el?.scrollIntoView({ block: 'nearest' }) : undefined}
-                        className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-subtle ${qi === quickAt ? 'bg-accent-soft' : ''}`}>
-                        <span className="block truncate font-medium text-stone-900 dark:text-stone-50">{item.brand && item.brand !== '-' ? item.brand : item.name}</span>
-                        <span className="mt-0.5 flex justify-between text-[11px] tabular-nums text-stone-500 dark:text-stone-400">
-                          <span>{[item.pkg && item.pkg !== '-' ? item.pkg : '', `${item.clQty} in stock`].filter(Boolean).join(' · ')}</span><span className="font-medium text-stone-700 dark:text-stone-300">₹ {money(item.rate)}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                  {!quickItems.length && <li className="px-3 py-6 text-center text-stone-500">No items match.</li>}
-                </ul>
-              </div>
-            )}
+          <div className={`grid grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-rows-[minmax(0,1fr)] ${quickOpen || tplOpen ? 'lg:grid-cols-[240px_minmax(0,1fr)]' : ''}`}>
+            {tplOpen && <QuickSelectionPanel kind="template" onAdd={stock => addItem(stock, 1)} onAddAll={stocks => stocks.reduce((cur, stock) => addItem(stock, 1, cur), lines)} onClose={() => { setTplOpen(false); focusSearch(); }} />}
+            {quickOpen && <QuickSelectionPanel onAdd={stock => addItem(stock, 1)} onClose={() => { setQuickOpen(false); focusSearch(); }} />}
 
-            <div className={`${panel} flex min-h-[320px] flex-col overflow-hidden`}>
-              <div className="flex-1 overflow-auto">
-                <table className={`${GRID_OUTLINE} table-fixed text-left text-xs`} style={{ width: cols.reduce((n, { id }) => n + widths[id], 0), minWidth: '100%' }}>
+            <div className={`${panel} flex min-h-[22rem] flex-col overflow-hidden xl:h-full xl:min-h-[22rem]`}>
+              <div className="flex min-h-0 flex-1 cursor-grab flex-col overflow-auto active:cursor-grabbing" onMouseDown={panGrid}>
+                <table className={`${GRID_OUTLINE} table-fixed text-left text-xs`} style={{ width: shownCols.reduce((n, { id }) => n + widths[id], 0), minWidth: '100%' }}>
                   <thead className={tableHead}>
                     <tr>
-                      {cols.map(({ id, caption, code }) => (
-                        <th key={id} style={{ width: widths[id] }} className={cn('relative overflow-hidden whitespace-nowrap px-3 py-2.5', !['sl', 'item'].includes(id) && 'text-right', code && tone(code))}>
-                          {caption}
+                      {shownCols.map(({ id, caption, code }) => (
+                        <th key={id} style={{ width: widths[id] }} aria-sort={sort.id === id ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined}
+                          className={cn('relative overflow-hidden whitespace-nowrap px-3 py-2.5', !['sl', 'item'].includes(id) && 'text-right', code && tone(code))}>
+                          <button type="button" tabIndex={-1} onClick={() => sortBy(id)} title={`Sort by ${caption}`} className="inline-flex items-center gap-1 font-[inherit] hover:underline">
+                            {caption}
+                            {sort.id === id && (sort.dir === 1 ? <ChevronUp size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />)}
+                          </button>
                           <span role="separator" aria-orientation="vertical" aria-label={`Resize ${caption}`} title="Drag to resize · double-click to reset all"
                             onMouseDown={startResize(id)} onTouchStart={startResize(id)} onDoubleClick={resetWidths}
                             className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize hover:bg-accent/40" />
@@ -615,7 +839,7 @@ export default function SalesInvoice({ setup, onClose }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line-soft tabular-nums">
-                    {priced.map((line, i) => [line, i]).filter(([line]) => !findLine.trim() || `${line.name} ${STOCK_ITEMS[line.id].code}`.toLowerCase().includes(findLine.trim().toLowerCase())).map(([line, i]) => {
+                    {displayed.map(({ line, i }) => {
                       const low = line.qty >= line.qoh;
                       const num = (v, cls) => <td className={`px-3 py-2 text-right ${cls}`}>{money(v)}</td>;
                       // One cell per column, in the order the grid shows them (cols).
@@ -639,15 +863,15 @@ export default function SalesInvoice({ setup, onClose }) {
                         itemAmt: num(itemAmt(line), 'font-semibold text-stone-900 dark:text-stone-50'),
                       };
                       return (
-                        <tr key={line.id} onClick={() => setSelectedId(line.id)} aria-selected={selectedId === line.id} className={`cursor-pointer transition-colors ${selectedId === line.id ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
-                          {cols.map(({ id }) => <Fragment key={id}>{cell[id]}</Fragment>)}
+                        <tr key={line.id} onClick={e => { setSelectedId(line.id); if (!e.target.closest('input,button,select')) focusSearch(); }} aria-selected={selectedId === line.id} className={`cursor-pointer transition-colors ${selectedId === line.id ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}>
+                          {shownCols.map(({ id }) => <Fragment key={id}>{cell[id]}</Fragment>)}
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
                 {lines.length === 0 && (
-                  <div className="px-4 py-16 text-center">
+                  <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center">
                     <ScanLine size={28} className="mx-auto mb-2 text-stone-300 dark:text-stone-600" />
                     <p className="text-sm font-medium text-stone-700 dark:text-stone-200">No items on this bill</p>
                     <p className="mt-0.5 text-xs text-stone-500">Scan a barcode or type an item name and press Enter. Quick pick: F3.</p>
@@ -656,14 +880,15 @@ export default function SalesInvoice({ setup, onClose }) {
               </div>
 
               {/* Line summary + line actions */}
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line bg-subtle/60 px-4 py-2.5 text-xs text-stone-600 dark:text-stone-300">
-                <span># Items : <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{lines.length}</span></span>
-                <span>Total Qty : <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.qty}</span></span>
-                <span>Invoice Value : <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.invoice)}</span></span>
-                <span>Litres <span className="font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.litres.toFixed(3)}</span></span>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line bg-subtle/60 px-4 py-2 text-xs text-stone-600 dark:text-stone-300">
+                <span className="flex items-baseline gap-1.5"># Items<span className="text-sm font-semibold tabular-nums text-stone-900 dark:text-stone-50">{lines.length}</span></span>
+                <span className="flex items-baseline gap-1.5">Total Qty<span className="text-sm font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.qty}</span></span>
+                <span className="flex items-baseline gap-1.5">Invoice Value<span className="text-sm font-semibold tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.invoice)}</span></span>
+                <span className="flex items-baseline gap-1.5">Litres<span className="text-sm font-semibold tabular-nums text-stone-900 dark:text-stone-50">{totals.litres.toFixed(3)}</span></span>
+                {liqLimits.map(x => <span key={x.label} className={x.over ? 'font-semibold text-red-600' : ''} title={x.limit === null ? undefined : `Limit ${x.limit} Ltr per bill`}>{x.label} : {x.litres} Ltr</span>)}
                 <div className="ml-auto flex flex-wrap items-center gap-1">
-                  <input value={findLine} onChange={e => setFindLine(e.target.value)} placeholder="Find in bill…" aria-label="Find in bill" tabIndex={-1} className={`${field} h-8 w-36 py-1 text-xs`} />
-                  <span className="hidden text-[11px] text-stone-400 xl:inline">↑↓ line · + − qty · Del remove · 3* qty · F9 cash · F10 save</span>
+                  <input value={findLine} onChange={e => setFindLine(e.target.value)} placeholder="Find in bill…" aria-label="Find in bill" tabIndex={-1} className={`${field} h-8 !w-40 py-1 text-xs`} />
+                  <span className="hidden text-[11px] text-stone-400 min-[1900px]:inline">↑↓ line · + − qty · Del remove · F9 cash · F10 save</span>
                   <button onClick={deleteItem} disabled={!lines.length} tabIndex={-1} className={ghostButton}><Trash2 size={14} />Delete item</button>
                   <button onClick={clearItems} disabled={!lines.length} tabIndex={-1} className={ghostButton}><Eraser size={14} />Clear</button>
                 </div>
@@ -673,7 +898,9 @@ export default function SalesInvoice({ setup, onClose }) {
         </div>
 
         {/* RIGHT: customer, totals, payment, actions */}
-        <aside aria-label="Bill summary" className="flex flex-col gap-3 xl:sticky xl:top-0 xl:max-h-[calc(100dvh-1rem)] xl:overflow-y-auto">
+        <aside aria-label="Bill summary" className="flex flex-col gap-2.5 xl:sticky xl:top-0 xl:h-full xl:max-h-[calc(100dvh-9rem)] xl:min-h-0">
+          {/* The customer, totals and payment scroll if the window is short; the save buttons below never do */}
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:overflow-y-auto">
           <div className={`${panel} p-2`}>
             <button type="button" onClick={togglePartyBox} aria-expanded={partyOpen} aria-controls="si-party-box" tabIndex={-1}
               className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left text-[11px] font-semibold uppercase tracking-wide text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100">
@@ -681,9 +908,9 @@ export default function SalesInvoice({ setup, onClose }) {
               {partyOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
             <div id="si-party-box" className={`grid grid-cols-2 gap-x-2 gap-y-1.5 px-1 pb-1 pt-1.5 text-xs ${partyOpen ? '' : 'hidden'}`}>
-            {!headDef('customer').hidden && <div className="col-span-2 sm:col-span-1">
+            {!headDef('customer').hidden && <div className="min-w-0">
               <label htmlFor="si-party" className={cn(labelClass, fieldTone(headDef('customer').required, headDef('customer').locked))}>{headDef('customer').label}{headDef('customer').required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>} <span className="font-normal text-stone-400">(F4)</span></label>
-              <CustomerPicker id="si-party" value={party} onChange={setParty} customers={customers} disabled={lines.length > 0 || headDef('customer').locked} title={lines.length ? 'Only the payment mode can be changed once items are on the bill.' : undefined} onDone={focusSearch} />
+              <CustomerPicker id="si-party" value={party} onChange={v => { if (v !== party) setRedeem(''); setParty(v); }} customers={customers} disabled={headDef('customer').locked} onDone={focusSearch} />
             </div>}
             <BillExtras bill={extrasBill} idPrefix="si" />
             {customer && customer.points > 0 && (
@@ -693,9 +920,9 @@ export default function SalesInvoice({ setup, onClose }) {
                 <input type="number" min={0} max={customer.points} value={redeem} onChange={e => setRedeem(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusField('si-collected'); } }} placeholder="Redeem" className={`${field} w-24 py-1 text-right tabular-nums`} aria-label="Points to redeem" />
               </div>
             )}
-            {!headDef('salesperson').hidden && <div className="col-span-2 sm:col-span-1">
+            {!headDef('salesperson').hidden && <div className="min-w-0">
               <label htmlFor="si-salesperson" className={cn(labelClass, fieldTone(headDef('salesperson').required, headDef('salesperson').locked))}>{headDef('salesperson').label}{headDef('salesperson').required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
-              <select id="si-salesperson" value={salesPerson} disabled={lines.length > 0 || headDef('salesperson').locked} title={lines.length ? 'Only the payment mode can be changed once items are on the bill.' : undefined} onChange={e => setSalesPerson(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusSearch(); } }} className={`${field} h-8 py-1 text-xs`}>
+              <select id="si-salesperson" value={salesPerson} disabled={headDef('salesperson').locked} onChange={e => setSalesPerson(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusSearch(); } }} className={`${field} h-8 py-1 text-xs`}>
                 {!salesPersons.length && <option value="">No sales persons (Sales Person Master)</option>}
                 {salesPersons.map(p => <option key={p}>{p}</option>)}
               </select>
@@ -704,30 +931,12 @@ export default function SalesInvoice({ setup, onClose }) {
           </div>
 
           <div className={`${panel} space-y-2.5 p-3 text-xs`}>
-            <div className="rounded-lg bg-subtle px-3 py-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-xs font-medium text-stone-500 dark:text-stone-400">Invoice value</span>
-                <span className="text-[11px] tabular-nums text-stone-500 dark:text-stone-400">{lines.length} items · {totals.qty} qty</span>
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-subtle px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-stone-500 dark:text-stone-400">Invoice value</div>
+                <div className="text-[11px] tabular-nums text-stone-500 dark:text-stone-400">{lines.length} items · {totals.qty} qty</div>
               </div>
-              <div className="mt-0.5 text-3xl font-semibold tracking-tight tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.invoice)}</div>
-              <div className="mt-1 text-[11px] italic leading-snug text-stone-500 dark:text-stone-400">{numberToWords(totals.invoice)}</div>
-            </div>
-            {/* The desktop's totals grid, always open so the amounts are seen without scrolling */}
-            <dl aria-label="Amount breakdown" className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border border-line px-3 py-2 tabular-nums">
-              {[...totalRows, ['Total', totals.total], ['Write-off', Number(writeOff) || 0]].map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-2">
-                  <dt className={label === 'Total' ? 'font-medium text-stone-700 dark:text-stone-200' : 'text-stone-500 dark:text-stone-400'}>{label}</dt>
-                  <dd className={label === 'Total' ? 'font-semibold text-stone-900 dark:text-stone-50' : value ? 'text-stone-800 dark:text-stone-200' : 'text-stone-400'}>{money(value)}</dd>
-                </div>
-              ))}
-              <div className="col-span-2 flex justify-between gap-2 border-t border-line pt-1">
-                <dt className="text-stone-500 dark:text-stone-400">Payment type</dt>
-                <dd className="font-semibold text-stone-900 dark:text-stone-50">{paymentType}</dd>
-              </div>
-            </dl>
-            <div className={payRow}>
-              <label htmlFor="si-writeoff" className="whitespace-nowrap text-stone-500 dark:text-stone-400">Write-off</label>
-              <input id="si-writeoff" type="number" min={0} disabled={!lines.length} value={writeOff} onFocus={e => e.target.select()} onChange={e => setWriteOff(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusField('si-collected'); } }} className={`${field} w-28 py-1 text-right tabular-nums`} />
+              <div className="text-3xl font-semibold tracking-tight tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.invoice)}</div>
             </div>
             <div role="radiogroup" aria-label="Payment type (F6 or Alt+P)" onKeyDown={e => {
               if (lines.length && ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
@@ -751,71 +960,83 @@ export default function SalesInvoice({ setup, onClose }) {
               ))}
             </div>
             {!lines.length && <p className="-mt-1 text-[11px] text-stone-500 dark:text-stone-400">Add items to choose the payment mode.</p>}
-            <dl className="tabular-nums">
-              <div className={payRow}>
-                <dt className="text-stone-500 dark:text-stone-400">Card</dt>
-                <dd>{paymentType === 'SPLIT'
-                  ? <input type="number" min={0} value={cardInput} onChange={e => setCardInput(e.target.value)} className={`${field} w-28 py-1 text-right tabular-nums`} aria-label="Card amount" />
-                  : <span className="text-stone-800 dark:text-stone-200">{money(totals.card)}</span>}</dd>
-              </div>
-              <div className={payRow}>
-                <dt className="text-stone-500 dark:text-stone-400">UPI / other</dt>
-                <dd>{paymentType === 'SPLIT'
-                  ? <input type="number" min={0} value={otherPay} onChange={e => setOtherPay(e.target.value)} className={`${field} w-28 py-1 text-right tabular-nums`} aria-label="Other pay amount" />
-                  : <span className="text-stone-800 dark:text-stone-200">{money(totals.other)}</span>}</dd>
-              </div>
-              <div className={payRow}>
-                <dt className="font-medium text-stone-700 dark:text-stone-200">Cash</dt>
-                <dd className="font-semibold text-stone-900 dark:text-stone-50">{money(totals.cash)}</dd>
-              </div>
-            </dl>
             <div>
               <label htmlFor="si-collected" className={labelClass}>Cash tendered <span className="font-normal text-stone-400">(F9 · Enter saves)</span></label>
               <div className="flex items-center gap-2">
                 <input id="si-collected" type="number" min={0} disabled={!lines.length} value={collected} onFocus={e => e.target.select()} onChange={e => setCollected(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void saveBill(); } if (e.key === 'Escape') focusSearch(); }} className={`${field} flex-1 text-right text-sm tabular-nums`} placeholder="0.00" />
+                <button type="button" onClick={() => setCountOpen(true)} disabled={!lines.length} className={`${secondaryButton} h-9 shrink-0 px-3 text-xs`} title="Count the notes and coins">Count</button>
               </div>
+              {countOpen && <CashCountDialog counts={denoms} onClose={() => { setCountOpen(false); focusField('si-collected'); }} onApply={(c, total) => { setDenoms(c); setCollected(total ? String(total) : ''); setCountOpen(false); focusField('si-collected'); }} />}
               {collected !== '' && (
-                <div role="status" aria-live="polite" className={`mt-2 flex items-baseline justify-between gap-3 rounded-lg px-3 py-2.5 tabular-nums ${change < 0
+                <div role="status" aria-live="polite" className={`mt-2 flex items-baseline justify-between gap-3 rounded-lg px-3 py-1.5 tabular-nums ${change < 0
                   ? 'bg-red-100 text-red-800 ring-2 ring-red-500/40 dark:bg-red-950/60 dark:text-red-200'
                   : 'bg-emerald-100 text-emerald-900 ring-2 ring-emerald-500/40 dark:bg-emerald-950/60 dark:text-emerald-200'}`}>
                   <span className="text-xs font-semibold">{change < 0 ? 'Short by' : change === 0 ? 'Exact amount' : 'Return change'}</span>
-                  <span className="text-2xl font-bold tracking-tight">₹ {money(Math.abs(change))}</span>
+                  <span className="text-xl font-bold tracking-tight">₹ {money(Math.abs(change))}</span>
                 </div>
               )}
             </div>
+            <dl className="grid grid-cols-3 gap-2 tabular-nums">
+              <div className="rounded-lg border border-line px-2 py-1.5">
+                <dt className="text-[11px] text-stone-500 dark:text-stone-400">Card</dt>
+                <dd className="mt-0.5">{paymentType === 'SPLIT'
+                  ? <input type="number" min={0} value={cardInput} onChange={e => setCardInput(e.target.value)} className={`${field} h-7 w-full py-0.5 text-right tabular-nums`} aria-label="Card amount" />
+                  : <span className="font-medium text-stone-800 dark:text-stone-200">{money(totals.card)}</span>}</dd>
+              </div>
+              <div className="rounded-lg border border-line px-2 py-1.5">
+                <dt className="text-[11px] text-stone-500 dark:text-stone-400">UPI / other</dt>
+                <dd className="mt-0.5">{paymentType === 'SPLIT'
+                  ? <input type="number" min={0} value={otherPay} onChange={e => setOtherPay(e.target.value)} className={`${field} h-7 w-full py-0.5 text-right tabular-nums`} aria-label="Other pay amount" />
+                  : <span className="font-medium text-stone-800 dark:text-stone-200">{money(totals.other)}</span>}</dd>
+              </div>
+              <div className="rounded-lg border border-line bg-subtle px-2 py-1.5">
+                <dt className="text-[11px] font-medium text-stone-700 dark:text-stone-200">Cash</dt>
+                <dd className="mt-0.5 font-semibold text-stone-900 dark:text-stone-50">{money(totals.cash)}</dd>
+              </div>
+            </dl>
+            {/* The desktop's totals grid, always open so the amounts are seen without scrolling */}
+            <dl aria-label="Amount breakdown" className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border border-line px-3 py-2 tabular-nums">
+              {[...totalRows, ['Total', totals.total]].map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-2">
+                  <dt className={label === 'Total' ? 'font-medium text-stone-700 dark:text-stone-200' : 'text-stone-500 dark:text-stone-400'}>{label}</dt>
+                  <dd className={label === 'Total' ? 'font-semibold text-stone-900 dark:text-stone-50' : value ? 'text-stone-800 dark:text-stone-200' : 'text-stone-400'}>{money(value)}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className={payRow}>
+              <label htmlFor="si-writeoff" className="whitespace-nowrap text-stone-500 dark:text-stone-400">Write-off</label>
+              <input id="si-writeoff" type="number" min={0} disabled={!lines.length} value={writeOff} onFocus={e => e.target.select()} onChange={e => setWriteOff(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); focusField('si-collected'); } }} className={`${field} w-28 py-1 text-right tabular-nums`} />
+            </div>
+          </div>
+          </div>
+          <div className={`${panel} shrink-0 space-y-2 p-3`}>
             <div className="space-y-2">
               <button
                 onClick={() => saveBill(true)}
-                className={`${printButton} h-11 w-full text-sm font-bold shadow-md hover:shadow-lg`}
+                className={`${printButton} h-10 w-full text-sm font-bold shadow-md hover:shadow-lg`}
               >
                 <Printer size={16} />Save & Print · ₹ {money(totals.invoice)}<Kbd combo="F10" />
               </button>
-              <button
-                onClick={() => saveBill(false)}
-                className={`${secondaryButton} h-9 w-full text-xs font-semibold`}
-              >
-                <Save size={14} />Save only (No print)<Kbd combo="Mod+S" />
-              </button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={holdOrNew} className={secondaryButton}><PauseCircle size={14} />Hold / new<Kbd combo="F7" /></button>
-              <button onClick={cancelBill} className={`${secondaryButton} hover:!text-red-600 dark:hover:!text-red-400`}><XCircle size={14} />Cancel bill<Kbd combo="Alt+X" /></button>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button onClick={() => saveBill(false)} title="Save without printing" className={`${secondaryButton} h-9 !px-2 text-xs font-semibold`}>Save only<Kbd combo="Mod+S" /></button>
+              <button onClick={holdOrNew} title="Hold this bill and start a new one" className={`${secondaryButton} h-9 !px-2 text-xs`}>Hold<Kbd combo="F7" /></button>
             </div>
           </div>
         </aside>
       </div>
 
-      {dialog === 'reprint' && <ReprintDialog initialNo={prevBill?.no ?? ''} onClose={() => setDialog(null)} />}
+      {dialog === 'reprint' && <ReprintDialog onClose={() => setDialog(d => (d === 'reprint' ? null : d))} onEdit={doc => void loadForEdit(doc)} onPrint={(no, format) => { setPrintDocNo(no); setPrintFormat(format ?? ''); }} />}
       {dialog === 'cancel' && (
         <CancelInvoiceDialog
-          initialNo={prevBill?.no ?? ''}
           onClose={() => setDialog(null)}
+          onEdit={doc => { setDialog(null); void loadForEdit(doc); }}
           onDone={msg => { setDialog(null); setToast({ kind: 'ok', text: msg }); }}
         />
       )}
       {dialog === 'held' && <HeldBillsDialog onClose={() => setDialog(null)} onRecall={recall} />}
 
-      {printDocNo && <PrintDialog kind="sales_invoice" docNo={printDocNo} title={`Print Sales Invoice (${printDocNo})`} onClose={() => setPrintDocNo(null)} />}
+      {printDocNo && <PrintDialog kind="sales_invoice" docNo={printDocNo} initialFormat={printFormat} title={`Print Sales Invoice (${printDocNo})`} onClose={() => { setPrintDocNo(null); setTimeout(focusSearch, 60); }} />}
     </div>
     </WithHistory>
   );

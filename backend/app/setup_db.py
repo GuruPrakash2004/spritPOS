@@ -55,8 +55,8 @@ def _present(names: tuple[str, ...]) -> set[str]:
 def is_ready() -> bool:
     """True when the connected database is a vLQMS database and the web app's own tables exist in it."""
     try:
-        have = _present(REQUIRED_TABLES + WEB_TABLES)
-        return len(have) == len(REQUIRED_TABLES) + len(WEB_TABLES)
+        need = REQUIRED_TABLES + (WEB_TABLES if db.use_web_tables() else ())
+        return len(_present(need)) == len(need)
     except Exception:   # noqa: BLE001 - the connection dropped
         return False
 
@@ -91,10 +91,12 @@ def prepare() -> dict:
     info = check()
     if not info["is_vlqms"]:
         raise SetupError("This isn't a vLQMS database: these tables are missing: " + ", ".join(info["missing_tables"]) + ".")
+    if db.no_writes():   # only reads: nothing is created in the client's database
+        return info
     if not info["stock_trigger"]:
         raise SetupError("UtlStockList has no trigger keeping the stock balance (TrnQOH), so stock would not update. "
                          "Use the database the desktop vLQMS works on.")
-    if info["web_tables"] < len(WEB_TABLES):
+    if info["web_tables"] < len(WEB_TABLES) and db.use_web_tables():
         if not info["can_create_tables"]:
             raise SetupError("This SQL login can't create the web app's tables in the database. Use a login with "
                              "db_owner (or CREATE TABLE) rights for this one-time setup.")

@@ -25,7 +25,7 @@ def needs_setup() -> bool:
 def needs_admin() -> bool:
     """The shop's database is in use but no active user is an Administrator: the sign-in page's Database
     setup then creates one (routers/setup.py, POST /setup/admin)."""
-    return sqlstore.enabled() and not any(
+    return sqlstore.enabled() and not db.no_writes() and not any(
         u.get("role") == store.ADMIN_ROLE and u.get("active", True) for u in store.USERS.values())
 
 
@@ -87,6 +87,7 @@ def forget_old_database() -> None:
     db_store._oldest.clear()      # how far back the old database's bills went, and the older dates read from it
     db_store._covered.clear()
     store.IDEMPOTENT.clear()
+    store.RENAMED.clear()
     ai_service._state.update(at=0.0, end=None, forecasts=None, error=None)
     designer_router._last["version"] = None
     designer_router._shared.update(at=0.0, version="")

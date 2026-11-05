@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { fieldProblem } from '../../lib/validation';
 import {
   FilePlus, KeyRound, Save, Trash2, Users, X,
-  Eye, Edit3, TextCursorInput, BadgeCheck, FileBarChart, LockKeyhole,
+  Eye, Edit3, TextCursorInput, BadgeCheck, FileBarChart, LockKeyhole, ShieldCheck,
 } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
@@ -28,6 +28,7 @@ import FieldRightsTab from './FieldRightsTab';
 import ApprovalsTab from './ApprovalsTab';
 import ReportRightsTab from './ReportRightsTab';
 import LoginSettingsTab from './LoginSettingsTab';
+import DesktopRightsTab from './DesktopRightsTab';
 import { encryptSecret } from '../../lib/secureField';
 import PermissionMatrixTable from './PermissionMatrixTable';
 
@@ -254,6 +255,9 @@ export default function AdminMaster({ currentUser }) {
         <button role="tab" aria-selected={tab === 'roles'} onClick={() => setTab('roles')} className={tabButton(tab === 'roles')}>
           <KeyRound size={14} />Roles &amp; rights
         </button>
+        <button role="tab" aria-selected={tab === 'desktop'} onClick={() => setTab('desktop')} className={tabButton(tab === 'desktop')}>
+          <ShieldCheck size={14} />Desktop rights
+        </button>
         <button role="tab" aria-selected={tab === 'fields'} onClick={() => setTab('fields')} className={tabButton(tab === 'fields')}>
           <TextCursorInput size={14} />Field rights
         </button>
@@ -268,6 +272,7 @@ export default function AdminMaster({ currentUser }) {
         </button>
       </div>
 
+      {tab === 'desktop' && <DesktopRightsTab />}
       {tab === 'fields' && <FieldRightsTab roles={roles} />}
       {tab === 'approvals' && <ApprovalsTab />}
       {tab === 'reports' && <ReportRightsTab />}

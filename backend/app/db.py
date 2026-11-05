@@ -5,6 +5,7 @@ Falls back to the in-memory store if no DB is reachable so the app still
 runs during development without a live SQL Server.
 """
 import os
+import contextvars
 import logging
 import time
 import threading
@@ -75,6 +76,45 @@ _password_unreadable = False
 
 def configured() -> bool:
     return bool(DB_HOST and DB_NAME and DB_USER) and not _password_unreadable
+
+
+# The web app only READS the client's own tables: it creates, alters, drops and writes nothing in the database (no Web_ tables).
+# DB_READ_ONLY=0 in backend/.env brings back the older saving mode (which needs the Web_ tables).
+READ_ONLY = _env("DB_READ_ONLY", "0") != "0"
+# The web app keeps NO tables of its own in a client database (no Web_ tables): "direct mode". Everything it saves goes into the desktop's own
+# tables; what has no desktop table (settings, rights, roles, number series) is refused. DB_WEB_TABLES=1 brings the older mode back.
+USE_WEB_TABLES = _env("DB_WEB_TABLES", "0") == "1"
+
+
+def use_web_tables() -> bool:
+    return USE_WEB_TABLES
+
+
+class ReadOnlyDatabase(RuntimeError):
+    """A feature tried to write to the shop's database while the app is read-only (answered 503 by app/main.py)."""
+
+
+READ_ONLY_MESSAGE = "This web app only reads the shop's database: nothing can be saved or changed here."
+
+
+_direct = contextvars.ContextVar("direct_writes", default=False)
+
+
+@contextmanager
+def direct_writes() -> Iterator[None]:
+    """Let ONE feature write straight into the shop's own (desktop) tables, in its own transaction, while the generic saving stays off.
+    Nothing is created: the web app has no tables of its own (no Web_ tables)."""
+    token = _direct.set(True)
+    try:
+        yield
+    finally:
+        _direct.reset(token)
+
+
+def no_writes() -> bool:
+    """True when a database is configured and the app must not write to it (outside `direct_writes()`). Without a database
+    (tests, scripts) nothing is saved anyway."""
+    return configured() and READ_ONLY and not _direct.get()
 
 
 def _password() -> str:
@@ -247,6 +287,12 @@ def driver_name() -> str:
 
 # ─── Query helpers ────────────────────────────────────────────────────────────
 
+def _connection_lost(exc: Exception) -> bool:
+    """The server dropped the connection (08S01 "Communication link failure", 08S02 "Physical connection is not usable", 10053)."""
+    text = str(exc)
+    return any(code in text for code in ("08S01", "08S02")) or any(w in text.lower() for w in ("communication link", "physical connection is not usable"))
+
+
 def fetchall(sql: str, params: tuple = ()) -> list[dict]:
     """Execute a SELECT and return list of dicts (column name → value). Parameters use ? placeholders (for
     both drivers, as in transaction()); without parameters the SQL runs exactly as written."""
@@ -266,7 +312,7 @@ def fetchall(sql: str, params: tuple = ()) -> list[dict]:
                 return rows
             except Exception as exc:
                 # The server dropped the connection (10053 / "Communication link failure"): reconnect, try once more.
-                if attempt == 1 and ("08S01" in str(exc) or "communication link" in str(exc).lower()):
+                if attempt == 1 and _connection_lost(exc):
                     logger.warning("Connection lost during a read; reconnecting and retrying")
                     if reconnect():
                         conn = get_conn()
@@ -286,6 +332,8 @@ def fetchone(sql: str, params: tuple = ()) -> dict | None:
 
 def execute(sql: str, params: tuple = ()) -> int:
     """Execute INSERT/UPDATE/DELETE; returns rowcount. Commits immediately."""
+    if no_writes():
+        raise ReadOnlyDatabase(READ_ONLY_MESSAGE)
     conn = get_conn()
     if conn is None:
         raise RuntimeError("No database connection")
@@ -304,6 +352,8 @@ def execute(sql: str, params: tuple = ()) -> int:
 
 def executemany(sql: str, rows: list[tuple]) -> int:
     """Bulk insert/update; returns total rowcount."""
+    if no_writes():
+        raise ReadOnlyDatabase(READ_ONLY_MESSAGE)
     conn = get_conn()
     if conn is None:
         raise RuntimeError("No database connection")
@@ -375,6 +425,8 @@ class TxCursor:
 def transaction() -> Iterator[TxCursor]:
     """Run several statements as one unit: all commit together, or all roll back if any fails.
     Holds _db_lock throughout, so nothing else uses the shared connection in the middle."""
+    if no_writes():
+        raise ReadOnlyDatabase(READ_ONLY_MESSAGE)
     conn = get_conn()
     if conn is None:
         raise RuntimeError("No database connection")

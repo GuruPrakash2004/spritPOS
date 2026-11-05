@@ -228,7 +228,7 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
             </span>
           </div>
           <div className="mt-0.5 truncate">Signed in as <span className="font-medium text-[#1B2B4B] dark:text-[#D4A847]">{user}</span></div>
-          <DevelopedBy className="mt-3 border-t border-[#E2D8CC] pt-3 dark:border-[#1E1E1E]" />
+          <DevelopedBy className="mt-2" size="xs" />
         </div>
       </aside>
     </>

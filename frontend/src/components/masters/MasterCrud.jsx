@@ -6,25 +6,26 @@
 // Keyboard: Enter/⌘S save, Esc cancel, ⌘N/Alt+N new, ↑/↓ move between fields, Alt+Home / Alt+PageUp / Alt+PageDown / Alt+End first / previous / next / last record (also the arrow buttons).
 // Cashiers cannot delete items (hidden here and refused with 403 by the backend).
 
-import Pager from '../common/Pager';
 import GroupBox from '../common/GroupBox';
 import { FIELD_RULES, cleanInput, fieldProblem } from '../../lib/validation';
-import { usePage } from '../common/usePage';
 import { useEffect, useMemo, useRef, useState, } from 'react';
+import { Search } from 'lucide-react';
+import ActionBar, { ScreenFrame } from '../common/ActionBar';
+import ListModal from '../common/ListModal';
+import { goHome } from '../../lib/nav';
 import LookupSelect from '../common/LookupSelect';
 import PartyRecords from './PartyRecords';
+import AttachmentsDialog from './AttachmentsDialog';
 import { getDesignerNextCode, getDesignerPickup } from '../../lib/api';
 import { useScreenFields } from '../../hooks/useScreenFields';
 import { applyDefinition, defaultFor, extraProblem, fieldsFromDefinition, pickupsAfter, ruleHolds, ruleValues, valueOf, withValue } from '../../lib/designerFields';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Edit3, FilePlus, PanelRightClose, PanelRightOpen, Save, Search, Trash2, X } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
-import { SkeletonTableRows } from '../common/Skeleton';
 import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { canDo, canSeeCost, createMaster, deleteMaster, errorText, fieldRight, listMaster, updateMaster } from '../../lib/api';
 import { cn } from '../../lib/utils';
-import { badge, field, fieldTone, ghostButton, label as labelClass, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
+import { badge, field, fieldTone, label as labelClass, pageHeader, pageSub, pageTitle, panel, sectionTitle } from '../../lib/styles';
 
  
 
@@ -58,7 +59,7 @@ const blank = (fields) => {
   return { ...base, extras };
 };
 
-export default function MasterCrud({ title, subtitle, path, fields: baseFields = [], toolbar, reloadKey = 0, onSaved, newDefaults, startNew = false }
+export default function MasterCrud({ title, subtitle, path, fields: baseFields = [], options: extraOptions = [], reloadKey = 0, onSaved, newDefaults, startNew = false }
 
 
 
@@ -81,17 +82,14 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
   const [rows, setRows] = useState([]);
   const [loaded, setLoaded] = useState(false);   // false until the first list arrives: skeleton rows, not "No records"
   const [selected, setSelected] = useState(null);
-  // The list of records can be hidden (remembered per master on this computer, in the browser only).
-  const listKey = `vlqms_master_list_${path}`;
-  const [listOpen, setListOpen] = useState(() => { try { return localStorage.getItem(listKey) !== '0'; } catch { return true; } });
-  const toggleList = () => setListOpen(o => { try { localStorage.setItem(listKey, o ? '0' : '1'); } catch { /* not remembered */ } return !o; });
+  const [listOpen, setListOpen] = useState(false);   // the List window (ListModal)
+  const [attachOpen, setAttachOpen] = useState(false);   // File Attachment (the desktop's button on every master)
   const [partyOpen, setPartyOpen] = useState(false);   // customer / supplier: the records kept beside the master
   const [form, setForm] = useState(() => blank(fields));
   const [formErrors, setFormErrors] = useState({});
   const [mode, setMode] = useState('View');
   const modeRef = useRef(mode);
   useEffect(() => { modeRef.current = mode; }, [mode]);
-  const [filter, setFilter] = useState('');
   const [options, setOptions] = useState({});
   const [toast, setToast] = useState(null);
   const { confirm, dialog } = useConfirm();
@@ -127,6 +125,14 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
     });
   }, [allFields, reloadKey]);
 
+  const startNewRecord = () => {
+    setForm({ ...blank(fields), ...newDefaults });
+    setFormErrors({});
+    setMode('New');
+    setTimeout(() => { const first = fields[0]?.key; if (first) document.getElementById(`mc-${path}-${first}`)?.focus(); }, 50);
+  };
+  const startEditRecord = () => { setFormErrors({}); setMode('Edit'); };
+
   const startedNew = useRef(false);
   useEffect(() => {
     // Opened to add a record (the Purchase Bill's New supplier button): start with a blank form once the list is here.
@@ -138,16 +144,19 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
 
   const readOnly = mode === 'View';
   const listFields = fields.filter(f => !f.designerHidden && f.showInList !== false).slice(0, 4);
-  const visible = rows.filter(r => `${r.code} ${r.name ?? ''}`.toLowerCase().includes(filter.toLowerCase()));
-  const pager = usePage(visible);
+  // The simple list beside the form (large screens): the records, filtered by what is typed in its search box; clicking one shows it.
+  const [find, setFind] = useState('');
+  const visible = useMemo(() => {
+    const q = find.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(r => [r.code, r.name, ...listFields.map(f => valueOf(r, f))].some(v => String(v ?? '').toLowerCase().includes(q)));
+  }, [rows, find, listFields]);
 
   const select = (row) => {
     setSelected(String(row.code));
     setForm(row);
     setFormErrors({});
     setMode('View');
-    // On a phone the details sit above the list: bring them into view.
-    if (window.matchMedia?.('(max-width: 1023.98px)').matches) document.getElementById(`mc-${path}-details`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // Record navigation (the desktop's Move First / Previous / Next / Last): through the records in the list's order (the search
@@ -158,7 +167,6 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
     const to = where === 'first' ? 0 : where === 'last' ? visible.length - 1
       : where === 'next' ? Math.min(visible.length - 1, selectedAt + 1) : Math.max(0, selectedAt - 1);
     select(visible[to]);
-    pager.setPage(Math.floor(to / pager.size));
   };
 
   const handleFieldChange = (key, rawValue) => {
@@ -349,26 +357,9 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
         return;
       }
 
-      // Cmd+N, Ctrl+N or Alt+N for New
-      if (canAdd && ((modKey && e.key.toLowerCase() === 'n') || (e.altKey && e.key.toLowerCase() === 'n'))) {
-        e.preventDefault();
-        setForm({ ...blank(fields), ...newDefaults });
-        setFormErrors({});
-        setMode('New');
-        setTimeout(() => {
-          const first = fields[0]?.key;
-          if (first) document.getElementById(`mc-${path}-${first}`)?.focus();
-        }, 50);
-        return;
-      }
-
-      // Cmd+E, Ctrl+E or Alt+E for Edit
-      if (canEdit && readOnly && selected && ((modKey && e.key.toLowerCase() === 'e') || (e.altKey && e.key.toLowerCase() === 'e'))) {
-        e.preventDefault();
-        setFormErrors({});
-        setMode('Edit');
-        return;
-      }
+      // Cmd+N / Ctrl+N for New, Cmd+E / Ctrl+E for Edit (Alt+N / Alt+E are the action bar's)
+      if (canAdd && modKey && e.key.toLowerCase() === 'n') { e.preventDefault(); startNewRecord(); return; }
+      if (canEdit && readOnly && selected && modKey && e.key.toLowerCase() === 'e') { e.preventDefault(); startEditRecord(); return; }
 
       // Arrow navigation between form inputs
       if (!readOnly) {
@@ -390,34 +381,6 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
         }
       }
 
-      // Alt+Home / Alt+PageUp / Alt+PageDown / Alt+End: first / previous / next / last record
-      if (readOnly && e.altKey && !modKey) {
-        const where = { Home: 'first', PageUp: 'prev', PageDown: 'next', End: 'last' }[e.key];
-        if (where) { e.preventDefault(); goTo(where); return; }
-      }
-
-      // Table row selection with Arrow keys in View mode
-      if (readOnly && visible.length > 0) {
-        const target = e.target ;
-        const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA');
-        if (!isTyping) {
-          if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            const currIdx = visible.findIndex(r => String(r.code) === selected);
-            const nextIdx = Math.min(visible.length - 1, currIdx + 1);
-            if (nextIdx !== currIdx && visible[nextIdx]) {
-              select(visible[nextIdx]);
-            }
-          } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            const currIdx = visible.findIndex(r => String(r.code) === selected);
-            const prevIdx = Math.max(0, currIdx - 1);
-            if (prevIdx !== currIdx && visible[prevIdx]) {
-              select(visible[prevIdx]);
-            }
-          }
-        }
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -436,100 +399,75 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
     if (last && last.title === title) last.fields.push(f); else sections.push({ title, fields: [f] });
   }
 
+  const barOptions = [
+    ...(path === 'customers' || path === 'suppliers' ? [{ label: 'Contacts, addresses, alerts, notes', onClick: () => setPartyOpen(true), disabled: !selected }] : []),
+    { label: 'File Attachment', onClick: () => setAttachOpen(true), disabled: !selected },
+    ...extraOptions,
+  ];
+  const listColumns = fields.filter(f => !f.designerHidden && f.type !== 'lines').map(f => ({
+    key: f.key, label: f.label, kind: f.type === 'number' ? 'number' : f.type === 'bool' ? 'bool' : 'text', value: r => valueOf(r, f),
+  }));
+  const bar = (
+    <ActionBar
+      mode={mode} onNew={canAdd ? startNewRecord : undefined} onEdit={canEdit ? startEditRecord : undefined} onDelete={() => void remove()} onList={() => setListOpen(true)} onClose={goHome}
+      onSave={() => void save()} onCancel={cancel}
+      canNew={canAdd} canEdit={canEdit && !!selected} canDelete={canDelete && !!selected}
+      noEditReason={!canEdit ? undefined : 'Select a record first'} noDeleteReason={!canDelete ? undefined : 'Select a record first'}
+      options={barOptions}
+      nav={visible.length ? {
+        onFirst: () => goTo('first'), onPrev: () => goTo('prev'), onNext: () => goTo('next'), onLast: () => goTo('last'), onFind: () => setListOpen(true),
+        atStart: selectedAt <= 0, atEnd: selectedAt === visible.length - 1, label: `${Math.max(selectedAt, 0) + 1} / ${visible.length}`,
+      } : { onFind: () => setListOpen(true), atStart: true, atEnd: true }}
+    />
+  );
+
   return (
+    <ScreenFrame bar={bar}>
     <div className="mx-auto max-w-7xl">
+      {listOpen && (
+        <ListModal title={title} subtitle={`Listing of ${title}`} columns={listColumns} defaultKeys={listFields.map(f => f.key)} rows={rows} rowKey={r => r.code}
+          loading={!loaded} storageKey={`master-${path}`} exportName={title} onRefresh={() => listMaster(path).then(setRows).catch(e => setToast({ kind: 'error', text: errorText(e) }))}
+          onOpen={select} onClose={() => setListOpen(false)} />
+      )}
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {dialog}
+      {attachOpen && selected && <AttachmentsDialog master={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setAttachOpen(false)} />}
       {partyOpen && selected && <PartyRecords party={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setPartyOpen(false)} />}
       <div className={`${pageHeader} mb-5`}>
         <div>
           <h1 className={pageTitle}>{title}</h1>
           <p className={pageSub}>{subtitle}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {readOnly && visible.length > 0 && (
-            <div role="group" aria-label="Move between records" className="flex items-center gap-1">
-              <button type="button" onClick={() => goTo('first')} disabled={selectedAt === 0} className={ghostButton} title="First record (Alt+Home)" aria-label="First record"><ChevronsLeft size={14} /></button>
-              <button type="button" onClick={() => goTo('prev')} disabled={selectedAt === 0} className={ghostButton} title="Previous record (Alt+Page Up)" aria-label="Previous record"><ChevronLeft size={14} /></button>
-              <span className="min-w-14 text-center text-xs tabular-nums text-stone-500" aria-live="polite">{selectedAt + 1} / {visible.length}</span>
-              <button type="button" onClick={() => goTo('next')} disabled={selectedAt === visible.length - 1} className={ghostButton} title="Next record (Alt+Page Down)" aria-label="Next record"><ChevronRight size={14} /></button>
-              <button type="button" onClick={() => goTo('last')} disabled={selectedAt === visible.length - 1} className={ghostButton} title="Last record (Alt+End)" aria-label="Last record"><ChevronsRight size={14} /></button>
-            </div>
-          )}
-          <button type="button" onClick={toggleList} aria-pressed={!listOpen} className={ghostButton} title={listOpen ? 'Hide the list of records' : 'Show the list of records'}>
-            {listOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}{listOpen ? 'Hide list' : 'Show list'}
-          </button>
-          {readOnly ? (
-            <>
-              {toolbar}
-              {(path === 'customers' || path === 'suppliers') && selected && mode === 'View' && (
-                <button onClick={() => setPartyOpen(true)} className={secondaryButton}>Contacts, addresses, alerts, notes</button>
-              )}
-              <button
-                onClick={remove}
-                disabled={!selected || !canDelete}
-                title={!canDelete ? 'Your role is not allowed to delete here' : undefined}
-                className={`${ghostButton} ${!canDelete ? 'opacity-40 cursor-not-allowed hover:!text-stone-400' : 'hover:!text-red-600 dark:hover:!text-red-400'}`}
-              >
-                <Trash2 size={14} />Delete
-              </button>
-              {canEdit && <button onClick={() => { setFormErrors({}); setMode('Edit'); }} disabled={!selected} className={secondaryButton}><Edit3 size={14} />Edit</button>}
-              {canAdd && <button onClick={() => { setForm({ ...blank(fields), ...newDefaults }); setFormErrors({}); setMode('New'); }} className={primaryButton}><FilePlus size={14} />New</button>}
-            </>
-          ) : (
-            <>
-              <button onClick={cancel} className={secondaryButton}><X size={14} />Cancel</button>
-              <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
-            </>
-          )}
-        </div>
+        <span className={badge(readOnly ? 'neutral' : 'warning')}>{mode === 'New' ? 'New record' : mode === 'Edit' ? 'Editing' : 'View'}</span>
       </div>
 
-      {/* As in the desktop: the record's details on the left, the list of records on the right. */}
-      <div className={`grid grid-cols-1 gap-4 ${listOpen ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]' : ''}`}>
-        <section aria-label={`${title} list`} className={`${panel} flex max-h-[600px] min-h-[320px] flex-col overflow-hidden order-2 ${listOpen ? '' : 'hidden'}`}>
-          <div className="flex items-center gap-3 border-b border-line p-3">
-            <div className="relative flex-1">
-              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-              <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Search code or name…" aria-label="Search records" className={`${field} pl-8`} />
-            </div>
-            <span className="shrink-0 text-xs tabular-nums text-stone-500">{visible.length} of {rows.length}</span>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(230px,290px)_minmax(0,1fr)]">
+        <aside aria-label={`${title} list`} className={`${panel} hidden self-start overflow-hidden lg:flex lg:max-h-[calc(100dvh-14rem)] lg:flex-col`}>
+          <div className="relative border-b border-line p-2">
+            <Search size={13} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input id="ml-search" value={find} onChange={e => setFind(e.target.value)} disabled={!readOnly} placeholder="Search…" aria-label={`Search ${title}`}
+              className="w-full rounded-lg border border-[#D5DCE7] bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#1B2B4B] disabled:opacity-50 dark:border-[#2A2A2A] dark:focus:border-[#D4A847]" />
           </div>
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-xs">
-              <thead className={tableHead}>
-                <tr>{listFields.map((f, i) => <th key={f.key} className={`px-4 py-2.5 ${f.type === 'number' ? 'text-right' : ''} ${i > 1 ? 'hidden sm:table-cell' : ''}`}>{f.label}</th>)}</tr>
-              </thead>
-              <tbody className={tableBody}>
-                {pager.slice.map(r => {
-                  const isSel = String(r.code) === selected;
-                  return (
-                    <tr
-                      key={String(r.code)}
-                      onClick={() => mode === 'View' && select(r)}
-                      onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && mode === 'View') { e.preventDefault(); select(r); } }}
-                      tabIndex={mode === 'View' ? 0 : -1}
-                      aria-selected={isSel}
-                      className={`cursor-pointer outline-none transition-colors focus-visible:bg-subtle ${isSel ? 'bg-accent-soft' : 'hover:bg-subtle/70'}`}
-                    >
-                      {listFields.map((f, i) => (
-                        <td key={f.key} className={`px-4 py-2.5 ${i > 1 ? 'hidden sm:table-cell' : ''} ${i === 0 ? `font-medium ${isSel ? 'text-accent-ink' : 'text-stone-900 dark:text-stone-50'}` : 'text-stone-600 dark:text-stone-300'} ${f.type === 'number' ? 'text-right tabular-nums' : ''}`}>
-                          {f.type === 'bool' ? <span className={badge(r[f.key] ? 'success' : 'neutral')}>{r[f.key] ? 'Yes' : 'No'}</span> : String(r[f.key] ?? '')}
-                          {i === 0 && r.authorised === false && <span className={`${badge('warning')} ml-2`}>Waiting for approval</span>}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-                {!loaded && <SkeletonTableRows rows={7} cols={Math.max(1, listFields.length)} />}
-                {loaded && !visible.length && <tr><td colSpan={listFields.length} className="px-4 py-12 text-center text-stone-500">{filter ? `No records match “${filter}”.` : 'No records yet. Click New to add one.'}</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          <Pager p={pager} />
-        </section>
-
-        <section id={`mc-${path}-details`} aria-label="Record details" className={`${panel} scroll-mt-20 self-start order-1`}>
+          <ul role="listbox" aria-label={`${title} records`} className="min-h-0 flex-1 overflow-y-auto">
+            {!loaded && <li className="px-3 py-4 text-xs text-stone-500">Loading…</li>}
+            {loaded && !visible.length && <li className="px-3 py-4 text-xs text-stone-500">{find ? 'Nothing matches.' : 'No records yet.'}</li>}
+            {visible.map(r => {
+              const on = String(r.code) === selected;
+              const second = listFields.find(f => f.key !== 'code');
+              return (
+                <li key={r.code} role="option" aria-selected={on}>
+                  <button type="button" tabIndex={-1} disabled={!readOnly} onClick={() => select(r)}
+                    className={`flex w-full items-baseline gap-2 border-b border-line-soft px-3 py-1.5 text-left text-xs disabled:cursor-not-allowed ${on ? 'bg-[#BBD7F0] text-stone-900 dark:bg-[#27405A] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
+                    <span className="shrink-0 font-mono">{String(r.code)}</span>
+                    {second && <span className="min-w-0 flex-1 truncate">{String(valueOf(r, second) ?? '')}</span>}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="border-t border-line px-3 py-1.5 text-[10px] text-stone-500">{visible.length} of {rows.length} records</p>
+        </aside>
+        <section id={`mc-${path}-details`} aria-label="Record details" className={`${panel} scroll-mt-20 self-start`}>
           <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
             <h2 className={sectionTitle}>{mode === 'New' ? 'New record' : mode === 'Edit' ? `Editing ${selected}` : selected ?? 'Details'}</h2>
             {readOnly
@@ -563,7 +501,7 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
                 if (f.hideWhen && ruleHolds(f.hideWhen, values)) return null;   // hidden by the designer's rule
                 // Read-only by Field Level Rights: can be filled in for a new record, not changed afterwards.
                 const locked = readOnly || f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values))
-                  || ((f.key === 'code' || f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit') || (f.key === 'code' && !!live.screen?.flags?.auto_code);
+                  || ((f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit') || (f.key === 'code' && !!live.screen?.flags?.auto_code);
                 const value = f.extra && f.type === 'date' ? String(valueOf(form, f) ?? '').slice(0, 10) : valueOf(form, f);
                 const opts = f.options ?? options[f.key] ?? [];
                 const id = `mc-${path}-${f.key}`;
@@ -678,15 +616,9 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
             </div>
           </div>
 
-          {/* The same Cancel / Save as the top of the page, so a long form is saved without scrolling back up. */}
-          {!readOnly && (
-            <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
-              <button onClick={cancel} className={secondaryButton}><X size={14} />Cancel</button>
-              <button onClick={save} className={primaryButton}><Save size={14} />Save</button>
-            </div>
-          )}
         </section>
       </div>
     </div>
+    </ScreenFrame>
   );
 }

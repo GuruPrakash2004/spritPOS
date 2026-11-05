@@ -257,6 +257,10 @@ export const importItems = (body) => request('/masters/items/import', { method: 
 export const bulkUpdateItems = (body) =>
   request('/masters/items/bulk-update', { method: 'POST', body });
 export const updatePriceList = (body) => request('/masters/items/price-list', { method: 'POST', body });
+// The Item Rate Columns of Price List Maintenance (the Item Master's numeric designer fields): [{ key, caption, typed }].
+export const getRateColumns = () => request('/masters/items/rate-columns');
+// Update to DB: [{ item_code, values: { <column key>: new value } }] the new rates themselves -> { items, changed }.
+export const setItemRates = (rows) => request('/masters/items/price-set', { method: 'POST', body: { rows } });
 
 export const getCompany = () => request('/masters/company');
 export const saveCompany = (body) => request('/masters/company', { method: 'PUT', body });
@@ -271,7 +275,8 @@ export const savePartyRecords = (party, code, kind, rows) => request(`/masters/$
 export const addPartyNote = (party, code, note) => request(`/masters/${party}/${encodeURIComponent(code)}/activities`, { method: 'POST', body: { rows: [{ Notes: note }] } });
 export const getNextFinYear = () => request('/masters/company/fin-years/next');
 export const createFinYear = (body) => request('/masters/company/fin-years', { method: 'POST', body });
-export const removeFinYear = (start) => request(`/masters/company/fin-years/${start}`, { method: 'DELETE' });
+export const activateFinYear = (start) => request(`/masters/company/fin-years/${start}/activate`, { method: 'PUT' });   // makes that year the active one; returns the company profile
+export const removeFinYear =(start) => request(`/masters/company/fin-years/${start}`, { method: 'DELETE' });
 export const getCompanyHours = () => request('/company/hours');
 
 // Company Master's pictures and documents (routers/company_files.py).
@@ -288,23 +293,57 @@ export const companyFileUrl = (id, download = false) => `${API_BASE}/company/fil
 export const getNextNumber = (kind, counter) => request(`/transactions/next-number${qs({ kind, counter })}`);
 
 const salesInvoicePath = (docNo) => `/transactions/sales-invoice/${docNo}`;
-export const listSalesInvoices = (status, from_date, to_date) => request(`/transactions/sales-invoice${qs({ status, from_date, to_date })}`);
+// Quick Selection (the desktop's MstQuickSelItems): named sets of item codes. { sets: [{ name, codes: [...] }] }
+export const getQuickSelections = () => request('/quick-selection');
+export const saveQuickSelection = (name, codes) => request(`/quick-selection/${encodeURIComponent(name)}`, { method: 'PUT', body: { codes } });
+export const deleteQuickSelection = (name) => request(`/quick-selection/${encodeURIComponent(name)}`, { method: 'DELETE' });
+// PDF Generator: the chosen documents as one ZIP of PDFs (a Blob).
+export const downloadBulkPdf = async (kind, docNos, option = '') => (await requestRaw('/print/bulk-pdf', { method: 'POST', body: { kind, doc_nos: docNos, option } })).blob();
+// Desktop rights (Admin Master): the shop's MstUserRights / MstRoleRights. Overview -> { by, owners:[{id,name,detail}], menu:[{id,caption,type}], flags }.
+export const getDesktopRightsOverview = () => request('/admin/desktop-rights');
+export const getDesktopRights = (ownerId) => request(`/admin/desktop-rights/${ownerId}`);
+export const saveDesktopRights = (ownerId, rows) => request(`/admin/desktop-rights/${ownerId}`, { method: 'PUT', body: { rows } });
+// File Attachment on masters (master = the /masters path, e.g. 'items'): files kept by the web server.
+export const listAttachments = (master, code) => request(`/attachments/${master}${qs({ code })}`);
+export const uploadAttachment = (master, code, body) => request(`/attachments/${master}${qs({ code })}`, { method: 'POST', body });
+export const deleteAttachment = (master, id) => request(`/attachments/${master}/${id}`, { method: 'DELETE' });
+export const fetchAttachment = async (master, id, download = false) => (await requestRaw(`/attachments/${master}/${id}/content${qs({ download: download || undefined })}`)).blob();
+// SMS (UtlMsgSettings / TrnSMS): providers + whether the shop has SMS on, sent history, and sending.
+export const getSmsProviders = () => request('/sms/providers');
+export const getSmsHistory = (from, to) => request(`/sms/history${qs({ from, to })}`);
+export const sendSms = (body) => request('/sms/send', { method: 'POST', body });
+// The note and coin values of the cash count (UtlDenom): { values: ['500', …] }.
+export const getDenominationConfig = () => request('/transactions/denominations/config');
+// Item templates (MstItemTemp, the desktop's F6 Load Template): the same shape as the quick selections.
+export const getItemTemplates = () => request('/item-templates');
+export const saveItemTemplate = (name, codes) => request(`/item-templates/${encodeURIComponent(name)}`, { method: 'PUT', body: { codes } });
+export const deleteItemTemplate = (name) => request(`/item-templates/${encodeURIComponent(name)}`, { method: 'DELETE' });
+export const listSalesInvoices =(status, from_date, to_date) => request(`/transactions/sales-invoice${qs({ status, from_date, to_date })}`);
+// The footer's Total Bills / Sales (App.jsx) listens for this and reloads after a bill is saved, changed or cancelled.
+const billsChanged = (result) => { try { window.dispatchEvent(new Event('vlqms:bills-changed')); } catch { /* no window (tests) */ } return result; };
 export const saveSalesInvoice = (body, idempotencyKey) =>
-  request('/transactions/sales-invoice', { method: 'POST', body, idempotencyKey });
+  request('/transactions/sales-invoice', { method: 'POST', body, idempotencyKey }).then(billsChanged);
 export const reprintSalesInvoice = (docNo) => request(`${salesInvoicePath(docNo)}/reprint`);
 export const cancelSalesInvoice = (docNo, remarks) =>
-  request(`${salesInvoicePath(docNo)}/cancel`, { method: 'POST', body: { remarks } });
+  request(`${salesInvoicePath(docNo)}/cancel`, { method: 'POST', body: { remarks } }).then(billsChanged);
 /** Remove a held bill (recalling it deletes the hold). */
 export const deleteSalesInvoice = (docNo) => request(salesInvoicePath(docNo), { method: 'DELETE' });
 
 /** The documents of one kind (sales_invoice, purchase_bill, purchase_indent, sales_return, stock_deduction, expense, closing_stock). */
-export const listDocuments = (kind, params = {}) => request(`/transactions/${kind.replaceAll('_', '-')}${qs(params)}`);
-export const getPurchaseIndents = () => request('/transactions/purchase-indent');
+export const getSalesInvoice = (docNo) => request(`/transactions/sales-invoice/${docNo}`);   // one saved bill, whole (as the screen edits it)
+export const listDocuments =(kind, params = {}) => request(`/transactions/${kind.replaceAll('_', '-')}${qs(params)}`);
+export const getPurchaseIndents = (from_date, to_date) => request(`/transactions/purchase-indent${qs({ from_date, to_date })}`);
+export const listPurchaseBills = (from_date, to_date) => request(`/transactions/purchase-bill${qs({ from_date, to_date })}`);
+/** Change a saved sales invoice / purchase bill in place (same number); the body is the one a new bill takes. */
+export const updateSalesInvoice = (docNo, body) => request(`/transactions/sales-invoice/${docNo}`, { method: 'PUT', body }).then(billsChanged);
+export const updatePurchaseBill = (docNo, body) => request(`/transactions/purchase-bill/${docNo}`, { method: 'PUT', body });
 export const savePurchaseBill = (body, idempotencyKey) =>
   request('/transactions/purchase-bill', { method: 'POST', body, idempotencyKey });
 /** Save a stock document (Purchase Indent, Stock Deduction, Sales Return) at its own endpoint, e.g. '/transactions/stock-deduction'. */
 export const saveStockDocument = (endpoint, body) => request(endpoint, { method: 'POST', body });
 export const saveExpense = (body) => request('/transactions/expense', { method: 'POST', body });
+/** Change a saved Purchase Indent / Sales Return / Stock Deduction / Expense: `path` is its endpoint plus the document number. */
+export const updateDocument = (path, body) => request(path, { method: 'PUT', body });
 
 export const loadClosingStock = (asOn) => request(`/transactions/closing-stock/load${qs({ as_on: asOn })}`);
 export const saveClosingStock = (body) => request('/transactions/closing-stock', { method: 'POST', body });
@@ -312,10 +351,45 @@ export const generateClosingStockInvoice = (docNo, body) =>
   request(`/transactions/closing-stock/${docNo}/generate-invoice`, { method: 'POST', body });
 
 export const getDenomination = (on) => request(`/transactions/denomination${qs({ on })}`);
+// Physical Stock Entry (desktop frmTrnPSE). load: active items with system_qty for groups / packages / items (comma lists);
+// save posts only the changed rows: the excess becomes a purchase bill, the shortage a stock deduction (or a sales invoice).
+export const loadPhysicalStock = (params) => request(`/transactions/physical-stock/load${qs(params)}`);
+export const getPhysicalStockEntry = (docNo) => request(`/transactions/physical-stock/${docNo}`);
+export const savePhysicalStock = (body, key) => request('/transactions/physical-stock', { method: 'POST', body, idempotencyKey: key });
+// Accounting (desktop frmTrnVch and the FrmRptAcc* reports), read from and written to the shop's own tables.
+// kind: payment | receipt | credit-note | debit-note | contra | journal. A voucher line is { ledger_id, side: 'Dr'|'Cr', amount }.
+export const getAccountingLedgers = () => request('/accounting/ledgers');
+export const listVouchers = (kind, from_date, to_date) => request(`/accounting/vouchers/${kind}${qs({ from_date, to_date })}`);
+export const getVoucher = (kind, id) => request(`/accounting/vouchers/${kind}/${id}`);
+export const saveVoucher = (kind, body) => request(`/accounting/vouchers/${kind}`, { method: 'POST', body });
+export const updateVoucher = (kind, id, body) => request(`/accounting/vouchers/${kind}/${id}`, { method: 'PUT', body });
+export const cancelVoucher = (kind, id) => request(`/accounting/vouchers/${kind}/${id}/cancel`, { method: 'POST' });
+export const getGeneralLedger = (ledger_id, from_date, to_date) => request(`/accounting/general-ledger${qs({ ledger_id, from_date, to_date })}`);
+export const getPartyOutstanding = (party) => request(`/accounting/outstanding${qs({ party })}`);
+export const getBillWise = (ac_type) => request(`/accounting/bill-wise${qs({ ac_type })}`);
+export const getBillAgeing = (ac_type, as_on) => request(`/accounting/ageing${qs({ ac_type, as_on })}`);
+// Quotation (desktop document 1282, tables TrnHdrQTN / TrnDtlQTN). A line is { item_code, qty, rate? } (rate defaults to the MRP).
+export const listQuotations = (from_date, to_date) => request(`/transactions/quotation${qs({ from_date, to_date })}`);
+export const getQuotation = (id) => request(`/transactions/quotation/${id}`);
+export const saveQuotation = (body) => request('/transactions/quotation', { method: 'POST', body });
+export const updateQuotation = (id, body) => request(`/transactions/quotation/${id}`, { method: 'PUT', body });
+export const cancelQuotation = (id) => request(`/transactions/quotation/${id}/cancel`, { method: 'POST' });
+// Shared Documents (desktop frmUtlSharedDocuments, table UtlSharedDocs): [{ id, group, file, remarks }], read only.
+export const getSharedDocuments = () => request('/utilities/shared-documents');
+// Item Vs Brand (desktop frmUtlItemVsBrand): assignments [{item_code, brand}], an empty brand unlinks. -> { changed }
+export const assignItemBrands = (assignments) => request('/masters/items/brands', { method: 'POST', body: { assignments } });
+// Update Item Stock (desktop frmUpdateItemStock): rows [{item_code, stock, rate}]. dry_run true checks each row
+// ({ ok, rows: [{row, error}], importable }); false posts one purchase bill of opening stock ({ doc_no, imported }).
+export const updateItemStock = (body, idempotencyKey) => request('/utilities/update-item-stock', { method: 'POST', body, idempotencyKey });
+// Expense Entry "Day's OP-Balance": { date, amount } cash in hand at the start of a day (desktop TrnExpOPBal).
+export const getExpenseOpening = (on) => request(`/transactions/expense/opening-balance${qs({ on })}`);
+export const saveExpenseOpening = (body) => request('/transactions/expense/opening-balance', { method: 'POST', body });
 export const saveDenomination = (body) => request('/transactions/denomination', { method: 'POST', body });
 
 // ─── Reports (routers/reports.py, routers/custom_reports.py) ───────────────────────────────────────
 
+/** The footer's Total Bills / Sales: today's bills in the database that are not cancelled or deleted, { total_bills, sales }. */
+export const getTodayTotals = () => request('/transactions/today-totals');
 export const getDsr = (on = todayIso()) => request(`/reports/dsr${qs({ on })}`);
 export const getDailySales = (fromDate, toDate) => request(`/reports/sales/daily${qs({ from_date: fromDate, to_date: toDate })}`);
 export const getStockMovement = (on = todayIso()) => request(`/reports/stock-movement${qs({ on })}`);
@@ -468,6 +542,11 @@ export const listDuplicateInvoices = (params) =>
   request(`/utilities/duplicate-invoices${qs(params)}`);
 export const removeDuplicateInvoices = (body) =>
   request('/utilities/duplicate-invoices/remove', { method: 'POST', body });
+
+// Delete Non-Liquor Items (desktop frmUtlDeleteNonLiqItems), Administrator only. preview -> { group, items, counts, blockers, can_delete };
+// delete body { group, confirm, admin_password (encrypted for "admin") } -> { deleted_items, sales_bills, ... }.
+export const previewDeleteNonLiquor = (group) => request(`/utilities/delete-non-liquor/preview${qs({ group })}`);
+export const deleteNonLiquorItems = (body) => request('/utilities/delete-non-liquor', { method: 'POST', body });
 
 /** `mode` is 'merge' or 'replace' (Merge Items / Replace and Remove Duplicate items). */
 export const previewMergeItems = (mode, fromItem, toItem) =>

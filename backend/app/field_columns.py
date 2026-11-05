@@ -16,7 +16,7 @@ _EXPLICIT: dict[str, dict[str, str]] = {
         "mrp": "MRP", "purchase_rate": "PURRATE", "cgst_per": "CGSTPER", "sgst_per": "SGSTPER", "rol": "ROL", "roq": "ROQ",
     },
     "customers": {"code": "CUSTCODE", "name": "CUSTNAME", "mobile": "MOBNO", "loyalty_card_no": "CARDNO",
-                  "send_sms": "SENDSMS", "gstin": "GSTNO", "city": "City"},
+                  "send_sms": "SENDSMS", "gstin": "GSTNO", "city": "City", "currency": "CURID"},
     "suppliers": {"code": "SUPPCODE", "name": "SUPPNAME", "alias": "SUPPAliasName", "address": "BAdd1", "city": "City",
                   "pin": "PinCode", "state": "State", "country": "Country", "phone": "PHNO", "gstin": "GSTNO"},
     "item-groups": {"code": "ITEMGROUPCODE", "name": "ITEMGROUPNAME", "liquor": "LiqItem", "consider_for_loyalty": "LOYALTY"},
@@ -59,7 +59,7 @@ WEB_HINTS: dict[str, dict[str, dict]] = {
               "uom": {"caption": "UOM", "options_from": "uoms", "required": True},
               "brand": {"caption": "Brand", "options_from": "brands"}, "package": {"options_from": "packages", "required": True},
               "liqtype": {"options": ["IML", "Beer", "Wine", "Others"], "required": True}},
-    "customers": {"points": {"caption": "Loyalty Points"}},
+    "customers": {"points": {"caption": "Loyalty Points"}, "gstin": {"required": True}, "currency": {"options_from": "currencies", "required": True}},
     "suppliers": {"gstin": {"required": True}},
     "ledgers": {"group": {"caption": "Ledger Group", "options_from": "ledger-groups", "required": True}},
 }

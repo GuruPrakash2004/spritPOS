@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toastStore } from '../common/toastStore'
 import SalesInvoice from './SalesInvoice'
+import { setAuthRights, todayIso } from '../../lib/api'
 import { STOCK_ITEMS } from '../../data/stockData'
 
 // Test data: one real-looking item that is not in the old sample list, with 5 in stock.
@@ -126,6 +127,52 @@ describe('SalesInvoice', () => {
     expect(screen.getByLabelText(/scan or search item/i)).toHaveValue('')
   })
 
+  it('opens the Please Select Item window with ↓, picks with Ok, shows the item beside Qty and clears it after Enter', async () => {
+    const user = userEvent.setup()
+    render(<SalesInvoice setup={setup} onClose={() => {}} />)
+    await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+
+    await user.click(screen.getByLabelText(/scan or search item/i))
+    expect(screen.queryByRole('dialog', { name: 'Please Select Item' })).not.toBeInTheDocument()   // a click does not open it
+    await user.keyboard('{ArrowDown}')
+    expect(await screen.findByRole('dialog', { name: 'Please Select Item' })).toBeInTheDocument()
+    expect(screen.getByText('Total Records : 1 / 1')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Ok' }))
+
+    expect(screen.getByLabelText(/scan or search item/i)).toHaveValue('BLND-750')
+    expect(screen.getByText(/BLENDERS PRIDE RARE WHISKY/)).toBeInTheDocument()   // the item beside OK
+    await user.keyboard('{Enter}')   // Enter in Qty adds it
+    expect(screen.getByLabelText(/scan or search item/i)).toHaveValue('')
+    expect(screen.getByLabelText(/qty for blenders/i)).toHaveValue(1)
+  })
+
+  it('a quantity typed for an item already on the bill sets the line instead of adding to it', async () => {
+    const user = userEvent.setup()
+    render(<SalesInvoice setup={setup} onClose={() => {}} />)
+    await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+    await scan(user, 'BLND-750')
+    await scan(user, 'BLND-750', '4')
+    expect(screen.getByLabelText(/qty for blenders/i)).toHaveValue(4)
+  })
+
+  it('a line that is selected takes the quantity typed in Qty (Enter) as its new quantity', async () => {
+    const user = userEvent.setup()
+    render(<SalesInvoice setup={setup} onClose={() => {}} />)
+    await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+    await scan(user, 'BLND-750')
+    expect(screen.getByLabelText(/qty for blenders/i)).toHaveValue(1)
+
+    await user.click(screen.getByText('BLENDERS PRIDE RARE WHISKY 750ml'))   // select the line
+    const qtyBox = screen.getByLabelText('Qty')
+    await user.clear(qtyBox)
+    await user.type(qtyBox, '4{Enter}')
+    expect(screen.getByLabelText(/qty for blenders/i)).toHaveValue(4)
+    expect(qtyBox).toHaveValue(1)   // the box goes back to 1 for the next item
+
+    await user.type(qtyBox, '9{Enter}')   // more than the 5 in stock: refused, the line keeps 4
+    expect(screen.getByLabelText(/qty for blenders/i)).toHaveValue(4)
+  })
+
   it('takes "3*" as the quantity, then + / − and Delete on the line', async () => {
     const user = userEvent.setup()
     render(<SalesInvoice setup={setup} onClose={() => {}} />)
@@ -181,5 +228,34 @@ describe('SalesInvoice', () => {
     await user.keyboard('{F10}')
     expect(posts()).toHaveLength(1)
     answer(json({ doc_no: '26/c10-0083718', status: 'SAVED', totals: { net: 1235, qty: 1 }, lines: [] }, 201))
+  })
+
+  it('opens a saved bill from Re-print / Edit to edit it, and saves the change as an update of the same bill', async () => {
+    setAuthRights(['*'])
+    const saved = { doc_no: '26/c10-0000001', date: todayIso(), time: '10:00:00', counter: 'C1', customer: 'CASH', salesperson: 'GURU', status: 'SAVED', payment_type: 'CASH',
+      lines: [{ item_code: 'BLND-750', item_name: ITEM.name, qty: 2, rate: 1234.6, amount: 2469.2 }], totals: { qty: 2, net: 2469, discount: 0, points_redeemed: 0 }, payment: { cash: 2469, card: 0, upi: 0, credit: 0 } }
+    const puts = []
+    fetchMock.mockImplementation(async (url, init) => {
+      if (init?.method === 'PUT') { puts.push([url, JSON.parse(String(init.body))]); return json({ ...saved, totals: { net: 1235, qty: 1 } }) }
+      if (url.endsWith('/reprint')) return json({ invoice: saved })
+      if (url.startsWith('/api/transactions/sales-invoice') && (!init?.method || init.method === 'GET')) return json([saved])
+      if (url.startsWith('/api/masters/items')) return json([ITEM])
+      if (url.startsWith('/api/masters/customers')) return json([CASH])
+      if (url.startsWith('/api/sales-persons')) return json(['GURU', 'RAVI'])
+      return json([])
+    })
+    const user = userEvent.setup()
+    render(<SalesInvoice setup={setup} onClose={() => {}} />)
+    await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+    await user.click(screen.getByRole('button', { name: /Re-print/ }))
+    await user.click((await screen.findAllByText('26/c10-0000001')).at(-1))   // the header's Last bill shows it too
+    await user.click(await screen.findByRole('button', { name: 'Edit Bill' }))
+    expect(await screen.findByText(/Editing bill 26\/c10-0000001/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop editing' })).toBeInTheDocument()
+    await user.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0][0]).toBe('/api/transactions/sales-invoice/26/c10-0000001')
+    expect(puts[0][1]).toMatchObject({ date: saved.date, counter: 'C1', hold: false, lines: [{ item_code: 'BLND-750', bottles: 2 }] })
+    expect(posts()).toHaveLength(0)   // an edit never creates a second bill
   })
 })

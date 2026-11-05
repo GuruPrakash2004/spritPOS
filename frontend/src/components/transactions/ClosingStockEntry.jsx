@@ -8,6 +8,7 @@ import { Download, FileOutput, Save } from 'lucide-react';
 import Modal from '../common/Modal';
 import Toast from '../common/Toast';
 import Kbd from '../common/Kbd';
+import WithHistory from './DocHistoryPanel';
 import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
 import { errorText, generateClosingStockInvoice, getSalesCounters, getSalesPersons, loadClosingStock, saveClosingStock, todayIso, } from '../../lib/api';
@@ -79,6 +80,7 @@ export default function ClosingStockEntry() {
   useShortcuts({ 'Mod+S': () => { void save(); } });
 
   return (
+    <WithHistory kind="closing_stock" title="closing stock entries" onNew={() => { setRows([]); setSavedDoc(null); }}>
     <div className="mx-auto flex max-w-6xl flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       <div className={pageHeader}>
@@ -168,5 +170,6 @@ export default function ClosingStockEntry() {
         </Modal>
       )}
     </div>
+    </WithHistory>
   );
 }

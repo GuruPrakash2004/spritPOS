@@ -207,7 +207,7 @@ def build(day: date) -> dict:
         "TotCashAmt": _r(pay.get("cash")), "TotCardAmt": _r(pay.get("card")), "OtherAmt": _r(pay.get("upi")),
         "CreditAmt": _r(pay.get("credit")), "WriteOffAmt": 0,
         "TotPurAmt_SalesRate": _r(pur_at_mrp), "PurAmtBasic": dsr["purchase"]["basic"],
-        "PurAmtInclGST": dsr["purchase"]["incl_gst"], "TotSalesRetnAmt": dsr["sales_returns"], "CashOPAmt": 0,
+        "PurAmtInclGST": dsr["purchase"]["incl_gst"], "TotSalesRetnAmt": dsr["sales_returns"], "CashOPAmt": dsr.get("cash_opening", 0),
         "ExpenseAmt": dsr["expenses"], "CashBalanceAmt": dsr["cash_balance"], "RedemAmount": dsr["redemption"],
         "LastPurBillNo": last_pb["doc_no"] if last_pb else "", "LastPurDate": last_pb["date"] if last_pb else None,
         "LastPurValue": _r(last_pb["totals"]["net"]) if last_pb else 0,

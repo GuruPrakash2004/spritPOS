@@ -17,13 +17,12 @@ const serve = (status) => vi.stubGlobal('fetch', vi.fn(async (url) => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('Login', () => {
-  it('shows no demo logins and the shop\'s own financial years', async () => {
+  it('shows no demo logins and offers no financial-year choice (the current year is used)', async () => {
     serve({})
     render(<Login onLogin={() => {}} />)
-    expect(await screen.findByRole('option', { name: '01/04/2027 - 31/03/2028' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '01/04/2026 - 31/03/2027' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('User name')).toHaveValue('')
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
     expect(screen.queryByText(/demo/i)).not.toBeInTheDocument()
-    expect(screen.getByLabelText('User name')).toHaveValue('')
   })
 
   it('has no sign-in form while the database is offline', async () => {

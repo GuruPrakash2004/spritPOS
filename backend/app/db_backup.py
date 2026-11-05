@@ -33,10 +33,9 @@ def start() -> dict:
         path, network = _setting("SQLBACKUPPATH"), _setting("SQLNWBACKUPPATH")
         if not path:
             raise ValueError("Backup path of SQL is not specified in Global Settings. (Under Database Group)")
-        if not network:
-            raise ValueError("Network Backup path of SQL is not specified in Global Settings. (Under Database Group)")
+        network = network or path   # only names the file in the success message; the SQL Server's own path is enough
         name = db.settings()["database"]
-        leaf = f"\db{name}{datetime.now():%d%b%Y_%H%M%S}.Bak"
+        leaf = f"\\db{name}{datetime.now():%d%b%Y_%H%M%S}.Bak"
         _state.update(state="running", file=path + leaf, network_file=network + leaf, message="", started=datetime.now().isoformat(timespec="seconds"), finished="")
         threading.Thread(target=_run, args=(name, path + leaf), daemon=True).start()
         return status()

@@ -4,10 +4,12 @@
 // All data is in the shop's SQL Server (Web_ tables), which is backed up by SQL Server itself.
 
 import { useMemo, useState, useEffect } from 'react';
+import ActionBar, { ScreenFrame } from '../common/ActionBar';
+import { goHome } from '../../lib/nav';
 import { FIELD_RULES, cleanInput, fieldProblem } from '../../lib/validation';
 import { 
   Building2, ShieldCheck, Calendar, Image as ImageIcon,
-  FolderArchive, Save, Plus,
+  FolderArchive, Plus,
 } from 'lucide-react';
 import { CompanyDocuments, CompanyImages } from './CompanyFiles';
 import { TextField } from '../common/FormField';
@@ -15,7 +17,7 @@ import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { useConfirm } from '../common/ConfirmDialog';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
-import { createFinYear, errorText, getBackupStatus, getCompany, getNextFinYear, removeFinYear, saveCompany, startBackup, updateDashboardLink, } from '../../lib/api';
+import { activateFinYear, createFinYear, errorText, getBackupStatus, getCompany, getNextFinYear, removeFinYear, saveCompany, startBackup, updateDashboardLink, } from '../../lib/api';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
 import { useScreenFields } from '../../hooks/useScreenFields';
 import { applyDefinition, extraProblem, valueOf } from '../../lib/designerFields';
@@ -103,7 +105,10 @@ const CompanyMaster = ({ canEditFiles }) => {
             clearInterval(timer);
             setToast({ kind: state.state === 'ok' ? 'ok' : 'error', text: state.message });
           }
-        } catch { clearInterval(timer); }
+        } catch (e) {
+          clearInterval(timer);
+          setToast({ kind: 'error', text: `Could not read the backup's progress: ${errorText(e)}` });
+        }
       }, 3000);
     } catch (e) { setToast({ kind: 'error', text: errorText(e) }); }
   };
@@ -126,6 +131,14 @@ const CompanyMaster = ({ canEditFiles }) => {
       setToast({ kind: 'ok', text: 'Financial year created.' });
     } catch (e) { setToast({ kind: 'error', text: errorText(e) }); }
   };
+  const makeActiveFinYear = async (y) => {
+    if (!(await confirm(`Make ${dmy(y.start)} to ${dmy(y.end)} the active financial year? New bills will be numbered in it, for every user.`))) return;
+    if (!(await toastStore.defer('ok', `The financial year ${dmy(y.start)} to ${dmy(y.end)} will be made active when this closes.`, 'Cancelled. The active year is unchanged.'))) return;
+    try {
+      setCompanyProfile(await activateFinYear(y.start));
+      setToast({ kind: 'ok', text: 'Financial year made active.' });
+    } catch (e) { setToast({ kind: 'error', text: errorText(e) }); }
+  };
   const deleteFinYear = async (y) => {
     if (!(await confirm(`Are you sure you want to delete the financial year ${dmy(y.start)} to ${dmy(y.end)}?`))) return;
     if (!(await toastStore.defer('delete', `The financial year ${dmy(y.start)} to ${dmy(y.end)} will be deleted when this closes.`, 'Delete cancelled. Nothing was removed.'))) return;
@@ -144,18 +157,19 @@ const CompanyMaster = ({ canEditFiles }) => {
     }
   };
 
-  useEffect(() => {
-    getCompany()
-      .then(profile => {
-        lastProfile = profile;
-        setCompanyProfile(profile);
-        setCompanyName(profile.name);
-        setEmail(profile.email);
-        setAddr(lines(profile));
-        setMapEmbed(profile.map_embed ?? '');
-      })
-      .catch(error => setToast({ kind: 'error', text: errorText(error) }));
-  }, []);
+  // Read the profile from the database (also what the bar's Cancel does: the typed changes are thrown away).
+  const loadProfile = () => getCompany()
+    .then(profile => {
+      lastProfile = profile;
+      setCompanyProfile(profile);
+      setCompanyName(profile.name);
+      setEmail(profile.email);
+      setAddr(lines(profile));
+      setMapEmbed(profile.map_embed ?? '');
+      setErrors({});
+    })
+    .catch(error => setToast({ kind: 'error', text: errorText(error) }));
+  useEffect(() => { void loadProfile(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps -- once, when the screen opens
 
   const handleSave = async () => {
     if (!canEditFiles || !companyProfile) return;
@@ -215,7 +229,11 @@ const CompanyMaster = ({ canEditFiles }) => {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // The one record of this master is always open: Save and Cancel are in the bar for those who may edit it (the exe's Edit mode); Close for everyone.
+  const bar = <ActionBar mode={canEditFiles ? 'Edit' : 'View'} onSave={() => void handleSave()} onCancel={() => void loadProfile()} onClose={goHome} saveLabel="Save Master" />;
+
   return (
+    <ScreenFrame bar={bar}>
     <div className="mx-auto max-w-6xl">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {confirmDialog}
@@ -227,9 +245,6 @@ const CompanyMaster = ({ canEditFiles }) => {
             <span className={badge('success')}>{companyProfile?.licence_type ? `Licensed entity · ${companyProfile.licence_type}` : 'Licensed entity'}</span>
           </div>
           <p className={pageSub}>Firm credentials, excise licences, retailer IDs and financial periods.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {canEditFiles && <button onClick={handleSave} className={primaryButton}><Save size={14} />Save Master</button>}
         </div>
       </div>
 
@@ -383,6 +398,7 @@ const CompanyMaster = ({ canEditFiles }) => {
                         {y.active ? <span className={badge('success')}><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active</span> : <span className="text-stone-500">—</span>}
                       </td>
                       <td className="px-4 py-2 text-right">
+                        {canEditFiles && !y.active && <button onClick={() => void makeActiveFinYear(y)} className="mr-3 text-xs text-[#1B2B4B] hover:underline dark:text-[#D4A847]">Make active</button>}
                         {canEditFiles && !y.active && <button onClick={() => deleteFinYear(y)} className="text-xs text-[#9A4B45] hover:underline dark:text-red-400">Remove</button>}
                       </td>
                     </tr>
@@ -407,7 +423,6 @@ const CompanyMaster = ({ canEditFiles }) => {
 
       {canEditFiles && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button onClick={handleSave} className={primaryButton}><Save size={14} />Save Master</button>
           <button onClick={runBackup} disabled={backup?.state === 'running'} className={secondaryButton} title="Backup of the current database">
             {backup?.state === 'running' ? 'Backing up…' : 'Backup'}
           </button>
@@ -423,6 +438,7 @@ const CompanyMaster = ({ canEditFiles }) => {
         </div>
       )}
     </div>
+    </ScreenFrame>
   );
 };
 

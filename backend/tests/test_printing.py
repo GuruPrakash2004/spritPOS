@@ -193,3 +193,9 @@ def test_printers_are_checked_side_by_side_and_remembered(monkeypatch):
     rpt_bridge.printer_report(fresh=True)
     assert len(calls) == 8
     rpt_bridge._PRINTERS.update(at=0.0, report=None)
+
+
+async def test_bulk_pdf_needs_documents_and_a_known_kind(client):
+    assert (await client.post("/print/bulk-pdf", json={"kind": "sales_invoice", "doc_nos": []})).status_code == 422
+    assert (await client.post("/print/bulk-pdf", json={"kind": "nothing", "doc_nos": ["1"]})).status_code == 404
+    assert (await client.post("/print/bulk-pdf", json={"kind": "sales_invoice", "doc_nos": [str(i) for i in range(101)]})).status_code == 422

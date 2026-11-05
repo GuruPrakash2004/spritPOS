@@ -1,0 +1,2838 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+    <ProductVersion>
+    </ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{6103ED10-E991-4310-9783-2E23C7343992}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <StartupObject>vLQMS.My.MyApplication</StartupObject>
+    <RootNamespace>vLQMS</RootNamespace>
+    <AssemblyName>vLQMS</AssemblyName>
+    <FileAlignment>512</FileAlignment>
+    <MyType>WindowsForms</MyType>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkProfile>
+    </TargetFrameworkProfile>
+    <IsWebBootstrapper>false</IsWebBootstrapper>
+    <PublishUrl>publish\</PublishUrl>
+    <Install>true</Install>
+    <InstallFrom>Disk</InstallFrom>
+    <UpdateEnabled>false</UpdateEnabled>
+    <UpdateMode>Foreground</UpdateMode>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdatePeriodically>false</UpdatePeriodically>
+    <UpdateRequired>false</UpdateRequired>
+    <MapFileExtensions>true</MapFileExtensions>
+    <ApplicationRevision>0</ApplicationRevision>
+    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <UseApplicationTrust>false</UseApplicationTrust>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <DefineDebug>true</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DocumentationFile>vLQMS.xml</DocumentationFile>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022</NoWarn>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <DefineDebug>false</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DocumentationFile>vLQMS.xml</DocumentationFile>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022</NoWarn>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionExplicit>On</OptionExplicit>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionCompare>Binary</OptionCompare>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionStrict>Off</OptionStrict>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionInfer>On</OptionInfer>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>final_icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationManifest>My Project\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="AForge">
+      <HintPath>..\..\svtTools\DLL\AForge.dll</HintPath>
+    </Reference>
+    <Reference Include="AForge.Video">
+      <HintPath>..\..\DLL\AForge.Video.dll</HintPath>
+    </Reference>
+    <Reference Include="AForge.Video.DirectShow">
+      <HintPath>..\..\svtTools\DLL\AForge.Video.DirectShow.dll</HintPath>
+    </Reference>
+    <Reference Include="C1.C1Report.4, Version=4.6.20132.54640, Culture=neutral, PublicKeyToken=594a0605db190bb9, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1Chart.4, Version=4.0.20132.23225, Culture=neutral, PublicKeyToken=a22e16972c085838, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1Command.4, Version=4.0.20132.19578, Culture=neutral, PublicKeyToken=e808566f358766d8, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1Editor.4, Version=4.0.20132.204, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1FlexGrid.4, Version=4.6.20132.786, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1GanttView.4, Version=4.0.20132.131, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1Input.4, Version=4.0.20132.33305, Culture=neutral, PublicKeyToken=7e7ff60f0c214f9a, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1InputPanel.4, Version=4.0.20132.166, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1List.2, Version=2.1.20132.237, Culture=neutral, PublicKeyToken=6b24f8f981dbd7bc, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1List.4, Version=4.1.20132.237, Culture=neutral, PublicKeyToken=6b24f8f981dbd7bc, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1Ribbon.4, Version=4.0.20132.488, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1Schedule.4, Version=4.0.20132.251, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1Sizer.4, Version=4.1.20132.78, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1SplitContainer.4, Version=4.0.20132.46, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1SuperTooltip.4, Version=4.0.20132.125, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="C1.Win.C1Win7Pack.4, Version=4.0.20132.33, Culture=neutral, PublicKeyToken=79882d576c6336da, processorArchitecture=MSIL" />
+    <Reference Include="ClosedXML">
+      <HintPath>..\..\svtTools\DLL\ClosedXML.dll</HintPath>
+    </Reference>
+    <Reference Include="CrystalDecisions.CrystalReports.Engine, Version=13.0.2000.0, Culture=neutral, PublicKeyToken=692fbea5521e1304, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>R:\dll\CrystalDecisions.CrystalReports.Engine.dll</HintPath>
+    </Reference>
+    <Reference Include="CrystalDecisions.ReportSource, Version=13.0.2000.0, Culture=neutral, PublicKeyToken=692fbea5521e1304, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>R:\dll\CrystalDecisions.ReportSource.dll</HintPath>
+    </Reference>
+    <Reference Include="CrystalDecisions.Shared, Version=13.0.2000.0, Culture=neutral, PublicKeyToken=692fbea5521e1304, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>R:\dll\CrystalDecisions.Shared.dll</HintPath>
+    </Reference>
+    <Reference Include="CrystalDecisions.Windows.Forms, Version=13.0.2000.0, Culture=neutral, PublicKeyToken=692fbea5521e1304, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>R:\dll\CrystalDecisions.Windows.Forms.dll</HintPath>
+    </Reference>
+    <Reference Include="ExcelDataReader">
+      <HintPath>..\..\svtTools\DLL\ExcelDataReader.dll</HintPath>
+    </Reference>
+    <Reference Include="Ionic.Zip.Reduced">
+      <HintPath>..\..\DLL\Ionic.Zip.Reduced.dll</HintPath>
+    </Reference>
+    <Reference Include="itextsharp">
+      <HintPath>..\..\svtTools\DLL\itextsharp.dll</HintPath>
+    </Reference>
+    <Reference Include="microsoft.msxml, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="Microsoft.Office.Interop.Excel, Version=14.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+      <HintPath>..\..\Activity\dll\Microsoft.Office.Interop.Excel.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Office.Interop.Outlook, Version=14.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+      <HintPath>..\..\Activity\dll\Microsoft.Office.Interop.Outlook.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Office.Interop.Word, Version=14.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+      <HintPath>..\..\Activity\dll\Microsoft.Office.Interop.Word.dll</HintPath>
+    </Reference>
+    <Reference Include="Office, Version=14.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+      <HintPath>..\..\Activity\dll\Office.dll</HintPath>
+    </Reference>
+    <Reference Include="PdfSharp">
+      <HintPath>..\..\svtTools\DLL\PdfSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="PresentationCore" />
+    <Reference Include="QRCoder">
+      <HintPath>..\..\svtTools\DLL\QRCoder.dll</HintPath>
+    </Reference>
+    <Reference Include="ReachFramework" />
+    <Reference Include="SSPLLic">
+      <HintPath>..\..\svtTools\DLL\SSPLLic.dll</HintPath>
+    </Reference>
+    <Reference Include="svtLicence, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\Live_MiniSrvr\Live\vClub\bin\Debug\svtLicence.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Design" />
+    <Reference Include="System.DirectoryServices" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Management" />
+    <Reference Include="System.Messaging" />
+    <Reference Include="System.Speech" />
+    <Reference Include="System.Web.Services" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Windows.Forms.DataVisualization" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="TCPCam">
+      <HintPath>..\..\svtTools\DLL\TCPCam.dll</HintPath>
+    </Reference>
+    <Reference Include="ThoughtWorks.QRCode">
+      <HintPath>..\..\svtTools\DLL\ThoughtWorks.QRCode.dll</HintPath>
+    </Reference>
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
+  <ItemGroup>
+    <Import Include="Microsoft.VisualBasic" />
+    <Import Include="System" />
+    <Import Include="System.Collections" />
+    <Import Include="System.Collections.Generic" />
+    <Import Include="System.Data" />
+    <Import Include="System.Drawing" />
+    <Import Include="System.Diagnostics" />
+    <Import Include="System.Windows.Forms" />
+    <Import Include="System.Linq" />
+    <Import Include="System.Xml.Linq" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Class\getHWInfo.vb" />
+    <Compile Include="Clients\Drops\frmRptDropsCons.Designer.vb">
+      <DependentUpon>frmRptDropsCons.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Clients\Drops\frmRptDropsCons.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Clients\Drops\frmRptDropsPur.Designer.vb">
+      <DependentUpon>frmRptDropsPur.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Clients\Drops\frmRptDropsPur.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Clients\Drops\frmRptDropsPettyCash.Designer.vb">
+      <DependentUpon>frmRptDropsPettyCash.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Clients\Drops\frmRptDropsPettyCash.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Clients\Drops\frmRptDropsDSR.Designer.vb">
+      <DependentUpon>frmRptDropsDSR.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Clients\Drops\frmRptDropsDSR.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Clients\LHouse\frmTrnCloseStk.designer.vb">
+      <DependentUpon>frmTrnCloseStk.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Clients\LHouse\frmTrnCloseStk.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Main\frmCreateFactICDbs.Designer.vb">
+      <DependentUpon>frmCreateFactICDbs.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Main\frmCreateFactICDbs.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Main\frmKeyReg.Designer.vb">
+      <DependentUpon>frmKeyReg.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Main\frmKeyReg.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Main\frmUpdateExe.Designer.vb">
+      <DependentUpon>frmUpdateExe.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Main\frmUpdateExe.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmDBCreation.Designer.vb">
+      <DependentUpon>frmDBCreation.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmDBCreation.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstCreateFinYear.Designer.vb">
+      <DependentUpon>frmMstCreateFinYear.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstCreateFinYear.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstHoliday.Designer.vb">
+      <DependentUpon>frmMstHoliday.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstHoliday.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstItemQuickSel.designer.vb">
+      <DependentUpon>frmMstItemQuickSel.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstItemQuickSel.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstUserAdmPwdChange.Designer.vb">
+      <DependentUpon>frmMstUserAdmPwdChange.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstUserAdmPwdChange.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Modules\frmModWebSync.vb" />
+    <Compile Include="My Project\Resources.Designer.vb">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\FrmRptAccAgeBillWise.designer.vb">
+      <DependentUpon>FrmRptAccAgeBillWise.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\FrmRptAccAgeBillWise.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\FrmRptAccGL.designer.vb">
+      <DependentUpon>FrmRptAccGL.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\FrmRptAccGL.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\FrmRptAccOSBillWise.designer.vb">
+      <DependentUpon>FrmRptAccOSBillWise.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\FrmRptAccOSBillWise.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptAccOutstanding.designer.vb">
+      <DependentUpon>frmRptAccOutstanding.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptAccOutstanding.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ApplicationEvents.vb" />
+    <Compile Include="Class\clsReg.vb" />
+    <Compile Include="Class\ControlMoverOrResizer.vb" />
+    <Compile Include="Class\HotKey.vb" />
+    <Compile Include="Class\svtLibrary.vb" />
+    <Compile Include="Class\svtPwd.vb" />
+    <Compile Include="frmsplash.Designer.vb">
+      <DependentUpon>frmsplash.vb</DependentUpon>
+    </Compile>
+    <Compile Include="frmsplash.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Main\frmLogin.Designer.vb">
+      <DependentUpon>frmLogin.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Main\frmLogin.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Main\frmMain.Designer.vb">
+      <DependentUpon>frmMain.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Main\frmMain.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Main\FrmMainSplash.Designer.vb">
+      <DependentUpon>FrmMainSplash.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Main\FrmMainSplash.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Main\frmOTP.Designer.vb">
+      <DependentUpon>frmOTP.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Main\frmOTP.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Main\frmUtlDBConnection.designer.vb">
+      <DependentUpon>frmUtlDBConnection.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Main\frmUtlDBConnection.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstBOM.designer.vb">
+      <DependentUpon>frmMstBOM.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstBOM.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstBOMMulti.Designer.vb">
+      <DependentUpon>frmMstBOMMulti.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstBOMMulti.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstGlobeComp.designer.vb">
+      <DependentUpon>frmMstGlobeComp.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstGlobeComp.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstPriceMaintenance.Designer.vb">
+      <DependentUpon>frmMstPriceMaintenance.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstPriceMaintenance.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstSelComp.Designer.vb">
+      <DependentUpon>frmMstSelComp.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstSelComp.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmPartyItem.Designer.vb">
+      <DependentUpon>frmPartyItem.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmPartyItem.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Modules\WaterMark.vb">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstCurr.Designer.vb">
+      <DependentUpon>frmMstCurr.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstCurr.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstFldRights.Designer.vb">
+      <DependentUpon>frmMstFldRights.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstFldRights.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstItem.designer.vb">
+      <DependentUpon>frmMstItem.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstItem.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstUOM.Designer.vb">
+      <DependentUpon>frmMstUOM.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstUOM.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstParty.Designer.vb">
+      <DependentUpon>frmMstParty.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstParty.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstPartyActivities.designer.vb">
+      <DependentUpon>frmMstPartyActivities.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstPartyActivities.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstPartyAddress.designer.vb">
+      <DependentUpon>frmMstPartyAddress.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstPartyAddress.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstPartyAlert.designer.vb">
+      <DependentUpon>frmMstPartyAlert.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstPartyAlert.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstPartyContactPerson.designer.vb">
+      <DependentUpon>frmMstPartyContactPerson.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstPartyContactPerson.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstOPBalEntry.designer.vb">
+      <DependentUpon>frmMstOPBalEntry.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstOPBalEntry.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstGeneral.Designer.vb">
+      <DependentUpon>frmMstGeneral.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstGeneral.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstRole.Designer.vb">
+      <DependentUpon>frmMstRole.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstRole.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstSCC.Designer.vb">
+      <DependentUpon>frmMstSCC.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstSCC.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstRights.Designer.vb">
+      <DependentUpon>frmMstRights.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstRights.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstUser.Designer.vb">
+      <DependentUpon>frmMstUser.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstUser.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmPartyInfo.Designer.vb">
+      <DependentUpon>frmPartyInfo.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmPartyInfo.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmSelFinYear.designer.vb">
+      <DependentUpon>frmSelFinYear.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmSelFinYear.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Masters\frmMstComp.designer.vb">
+      <DependentUpon>frmMstComp.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Masters\frmMstComp.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Modules\ChartVisualStyles.vb" />
+    <Compile Include="Modules\DsgrModule.vb" />
+    <Compile Include="Modules\frmModule.vb" />
+    <Compile Include="Modules\svtModule.vb" />
+    <Compile Include="Modules\ViewForm.vb" />
+    <Compile Include="My Project\AssemblyInfo.vb" />
+    <Compile Include="My Project\Application.Designer.vb">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Application.myapp</DependentUpon>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <Compile Include="My Project\Settings.Designer.vb">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+    <Compile Include="Reports\frmRptAdminAuditLog.Designer.vb">
+      <DependentUpon>frmRptAdminAuditLog.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptAdminAuditLog.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPosInv.designer.vb">
+      <DependentUpon>frmTrnPosInv.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPosInv.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPSE.Designer.vb">
+      <DependentUpon>frmTrnPSE.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPSE.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptLoyalty.Designer.vb">
+      <DependentUpon>frmRptLoyalty.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptLoyalty.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptCRFinal.Designer.vb">
+      <DependentUpon>frmRptCRFinal.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptCRFinal.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptCRFldSel.Designer.vb">
+      <DependentUpon>frmRptCRFldSel.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptCRFldSel.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptCRDesign.Designer.vb">
+      <DependentUpon>frmRptCRDesign.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptCRDesign.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptCurStockBal.Designer.vb">
+      <DependentUpon>frmRptCurStockBal.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptCurStockBal.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptCustomiseRptView.Designer.vb">
+      <DependentUpon>frmRptCustomiseRptView.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptCustomiseRptView.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptDailySummary.Designer.vb">
+      <DependentUpon>frmRptDailySummary.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptDailySummary.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptDesigner.Designer.vb">
+      <DependentUpon>frmRptDesigner.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptDesigner.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptBCPrint.designer.vb">
+      <DependentUpon>frmRptBCPrint.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptBCPrint.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptDSR.Designer.vb">
+      <DependentUpon>frmRptDSR.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptDSR.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptExciseStk.designer.vb">
+      <DependentUpon>frmRptExciseStk.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptExciseStk.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptHourlySales.designer.vb">
+      <DependentUpon>frmRptHourlySales.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptHourlySales.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptItemQR.designer.vb">
+      <DependentUpon>frmRptItemQR.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptItemQR.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptLblPrint.designer.vb">
+      <DependentUpon>frmRptLblPrint.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptLblPrint.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptMultiPrint.Designer.vb">
+      <DependentUpon>frmRptMultiPrint.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptMultiPrint.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRPtInvalidItems.designer.vb">
+      <DependentUpon>frmRPtInvalidItems.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRPtInvalidItems.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptBrandWise.Designer.vb">
+      <DependentUpon>frmRptBrandWise.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptBrandWise.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptPM.designer.vb">
+      <DependentUpon>frmRptPM.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptPM.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptPMDesign.Designer.vb">
+      <DependentUpon>frmRptPMDesign.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptPMDesign.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptProMrg.designer.vb">
+      <DependentUpon>frmRptProMrg.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptProMrg.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptPurchase.designer.vb">
+      <DependentUpon>frmRptPurchase.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptPurchase.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptQuery.Designer.vb">
+      <DependentUpon>frmRptQuery.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptQuery.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptReport.Designer.vb">
+      <DependentUpon>frmRptReport.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptReport.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptSalesPkgwise.designer.vb">
+      <DependentUpon>frmRptSalesPkgwise.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptSalesPkgwise.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptSMSHistory.designer.vb">
+      <DependentUpon>frmRptSMSHistory.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptSMSHistory.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptSPurPkgwise.designer.vb">
+      <DependentUpon>frmRptSPurPkgwise.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptSPurPkgwise.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptsDrops.designer.vb">
+      <DependentUpon>frmRptsDrops.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptsDrops.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptsRegister.designer.vb">
+      <DependentUpon>frmRptsRegister.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptsRegister.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptStkLevel.designer.vb">
+      <DependentUpon>frmRptStkLevel.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptStkLevel.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptStkRef.Designer.vb">
+      <DependentUpon>frmRptStkRef.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptStkRef.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptStockAgeing.Designer.vb">
+      <DependentUpon>frmRptStockAgeing.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptStockAgeing.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptStockBal.designer.vb">
+      <DependentUpon>frmRptStockBal.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptStockBal.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptStockLed.designer.vb">
+      <DependentUpon>frmRptStockLed.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptStockLed.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptTemp.Designer.vb">
+      <DependentUpon>frmRptTemp.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptTemp.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmRptView.Designer.vb">
+      <DependentUpon>frmRptView.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmRptView.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Reports\frmStockLevel.Designer.vb">
+      <DependentUpon>frmStockLevel.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Reports\frmStockLevel.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmStkRewrite.Designer.vb">
+      <DependentUpon>frmStkRewrite.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmStkRewrite.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnAddMultiItem.designer.vb">
+      <DependentUpon>frmTrnAddMultiItem.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnAddMultiItem.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnAddSngItem.Designer.vb">
+      <DependentUpon>frmTrnAddSngItem.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnAddSngItem.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnBill.Designer.vb">
+      <DependentUpon>frmTrnBill.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnBill.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnBOMDetails.Designer.vb">
+      <DependentUpon>frmTrnBOMDetails.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnBOMDetails.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnEmail.Designer.vb">
+      <DependentUpon>frmTrnEmail.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnEmail.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnMemorandum.designer.vb">
+      <DependentUpon>frmTrnMemorandum.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnMemorandum.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnNonPartyNonItem.designer.vb">
+      <DependentUpon>frmTrnNonPartyNonItem.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnNonPartyNonItem.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnInv.designer.vb">
+      <DependentUpon>frmTrnInv.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnInv.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnRDM.designer.vb">
+      <DependentUpon>frmTrnRDM.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnRDM.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPBM.designer.vb">
+      <DependentUpon>frmTrnPBM.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPBM.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnRemoveDuplicates.Designer.vb">
+      <DependentUpon>frmTrnRemoveDuplicates.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnRemoveDuplicates.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnSR.designer.vb">
+      <DependentUpon>frmTrnSR.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnSR.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnSTKDED.designer.vb">
+      <DependentUpon>frmTrnSTKDED.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnSTKDED.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPartyDoc.designer.vb">
+      <DependentUpon>frmTrnPartyDoc.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPartyDoc.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPartySMS.Designer.vb">
+      <DependentUpon>frmTrnPartySMS.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPartySMS.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPendPopUp.designer.vb">
+      <DependentUpon>frmTrnPendPopUp.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnPendPopUp.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnQuickBillNonTouch.designer.vb">
+      <DependentUpon>frmTrnQuickBillNonTouch.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnQuickBillNonTouch.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnSMS.Designer.vb">
+      <DependentUpon>frmTrnSMS.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnSMS.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnVch.designer.vb">
+      <DependentUpon>frmTrnVch.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnVch.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Transaction\frmTrnVchPend.Designer.vb">
+      <DependentUpon>frmTrnVchPend.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Transaction\frmTrnVchPend.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UserControls\btnCtrl.designer.vb">
+      <DependentUpon>btnCtrl.vb</DependentUpon>
+    </Compile>
+    <Compile Include="UserControls\btnCtrl.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="UserControls\CButton.Designer.vb">
+      <DependentUpon>CButton.vb</DependentUpon>
+    </Compile>
+    <Compile Include="UserControls\CButton.vb">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="UserControls\CButtonDesigner.vb" />
+    <Compile Include="UserControls\ChooseGlyph.vb" />
+    <Compile Include="UserControls\ComboEz.vb">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="UserControls\svtPartyCtrl.Designer.vb">
+      <DependentUpon>svtPartyCtrl.vb</DependentUpon>
+    </Compile>
+    <Compile Include="UserControls\svtPartyCtrl.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAutoEmailSch.designer.vb">
+      <DependentUpon>frmUtlAutoEmailSch.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAutoEmailSch.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBarCodePrint.Designer.vb">
+      <DependentUpon>frmUtlBarCodePrint.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBarCodePrint.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBlkImpt.Designer.vb">
+      <DependentUpon>frmUtlBlkImpt.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBlkImpt.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDeleteNonLiqItems.Designer.vb">
+      <DependentUpon>frmUtlDeleteNonLiqItems.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDeleteNonLiqItems.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstTrnBulkUpdate.Designer.vb">
+      <DependentUpon>frmUtlMstTrnBulkUpdate.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstTrnBulkUpdate.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstTrnBulkUpdateDesign.Designer.vb">
+      <DependentUpon>frmUtlMstTrnBulkUpdateDesign.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstTrnBulkUpdateDesign.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPkgOrderBy.designer.vb">
+      <DependentUpon>frmUtlPkgOrderBy.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPkgOrderBy.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlGrpOrderBy.designer.vb">
+      <DependentUpon>frmUtlGrpOrderBy.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlGrpOrderBy.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlImportAnyFld.Designer.vb">
+      <DependentUpon>frmUtlImportAnyFld.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlImportAnyFld.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlWAS.Designer.vb">
+      <DependentUpon>frmUtlWAS.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlWAS.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAssignRight.Designer.vb">
+      <DependentUpon>frmUtlAssignRight.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAssignRight.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlCompareStk.Designer.vb">
+      <DependentUpon>frmUtlCompareStk.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlCompareStk.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUpdateItemStock.Designer.vb">
+      <DependentUpon>frmUpdateItemStock.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUpdateItemStock.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmImportItemXLData.Designer.vb">
+      <DependentUpon>frmImportItemXLData.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmImportItemXLData.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAddRptItems.Designer.vb">
+      <DependentUpon>frmUtlAddRptItems.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAddRptItems.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAddParty.Designer.vb">
+      <DependentUpon>frmUtlAddParty.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAddParty.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAuditLogSync.Designer.vb">
+      <DependentUpon>frmUtlAuditLogSync.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAuditLogSync.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBCLblGen.designer.vb">
+      <DependentUpon>frmUtlBCLblGen.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBCLblGen.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBulkPDFGenerator.Designer.vb">
+      <DependentUpon>frmUtlBulkPDFGenerator.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBulkPDFGenerator.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlCalci.Designer.vb">
+      <DependentUpon>frmUtlCalci.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlCalci.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmMutlCurr.Designer.vb">
+      <DependentUpon>frmMutlCurr.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmMutlCurr.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDashBoard.Designer.vb">
+      <DependentUpon>frmUtlDashBoard.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDashBoard.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDashSettings.Designer.vb">
+      <DependentUpon>frmUtlDashSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDashSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlCancelInvRmks.Designer.vb">
+      <DependentUpon>frmUtlCancelInvRmks.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlCancelInvRmks.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDaysExpOPBalance.Designer.vb">
+      <DependentUpon>frmUtlDaysExpOPBalance.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDaysExpOPBalance.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDelDupInvoice.Designer.vb">
+      <DependentUpon>frmUtlDelDupInvoice.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDelDupInvoice.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDelCancelDoc.Designer.vb">
+      <DependentUpon>frmUtlDelCancelDoc.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDelCancelDoc.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlExportStkWeb.Designer.vb">
+      <DependentUpon>frmUtlExportStkWeb.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlExportStkWeb.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFixedEmail.Designer.vb">
+      <DependentUpon>frmUtlFixedEmail.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFixedEmail.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlHoldBill.Designer.vb">
+      <DependentUpon>frmUtlHoldBill.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlHoldBill.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlImportItemFmExcel.designer.vb">
+      <DependentUpon>frmUtlImportItemFmExcel.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlImportItemFmExcel.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlImportLegacyData.Designer.vb">
+      <DependentUpon>frmUtlImportLegacyData.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlImportLegacyData.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlInvSMS.Designer.vb">
+      <DependentUpon>frmUtlInvSMS.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlInvSMS.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlItemVsBrand.Designer.vb">
+      <DependentUpon>frmUtlItemVsBrand.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlItemVsBrand.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlLoadFromDoc.Designer.vb">
+      <DependentUpon>frmUtlLoadFromDoc.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlLoadFromDoc.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBOMPrint.Designer.vb">
+      <DependentUpon>frmUtlBOMPrint.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBOMPrint.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBomShowRev.Designer.vb">
+      <DependentUpon>frmUtlBomShowRev.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBomShowRev.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBOMTreeview.Designer.vb">
+      <DependentUpon>frmUtlBOMTreeview.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBOMTreeview.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBulkUpdate.Designer.vb">
+      <DependentUpon>frmUtlBulkUpdate.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBulkUpdate.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDCShortClose.designer.vb">
+      <DependentUpon>frmUtlDCShortClose.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDCShortClose.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlDeleteLinkageUpdation.Designer.vb">
+      <DependentUpon>FrmUtlDeleteLinkageUpdation.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlDeleteLinkageUpdation.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDocDeleteData.Designer.vb">
+      <DependentUpon>frmUtlDocDeleteData.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDocDeleteData.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDSEShortClose.Designer.vb">
+      <DependentUpon>frmUtlDSEShortClose.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDSEShortClose.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlEnv.Designer.vb">
+      <DependentUpon>frmUtlEnv.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlEnv.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlEnvDesign.Designer.vb">
+      <DependentUpon>frmUtlEnvDesign.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlEnvDesign.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFileControl.Designer.vb">
+      <DependentUpon>frmUtlFileControl.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFileControl.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFindFlds.designer.vb">
+      <DependentUpon>frmUtlFindFlds.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFindFlds.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFldCaptions.designer.vb">
+      <DependentUpon>frmUtlFldCaptions.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFldCaptions.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlLoginSettings.Designer.vb">
+      <DependentUpon>frmUtlLoginSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlLoginSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMenuSequence.Designer.vb">
+      <DependentUpon>frmUtlMenuSequence.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMenuSequence.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMergeItems.Designer.vb">
+      <DependentUpon>frmUtlMergeItems.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMergeItems.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstApprovals.Designer.vb">
+      <DependentUpon>frmUtlMstApprovals.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstApprovals.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstPartyAddress.designer.vb">
+      <DependentUpon>frmUtlMstPartyAddress.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstPartyAddress.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultiAmt.Designer.vb">
+      <DependentUpon>frmUtlMultiAmt.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultiAmt.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultilineNote.Designer.vb">
+      <DependentUpon>frmUtlMultilineNote.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultilineNote.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlNotification.Designer.vb">
+      <DependentUpon>frmUtlNotification.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlNotification.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPostDocDesign.Designer.vb">
+      <DependentUpon>frmUtlPostDocDesign.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPostDocDesign.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPostDocEntry.designer.vb">
+      <DependentUpon>frmUtlPostDocEntry.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPostDocEntry.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPostDocList.Designer.vb">
+      <DependentUpon>frmUtlPostDocList.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPostDocList.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPostDocRpt.Designer.vb">
+      <DependentUpon>frmUtlPostDocRpt.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPostDocRpt.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlPrintOptionname.Designer.vb">
+      <DependentUpon>FrmUtlPrintOptionname.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlPrintOptionname.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlPrintSettings.Designer.vb">
+      <DependentUpon>FrmUtlPrintSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlPrintSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlQuickRef.Designer.vb">
+      <DependentUpon>frmUtlQuickRef.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlQuickRef.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlRecAuditLog .Designer.vb">
+      <DependentUpon>frmUtlRecAuditLog .vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlRecAuditLog .vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFormColourSettings.Designer.vb">
+      <DependentUpon>frmUtlFormColourSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFormColourSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAddItems.Designer.vb">
+      <DependentUpon>frmUtlAddItems.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAddItems.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UserControls\ucBtn.Designer.vb">
+      <DependentUpon>ucBtn.vb</DependentUpon>
+    </Compile>
+    <Compile Include="UserControls\ucBtn.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="UserControls\ucSearch.Designer.vb">
+      <DependentUpon>ucSearch.vb</DependentUpon>
+    </Compile>
+    <Compile Include="UserControls\ucSearch.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="UserControls\CornerGlyph.vb" />
+    <Compile Include="UserControls\CustomButton.vb">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="UserControls\DotNetBarTabControl.vb">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="UserControls\DropdownColorBlender.designer.vb">
+      <DependentUpon>DropdownColorBlender.vb</DependentUpon>
+    </Compile>
+    <Compile Include="UserControls\DropdownColorBlender.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="UserControls\FocalPtGlyph.vb" />
+    <Compile Include="UserControls\PadGlyph.vb" />
+    <Compile Include="UserControls\svtFileCtrl.designer.vb">
+      <DependentUpon>svtFileCtrl.vb</DependentUpon>
+    </Compile>
+    <Compile Include="UserControls\svtFileCtrl.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDenom.Designer.vb">
+      <DependentUpon>frmUtlDenom.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDenom.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFormSettings.Designer.vb">
+      <DependentUpon>frmUtlFormSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFormSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlGenDoc.Designer.vb">
+      <DependentUpon>frmUtlGenDoc.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlGenDoc.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlGSettings.designer.vb">
+      <DependentUpon>FrmUtlGSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlGSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlImportXL.designer.vb">
+      <DependentUpon>frmUtlImportXL.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlImportXL.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlInsertfromDoc.Designer.vb">
+      <DependentUpon>frmUtlInsertfromDoc.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlInsertfromDoc.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlReceivedNotes.Designer.vb">
+      <DependentUpon>frmUtlReceivedNotes.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlReceivedNotes.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlReg.Designer.vb">
+      <DependentUpon>frmUtlReg.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlReg.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlRestore.Designer.vb">
+      <DependentUpon>frmUtlRestore.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlRestore.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSendSMS.Designer.vb">
+      <DependentUpon>frmUtlSendSMS.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSendSMS.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSEShortClose.Designer.vb">
+      <DependentUpon>frmUtlSEShortClose.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSEShortClose.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlShortclose.Designer.vb">
+      <DependentUpon>frmUtlShortclose.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlShortclose.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlShowText.Designer.vb">
+      <DependentUpon>frmUtlShowText.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlShowText.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSMSSearch.designer.vb">
+      <DependentUpon>frmUtlSMSSearch.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSMSSearch.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSplitData.Designer.vb">
+      <DependentUpon>frmUtlSplitData.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSplitData.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSQLQueryExec.Designer.vb">
+      <DependentUpon>frmUtlSQLQueryExec.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSQLQueryExec.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFldsTemplate.Designer.vb">
+      <DependentUpon>frmUtlFldsTemplate.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlFldsTemplate.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSQLTblEdit.Designer.vb">
+      <DependentUpon>frmUtlSQLTblEdit.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSQLTblEdit.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlStk.Designer.vb">
+      <DependentUpon>frmUtlStk.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlStk.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlLabelDesign.Designer.vb">
+      <DependentUpon>frmUtlLabelDesign.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlLabelDesign.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSuppConfDate.Designer.vb">
+      <DependentUpon>frmUtlSuppConfDate.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSuppConfDate.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlToolTipText.Designer.vb">
+      <DependentUpon>frmUtlToolTipText.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlToolTipText.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlTranspose.Designer.vb">
+      <DependentUpon>frmUtlTranspose.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlTranspose.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlTrnFldsEmailTmp.Designer.vb">
+      <DependentUpon>frmUtlTrnFldsEmailTmp.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlTrnFldsEmailTmp.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlTrnFldsTemplate.Designer.vb">
+      <DependentUpon>frmUtlTrnFldsTemplate.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlTrnFldsTemplate.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlTrnSettings.Designer.vb">
+      <DependentUpon>FrmUtlTrnSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\FrmUtlTrnSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlTrnView.designer.vb">
+      <DependentUpon>frmUtlTrnView.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlTrnView.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmFMTViewer.Designer.vb">
+      <DependentUpon>frmFMTViewer.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmFMTViewer.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAuditLog.Designer.vb">
+      <DependentUpon>frmUtlAuditLog.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAuditLog.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBtnHotkeys.designer.vb">
+      <DependentUpon>frmUtlBtnHotkeys.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBtnHotkeys.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlExplosion.Designer.vb">
+      <DependentUpon>frmUtlExplosion.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlExplosion.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultiSelAudit.designer.vb">
+      <DependentUpon>frmUtlMultiSelAudit.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultiSelAudit.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultiSelRpt.designer.vb">
+      <DependentUpon>frmUtlMultiSelRpt.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultiSelRpt.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlNewShortcutKey.Designer.vb">
+      <DependentUpon>frmUtlNewShortcutKey.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlNewShortcutKey.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSettings.designer.vb">
+      <DependentUpon>frmUtlSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAbout.Designer.vb">
+      <DependentUpon>frmUtlAbout.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAbout.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAssignRights.Designer.vb">
+      <DependentUpon>frmUtlAssignRights.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAssignRights.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlUpdatefromTally.Designer.vb">
+      <DependentUpon>frmUtlUpdatefromTally.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlUpdatefromTally.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlValueMatrixEmails.Designer.vb">
+      <DependentUpon>frmUtlValueMatrixEmails.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlValueMatrixEmails.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlVRImage.Designer.vb">
+      <DependentUpon>frmUtlVRImage.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlVRImage.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\Linked\frmUtlAlias.Designer.vb">
+      <DependentUpon>frmUtlAlias.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\Linked\frmUtlAlias.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAuth.designer.vb">
+      <DependentUpon>frmUtlAuth.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAuth.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAuthDoc.designer.vb">
+      <DependentUpon>frmUtlAuthDoc.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlAuthDoc.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlGColourSettings.Designer.vb">
+      <DependentUpon>frmUtlGColourSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlGColourSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlInvXLPrintQuery.Designer.vb">
+      <DependentUpon>frmUtlInvXLPrintQuery.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlInvXLPrintQuery.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlKeyBoard.Designer.vb">
+      <DependentUpon>frmUtlKeyBoard.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlKeyBoard.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMnuGrpItemSel.designer.vb">
+      <DependentUpon>frmUtlMnuGrpItemSel.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMnuGrpItemSel.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPLListView.designer.vb">
+      <DependentUpon>frmUtlPLListView.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPLListView.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPLView.designer.vb">
+      <DependentUpon>frmUtlPLView.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPLView.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlCopyFrom.Designer.vb">
+      <DependentUpon>frmUtlCopyFrom.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlCopyFrom.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDelCancel.Designer.vb">
+      <DependentUpon>frmUtlDelCancel.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDelCancel.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlScreenDocs.Designer.vb">
+      <DependentUpon>frmUtlScreenDocs.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlScreenDocs.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSelBranch.designer.vb">
+      <DependentUpon>frmUtlSelBranch.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSelBranch.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlShowHelpFiles.Designer.vb">
+      <DependentUpon>frmUtlShowHelpFiles.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlShowHelpFiles.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlChange.Designer.vb">
+      <DependentUpon>frmUtlChange.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlChange.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDocNumber.Designer.vb">
+      <DependentUpon>frmUtlDocNumber.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDocNumber.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultiSelection.designer.vb">
+      <DependentUpon>frmUtlMultiSelection.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMultiSelection.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBCDesigner.designer.vb">
+      <DependentUpon>frmUtlBCDesigner.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlBCDesigner.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDispAuth.designer.vb">
+      <DependentUpon>frmUtlDispAuth.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlDispAuth.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlInvNumberFmt.Designer.vb">
+      <DependentUpon>frmUtlInvNumberFmt.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlInvNumberFmt.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPriceImport.Designer.vb">
+      <DependentUpon>frmUtlPriceImport.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlPriceImport.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSearchSettings.designer.vb">
+      <DependentUpon>frmUtlSearchSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSearchSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSelection.designer.vb">
+      <DependentUpon>frmUtlSelection.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSelection.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSharedDocuments.Designer.vb">
+      <DependentUpon>frmUtlSharedDocuments.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSharedDocuments.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSingleSel.designer.vb">
+      <DependentUpon>frmUtlSingleSel.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSingleSel.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSMTPSettings.Designer.vb">
+      <DependentUpon>frmUtlSMTPSettings.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlSMTPSettings.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstView.designer.vb">
+      <DependentUpon>frmUtlMstView.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlMstView.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlViewExport.designer.vb">
+      <DependentUpon>frmUtlViewExport.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlViewExport.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\frmUtlWebCam.designer.vb">
+      <DependentUpon>frmUtlWebCam.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\frmUtlWebCam.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\Linked\frmUtlReportViewer.designer.vb">
+      <DependentUpon>frmUtlReportViewer.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\Linked\frmUtlReportViewer.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Utilities\WEBDBCHANGES.Designer.vb">
+      <DependentUpon>WEBDBCHANGES.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\WEBDBCHANGES.vb">
+      <SubType>Form</SubType>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Clients\Drops\frmRptDropsCons.resx">
+      <DependentUpon>frmRptDropsCons.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Clients\Drops\frmRptDropsPur.resx">
+      <DependentUpon>frmRptDropsPur.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Clients\Drops\frmRptDropsPettyCash.resx">
+      <DependentUpon>frmRptDropsPettyCash.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Clients\Drops\frmRptDropsDSR.resx">
+      <DependentUpon>frmRptDropsDSR.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Clients\LHouse\frmTrnCloseStk.resx">
+      <DependentUpon>frmTrnCloseStk.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Main\frmCreateFactICDbs.resx">
+      <DependentUpon>frmCreateFactICDbs.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Main\frmKeyReg.resx">
+      <DependentUpon>frmKeyReg.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Main\frmUpdateExe.resx">
+      <DependentUpon>frmUpdateExe.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmDBCreation.resx">
+      <DependentUpon>frmDBCreation.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstCreateFinYear.resx">
+      <DependentUpon>frmMstCreateFinYear.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstHoliday.resx">
+      <DependentUpon>frmMstHoliday.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstItemQuickSel.resx">
+      <DependentUpon>frmMstItemQuickSel.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstUserAdmPwdChange.resx">
+      <DependentUpon>frmMstUserAdmPwdChange.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\FrmRptAccAgeBillWise.resx">
+      <DependentUpon>FrmRptAccAgeBillWise.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\FrmRptAccGL.resx">
+      <DependentUpon>FrmRptAccGL.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\FrmRptAccOSBillWise.resx">
+      <DependentUpon>FrmRptAccOSBillWise.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptAccOutstanding.resx">
+      <DependentUpon>frmRptAccOutstanding.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="frmsplash.resx">
+      <DependentUpon>frmsplash.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Main\frmLogin.resx">
+      <DependentUpon>frmLogin.vb</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Main\frmMain.resx">
+      <DependentUpon>frmMain.vb</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Main\FrmMainSplash.resx">
+      <DependentUpon>FrmMainSplash.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Main\frmOTP.resx">
+      <DependentUpon>frmOTP.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Main\frmUtlDBConnection.resx">
+      <DependentUpon>frmUtlDBConnection.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstBOM.resx">
+      <DependentUpon>frmMstBOM.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstBOMMulti.resx">
+      <DependentUpon>frmMstBOMMulti.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstCurr.resx">
+      <DependentUpon>frmMstCurr.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstFldRights.resx">
+      <DependentUpon>frmMstFldRights.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstGlobeComp.resx">
+      <DependentUpon>frmMstGlobeComp.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstItem.resx">
+      <DependentUpon>frmMstItem.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstPriceMaintenance.resx">
+      <DependentUpon>frmMstPriceMaintenance.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstSelComp.resx">
+      <DependentUpon>frmMstSelComp.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstUOM.resx">
+      <DependentUpon>frmMstUOM.vb</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstParty.resx">
+      <DependentUpon>frmMstParty.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstPartyActivities.resx">
+      <DependentUpon>frmMstPartyActivities.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstPartyAddress.resx">
+      <DependentUpon>frmMstPartyAddress.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstPartyAlert.resx">
+      <DependentUpon>frmMstPartyAlert.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstPartyContactPerson.resx">
+      <DependentUpon>frmMstPartyContactPerson.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstOPBalEntry.resx">
+      <DependentUpon>frmMstOPBalEntry.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstGeneral.resx">
+      <DependentUpon>frmMstGeneral.vb</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstRole.resx">
+      <DependentUpon>frmMstRole.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstSCC.resx">
+      <DependentUpon>frmMstSCC.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstRights.resx">
+      <DependentUpon>frmMstRights.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstUser.resx">
+      <DependentUpon>frmMstUser.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmPartyInfo.resx">
+      <DependentUpon>frmPartyInfo.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmPartyItem.resx">
+      <DependentUpon>frmPartyItem.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmSelFinYear.resx">
+      <DependentUpon>frmSelFinYear.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Masters\frmMstComp.resx">
+      <DependentUpon>frmMstComp.vb</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="My Project\licenses.licx" />
+    <EmbeddedResource Include="My Project\Resources.resx">
+      <Generator>VbMyResourcesResXFileCodeGenerator</Generator>
+      <CustomToolNamespace>My.Resources</CustomToolNamespace>
+      <SubType>Designer</SubType>
+      <LastGenOutput>Resources.Designer.vb</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptAdminAuditLog.resx">
+      <DependentUpon>frmRptAdminAuditLog.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnPosInv.resx">
+      <DependentUpon>frmTrnPosInv.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnPSE.resx">
+      <DependentUpon>frmTrnPSE.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptLoyalty.resx">
+      <DependentUpon>frmRptLoyalty.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptCRFinal.resx">
+      <DependentUpon>frmRptCRFinal.vb</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptCRFldSel.resx">
+      <DependentUpon>frmRptCRFldSel.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptCRDesign.resx">
+      <DependentUpon>frmRptCRDesign.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptCurStockBal.resx">
+      <DependentUpon>frmRptCurStockBal.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptCustomiseRptView.resx">
+      <DependentUpon>frmRptCustomiseRptView.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptDailySummary.resx">
+      <DependentUpon>frmRptDailySummary.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptDesigner.resx">
+      <DependentUpon>frmRptDesigner.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptBCPrint.resx">
+      <DependentUpon>frmRptBCPrint.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptDSR.resx">
+      <DependentUpon>frmRptDSR.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptExciseStk.resx">
+      <DependentUpon>frmRptExciseStk.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptHourlySales.resx">
+      <DependentUpon>frmRptHourlySales.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptItemQR.resx">
+      <DependentUpon>frmRptItemQR.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptLblPrint.resx">
+      <DependentUpon>frmRptLblPrint.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptMultiPrint.resx">
+      <DependentUpon>frmRptMultiPrint.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRPtInvalidItems.resx">
+      <DependentUpon>frmRPtInvalidItems.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptBrandWise.resx">
+      <DependentUpon>frmRptBrandWise.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptPM.resx">
+      <DependentUpon>frmRptPM.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptPMDesign.resx">
+      <DependentUpon>frmRptPMDesign.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptProMrg.resx">
+      <DependentUpon>frmRptProMrg.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptPurchase.resx">
+      <DependentUpon>frmRptPurchase.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptQuery.resx">
+      <DependentUpon>frmRptQuery.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptReport.resx">
+      <DependentUpon>frmRptReport.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptSalesPkgwise.resx">
+      <DependentUpon>frmRptSalesPkgwise.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptSMSHistory.resx">
+      <DependentUpon>frmRptSMSHistory.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptSPurPkgwise.resx">
+      <DependentUpon>frmRptSPurPkgwise.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptsDrops.resx">
+      <DependentUpon>frmRptsDrops.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptsRegister.resx">
+      <DependentUpon>frmRptsRegister.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptStkLevel.resx">
+      <DependentUpon>frmRptStkLevel.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptStkRef.resx">
+      <DependentUpon>frmRptStkRef.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptStockAgeing.resx">
+      <DependentUpon>frmRptStockAgeing.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptStockBal.resx">
+      <DependentUpon>frmRptStockBal.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptStockLed.resx">
+      <DependentUpon>frmRptStockLed.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptTemp.resx">
+      <DependentUpon>frmRptTemp.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmRptView.resx">
+      <DependentUpon>frmRptView.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Reports\frmStockLevel.resx">
+      <DependentUpon>frmStockLevel.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmStkRewrite.resx">
+      <DependentUpon>frmStkRewrite.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnAddMultiItem.resx">
+      <DependentUpon>frmTrnAddMultiItem.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnAddSngItem.resx">
+      <DependentUpon>frmTrnAddSngItem.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnBill.resx">
+      <DependentUpon>frmTrnBill.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnBOMDetails.resx">
+      <DependentUpon>frmTrnBOMDetails.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnEmail.resx">
+      <DependentUpon>frmTrnEmail.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnMemorandum.resx">
+      <DependentUpon>frmTrnMemorandum.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnNonPartyNonItem.resx">
+      <DependentUpon>frmTrnNonPartyNonItem.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnInv.resx">
+      <DependentUpon>frmTrnInv.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnRDM.resx">
+      <DependentUpon>frmTrnRDM.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnPBM.resx">
+      <DependentUpon>frmTrnPBM.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnRemoveDuplicates.resx">
+      <DependentUpon>frmTrnRemoveDuplicates.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnSR.resx">
+      <DependentUpon>frmTrnSR.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnSTKDED.resx">
+      <DependentUpon>frmTrnSTKDED.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnPartyDoc.resx">
+      <DependentUpon>frmTrnPartyDoc.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnPartySMS.resx">
+      <DependentUpon>frmTrnPartySMS.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnPendPopUp.resx">
+      <DependentUpon>frmTrnPendPopUp.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnQuickBillNonTouch.resx">
+      <DependentUpon>frmTrnQuickBillNonTouch.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnSMS.resx">
+      <DependentUpon>frmTrnSMS.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnVch.resx">
+      <DependentUpon>frmTrnVch.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Transaction\frmTrnVchPend.resx">
+      <DependentUpon>frmTrnVchPend.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UserControls\btnCtrl.resx">
+      <DependentUpon>btnCtrl.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UserControls\CButton.resx">
+      <DependentUpon>CButton.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UserControls\ComboEz.resx">
+      <DependentUpon>ComboEz.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UserControls\svtPartyCtrl.resx">
+      <DependentUpon>svtPartyCtrl.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UserControls\ucBtn.resx">
+      <DependentUpon>ucBtn.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UserControls\ucSearch.resx">
+      <DependentUpon>ucSearch.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UserControls\DropdownColorBlender.resx">
+      <DependentUpon>DropdownColorBlender.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UserControls\svtFileCtrl.resx">
+      <DependentUpon>svtFileCtrl.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAutoEmailSch.resx">
+      <DependentUpon>frmUtlAutoEmailSch.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBarCodePrint.resx">
+      <DependentUpon>frmUtlBarCodePrint.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBlkImpt.resx">
+      <DependentUpon>frmUtlBlkImpt.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDeleteNonLiqItems.resx">
+      <DependentUpon>frmUtlDeleteNonLiqItems.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMstTrnBulkUpdate.resx">
+      <DependentUpon>frmUtlMstTrnBulkUpdate.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMstTrnBulkUpdateDesign.resx">
+      <DependentUpon>frmUtlMstTrnBulkUpdateDesign.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlPkgOrderBy.resx">
+      <DependentUpon>frmUtlPkgOrderBy.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlGrpOrderBy.resx">
+      <DependentUpon>frmUtlGrpOrderBy.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlImportAnyFld.resx">
+      <DependentUpon>frmUtlImportAnyFld.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlWAS.resx">
+      <DependentUpon>frmUtlWAS.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUpdateItemStock.resx">
+      <DependentUpon>frmUpdateItemStock.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmImportItemXLData.resx">
+      <DependentUpon>frmImportItemXLData.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAddRptItems.resx">
+      <DependentUpon>frmUtlAddRptItems.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAddParty.resx">
+      <DependentUpon>frmUtlAddParty.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAssignRight.resx">
+      <DependentUpon>frmUtlAssignRight.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAuditLogSync.resx">
+      <DependentUpon>frmUtlAuditLogSync.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBCLblGen.resx">
+      <DependentUpon>frmUtlBCLblGen.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBOMPrint.resx">
+      <DependentUpon>frmUtlBOMPrint.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBomShowRev.resx">
+      <DependentUpon>frmUtlBomShowRev.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBOMTreeview.resx">
+      <DependentUpon>frmUtlBOMTreeview.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBulkPDFGenerator.resx">
+      <DependentUpon>frmUtlBulkPDFGenerator.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBulkUpdate.resx">
+      <DependentUpon>frmUtlBulkUpdate.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlCalci.resx">
+      <DependentUpon>frmUtlCalci.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlCompareStk.resx">
+      <DependentUpon>frmUtlCompareStk.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmMutlCurr.resx">
+      <DependentUpon>frmMutlCurr.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDashBoard.resx">
+      <DependentUpon>frmUtlDashBoard.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDashSettings.resx">
+      <DependentUpon>frmUtlDashSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlCancelInvRmks.resx">
+      <DependentUpon>frmUtlCancelInvRmks.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDaysExpOPBalance.resx">
+      <DependentUpon>frmUtlDaysExpOPBalance.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDCShortClose.resx">
+      <DependentUpon>frmUtlDCShortClose.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDelDupInvoice.resx">
+      <DependentUpon>frmUtlDelDupInvoice.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDelCancelDoc.resx">
+      <DependentUpon>frmUtlDelCancelDoc.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\FrmUtlDeleteLinkageUpdation.resx">
+      <DependentUpon>FrmUtlDeleteLinkageUpdation.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDocDeleteData.resx">
+      <DependentUpon>frmUtlDocDeleteData.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDSEShortClose.resx">
+      <DependentUpon>frmUtlDSEShortClose.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlEnv.resx">
+      <DependentUpon>frmUtlEnv.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlEnvDesign.resx">
+      <DependentUpon>frmUtlEnvDesign.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlExportStkWeb.resx">
+      <DependentUpon>frmUtlExportStkWeb.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlFileControl.resx">
+      <DependentUpon>frmUtlFileControl.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlFindFlds.resx">
+      <DependentUpon>frmUtlFindFlds.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlFixedEmail.resx">
+      <DependentUpon>frmUtlFixedEmail.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlFldCaptions.resx">
+      <DependentUpon>frmUtlFldCaptions.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlHoldBill.resx">
+      <DependentUpon>frmUtlHoldBill.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlImportItemFmExcel.resx">
+      <DependentUpon>frmUtlImportItemFmExcel.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlImportLegacyData.resx">
+      <DependentUpon>frmUtlImportLegacyData.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlInvSMS.resx">
+      <DependentUpon>frmUtlInvSMS.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlItemVsBrand.resx">
+      <DependentUpon>frmUtlItemVsBrand.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlLoadFromDoc.resx">
+      <DependentUpon>frmUtlLoadFromDoc.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlLoginSettings.resx">
+      <DependentUpon>frmUtlLoginSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMenuSequence.resx">
+      <DependentUpon>frmUtlMenuSequence.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMergeItems.resx">
+      <DependentUpon>frmUtlMergeItems.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMstApprovals.resx">
+      <DependentUpon>frmUtlMstApprovals.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMstPartyAddress.resx">
+      <DependentUpon>frmUtlMstPartyAddress.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMultiAmt.resx">
+      <DependentUpon>frmUtlMultiAmt.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMultilineNote.resx">
+      <DependentUpon>frmUtlMultilineNote.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlNotification.resx">
+      <DependentUpon>frmUtlNotification.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlPostDocDesign.resx">
+      <DependentUpon>frmUtlPostDocDesign.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlPostDocEntry.resx">
+      <DependentUpon>frmUtlPostDocEntry.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlPostDocList.resx">
+      <DependentUpon>frmUtlPostDocList.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlPostDocRpt.resx">
+      <DependentUpon>frmUtlPostDocRpt.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\FrmUtlPrintOptionname.resx">
+      <DependentUpon>FrmUtlPrintOptionname.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\FrmUtlPrintSettings.resx">
+      <DependentUpon>FrmUtlPrintSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlQuickRef.resx">
+      <DependentUpon>frmUtlQuickRef.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlRecAuditLog .resx">
+      <DependentUpon>frmUtlRecAuditLog .vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAddItems.resx">
+      <DependentUpon>frmUtlAddItems.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDenom.resx">
+      <DependentUpon>frmUtlDenom.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlFormColourSettings.resx">
+      <DependentUpon>frmUtlFormColourSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlFormSettings.resx">
+      <DependentUpon>frmUtlFormSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlGenDoc.resx">
+      <DependentUpon>frmUtlGenDoc.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\FrmUtlGSettings.resx">
+      <DependentUpon>FrmUtlGSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlImportXL.resx">
+      <DependentUpon>frmUtlImportXL.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlInsertfromDoc.resx">
+      <DependentUpon>frmUtlInsertfromDoc.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlReceivedNotes.resx">
+      <DependentUpon>frmUtlReceivedNotes.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlReg.resx">
+      <DependentUpon>frmUtlReg.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlRestore.resx">
+      <DependentUpon>frmUtlRestore.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSendSMS.resx">
+      <DependentUpon>frmUtlSendSMS.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSEShortClose.resx">
+      <DependentUpon>frmUtlSEShortClose.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlShortclose.resx">
+      <DependentUpon>frmUtlShortclose.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlShowText.resx">
+      <DependentUpon>frmUtlShowText.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSMSSearch.resx">
+      <DependentUpon>frmUtlSMSSearch.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSplitData.resx">
+      <DependentUpon>frmUtlSplitData.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSQLQueryExec.resx">
+      <DependentUpon>frmUtlSQLQueryExec.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlFldsTemplate.resx">
+      <DependentUpon>frmUtlFldsTemplate.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSQLTblEdit.resx">
+      <DependentUpon>frmUtlSQLTblEdit.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlStk.resx">
+      <DependentUpon>frmUtlStk.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlLabelDesign.resx">
+      <DependentUpon>frmUtlLabelDesign.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSuppConfDate.resx">
+      <DependentUpon>frmUtlSuppConfDate.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlToolTipText.resx">
+      <DependentUpon>frmUtlToolTipText.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlTranspose.resx">
+      <DependentUpon>frmUtlTranspose.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlTrnFldsEmailTmp.resx">
+      <DependentUpon>frmUtlTrnFldsEmailTmp.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlTrnFldsTemplate.resx">
+      <DependentUpon>frmUtlTrnFldsTemplate.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\FrmUtlTrnSettings.resx">
+      <DependentUpon>FrmUtlTrnSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlTrnView.resx">
+      <DependentUpon>frmUtlTrnView.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmFMTViewer.resx">
+      <DependentUpon>frmFMTViewer.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAuditLog.resx">
+      <DependentUpon>frmUtlAuditLog.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBtnHotkeys.resx">
+      <DependentUpon>frmUtlBtnHotkeys.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlExplosion.resx">
+      <DependentUpon>frmUtlExplosion.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMultiSelAudit.resx">
+      <DependentUpon>frmUtlMultiSelAudit.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMultiSelRpt.resx">
+      <DependentUpon>frmUtlMultiSelRpt.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlNewShortcutKey.resx">
+      <DependentUpon>frmUtlNewShortcutKey.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSettings.resx">
+      <DependentUpon>frmUtlSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAbout.resx">
+      <DependentUpon>frmUtlAbout.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAssignRights.resx">
+      <DependentUpon>frmUtlAssignRights.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlUpdatefromTally.resx">
+      <DependentUpon>frmUtlUpdatefromTally.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlValueMatrixEmails.resx">
+      <DependentUpon>frmUtlValueMatrixEmails.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlVRImage.resx">
+      <DependentUpon>frmUtlVRImage.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\Linked\frmUtlAlias.resx">
+      <DependentUpon>frmUtlAlias.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAuth.resx">
+      <DependentUpon>frmUtlAuth.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlAuthDoc.resx">
+      <DependentUpon>frmUtlAuthDoc.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlGColourSettings.resx">
+      <DependentUpon>frmUtlGColourSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlInvXLPrintQuery.resx">
+      <DependentUpon>frmUtlInvXLPrintQuery.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlKeyBoard.resx">
+      <DependentUpon>frmUtlKeyBoard.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMnuGrpItemSel.resx">
+      <DependentUpon>frmUtlMnuGrpItemSel.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlPLListView.resx">
+      <DependentUpon>frmUtlPLListView.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlPLView.resx">
+      <DependentUpon>frmUtlPLView.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlCopyFrom.resx">
+      <DependentUpon>frmUtlCopyFrom.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDelCancel.resx">
+      <DependentUpon>frmUtlDelCancel.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlScreenDocs.resx">
+      <DependentUpon>frmUtlScreenDocs.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSelBranch.resx">
+      <DependentUpon>frmUtlSelBranch.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlShowHelpFiles.resx">
+      <DependentUpon>frmUtlShowHelpFiles.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlChange.resx">
+      <DependentUpon>frmUtlChange.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDocNumber.resx">
+      <DependentUpon>frmUtlDocNumber.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMultiSelection.resx">
+      <DependentUpon>frmUtlMultiSelection.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlBCDesigner.resx">
+      <DependentUpon>frmUtlBCDesigner.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlDispAuth.resx">
+      <DependentUpon>frmUtlDispAuth.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlInvNumberFmt.resx">
+      <DependentUpon>frmUtlInvNumberFmt.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlPriceImport.resx">
+      <DependentUpon>frmUtlPriceImport.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSearchSettings.resx">
+      <DependentUpon>frmUtlSearchSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSelection.resx">
+      <DependentUpon>frmUtlSelection.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSharedDocuments.resx">
+      <DependentUpon>frmUtlSharedDocuments.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSingleSel.resx">
+      <DependentUpon>frmUtlSingleSel.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlSMTPSettings.resx">
+      <DependentUpon>frmUtlSMTPSettings.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlMstView.resx">
+      <DependentUpon>frmUtlMstView.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlViewExport.resx">
+      <DependentUpon>frmUtlViewExport.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\frmUtlWebCam.resx">
+      <DependentUpon>frmUtlWebCam.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\Linked\frmUtlReportViewer.resx">
+      <DependentUpon>frmUtlReportViewer.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Utilities\WEBDBCHANGES.resx">
+      <DependentUpon>WEBDBCHANGES.vb</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="My Project\app.manifest" />
+    <None Include="My Project\Application.myapp">
+      <Generator>MyApplicationCodeGenerator</Generator>
+      <LastGenOutput>Application.Designer.vb</LastGenOutput>
+    </None>
+    <None Include="My Project\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <CustomToolNamespace>My</CustomToolNamespace>
+      <LastGenOutput>Settings.Designer.vb</LastGenOutput>
+    </None>
+    <None Include="Resources\ErrorsAndSolutionsvLQMSSoftware.pdf" />
+    <None Include="Resources\T1\Thumbs.db" />
+    <None Include="Resources\T2\Thumbs.db" />
+    <None Include="Resources\T3\Thumbs.db" />
+    <None Include="Resources\T4\Thumbs.db" />
+    <None Include="Resources\T5\Thumbs.db" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\D\Thumbs.db" />
+    <None Include="Resources\Plus.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\add.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\magnifier.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\picture_save.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\cancel.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Service Include="{C0C07587-41A7-46C8-8FBD-3F9C8EBE2DDC}" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Arrow Up 1.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Arrow Down 2.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\basket.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\ImgCRReportGroup.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\receipt-20.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\SALES.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\purchase_order-20.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\bill-20.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Login Big Keys.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <COMReference Include="stdole">
+      <Guid>{00020430-0000-0000-C000-000000000046}</Guid>
+      <VersionMajor>2</VersionMajor>
+      <VersionMinor>0</VersionMinor>
+      <Lcid>0</Lcid>
+      <WrapperTool>primary</WrapperTool>
+      <Isolated>False</Isolated>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+      <Private>True</Private>
+    </COMReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\calci.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\login_img.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\rounded_rectangle-20.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Record-15.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\small-tick.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\0115-users.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <WCFMetadata Include="Service References\" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\red.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="final_icon.ico" />
+    <None Include="Resources\whatsapp-icon2.png" />
+    <None Include="Resources\whatsapp-icon.jpg" />
+    <None Include="Resources\X11.png" />
+    <None Include="Resources\X1.png" />
+    <None Include="Resources\1.png" />
+    <None Include="Resources\10.PNG" />
+    <None Include="Resources\100.PNG" />
+    <Content Include="Resources\1442256475_ic_find_replace_48px.png" />
+    <Content Include="Resources\1442256527_editor_copy_duplicate.png" />
+    <Content Include="Resources\1442257507_editor_copy_duplicate_.png" />
+    <Content Include="Resources\1442257554_editor_copy_duplicate_.png" />
+    <Content Include="Resources\1442257610_ic_find_replace_48px.png" />
+    <None Include="Resources\20.PNG" />
+    <None Include="Resources\50.PNG" />
+    <None Include="Resources\200.PNG" />
+    <None Include="Resources\500.PNG" />
+    <None Include="Resources\2000.PNG" />
+    <Content Include="Resources\actions.png" />
+    <None Include="Resources\Add_Black_White.png" />
+    <Content Include="Resources\attach.png" />
+    <Content Include="Resources\attachG-20.png" />
+    <Content Include="Resources\attachG_20.png" />
+    <Content Include="Resources\attach_20.png" />
+    <Content Include="Resources\bill.ico" />
+    <Content Include="Resources\bill.png" />
+    <Content Include="Resources\billing.png" />
+    <Content Include="Resources\blank_image.png" />
+    <Content Include="Resources\clipboard.png" />
+    <Content Include="Resources\clipboardW.png" />
+    <None Include="Resources\closed-eye-24.png" />
+    <Content Include="Resources\computer_key_F1.png" />
+    <Content Include="Resources\computer_key_F10.png" />
+    <Content Include="Resources\computer_key_F11.png" />
+    <Content Include="Resources\computer_key_F12.png" />
+    <Content Include="Resources\computer_key_F2.png" />
+    <Content Include="Resources\computer_key_F3.png" />
+    <Content Include="Resources\computer_key_F4.png" />
+    <Content Include="Resources\computer_key_F5.png" />
+    <Content Include="Resources\computer_key_F6.png" />
+    <Content Include="Resources\computer_key_F7.png" />
+    <Content Include="Resources\computer_key_F8.png" />
+    <Content Include="Resources\computer_key_F9.png" />
+    <None Include="Resources\download %283%29.png" />
+    <None Include="Resources\docDesigner2.png" />
+    <None Include="Resources\dashbrd2.jpg" />
+    <Content Include="Resources\D\D_Cancel.png" />
+    <Content Include="Resources\D\D_Close.png" />
+    <Content Include="Resources\D\D_Delete.png" />
+    <Content Include="Resources\D\D_Edit.png" />
+    <Content Include="Resources\D\D_Find.png" />
+    <Content Include="Resources\D\D_MoveFirst.png" />
+    <Content Include="Resources\D\D_MoveLast.png" />
+    <Content Include="Resources\D\D_MoveNext.png" />
+    <Content Include="Resources\D\D_MovePrev.png" />
+    <Content Include="Resources\D\D_New.png" />
+    <Content Include="Resources\D\D_Options.png" />
+    <Content Include="Resources\D\D_Print.png" />
+    <Content Include="Resources\D\D_Save.png" />
+    <Content Include="Resources\exit.png" />
+    <Content Include="Resources\exitW.png" />
+    <None Include="Resources\images.jpg" />
+    <None Include="Resources\images %281%29.jpg" />
+    <None Include="Resources\eye.jpg" />
+    <None Include="Resources\info.jpg" />
+    <None Include="Resources\Info1.jpg" />
+    <None Include="Resources\info3.jpg" />
+    <None Include="Resources\INR.JPG" />
+    <None Include="Resources\INRr.png" />
+    <None Include="Resources\Gif7.gif" />
+    <None Include="Resources\K.jpg" />
+    <None Include="Resources\iconfinder_icon-image_211677.png" />
+    <Content Include="Resources\NoImage.png" />
+    <Content Include="Resources\headerbg.PNG" />
+    <Content Include="Resources\hotkey1.PNG" />
+    <Content Include="Resources\Keyboard-2.png" />
+    <Content Include="Resources\Keyboard-20.png" />
+    <Content Include="Resources\Keyboard-21.png" />
+    <Content Include="Resources\Keyboard-22.png" />
+    <Content Include="Resources\Keyboard-40.png" />
+    <Content Include="Resources\Keyboard.png" />
+    <Content Include="Resources\linear_gradient.png" />
+    <Content Include="Resources\mag.png" />
+    <None Include="Resources\open-eye-24.png" />
+    <None Include="Resources\refresh.jpg" />
+    <None Include="Resources\Paste.png" />
+    <Content Include="Resources\register-20.png" />
+    <None Include="Resources\select_all.png" />
+    <None Include="Resources\Splash.png" />
+    <None Include="Resources\remove2.png" />
+    <None Include="Resources\Remove.png" />
+    <Content Include="Resources\Rupee.png" />
+    <None Include="Resources\setting1.jpg" />
+    <None Include="Resources\setting11.jpg" />
+    <None Include="Resources\softventLogo_Black.jpg" />
+    <None Include="Resources\softventLogo_Black1.jpg" />
+    <None Include="Resources\S.jpg" />
+    <Content Include="Resources\Student2.png" />
+    <Content Include="Resources\T1\T1_Cancel.png" />
+    <Content Include="Resources\T1\T1_Close.png" />
+    <Content Include="Resources\T1\T1_Delete.png" />
+    <Content Include="Resources\T1\T1_Edit.png" />
+    <Content Include="Resources\T1\T1_Find.png" />
+    <Content Include="Resources\T1\T1_MoveFirst.png" />
+    <Content Include="Resources\T1\T1_MoveLast.png" />
+    <Content Include="Resources\T1\T1_MoveNext.png" />
+    <Content Include="Resources\T1\T1_MovePrev.png" />
+    <Content Include="Resources\T1\T1_New.png" />
+    <Content Include="Resources\T1\T1_Options.png" />
+    <Content Include="Resources\T1\T1_Print.png" />
+    <Content Include="Resources\T1\T1_Save.png" />
+    <Content Include="Resources\T2\T2_Cancel.png" />
+    <Content Include="Resources\T2\T2_Close.png" />
+    <Content Include="Resources\T2\T2_Delete.PNG" />
+    <Content Include="Resources\T2\T2_Edit.png" />
+    <Content Include="Resources\T2\T2_Find.png" />
+    <Content Include="Resources\T2\T2_MoveFirst.png" />
+    <Content Include="Resources\T2\T2_MoveLast.png" />
+    <Content Include="Resources\T2\T2_MoveNext.png" />
+    <Content Include="Resources\T2\T2_MovePrev.png" />
+    <Content Include="Resources\T2\T2_New.png" />
+    <Content Include="Resources\T2\T2_Options.png" />
+    <Content Include="Resources\T2\T2_Print.png" />
+    <Content Include="Resources\T2\T2_Save.png" />
+    <Content Include="Resources\T3\T3_cancel.png" />
+    <Content Include="Resources\T3\T3_close.png" />
+    <Content Include="Resources\T3\T3_delete.png" />
+    <Content Include="Resources\T3\T3_edit.png" />
+    <Content Include="Resources\T3\T3_FIND.png" />
+    <Content Include="Resources\T3\T3_MoveFirst.png" />
+    <Content Include="Resources\T3\T3_MoveLast.png" />
+    <Content Include="Resources\T3\T3_MoveNext.png" />
+    <Content Include="Resources\T3\T3_MovePrev.png" />
+    <Content Include="Resources\T3\T3_New.png" />
+    <None Include="Resources\T3\T3_ok.png" />
+    <Content Include="Resources\T3\T3_Options.png" />
+    <Content Include="Resources\T3\T3_print.png" />
+    <Content Include="Resources\T3\T3_save.png" />
+    <None Include="Resources\T3_load.png" />
+    <Content Include="Resources\T4\T4_Cancel.png" />
+    <Content Include="Resources\T4\T4_Close.png" />
+    <Content Include="Resources\T4\T4_Delete.png" />
+    <Content Include="Resources\T4\T4_Edit.png" />
+    <Content Include="Resources\T4\T4_Find.png" />
+    <Content Include="Resources\T4\T4_First.png" />
+    <Content Include="Resources\T4\T4_Last.png" />
+    <Content Include="Resources\T4\T4_MoveNext.png" />
+    <Content Include="Resources\T4\T4_MovePrev.png" />
+    <Content Include="Resources\T4\T4_New.png" />
+    <Content Include="Resources\T4\T4_Options.png" />
+    <Content Include="Resources\T4\T4_Print.png" />
+    <Content Include="Resources\T4\T4_Save.png" />
+    <Content Include="Resources\T5\T5_Cancel.PNG" />
+    <Content Include="Resources\T5\T5_Close.PNG" />
+    <Content Include="Resources\T5\T5_Del.PNG" />
+    <Content Include="Resources\T5\T5_Edit.PNG" />
+    <Content Include="Resources\T5\T5_Find.png" />
+    <Content Include="Resources\T5\T5_MoveFirst.PNG" />
+    <Content Include="Resources\T5\T5_MoveLast.PNG" />
+    <Content Include="Resources\T5\T5_MoveNext.png" />
+    <Content Include="Resources\T5\T5_MovePrev.png" />
+    <Content Include="Resources\T5\T5_New.PNG" />
+    <Content Include="Resources\T5\T5_Options.PNG" />
+    <Content Include="Resources\T5\T5_Print.PNG" />
+    <Content Include="Resources\T5\T5_Save.PNG" />
+    <None Include="Resources\tally1.png" />
+    <None Include="Resources\UCButtons\ucCamera.PNG" />
+    <None Include="Resources\UCButtons\ucfreeze.png" />
+    <Content Include="Resources\users.png" />
+    <Content Include="Resources\entities.png" />
+    <Content Include="Resources\pwd.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include=".NETFramework,Version=v4.0">
+      <Visible>False</Visible>
+      <ProductName>Microsoft .NET Framework 4 %28x86 and x64%29</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1 Client Profile</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Windows.Installer.3.1">
+      <Visible>False</Visible>
+      <ProductName>Windows Installer 3.1</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="bin\Debug\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

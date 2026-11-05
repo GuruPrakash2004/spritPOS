@@ -44,6 +44,7 @@ def test_a_database_without_the_stock_trigger_is_refused(monkeypatch):
 
 
 def test_prepare_creates_the_web_tables_once_and_needs_the_right_to(monkeypatch):
+    monkeypatch.setattr(db, "USE_WEB_TABLES", True)   # the older mode; in direct mode nothing is ever created
     state = {"web_tables": 0, "can_create_tables": False, "created": 0}
     monkeypatch.setattr(setup_db, "check", lambda: {"is_vlqms": True, "missing_tables": [], "stock_trigger": True, **state})
     monkeypatch.setattr(setup_db, "create_schema", lambda: state.update(created=state["created"] + 1, web_tables=5))
@@ -131,7 +132,7 @@ async def test_setup_is_open_while_not_set_up(anon_client, setup_mode):
     assert len(setup_mode) == 1
 
 
-async def test_password_must_be_encrypted_for_the_db_field(anon_client, setup_mode):
+async def test_password_must_be_encrypted_for_the_db_field(anon_client, setup_mode, strict_encryption):
     r = await anon_client.post("/setup/test", json={**BODY, "password": "plain"})
     assert r.status_code in (400, 422)
     r = await anon_client.post("/setup/test", json={**BODY, "password": enc("pw", "login")})
@@ -175,25 +176,26 @@ async def test_bad_server_names_are_refused(anon_client, setup_mode):
     assert r.status_code == 422
 
 
-async def test_once_set_up_only_an_administrator_can_change_it(anon_client, client, cashier_client, setup_mode, monkeypatch):
+async def test_once_set_up_the_settings_stay_open_to_the_sign_in_page(anon_client, client, cashier_client, setup_mode, monkeypatch, strict_encryption):
+    # Owner's decision: database settings and the report-files path are open to anyone who reaches the sign-in page (routers/setup.py _open)
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
     monkeypatch.setattr(sqlstore, "enabled", lambda: True)   # the database is in use
     monkeypatch.setattr(db, "is_db_available", lambda: True)
     monkeypatch.setattr(setup_router, "LOOPBACK", set())   # a request from another PC
     body = {**BODY, "password": enc("pw", "db")}
-    assert (await anon_client.post("/setup/test", json=body)).status_code == 403
-    assert (await cashier_client.post("/setup/test", json={**body, "password": enc("pw", "db")})).status_code == 403
+    assert (await anon_client.post("/setup/test", json={**body, "password": enc("pw", "db")})).status_code == 200
+    assert (await cashier_client.post("/setup/test", json={**body, "password": enc("pw", "db")})).status_code == 200
     assert (await client.post("/setup/test", json={**body, "password": enc("pw", "db")})).status_code == 200
 
 
-async def test_while_a_set_up_database_is_offline_only_the_server_pc_may_change_it(anon_client, setup_mode, monkeypatch):
+async def test_a_set_up_database_that_is_offline_still_lets_the_sign_in_page_test_a_connection(anon_client, setup_mode, monkeypatch, strict_encryption):
     # Set up but unreachable: nobody can sign in, so only a request from the server PC itself is accepted.
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
     monkeypatch.setattr(sqlstore, "enabled", lambda: False)
     monkeypatch.setattr(db, "is_db_available", lambda: False)
     monkeypatch.setattr(setup_router, "LOOPBACK", set())   # a request from another PC
-    assert (await anon_client.post("/setup/test", json={**BODY, "password": enc("pw", "db")})).status_code == 403
-    assert setup_mode == []
+    assert (await anon_client.post("/setup/test", json={**BODY, "password": enc("pw", "db")})).status_code == 200
+    assert setup_mode and not setup_mode[-1][4] == ""   # the test ran against the typed connection
 
 
 async def test_odbc_values_are_escaped_and_bad_names_refused(anon_client, setup_mode):
@@ -207,18 +209,29 @@ async def test_odbc_values_are_escaped_and_bad_names_refused(anon_client, setup_
 
 
 async def test_writes_are_refused_while_a_set_up_database_is_offline(client, monkeypatch):
+    monkeypatch.setattr(db, "READ_ONLY", False)   # the older saving mode; read-only mode refuses every write (next test)
     monkeypatch.setattr(db, "configured", lambda: True)
     monkeypatch.setattr(db, "reconnect", lambda: False)
     res = await client.post("/masters/brands", json={"code": "ZZ", "name": "Zed"})
     assert res.status_code == 503 and "offline" in res.json()["detail"]
 
 
-async def test_the_server_pc_itself_may_open_the_settings_from_the_sign_in_page(anon_client, setup_mode, monkeypatch):
+async def test_a_configured_database_is_only_read_never_written(client, monkeypatch):
+    """DB_READ_ONLY=1: the web app writes nothing in the shop's database; every save is refused, sign-in still works."""
+    monkeypatch.setattr(db, "READ_ONLY", True)
+    monkeypatch.setattr(db, "configured", lambda: True)
+    res = await client.post("/masters/brands", json={"code": "ZZ", "name": "Zed"})
+    assert res.status_code == 503 and "only reads" in res.json()["detail"]
+    assert db.no_writes() and not sqlstore.enabled()
+    assert (await client.get("/masters/brands")).status_code == 200            # reads are untouched
+
+
+async def test_the_rpt_folder_can_be_read_from_the_sign_in_page_on_any_pc(anon_client, setup_mode, monkeypatch, strict_encryption):
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
     monkeypatch.setattr(db, "is_db_available", lambda: True)
     assert (await anon_client.get("/setup/rpt-folder")).status_code == 200   # the test client counts as the server PC
     monkeypatch.setattr(setup_router, "LOOPBACK", set())
-    assert (await anon_client.get("/setup/rpt-folder")).status_code == 403
+    assert (await anon_client.get("/setup/rpt-folder")).status_code == 200
 
 
 async def test_the_rpt_folder_is_saved_checked_and_used_at_once(client, monkeypatch, tmp_path):
@@ -237,10 +250,10 @@ async def test_the_rpt_folder_is_saved_checked_and_used_at_once(client, monkeypa
     assert r.status_code == 200 and rpt_bridge.folder() == rpt_bridge.DEFAULT_FOLDER
 
 
-async def test_a_cashier_cannot_change_the_rpt_folder(cashier_client, monkeypatch):
+async def test_a_cashier_may_change_the_rpt_folder(cashier_client, monkeypatch):
     monkeypatch.setattr(boot, "needs_setup", lambda: False)
     monkeypatch.setattr(setup_router, "LOOPBACK", set())
-    assert (await cashier_client.post("/setup/rpt-folder", json={"folder": ""})).status_code == 403
+    assert (await cashier_client.post("/setup/rpt-folder", json={"folder": ""})).status_code == 200   # open by the owner's decision
 
 
 async def test_smtp_settings_are_saved_sealed_and_used_at_once(client, monkeypatch, tmp_path):
@@ -326,3 +339,9 @@ def test_connecting_to_another_database_forgets_everything_of_the_old_one():
     boot.forget_old_database()
     assert not sqlstore._saved and not sqlstore._doc_status and not sqlstore._cols and not sqlstore._mapped_cache
     assert not schema_meta._cols and not admin_audit._pending and not store.IDEMPOTENT
+
+
+def test_a_dropped_connection_is_recognised_so_a_read_reconnects_and_tries_again():
+    assert db._connection_lost(Exception("('08S02', '[08S02] SMux Provider: Physical connection is not usable')"))
+    assert db._connection_lost(Exception("('08S01', 'Communication link failure')"))
+    assert not db._connection_lost(Exception("('42S02', \"Invalid object name 'X'\")"))

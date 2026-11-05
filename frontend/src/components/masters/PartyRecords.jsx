@@ -1,6 +1,6 @@
 // The records vLQMS.exe keeps beside a customer or supplier: contact persons, other / shipping addresses, alert messages (shown
 // when the party is picked on a bill) and dated activity notes. One window with a tab for each; contacts, addresses and alerts
-// are edited as a list and saved together, notes are only added. The lists come from GET /masters/{customers|suppliers}/{code}/{kind}.
+// are edited as a list and saved together (Item rates is the desktop's Customer vs Item / Supplier vs Item: the party's own rate for an item), notes are only added. The lists come from GET /masters/{customers|suppliers}/{code}/{kind}.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
@@ -13,6 +13,7 @@ import { field, label, primaryButton, secondaryButton } from '../../lib/styles';
 const TABS = [
   { id: 'contacts', title: 'Contact persons', captions: { CName: 'Name', CDesig: 'Designation', CMobNo: 'Mobile', CPhone: 'Phone', Fax: 'Fax', Email: 'E-mail', CDepartment: 'Department', CRemarks: 'Remarks', SetDefault: 'Default' } },
   { id: 'addresses', title: 'Addresses', captions: { AddCat: 'Category', Add1: 'Address 1', Add2: 'Address 2', Add3: 'Address 3', Add4: 'Address 4', City: 'City', PinCode: 'Pin', State: 'State', Country: 'Country', DefShipAdd: 'Default shipping' } },
+  { id: 'item-rates', title: 'Item rates', captions: { item_code: 'Item code', rate: 'Rate', eff_from: 'From (yyyy-mm-dd)', eff_to: 'To (yyyy-mm-dd)', remarks: 'Remarks' } },
   { id: 'alerts', title: 'Alert messages', captions: { Message: 'Message' } },
   { id: 'activities', title: 'Notes', captions: { Notes: 'Note' } },
 ];

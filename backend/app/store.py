@@ -61,14 +61,17 @@ ROLES = {
     ADMIN_ROLE: ["*"],
     "Manager": [
         "Dashboard", "Item Master", "Price List Maintenance", "Item Group Master", "UOM Master", "Supplier Master",
-        "Customer Master", "Ledger Master", "Ledger Group Master", "Sales Person Master", "Package Master", "Brand Master",
+        "SMS", "PDF Generator", "Customer Master", "Customer Vs Item Master", "Supplier Vs Item Master", "Ledger Master", "Ledger Group Master", "Sales Person Master", "Package Master", "Brand Master",
         "Supplier Group Master", "Customer Group Master", "State Master", "Currency Master", "Location Master", "Tax Master",
         "Bank Master", "Holiday Master",
         "Purchase Bill", "Sales Invoice", "Expense Entry", "Stock Deduction", "Purchase Indent", "Sales Return",
-        "Closing Stock Entry", "Cash Denomination", "Daily Summary Report", "Stock Balance Report", "Stock Ledger",
+        "Closing Stock Entry", "Physical Stock Entry", "Update Item Stock", "Item Vs Brand", "Shared Documents", "Cash Denomination",
+        "Payment Voucher", "Receipt Voucher", "Credit Note", "Debit Note", "Contra Voucher", "Journal Voucher", "Quotation",
+        "General Ledger", "Bill wise Ageing", "Bill wise OutStanding", "Party wise OutStanding", "Daily Summary Report", "Stock Balance Report", "Stock Ledger",
         "Stock Ageing", "Profit Margin", "Hourly Sales", "Daily Sales", "Brand-wise Sales", "Day-wise Litres",
         "Stock in Litres", "Stock Level / Reorder", "Reports Dashboard",
         "Package-wise Sales", "Package-wise Purchase", "Loyalty Report", "Excise Stock",
+        "Loyalty Detail", "Item Rate History", "Drops Sales Summary", "Drops Purchase", "Drops Petty Cash", "Drops Consolidated",
     ],
     "Cashier": ["Dashboard", "Item Master", "Sales Invoice", "Sales Return", "Cash Denomination", "Closing Stock Entry", "Stock Balance Report"],
 }
@@ -87,6 +90,10 @@ UTL_CAPTIONS: dict[str, str] = {}   # UtlFldCaptions: field code -> caption over
 
 # Day-end cash counts, keyed by ISO date.
 DENOMINATIONS: dict[str, dict] = {}
+RENAMED: dict[tuple, str] = {}   # (store table, new code) -> old code: a master whose code was changed, so the database row is updated, not replaced
+
+# Expense Entry "Day's OP-Balance" (desktop TrnExpOPBal): the cash opening balance of a day, ISO date -> amount.
+EXP_OPENING: dict[str, float] = {}
 
 # When each item was last received (TrnHdrPB/TrnDtlPB), for Stock Ageing; purchases update it.
 LAST_PURCHASE: dict[str, str] = {}
@@ -102,6 +109,7 @@ GSETTINGS: dict[str, dict] = {}
 # Transactions: doc type -> {doc_no: doc}
 DOCS: dict[str, dict[str, dict]] = {k: {} for k in [
     "purchase_indent", "purchase_bill", "sales_invoice", "sales_return", "expense", "stock_deduction", "closing_stock",
+    "physical_stock",
 ]}
 
 # Every stock-affecting line is logged here to drive Stock Ledger / Balance / DSR.
@@ -181,8 +189,13 @@ def find(table: dict, key: str) -> dict | None:
     return next((r for r in table.values() if r.get("name", "").lower() == kl), None)
 
 
+NUMBER_SYNC = None   # set by sqlstore: callable(kind) that moves a series past the highest number in the database (other PCs write there too)
+
+
 def next_doc_no(kind: str, prefix: str) -> str:
     """Next number in a document series, e.g. next_doc_no("sales_invoice", "c10") -> "26/c10-0000001"."""
+    if NUMBER_SYNC:
+        NUMBER_SYNC(kind)
     return f"{FY_PREFIX}/{prefix}-{next(_seq[kind]):07d}"
 
 

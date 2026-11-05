@@ -588,7 +588,7 @@ export default function Login({ onLogin, notice = '' }) {
                 {busy ? 'Signing in…' : 'Sign in'}
               </button>
 
-              <DevelopedBy className="mt-[clamp(0.5rem,2dvh,1.5rem)] border-t border-[#DDE3EC] pt-[clamp(0.5rem,1.6dvh,1.25rem)] dark:border-[#2A2A2A]" />
+              <DevelopedBy className="mt-[clamp(0.5rem,2dvh,1.5rem)]" />
             </form>}
 
             {!setup && !editingDb && (

@@ -258,7 +258,7 @@ async def test_rights_ticks_are_enforced(client, manager_client):
         "name": "Manager", "modules": store.ROLES["Manager"],
         "rights": {"Customer Master": {"add": True, "edit": False, "delete": False},
                    "Sales Invoice": {"add": True, "edit": True, "delete": False}}})
-    customer = {"code": "C7", "name": "Ravi Kumar"}
+    customer = {"code": "C7", "name": "Ravi Kumar", "gstin": "29ABCDE1234F1Z5", "currency": "Rupees"}
 
     assert (await manager_client.post("/masters/customers", json=customer)).status_code == 201
     assert (await manager_client.put("/masters/customers/C7", json=customer | {"name": "Ravi K"})).status_code == 403
@@ -336,7 +336,7 @@ async def test_token_from_before_the_update_gets_a_clear_message(anon_client):
 
 # ─── Credentials are always encrypted from the UI (app/secure_fields.py) ─────────
 
-async def test_plain_password_is_refused(anon_client):
+async def test_plain_password_is_refused(anon_client, strict_encryption):
     res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": "admin"})
     assert res.status_code == 400
     assert "encrypted" in res.json()["detail"]
@@ -388,3 +388,18 @@ async def test_transport_key_gives_server_time_for_pcs_with_a_wrong_clock(anon_c
     key = (await anon_client.get("/auth/transport-key")).json()
     assert abs(key["server_time"] - time.time() * 1000) < 5000
 
+
+
+def test_the_desktops_password_cipher_round_trips_and_is_what_sign_in_checks():
+    from app import legacy_crypto
+    from app.routers import auth
+    stored = legacy_crypto.encrypt("Test@Pass1")
+    assert legacy_crypto.decrypt(stored) == "Test@Pass1" and legacy_crypto.decrypt("not base64!") is None
+    user = {"user": "OFFICE", "legacy_password": stored, "role": "Manager"}
+    assert auth._verify_password(dict(user), "Test@Pass1") and not auth._verify_password(dict(user), "wrong")
+
+
+def test_the_user_code_admin_is_always_an_administrator():
+    from app import db_store, store
+    assert db_store._role_for("ADMIN", "", "-") == store.ADMIN_ROLE      # the desktop's super user, whatever its role column says
+    assert db_store._role_for("OFFICE", "", "-") != store.ADMIN_ROLE

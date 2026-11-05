@@ -1026,3 +1026,8 @@ body.print-mode-a5 {
   page: print-a5-landscape;
 }
 
+
+/* A required field's label is red: every label that carries the red required asterisk (a read-only, blue label keeps its blue).
+   Unlayered on purpose, so it wins over the label's own grey utility classes on any screen. */
+label:not([class*="text-blue"]):has(> span.text-red-600[aria-hidden="true"]) { color: #dc2626; }
+.dark label:not([class*="text-blue"]):has(> span.text-red-600[aria-hidden="true"]) { color: #f87171; }

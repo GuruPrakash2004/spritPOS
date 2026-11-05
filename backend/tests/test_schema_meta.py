@@ -40,11 +40,11 @@ def test_column_dropped_from_the_table_disappears():
 
 
 def test_caption_override_and_conditional_rule():
-    rows = [row("ROL", 20, FldHideCompareVal="#ITEMNAME#", FldHideOperator="=", FldHideWithVal="X")]
+    rows = [row("ROL", 20, FLdBlnHide="Y", FldHideCompareVal="#ITEMNAME#", FldHideOperator="=", FldHideWithVal="X")]
     s = sm.build_screen(DOC, rows, HDR, [], {"rol": "Re-order level"})
     f = next(f for f in s["fields"] if f["code"] == "ROL")
     assert f["caption"] == "Re-order level"
-    assert f["hide_when"] == {"field": "ITEMNAME", "op": "=", "value": "X"}
+    assert f["hide_when"] == {"field": "ITEMNAME", "compare": "#ITEMNAME#", "op": "=", "value": "X"}
 
 
 def test_table_name_is_never_unsafe():

@@ -1,0 +1,3185 @@
+<?xml version="1.0"?>
+<doc>
+  <assembly>
+    <name>C1.Win.C1GanttView.4</name>
+  </assembly>
+  <members>
+    <member name="T:C1.Win.C1GanttView.C1GanttView">
+      <summary>
+            Represents the Gantt Chart control.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.C1GanttView" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.Dispose(System.Boolean)">
+      <summary>
+            Clean up any resources being used.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.SaveXml(System.String)">
+      <summary>
+            Saves the contents of <see cref="T:C1.Win.C1GanttView.C1GanttView" /> into an XML file.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.SaveXml(System.String,System.Text.Encoding)">
+      <summary>
+            Saves the contents of <see cref="T:C1.Win.C1GanttView.C1GanttView" /> into an XML file.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.SaveXml(System.IO.Stream)">
+      <summary>
+            Saves the contents of <see cref="T:C1.Win.C1GanttView.C1GanttView" /> into a <see cref="T:System.IO.Stream" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.SaveXml(System.IO.Stream,System.Text.Encoding)">
+      <summary>
+            Saves the contents of <see cref="T:C1.Win.C1GanttView.C1GanttView" /> into a <see cref="T:System.IO.Stream" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.SaveXml(System.Xml.XmlWriter)">
+      <summary>
+            Saves the contents of <see cref="T:C1.Win.C1GanttView.C1GanttView" /> into an <see cref="T:System.Xml.XmlWriter" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.LoadXml(System.String)">
+      <summary>
+            Loads the contents of <see cref="T:C1.Win.C1GanttView.C1GanttView" /> from an XML file.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.LoadXml(System.IO.Stream)">
+      <summary>
+            Loads the contents of <see cref="T:C1.Win.C1GanttView.C1GanttView" /> from a <see cref="T:System.IO.Stream" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.LoadXml(System.Xml.XmlDocument)">
+      <summary>
+            Loads the contents of <see cref="T:C1.Win.C1GanttView.C1GanttView" /> from an <see cref="T:System.Xml.XmlDocument" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ResetSplitterColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.C1GanttView.SplitterColor" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ResetStartFinishLineColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.C1GanttView.StartFinishLineColor" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ResetTodayLineColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.C1GanttView.TodayLineColor" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ResetNonworkingTimeColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.C1GanttView.NonworkingTimeColor" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ResetMarqueeColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.C1GanttView.MarqueeColor" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ShouldSerializeVisualStyle">
+      <summary>
+            Gets a value that determines whether the <see cref="P:C1.Win.C1GanttView.C1GanttView.VisualStyle" /> 
+            property is set explicitly and should be persisted.
+            </summary>
+      <returns>True if the property was explicitly set by the user.</returns>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ResetVisualStyle">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.C1GanttView.VisualStyle" /> ambient property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnAmbientChangedVisualStyle">
+      <summary>
+            Method invoked when the <see cref="P:C1.Win.C1GanttView.C1GanttView.VisualStyle" /> property changes.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnCultureInfoChanged(System.EventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.C1GanttView.CultureInfoChanged" /> event.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnSelectedIndexChanged(System.EventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.C1GanttView.SelectedIndexChanged" /> event.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnZoomFactorChanged(System.EventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.C1GanttView.ZoomFactorChanged" /> event.
+            </summary>
+      <param name="e">The <see cref="T:System.EventArgs" /> object.</param>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnBeforeZoomFactorChange(System.EventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.C1GanttView.BeforeZoomFactorChange" /> event.
+            </summary>
+      <param name="e">The <see cref="T:System.EventArgs" /> object.</param>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.BeginUpdate">
+      <summary>
+            Maintains performance while multiple settings are being changed.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.EndUpdate">
+      <summary>
+            Resumes processing after it has been suspended by a call to <see cref="M:C1.Win.C1GanttView.C1GanttView.BeginUpdate" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ScrollToTask(C1.Win.C1GanttView.Task)">
+      <summary>
+            Scrolls the grid and chart views so that the specified task becomes visible.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.GetPredefinedBarStyle(C1.Win.C1GanttView.BarType)">
+      <summary>
+            Returns a copy of the built-in <see cref="T:C1.Win.C1GanttView.BarStyle" /> for the specified bar type.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ClickButton(C1.Win.C1GanttView.CommandButton)">
+      <summary>
+            Simulates a click on the toolbar button specified by the 'button' parameter.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ZoomIn">
+      <summary>
+            Simulates zoom in operations.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ZoomOut">
+      <summary>
+            Simulate zoom out operations.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.Zoom(C1.Win.C1GanttView.TimescaleUnits,System.Int32)">
+      <summary>
+            Zoom to custom count and unit.
+            </summary>
+      <param name="units">Custom unit.</param>
+      <param name="count">Custom count.</param>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ZoomEntireProject">
+      <summary>
+            Zoom to entire project.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ZoomTask(C1.Win.C1GanttView.Task)">
+      <summary>
+            Zoom to a specific task.
+            </summary>
+      <param name="task">The task to zoom.</param>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ZoomTasks(System.Collections.Generic.List{C1.Win.C1GanttView.Task})">
+      <summary>
+            Zoom to many tasks.
+            </summary>
+      <param name="tasks">
+      </param>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.ZoomToRange(System.DateTime,System.DateTime)">
+      <summary>
+            Zoom to specific time range.
+            </summary>
+      <param name="startRange">The start date of range.</param>
+      <param name="endRange">The end date of range.</param>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnFontChanged(System.EventArgs)">
+      <summary>
+            Raises the <see cref="E:System.Windows.Forms.Control.FontChanged" /> event.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnVisibleChanged(System.EventArgs)">
+      <summary>
+            Raises the <see cref="E:System.Windows.Forms.Control.VisibleChanged" /> event.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnBackColorChanged(System.EventArgs)">
+      <summary>
+            Raises the <see cref="E:System.Windows.Forms.Control.BackColorChanged" /> event.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnForeColorChanged(System.EventArgs)">
+      <summary>
+            Raises the <see cref="E:System.Windows.Forms.Control.ForeColorChanged" /> event.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.C1GanttView.OnParentChanged(System.EventArgs)">
+      <summary>
+            Raises the <see cref="E:System.Windows.Forms.Control.ParentChanged" /> event.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.Project">
+      <summary>
+            Gets the <see cref="P:C1.Win.C1GanttView.C1GanttView.Project" /> being displayed in the control.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.Schedule">
+      <summary>
+            Gets the <see cref="P:C1.Win.C1GanttView.C1GanttView.Schedule" /> options.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ToolStrip">
+      <summary>
+            Gets the ToolStrip object.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.GridContextMenu">
+      <summary>
+            Gets the context menu displayed for the grid view.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ChartContextMenu">
+      <summary>
+            Gets the context menu displayed for the chart view.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.SelectedTaskIndex">
+      <summary>
+            Gets or sets the index of the currently selected task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.SelectedTask">
+      <summary>
+            Gets or sets the currently selected task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ZoomFactor">
+      <summary>
+            Gets or Sets zoom factor of chart view.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ToolbarBackColor">
+      <summary>
+            Gets or sets the custom background color of the toolbar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.SplitterColor">
+      <summary>
+            Gets or sets the custom color of the splitter between the grid and chart views.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.CellBorderColor">
+      <summary>
+            Gets or sets the custom color of cell borders in the grid and chart views.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.FixedBackColor">
+      <summary>
+            Gets or sets the custom background color of the fixed column/timescale area.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.FixedForeColor">
+      <summary>
+            Gets or sets the custom foreground color of the fixed column/timescale area.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.FixedCellBorderColor">
+      <summary>
+            Gets or sets the custom color of cell borders in the fixed area.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.HighlightBackColor">
+      <summary>
+            Gets or sets the custom background color of the highlighted row in the grid view.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.HighlightForeColor">
+      <summary>
+            Gets or sets the custom foreground color of the highlighted row in the grid view.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.EmptyAreaBackColor">
+      <summary>
+            Gets or sets the background color of the empty area below the tasks.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.StartFinishLineColor">
+      <summary>
+            Gets or sets the color of the project start/finish date lines.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.TodayLineColor">
+      <summary>
+            Gets or sets the color of the "today" line.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.NonworkingTimeColor">
+      <summary>
+            Gets or sets the color of the brush for drawing non-working time.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.MarqueeColor">
+      <summary>
+            Gets or sets the color of marquee displayed on the chart view when resizing or moving task rectangles.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.VisualStyle">
+      <summary>
+            Gets or sets the visual style of the <see cref="T:C1.Win.C1GanttView.C1GanttView" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ShowToolbar">
+      <summary>
+            Gets or sets whether the toolbar with the command buttons is visible.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.Columns">
+      <summary>
+            Gets the collection of grid columns.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.BarStyles">
+      <summary>
+            Gets the collection of non-standard bar styles.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.Timescale">
+      <summary>
+            Specifies the timescale settings.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ProgressLine">
+      <summary>
+            Specifies the progress line settings.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ShowStartFinish">
+      <summary>
+            Gets or sets a value that determines whether the Gantt chart highlights project start and finish dates.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ShowToday">
+      <summary>
+            Gets or sets a value that determines whether the Gantt chart highlights today's date.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ShowNonworkingTime">
+      <summary>
+            Gets or sets a value that determines whether the Gantt chart draws non-working time.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.GridWidth">
+      <summary>
+            Gets or sets the width of the grid portion of the control.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.Tasks">
+      <summary>
+            Gets the list of tasks.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.Resources">
+      <summary>
+            Gets the list of resources.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ScheduleFrom">
+      <summary>
+            Gets or sets whether the project is scheduled from its start date or from its finish date.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.StartDate">
+      <summary>
+            Gets or sets the start date of the project.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.FinishDate">
+      <summary>
+            Gets or sets the finish date of the project.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.Culture">
+      <summary>
+            Gets or sets the culture ID used by the component.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.UserCultureOverride">
+      <summary>
+            Gets or sets whether the current user regional settings override the selected culture.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.CultureInfo">
+      <summary>
+            The current CultureInfo object.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.GridDateFormat">
+      <summary>
+            Gets or sets the format string for date values on the grid view.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.ChartDateFormat">
+      <summary>
+            Gets or sets the format string for date values on the chart view.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.FirstMonthOfFY">
+      <summary>
+            Gets or sets the first month of the fiscal year.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.UseStartingYearForFY">
+      <summary>
+            Gets or sets whether the fiscal year starts in the same calendar year (true)
+            or in the previous calendar year (false).
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.FirstDayOfWeek">
+      <summary>
+            Gets or sets the first working day of the week.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.HoursPerDay">
+      <summary>
+            Gets or sets the number of work hours per day.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.HoursPerWeek">
+      <summary>
+            Gets or sets the number of work hours per week.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.DaysPerMonth">
+      <summary>
+            Gets or sets the number of working days in a month.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.CustomCalendars">
+      <summary>
+            Gets the collection of calendars that identify working times.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.DefaultWorkingTimes">
+      <summary>
+            Gets the default day working start/end times.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.DefaultDaysOff">
+      <summary>
+            Gets or sets the default days off work.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.DefaultWorkWeek">
+      <summary>
+            Gets the default work week.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.CalendarExceptions">
+      <summary>
+            Gets the collection of default calendar exceptions.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.C1GanttView.Padding">
+      <summary>
+            This property is not relevant to this class.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.C1GanttView.CultureInfoChanged">
+      <summary>
+            Occurs when the value of the CultureInfo property changes.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.C1GanttView.SelectedIndexChanged">
+      <summary>
+            Occurs when the selected task index changes.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.C1GanttView.ZoomFactorChanged">
+      <summary>
+            Occurs when the ZoomFactor property is changed.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.C1GanttView.BeforeZoomFactorChange">
+      <summary>
+            Occurs before the ZoomFactor property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.Grid.AutoSearchEnum">
+      <summary>
+            Specifies where the grid should start searching for cells when using the 
+            <see cref="P:C1.Win.C1GanttView.Grid.C1FlexGridBase.AutoSearch" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.Grid.AutoSearchEnum.None">
+      <summary>
+            No auto-searching.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.Grid.AutoSearchEnum.FromTop">
+      <summary>
+            Search from the first scrollable row.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.Grid.AutoSearchEnum.FromCursor">
+      <summary>
+            Search from the current row.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.Grid.KeyActionEnum">
+      <summary>
+            Specifies the action to perform when the ENTER and TAB keys are pressed.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.Grid.KeyActionEnum.None">
+      <summary>
+            No special action (allow system to handle the key). For example, the TAB key is normally 
+            used to cycle through the controls on a form.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.Grid.KeyActionEnum.MoveDown">
+      <summary>
+            Move to the next row.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.Grid.KeyActionEnum.MoveAcross">
+      <summary>
+            Move to the next column. At the end of the row, wrap to the start of the next row.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.Grid.KeyActionEnum.MoveAcrossOut">
+      <summary>
+        <para>Same as <b>MoveAcross</b>, but move the focus to the next control in the tab order when 
+            the last cell in the grid is reached.</para>
+        <para>This setting applies only to the <see cref="P:C1.Win.C1GanttView.Grid.C1FlexGridBase.KeyActionTab" /> property;
+            when used with  <see cref="P:C1.Win.C1GanttView.Grid.C1FlexGridBase.KeyActionEnter" /> it behaves like <b>MoveAcross</b>.</para>
+      </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.BarShape">
+      <summary>
+            Specifies the shape of a bar, such as a task bar or progress bar.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarShape.None">
+      <summary>
+            Hide the bar.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarShape.ThickBar">
+      <summary>
+            Diplays a thick (full) bar.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarShape.TopBar">
+      <summary>
+            Displays a medium-sized bar at the top.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarShape.MiddleBar">
+      <summary>
+            Displays a thin bar at the center.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarShape.BottomBar">
+      <summary>
+            Displays a medium-sized bar at the bottom.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarShape.TopLine">
+      <summary>
+            Displays a thin line at the top.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarShape.MiddleLine">
+      <summary>
+            Displays a thin line at the center.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarShape.BottomLine">
+      <summary>
+            Displays a thin line at the bottom.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.BarType">
+      <summary>
+            Specifies the target bar type for the <see cref="T:C1.Win.C1GanttView.BarStyle" />.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.Undefined">
+      <summary>
+            The style is not yet associated with any element.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.AutoTask">
+      <summary>
+            The style is used for automatically scheduled tasks.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.ManualTask">
+      <summary>
+            The style is applied to manually scheduled tasks.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.Progress">
+      <summary>
+            The style is applied to progress bars.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.Milestone">
+      <summary>
+            The style is applied to milestone marks.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.Deadline">
+      <summary>
+            The style is applied to deadline marks.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.DurationOnly">
+      <summary>
+            The style is used for drawing tasks with undefined Start and Finish.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.DurationOnlyMilestone">
+      <summary>
+            The style is used for drawing milestone marks with undefined Start.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.StartOnly">
+      <summary>
+            The style is used for drawing tasks with undefined Finish and Duration.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.BarType.FinishOnly">
+      <summary>
+            The style is used for drawing tasks with undefined Start and Duration.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.CommandButton">
+      <summary>
+            Specifies the button on the toolbar.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.LoadFromXml">
+      <summary>
+            Selects the "Load From XML File" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.SaveAsXml">
+      <summary>
+            Selects the "Save As XML File" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.GridColumns">
+      <summary>
+            Selects the "Grid Columns" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.MoveTaskUp">
+      <summary>
+            Selects the "Move Task Up" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.MoveTaskDown">
+      <summary>
+            Selects the "Move Task Down" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.TaskInfo">
+      <summary>
+            Selects the "Task Information" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.AddTask">
+      <summary>
+            Selects the "Add Task" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.AddBlankRow">
+      <summary>
+            Selects the "Add Blank Row" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.DeleteTask">
+      <summary>
+            Selects the "Delete Task" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.ProjectInfo">
+      <summary>
+            Selects the "Project Information" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.WorkingTime">
+      <summary>
+            Selects the "Change Working Time" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.Resources">
+      <summary>
+            Selects the "Project Resources" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.Timescale">
+      <summary>
+            Selects the "Timescale" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.BarStyles">
+      <summary>
+            Selects the "Bar Styles" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.ProgressLines">
+      <summary>
+            Selects the "Progress Lines" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.ScrollToTask">
+      <summary>
+            Selects the "Scroll to Task" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.Zoom">
+      <summary>
+            Invoke "Zoom" dialog.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.ZoomEntireProject">
+      <summary>
+            Selects "Zoom Entire Project" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.ZoomSelectedTask">
+      <summary>
+            Selects "Zoom Selected Task" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.ZoomIn">
+      <summary>
+            Selects "Zoom In" button.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.CommandButton.ZoomOut">
+      <summary>
+            Selects "Zoom Out" button.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ConstraintType">
+      <summary>
+            Provides choices for the type of constraint you can apply for scheduling a task.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ConstraintType.Default">
+      <summary>
+            Task is scheduled as soon as possible (in a project scheduled from the start date) or
+            it is scheduled as late as possible (in a project scheduled from the finish date).
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ConstraintType.StartNoEarlierThan">
+      <summary>
+            Task must start on or after the defined constraint date.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ConstraintType.StartNoLaterThan">
+      <summary>
+            Task must start on or before the defined constraint date.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ConstraintType.FinishNoEarlierThan">
+      <summary>
+            Task must finish on or after the defined constraint date.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ConstraintType.FinishNoLaterThan">
+      <summary>
+            Task must finish on or before the defined constraint date.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ConstraintType.MustStartOn">
+      <summary>
+            Task must start exactly on the defined constraint date.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ConstraintType.MustFinishOn">
+      <summary>
+            Task must finish exactly on the defined constraint date.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.DayTimesKind">
+      <summary>
+            Working time scheduling options.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.DayTimesKind.UseDefaultTimes">
+      <summary>
+            Use default working times for this day.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.DayTimesKind.NonworkingTime">
+      <summary>
+            Identify the day as a planned day off.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.DayTimesKind.SpecificTimes">
+      <summary>
+            Use the specific time intervals to identify the working times.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.DurationUnits">
+      <summary>
+            Specifies the time units for a task duration.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.DurationUnits.Minutes">
+      <summary>
+            Task duration is expressed in minutes. 
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.DurationUnits.Hours">
+      <summary>
+            Task duration is expressed in hours. 
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.DurationUnits.Days">
+      <summary>
+            Task duration is expressed in days. 
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.DurationUnits.Weeks">
+      <summary>
+            Task duration is expressed in weeks. 
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.DurationUnits.Months">
+      <summary>
+            Task duration is expressed in months. 
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ExceptionLimitedBy">
+      <summary>
+            Indicates whether a calendar exception ends after the specified
+            number of occurrences or by the given finish date.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ExceptionLimitedBy.FinishDate">
+      <summary>
+            The exception ends by the given <see cref="P:C1.Win.C1GanttView.CalendarException.FinishDate" />.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ExceptionLimitedBy.NumberOfOccurrences">
+      <summary>
+            The exception ends after the specified number of occurrences.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.FirstMonthOfFY">
+      <summary>
+            Specifies the first month of the fiscal year.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.January">
+      <summary>
+            Fiscal year is the same as the calendar year.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.February">
+      <summary>
+            Fiscal year starts in February.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.March">
+      <summary>
+            Fiscal year starts in March.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.April">
+      <summary>
+            Fiscal year starts in April.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.May">
+      <summary>
+            Fiscal year starts in May.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.June">
+      <summary>
+            Fiscal year starts in June.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.July">
+      <summary>
+            Fiscal year starts in July.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.August">
+      <summary>
+            Fiscal year starts in August.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.September">
+      <summary>
+            Fiscal year starts in September.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.October">
+      <summary>
+            Fiscal year starts in October.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.November">
+      <summary>
+            Fiscal year starts in November.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.FirstMonthOfFY.December">
+      <summary>
+            Fiscal year starts in December.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.HatchPattern">
+      <summary>
+            Specifies the filling pattern for bars and shapes.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.Empty">
+      <summary>
+            Use a white brush for filling.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.SolidBrush">
+      <summary>
+            Fill with a brush of a single color.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.Gradient">
+      <summary>
+            Use a gradient brush for filling.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.Percent25">
+      <summary>
+            Specifies a 25-percent hatch.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.Percent50">
+      <summary>
+            Specifies a 50-percent hatch.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.Percent70">
+      <summary>
+            Specifies a 70-percent hatch.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.ForwardDiagonal">
+      <summary>
+            A pattern of lines on a diagonal from upper left to lower right.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.BackwardDiagonal">
+      <summary>
+            A pattern of lines on a diagonal from upper right to lower left.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.DiagonalCross">
+      <summary>
+            A pattern of crisscross diagonal lines.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.Vertical">
+      <summary>
+            A pattern of vertical lines.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.Horizontal">
+      <summary>
+            A pattern of horizontal lines.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.NarrowVertical">
+      <summary>
+            Specifies vertical lines that are spaced 75 percent closer together than hatch style Vertical.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.NarrowHorizontal">
+      <summary>
+            Specifies horizontal lines that are spaced 75 percent closer together than hatch style Horizontal.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.Confetti">
+      <summary>
+            Specifies a hatch that has the appearance of confetti.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.HatchPattern.ZigZag">
+      <summary>
+            Specifies horizontal lines that are composed of zigzags.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.PredecessorType">
+      <summary>
+            Specifies the type of dependency between tasks.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.PredecessorType.FinishToStart">
+      <summary>
+            Indicates that the dependent task can't start until the parent task finishes.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.PredecessorType.StartToStart">
+      <summary>
+            Indicates that the dependent task can start only after the parent task has started.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.PredecessorType.FinishToFinish">
+      <summary>
+            Indicates that the dependent task can finish only after the parent task has finished.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.PredecessorType.StartToFinish">
+      <summary>
+            Indicates that the dependent task can finish only after the parent task has started.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ProgressLineStyle">
+      <summary>
+            Specifies the style of progress lines.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ProgressLineStyle.None">
+      <summary>
+            Hides the line.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ProgressLineStyle.Solid">
+      <summary>
+            Specifies a solid line.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ProgressLineStyle.Dash">
+      <summary>
+            Specifies a line consisting of dashes.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ProgressLineStyle.Dot">
+      <summary>
+            Specifies a line consisting of dots.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ProgressLineStyle.DashDot">
+      <summary>
+            Specifies a line consisting of a repeating pattern of dash-dot.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ProgressLineStyle.DashDotDot">
+      <summary>
+            Specifies a line consisting of a repeating pattern of dash-dot-dot.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ResourceType">
+      <summary>
+            Specifies the type of a resource.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ResourceType.Work">
+      <summary>
+            People and equipment that will do the work to complete tasks in your project.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ResourceType.Material">
+      <summary>
+            Things that the work resources need to complete tasks in your project.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ResourceType.Cost">
+      <summary>
+            Fees associated with getting tasks in your project done.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ScaleLabelAlignment">
+      <summary>
+            Specifies the horizontal alignment of the scale labels.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScaleLabelAlignment.Left">
+      <summary>
+            Scale labels are aligned to the left.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScaleLabelAlignment.Center">
+      <summary>
+            Scale labels are centered.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScaleLabelAlignment.Right">
+      <summary>
+            Scale labels are aligned to the right.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScaleLabelAlignment.Justify">
+      <summary>
+            Scale labels are aligned to both sides (used for ranges).
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ScaleLabelInstant">
+      <summary>
+            Specifies the point in time to be displayed as a scale label.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScaleLabelInstant.Start">
+      <summary>
+            Shows the beginning of the time interval.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScaleLabelInstant.End">
+      <summary>
+            Shows the ending of the time interval.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScaleLabelInstant.Middle">
+      <summary>
+            Shows the middle of the time interval.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScaleLabelInstant.Range">
+      <summary>
+            Shows a range from beginning to ending of the time interval.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScaleLabelInstant.RangeOverlapped">
+      <summary>
+            Shows a range from beginning of the current time interval to
+            beginning of the next time interval.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ScheduleFrom">
+      <summary>
+            Indicates whether the project is scheduled from its start date or from its finish date.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScheduleFrom.ProjectStartDate">
+      <summary>
+            The project is scheduled from its start date.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.ScheduleFrom.ProjectFinishDate">
+      <summary>
+            The project is scheduled from its finish date.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.TaskMode">
+      <summary>
+            Specifies how a <see cref="T:C1.Win.C1GanttView.Task" /> should be scheduled.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskMode.Manual">
+      <summary>
+            The user must provide the task's start date.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskMode.Automatic">
+      <summary>
+            The task's start data is calculated automatically.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.TaskProperty">
+      <summary>
+            Specifies a property of the <see cref="T:C1.Win.C1GanttView.Task" /> object.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.None">
+      <summary>
+            No reference. The column doesn't appear in the grid.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.Name">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.Name" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.Mode">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.Mode" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.Calendar">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.Calendar" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.Duration">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.Duration" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.DurationUnits">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.DurationUnits" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.Start">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.Start" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.Finish">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.Finish" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.PercentComplete">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.PercentComplete" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.Deadline">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.Deadline" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.ConstraintType">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.ConstraintType" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.ConstraintDate">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.ConstraintDate" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.Predecessors">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.Predecessors" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.ResourceNames">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.Task.ResourceNames" /> property.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TaskProperty.Notes">
+      <summary>
+            References the <see cref="P:C1.Win.C1GanttView.BaseObject.Notes" /> property.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.TimescaleUnits">
+      <summary>
+            Specifies the units for a timescale.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TimescaleUnits.Minutes">
+      <summary>
+            Display minutes.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TimescaleUnits.Hours">
+      <summary>
+            Display hours.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TimescaleUnits.Days">
+      <summary>
+            Display days.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TimescaleUnits.Weeks">
+      <summary>
+            Display weeks.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TimescaleUnits.ThirdsOfMonths">
+      <summary>
+            Display thirds of months.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TimescaleUnits.Months">
+      <summary>
+            Display months.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TimescaleUnits.Quarters">
+      <summary>
+            Display quarters.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TimescaleUnits.HalfYears">
+      <summary>
+            Display half-years.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.TimescaleUnits.Years">
+      <summary>
+            Display years.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.VisualStyle">
+      <summary>
+            Specifies a visual style to use when rendering the control.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.VisualStyle.Custom">
+      <summary>
+            Used-defined color scheme.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.VisualStyle.Office2007Black">
+      <summary>
+            Office 2007 Black visual style.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.VisualStyle.Office2007Blue">
+      <summary>
+            Office 2007 Blue visual style.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.VisualStyle.Office2007Silver">
+      <summary>
+            Office 2007 Silver visual style.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.VisualStyle.Office2010Black">
+      <summary>
+            Office 2010 Black visual style.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.VisualStyle.Office2010Blue">
+      <summary>
+            Office 2010 Blue visual style.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.VisualStyle.Office2010Silver">
+      <summary>
+            Office 2010 Silver visual style.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.VisualStyle.Windows7">
+      <summary>
+            Windows 7 visual style.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.WeekDays">
+      <summary>
+            Specifies the set of week days.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.None">
+      <summary>
+            No days in the set.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Sunday">
+      <summary>
+            Specifies the Sunday.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Monday">
+      <summary>
+            Specifies the Monday.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Tuesday">
+      <summary>
+            Specifies the Tuesday.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Wednesday">
+      <summary>
+            Specifies the Wednesday.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Thursday">
+      <summary>
+            Specifies the Thursday.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Friday">
+      <summary>
+            Specifies the Friday.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Saturday">
+      <summary>
+            Specifies the Saturday.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Workdays">
+      <summary>
+            Specifies all days excepts weekends.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Weekends">
+      <summary>
+            Specifies the Sunday and Saturday.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekDays.Everyday">
+      <summary>
+            Specifies every day of the week.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.WeekOfMonth">
+      <summary>
+            Specifies the weeks of month, used in a recurrence pattern.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekOfMonth.NotSpecified">
+      <summary>
+            The week of month is not specified.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekOfMonth.First">
+      <summary>
+            The event recurs in the first week of the month.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekOfMonth.Second">
+      <summary>
+            The item recurs in the second week of the month.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekOfMonth.Third">
+      <summary>
+            The item recurs in the third week of the month. 
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekOfMonth.Fourth">
+      <summary>
+            The item recurs in the fourth week of the month.
+            </summary>
+    </member>
+    <member name="F:C1.Win.C1GanttView.WeekOfMonth.Last">
+      <summary>
+            The item recurs in the last week of the month.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.BaseObject">
+      <summary>
+            Base object that implements INotifyPropertyChanged.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseObject.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.BaseObject.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event data.</param>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseObject.GetFieldValue(System.String,System.Object)">
+      <summary>
+            Gets the value of a custom field.
+            </summary>
+      <param name="fieldName">Name of the field to get.</param>
+      <param name="defaultValue">Field default value.</param>
+      <returns>The value of the field.</returns>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseObject.SetFieldValue(System.String,System.Object)">
+      <summary>
+            Sets the value of a custom field.
+            </summary>
+      <param name="fieldName">Name of the field to set.</param>
+      <param name="value">Value to assign to field.</param>
+      <returns>True if the value changed, false otherwise.</returns>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseObject.Project">
+      <summary>
+            Gets the owner <see cref="P:C1.Win.C1GanttView.BaseObject.Project" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseObject.ID">
+      <summary>
+            Gets the object's autogenerated ID.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseObject.Notes">
+      <summary>
+            Gets or sets notes associated with this task.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.BaseObject.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.BaseColumn">
+      <summary>
+            Specifies the properties of a grid column.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseColumn.ToString">
+      <summary>
+            Returns a string that represents the grid column.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseColumn.GetHashCode">
+      <summary>
+            Returns the hash code for this column.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseColumn.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.BaseColumn.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event data.</param>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseColumn.View">
+      <summary>
+            Gets the owner <see cref="T:C1.Win.C1GanttView.C1GanttView" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseColumn.ID">
+      <summary>
+            Gets the column's autogenerated ID.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseColumn.Caption">
+      <summary>
+            Gets or sets the caption of the grid column.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseColumn.TextAlign">
+      <summary>
+            Gets or sets text alignment of the column data.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseColumn.Width">
+      <summary>
+            Gets or sets the width of the grid column.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseColumn.Visible">
+      <summary>
+            Gets or sets whether the grid column is visible.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.BaseColumn.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.TaskPropertyColumn">
+      <summary>
+            Specifies the properties of a predefined grid column.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.TaskPropertyColumn.Property">
+      <summary>
+            Gets or sets which property of the <see cref="T:C1.Win.C1GanttView.Task" /> object is referenced.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.CustomFieldColumn">
+      <summary>
+            Specifies the properties of a custom grid column.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomFieldColumn.ResetDataType">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.CustomFieldColumn.DataType" /> property.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CustomFieldColumn.Name">
+      <summary>
+            Gets or sets the name of the custom field.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CustomFieldColumn.DataType">
+      <summary>
+            Gets or sets the data type of the custom field.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CustomFieldColumn.Format">
+      <summary>
+            Gets or sets a string that specifies how to format the data on this column.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ColumnCollection">
+      <summary>
+            Represents a collection of grid columns.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ColumnCollection.Search(System.Int32)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.BaseColumn" /> with the specified ID.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ColumnCollection.Search(C1.Win.C1GanttView.TaskProperty)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.TaskPropertyColumn" /> with the specified value of <see cref="P:C1.Win.C1GanttView.TaskPropertyColumn.Property" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ColumnCollection.IndexOf(System.Int32)">
+      <summary>
+            Searches for the specified ID and returns the zero-based index of the corresponding column.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ColumnCollection.IndexOf(C1.Win.C1GanttView.TaskProperty)">
+      <summary>
+            Searches for the specified value of <see cref="P:C1.Win.C1GanttView.TaskPropertyColumn.Property" /> and returns the zero-based index of the corresponding column.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ColumnCollection.InsertItem(System.Int32,C1.Win.C1GanttView.BaseColumn)">
+      <summary>
+            Inserts an item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ColumnCollection.SetItem(System.Int32,C1.Win.C1GanttView.BaseColumn)">
+      <summary>
+            Replaces the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ColumnCollection.RemoveItem(System.Int32)">
+      <summary>
+            Removes the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ColumnCollection.ClearItems">
+      <summary>
+            Removes all items from the collection.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.CustomCalendar">
+      <summary>
+            Identifies working times for the project tasks.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendar.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.CustomCalendar" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendar.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.CustomCalendar.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event data.</param>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendar.ToString">
+      <summary>
+            Returns a String that represents the current <see cref="T:C1.Win.C1GanttView.CustomCalendar" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendar.GetHashCode">
+      <summary>
+            Returns the hash code for this <see cref="T:C1.Win.C1GanttView.CustomCalendar" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CustomCalendar.Schedule">
+      <summary>
+            Gets the owner <see cref="P:C1.Win.C1GanttView.CustomCalendar.Schedule" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CustomCalendar.ID">
+      <summary>
+            Gets the custom calendar's autogenerated ID.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CustomCalendar.Name">
+      <summary>
+            Gets or sets the name of the custom calendar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CustomCalendar.HonorDefaultExceptions">
+      <summary>
+            Gets or sets whether the default calendar exceptions should be taken into account.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CustomCalendar.CalendarExceptions">
+      <summary>
+            Gets the collection of calendar exceptions.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CustomCalendar.WorkWeeks">
+      <summary>
+            Gets the collection of work weeks.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.CustomCalendar.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.CustomCalendarCollection">
+      <summary>
+            Represents a collection of custom calendars.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendarCollection.Search(System.Int32)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.CustomCalendar" /> with the specified ID.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendarCollection.Search(System.String)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.CustomCalendar" /> with the specified Name.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendarCollection.IndexOf(System.Int32)">
+      <summary>
+            Searches for the specified ID and returns the zero-based index of the corresponding calendar.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendarCollection.IndexOf(System.String)">
+      <summary>
+            Searches for the specified Name and returns the zero-based index of the corresponding calendar.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendarCollection.InsertItem(System.Int32,C1.Win.C1GanttView.CustomCalendar)">
+      <summary>
+            Inserts an item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendarCollection.SetItem(System.Int32,C1.Win.C1GanttView.CustomCalendar)">
+      <summary>
+            Replaces the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendarCollection.RemoveItem(System.Int32)">
+      <summary>
+            Removes the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CustomCalendarCollection.ClearItems">
+      <summary>
+            Removes all items from the collection.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.CalendarException">
+      <summary>
+            Specifies the working times (calendar) exception.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.WorkingTimes">
+      <summary>
+            Specifies the day working times.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkingTimes.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.WorkingTimes" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkingTimes.ResetInterval_1">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.WorkingTimes.Interval_1" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkingTimes.ResetInterval_2">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.WorkingTimes.Interval_2" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkingTimes.ResetInterval_3">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.WorkingTimes.Interval_3" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkingTimes.ResetInterval_4">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.WorkingTimes.Interval_4" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkingTimes.ResetInterval_5">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.WorkingTimes.Interval_5" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkingTimes.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.WorkingTimes.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event data.</param>
+    </member>
+    <member name="P:C1.Win.C1GanttView.WorkingTimes.Interval_1">
+      <summary>
+            Gets the first time interval.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.WorkingTimes.Interval_2">
+      <summary>
+            Gets the second time interval.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.WorkingTimes.Interval_3">
+      <summary>
+            Gets the third time interval.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.WorkingTimes.Interval_4">
+      <summary>
+            Gets the fourth time interval.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.WorkingTimes.Interval_5">
+      <summary>
+            Gets the fifth time interval.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.WorkingTimes.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CalendarException.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.CalendarException" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CalendarException.ResetNumberOfOccurrences">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.CalendarException.NumberOfOccurrences" /> property.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CalendarException.Schedule">
+      <summary>
+            Gets the owner <see cref="P:C1.Win.C1GanttView.CalendarException.Schedule" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CalendarException.Name">
+      <summary>
+            Gets or sets the name of the calendar exception.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CalendarException.Workday">
+      <summary>
+            Gets or sets whether the exception specifies a working day or a nonworking day.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CalendarException.StartDate">
+      <summary>
+            Gets or sets the start date of the calendar exception.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CalendarException.LimitedBy">
+      <summary>
+            Gets or sets whether the calendar exception ends after the specified
+            number of occurrences or by the given finish date.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CalendarException.FinishDate">
+      <summary>
+            Gets or sets the finish date of the calendar exception.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CalendarException.NumberOfOccurrences">
+      <summary>
+            Gets or sets the number of occurrences after which the calendar exception ends.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.CalendarException.RecurrencePattern">
+      <summary>
+            Gets the recurrence pattern for the calendar exception.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.CalendarExceptionCollection">
+      <summary>
+            Represents a collection of calendar exceptions.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CalendarExceptionCollection.#ctor">
+      <summary>
+            Initializes a new instance of the <see cref="T:C1.Win.C1GanttView.CalendarExceptionCollection" /> class.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CalendarExceptionCollection.Search(System.String)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.CalendarException" /> with the specified Name.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CalendarExceptionCollection.IndexOf(System.String)">
+      <summary>
+            Searches for the specified Name and returns the zero-based index of the corresponding calendar exception.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CalendarExceptionCollection.InsertItem(System.Int32,C1.Win.C1GanttView.CalendarException)">
+      <summary>
+            Inserts an item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CalendarExceptionCollection.SetItem(System.Int32,C1.Win.C1GanttView.CalendarException)">
+      <summary>
+            Replaces the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CalendarExceptionCollection.RemoveItem(System.Int32)">
+      <summary>
+            Removes the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.CalendarExceptionCollection.ClearItems">
+      <summary>
+            Removes all items from the collection.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.Predecessor">
+      <summary>
+            Specifies the dependence of one task on the other task.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Predecessor.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.Predecessor" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Predecessor.#ctor(System.Int32,C1.Win.C1GanttView.PredecessorType,System.Double)">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.Predecessor" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Predecessor.OwnerTask">
+      <summary>
+            Gets the owner (dependent) task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Predecessor.PredecessorTaskID">
+      <summary>
+            Gets or sets the ID of the predecessor task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Predecessor.PredecessorTask">
+      <summary>
+            Gets or sets the predecessor task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Predecessor.PredecessorType">
+      <summary>
+            Gets or sets the type of dependency between tasks.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Predecessor.Lag">
+      <summary>
+            Gets or sets a delay between two tasks, in days.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.PredecessorCollection">
+      <summary>
+            Represents a collection of task predecessors.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.PredecessorCollection.Search(System.Int32)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.Predecessor" /> with the specified ID of the predecessor task.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.PredecessorCollection.IndexOf(System.Int32)">
+      <summary>
+            Searches for the specified ID of the predecessor task and returns the zero-based index of the corresponding predecessor.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.PredecessorCollection.InsertItem(System.Int32,C1.Win.C1GanttView.Predecessor)">
+      <summary>
+            Inserts an item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.PredecessorCollection.SetItem(System.Int32,C1.Win.C1GanttView.Predecessor)">
+      <summary>
+            Replaces the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.PredecessorCollection.RemoveItem(System.Int32)">
+      <summary>
+            Removes the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.PredecessorCollection.ClearItems">
+      <summary>
+            Removes all items from the collection.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ProgressLine">
+      <summary>
+            Represents a line on the timescale that draws attention
+            to tasks that are ahead or behind the schedule.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ProgressLine.Dispose">
+      <summary>
+            Clean up any resources being used.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ProgressLine.ResetLineColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.ProgressLine.LineColor" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ProgressLine.ResetPointColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.ProgressLine.PointColor" /> property.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ProgressLine.Visible">
+      <summary>
+            Gets or sets whether the progress line is visible.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ProgressLine.StatusDate">
+      <summary>
+            Gets or sets a fixed date for the progress line ('(NA)' means 'floating today').
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ProgressLine.LineStyle">
+      <summary>
+            Gets or sets line type of the progress line.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ProgressLine.UseAntialiasing">
+      <summary>
+            Gets or sets whether the progress line is drawn with antialiasing.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ProgressLine.LineColor">
+      <summary>
+            Gets or sets the color of the progress line.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ProgressLine.PointShape">
+      <summary>
+            Gets or sets the type of the point shape.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ProgressLine.PointColor">
+      <summary>
+            Gets or sets the color of the point shape.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.RecurrencePattern">
+      <summary>
+            Specifies the recurrence pattern for the events, such as tasks or calendar exceptions.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.RecurrencePattern.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.RecurrencePattern.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event data.</param>
+    </member>
+    <member name="P:C1.Win.C1GanttView.RecurrencePattern.Interval">
+      <summary>
+            Gets or sets the cycle step of occurrences of the recurrence. 
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.RecurrencePattern.WeekDays">
+      <summary>
+            Gets or sets the days of week when the recurrence should occur.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.RecurrencePattern.WeekOfMonth">
+      <summary>
+            Gets or sets the week of month when the recurrence should occur.
+            </summary>
+      <remarks>
+            Setting this property to 'NotSpecified' means "every week of the month".
+            </remarks>
+    </member>
+    <member name="P:C1.Win.C1GanttView.RecurrencePattern.DayOfMonth">
+      <summary>
+            Gets or sets the day of month when the recurrence should occur.
+            </summary>
+      <remarks>
+            Setting this property to 0 means "every day of the month".
+            Negative value counts days from the end of month.
+            </remarks>
+    </member>
+    <member name="P:C1.Win.C1GanttView.RecurrencePattern.MonthOfYear">
+      <summary>
+            Gets or sets the month of year when the recurrence should occur.
+            </summary>
+      <remarks>
+            Setting this property to 0 means "every month of the year".
+            </remarks>
+    </member>
+    <member name="E:C1.Win.C1GanttView.RecurrencePattern.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.Resource">
+      <summary>
+            Represents a resource in the project.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Resource.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.Resource" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Resource.ResetCost">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.Resource.Cost" /> property.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Resource.Name">
+      <summary>
+            Gets or sets the resource name.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Resource.ResourceType">
+      <summary>
+            Gets or sets the type of the resource.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Resource.Cost">
+      <summary>
+            Gets or sets the cost of the resource.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Resource.UnitOfMeasure">
+      <summary>
+            Gets or sets the unit of measure for the resource.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ResourceCollection">
+      <summary>
+            Represents a collection of resources.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.Search(System.Int32)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.Resource" /> with the specified ID.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.Search(System.String)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.Resource" /> with the specified Name.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.IndexOf(System.Int32)">
+      <summary>
+            Searches for the specified ID and returns the zero-based index of the corresponding resource.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.IndexOf(System.String)">
+      <summary>
+            Searches for the specified Name and returns the zero-based index of the corresponding resource.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.InsertItem(System.Int32,C1.Win.C1GanttView.Resource)">
+      <summary>
+            Inserts an item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.SetItem(System.Int32,C1.Win.C1GanttView.Resource)">
+      <summary>
+            Replaces the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.RemoveItem(System.Int32)">
+      <summary>
+            Removes the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.ClearItems">
+      <summary>
+            Removes all items from the collection.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.ApplySortCore(System.ComponentModel.PropertyDescriptor,System.ComponentModel.ListSortDirection)">
+      <summary>
+            Sorts the resources.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceCollection.OnListChanged(System.ComponentModel.ListChangedEventArgs)">
+      <summary>
+            Raises the ListChanged event.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ResourceRef">
+      <summary>
+            Specifies the reference to a resource object.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceRef.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.ResourceRef" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceRef.#ctor(System.Int32,System.Double)">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.ResourceRef" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ResourceRef.OwnerTask">
+      <summary>
+            Gets the owner task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ResourceRef.ResourceID">
+      <summary>
+            Gets or sets the ID of the resource.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ResourceRef.Resource">
+      <summary>
+            Gets or sets a resource for the owner task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ResourceRef.Amount">
+      <summary>
+            Gets or sets the amount of the resource that will be spent on this task.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ResourceRefCollection">
+      <summary>
+            Represents a collection of resource references.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceRefCollection.Search(System.Int32)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.ResourceRef" /> with the specified ID of the resource.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceRefCollection.IndexOf(System.Int32)">
+      <summary>
+            Searches for the specified ID of the resource and returns the zero-based index of the corresponding element.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceRefCollection.InsertItem(System.Int32,C1.Win.C1GanttView.ResourceRef)">
+      <summary>
+            Inserts an item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceRefCollection.SetItem(System.Int32,C1.Win.C1GanttView.ResourceRef)">
+      <summary>
+            Replaces the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceRefCollection.RemoveItem(System.Int32)">
+      <summary>
+            Removes the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.ResourceRefCollection.ClearItems">
+      <summary>
+            Removes all items from the collection.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.Schedule">
+      <summary>
+            Represents the schedule options.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Schedule.#ctor(C1.Win.C1GanttView.C1GanttView)">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.Schedule" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Schedule.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.Schedule.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event parameters.</param>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.View">
+      <summary>
+            Gets the <see cref="T:C1.Win.C1GanttView.C1GanttView" /> control for this <see cref="T:C1.Win.C1GanttView.Project" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.CultureCode">
+      <summary>
+            Gets the culture identifier for the current project.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.UserCultureOverride">
+      <summary>
+            Gets or sets whether the current user regional settings override the selected culture.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.CultureInfo">
+      <summary>
+            Gets the current CultureInfo object for the current project.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.GridDateFormat">
+      <summary>
+            Gets or sets the format string for date values on the grid view.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.ChartDateFormat">
+      <summary>
+            Gets or sets the format string for date values on the chart view.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.FirstMonthOfFY">
+      <summary>
+            Gets or sets the first month of the fiscal year.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.UseStartingYearForFY">
+      <summary>
+            Gets or sets whether the fiscal year starts in the same calendar year (true)
+            or in the previous calendar year (false).
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.FirstDayOfWeek">
+      <summary>
+            Gets or sets the first day of the week.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.HoursPerDay">
+      <summary>
+            Gets or sets the number of work hours per day.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.HoursPerWeek">
+      <summary>
+            Gets or sets the number of work hours per week.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.DaysPerMonth">
+      <summary>
+            Gets or sets the number of working days in a month.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.CustomCalendars">
+      <summary>
+            Gets the collection of calendars that identify working times.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.DefaultWorkingTimes">
+      <summary>
+            Gets the default working start/end times.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.DefaultDaysOff">
+      <summary>
+            Gets or sets the default days off work.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.DefaultWorkWeek">
+      <summary>
+            Gets the default work week.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Schedule.CalendarExceptions">
+      <summary>
+            Gets the collection of default calendar exceptions.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.Schedule.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.ScaleTier">
+      <summary>
+            Switches time units and date formats for a level of timescale.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ScaleTier.Units">
+      <summary>
+            Gets or sets the units for a timescale.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ScaleTier.Count">
+      <summary>
+            Gets or sets the number of units in a scale division.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ScaleTier.UseFiscalYear">
+      <summary>
+            Gets or sets whether the fiscal year should be used instead of the calendar year.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ScaleTier.Format">
+      <summary>
+             Gets or sets the format string for the scale labels.
+             </summary>
+      <remarks>
+             The list of supported format specifiers.
+            
+             sx, where x is a standard date/time format specifier:
+             sd - Short date pattern (4/10/2008)
+             sD - Long date pattern (Thursday, April 10, 2008)
+             sf - Full date/time pattern (Thursday, April 10, 2008 6:30 AM)
+             sg - General date/time pattern (4/10/2008 6:30 AM)
+             sm - Month day pattern (April 10)
+             st - Short time pattern (6:30 AM)
+             sy - Year month pattern (April, 2008)
+             
+             yy - Represents the year as a two-digit number
+             yyy - Represents the year with a minimum of three digits
+             yyyy - Represents the year as a four-digit number
+            
+             h - Represents a half-year as a number 1 or 2.
+             h{N1,N2} - Custom half-year name
+            
+             q - Represents a quarter as a number from 1 through 4.
+             q{N1,N2,N3,N4} - Custom quarter name
+            
+             m - Represents the month as a number from 1 through 12
+             mm - Represents the month as a number from 01 through 12
+            
+             n - Single-letter month name
+             nnn - Use DateTimeFormatInfo.GetAbbreviatedMonthName
+             nnnn - Use DateTimeFormatInfo.GetMonthName
+             n{N1,N2,N3,N4,N5,N6,N7,N8,N9,N10,N11,N12} - Custom month name
+            
+             e{N1,N2,N3} - Custom thirds-of-month name
+            
+             k - Represents the week of the year number from 1 to 53.
+             kk - Represents the week of the year number from 01 to 53.
+            
+             d - Represents the day of the month as a number from 1 through 31
+             dd - Represents the day of the month as a number from 01 through 31
+            
+             b - Represents the day of the year as a number from 1 through 366
+             bbb - Represents the day of the year as a number from 001 through 366
+            
+             w - Single-letter week day (S, M, T, W,...)
+             ww - Use DateTimeFormatInfo.GetShortestDayName
+             www - Use DateTimeFormatInfo.GetAbbreviatedDayName 
+             wwww - Use DateTimeFormatInfo.GetDayName
+             w{N1,N2,N3,N4,N5,N6,N7} - Custom week day name
+            
+             a - Represents the hour as a number from 1 through 12
+             aa - Represents the hour as a number from 01 through 12
+             u - Represents the hour as a number from 0 through 23
+             uu - Represents the hour as a number from 00 through 23
+            
+             i - Represents the minute as a number from 0 through 59
+             ii - Represents the minute as a number from 00 through 59
+            
+             t - Represents the first character of the AM/PM designator
+             tt - Represents the AM/PM designator
+             t{N1,N2}
+            
+             : - Use DateTimeFormatInfo.TimeSeparator
+             / - Use DateTimeFormatInfo.DateSeparator
+             " - Represents a quoted string (quotation mark).
+             ' - Represents a quoted string (apostrophe).
+            
+             \c - Displays the character 'c' as a literal
+             Other character - Copies to the result string
+             
+             </remarks>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ScaleTier.Instant">
+      <summary>
+            Gets or sets the point in time to be displayed as a scale label.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ScaleTier.Align">
+      <summary>
+            Gets or sets the horizontal alignment of the scale labels.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ScaleTier.MinWidth">
+      <summary>
+            Gets or sets the minimal width of the scale division.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.ScaleTier.Visible">
+      <summary>
+            Gets or sets whether the tier is visible.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.Timescale">
+      <summary>
+            Adjusts the timescale display settings.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Timescale.TopTier">
+      <summary>
+            Specifies settings for the top level of the timescale.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Timescale.MiddleTier">
+      <summary>
+            Specifies settings for the middle level of the timescale.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Timescale.BottomTier">
+      <summary>
+            Specifies settings for the bottom level of the timescale.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.TimeInterval">
+      <summary>
+            Specifies the working time interval.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TimeInterval.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.TimeInterval.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event data.</param>
+    </member>
+    <member name="P:C1.Win.C1GanttView.TimeInterval.Empty">
+      <summary>
+            Gets or sets whether the time interval is empty (not used).
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.TimeInterval.From">
+      <summary>
+            Gets or sets the working time start.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.TimeInterval.To">
+      <summary>
+            Gets or sets the working time end.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.TimeInterval.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.DayWorkingTimes">
+      <summary>
+            The working times for a specific day.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.DayWorkingTimes.DayTimesKind">
+      <summary>
+            Gets or sets the working time scheduling options.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.Project">
+      <summary>
+            Represents the project data.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Project.#ctor(C1.Win.C1GanttView.C1GanttView)">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.Project" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Project.Dispose">
+      <summary>
+            Clean up any resources being used.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Project.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.Project.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event parameters.</param>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Project.View">
+      <summary>
+            Gets the <see cref="T:C1.Win.C1GanttView.C1GanttView" /> control for this <see cref="T:C1.Win.C1GanttView.Project" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Project.Tasks">
+      <summary>
+            Gets the list of tasks that comprise this project.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Project.Resources">
+      <summary>
+            Gets the list of all available resources.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Project.BarStyles">
+      <summary>
+            Gets the list of non-standard bar styles.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Project.ScheduleFrom">
+      <summary>
+            Gets or sets whether the project is scheduled from its start date or from its finish date.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Project.StartDate">
+      <summary>
+            Gets or sets the project's start date and time.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Project.FinishDate">
+      <summary>
+            Gets or sets the project's end date and time.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.Project.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.Task">
+      <summary>
+            Represents a task in the project.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Task.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.Task" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Task.Dispose">
+      <summary>
+            Clean up any resources being used.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Task.ResetStart">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.Task.Start" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Task.ResetFinish">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.Task.Finish" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Task.ResetDuration">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.Task.Duration" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Task.ResetConstraintType">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.Task.ConstraintType" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Task.ResetConstraintDate">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.Task.ConstraintDate" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.Task.GetDurationInDays">
+      <summary>
+            Returns the task duration, in days.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.Initialized">
+      <summary>
+            Indicates whether the <see cref="T:C1.Win.C1GanttView.Task" /> contains non-empty fields.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.Name">
+      <summary>
+            Gets or sets the task name.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.Mode">
+      <summary>
+            Gets or sets how the task is scheduled (manually or automatically).
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.CalendarID">
+      <summary>
+            Gets or sets the ID of the custom calendar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.Calendar">
+      <summary>
+            Gets or sets a custom calendar for the task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.BarStyles">
+      <summary>
+            Gets the collection of bar styles redefined for the given task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.Start">
+      <summary>
+            Gets or sets (for manual tasks only) the task start date and time.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.Finish">
+      <summary>
+            Gets or sets (for manual tasks only) the task finish date and time.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.Duration">
+      <summary>
+            Gets or sets the task duration. Duration units are specified by the <see cref="P:C1.Win.C1GanttView.Task.DurationUnits" /> property.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.DurationUnits">
+      <summary>
+            Gets or sets the time units for the task duration.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.PercentComplete">
+      <summary>
+            Gets or sets the completion stage of this task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.Deadline">
+      <summary>
+            Gets or sets the task's deadline.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.ConstraintType">
+      <summary>
+            Gets or sets the type of constraint for scheduling a task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.ConstraintDate">
+      <summary>
+            Gets or sets the start (finish) date for a start (finish) date constraint.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.HideBar">
+      <summary>
+            Gets or sets a value indicating if the task bar shouldn't appear on the chart.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.Predecessors">
+      <summary>
+            Gets a list of tasks that must be finished/started before this task can start/finish.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.ResourceNames">
+      <summary>
+            Gets a string with the list of resources used by this task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.ResourceRefs">
+      <summary>
+            Gets a list of resources used by this task.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.Task.ErrorMessage">
+      <summary>
+            Gets or sets the error message displayed for the task.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.TaskCollection">
+      <summary>
+            Represents a collection of tasks.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.Search(System.Int32)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.Task" /> with the specified ID.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.Search(System.String)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.Task" /> with the specified Name.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.IndexOf(System.Int32)">
+      <summary>
+            Searches for the specified ID and returns the zero-based index of the corresponding task.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.IndexOf(System.String)">
+      <summary>
+            Searches for the specified Name and returns the zero-based index of the corresponding task.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.ClearAndDispose">
+      <summary>
+            Removes all tasks from the collection, then disposes the tasks.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.InsertItem(System.Int32,C1.Win.C1GanttView.Task)">
+      <summary>
+            Inserts an item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.SetItem(System.Int32,C1.Win.C1GanttView.Task)">
+      <summary>
+            Replaces the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.RemoveItem(System.Int32)">
+      <summary>
+            Removes the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.ClearItems">
+      <summary>
+            Removes all items from the collection.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.ApplySortCore(System.ComponentModel.PropertyDescriptor,System.ComponentModel.ListSortDirection)">
+      <summary>
+            Sorts the tasks.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.TaskCollection.OnListChanged(System.ComponentModel.ListChangedEventArgs)">
+      <summary>
+            Raises the ListChanged event.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.BaseWorkWeek">
+      <summary>
+            The default working times for a work week.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseWorkWeek.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.BaseWorkWeek" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseWorkWeek.ResetSundayTimes">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BaseWorkWeek.SundayTimes" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseWorkWeek.ResetMondayTimes">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BaseWorkWeek.MondayTimes" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseWorkWeek.ResetTuesdayTimes">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BaseWorkWeek.TuesdayTimes" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseWorkWeek.ResetWednesdayTimes">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BaseWorkWeek.WednesdayTimes" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseWorkWeek.ResetThursdayTimes">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BaseWorkWeek.ThursdayTimes" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseWorkWeek.ResetFridayTimes">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BaseWorkWeek.FridayTimes" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseWorkWeek.ResetSaturdayTimes">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BaseWorkWeek.SaturdayTimes" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BaseWorkWeek.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.BaseWorkWeek.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event data.</param>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseWorkWeek.Schedule">
+      <summary>
+            Gets the owner <see cref="P:C1.Win.C1GanttView.BaseWorkWeek.Schedule" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseWorkWeek.SundayTimes">
+      <summary>
+            Gets or sets the working times for Sunday.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseWorkWeek.MondayTimes">
+      <summary>
+            Gets or sets the working times for Monday.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseWorkWeek.TuesdayTimes">
+      <summary>
+            Gets or sets the working times for Tuesday.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseWorkWeek.WednesdayTimes">
+      <summary>
+            Gets or sets the working times for Wednesday.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseWorkWeek.ThursdayTimes">
+      <summary>
+            Gets or sets the working times for Thursday.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseWorkWeek.FridayTimes">
+      <summary>
+            Gets or sets the working times for Friday.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BaseWorkWeek.SaturdayTimes">
+      <summary>
+            Gets or sets the working times for Saturday.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.BaseWorkWeek.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.WorkWeek">
+      <summary>
+            Specifies a work week for a given period.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkWeek.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.WorkWeek" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.WorkWeek.StartDate">
+      <summary>
+            Gets or sets the start date of a work week.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.WorkWeek.FinishDate">
+      <summary>
+            Gets or sets the finish date of a work week.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.WorkWeek.Name">
+      <summary>
+            Gets or sets the name of a work week.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.WorkWeekCollection">
+      <summary>
+            Represents a collection of work weeks.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkWeekCollection.#ctor">
+      <summary>
+            Initializes a new instance of the <see cref="T:C1.Win.C1GanttView.WorkWeekCollection" /> class.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkWeekCollection.Search(System.String)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.WorkWeek" /> with the specified Name.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkWeekCollection.IndexOf(System.String)">
+      <summary>
+            Searches for the specified Name and returns the zero-based index of the corresponding work week.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkWeekCollection.InsertItem(System.Int32,C1.Win.C1GanttView.WorkWeek)">
+      <summary>
+            Inserts an item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkWeekCollection.SetItem(System.Int32,C1.Win.C1GanttView.WorkWeek)">
+      <summary>
+            Replaces the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkWeekCollection.RemoveItem(System.Int32)">
+      <summary>
+            Removes the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.WorkWeekCollection.ClearItems">
+      <summary>
+            Removes all items from the collection.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.BarStyle">
+      <summary>
+            Specifies style settings for drawing a bar on the Gantt Chart.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyle.#ctor">
+      <summary>
+            Initializes a new instance of a <see cref="T:C1.Win.C1GanttView.BarStyle" />.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyle.Clone">
+      <summary>
+            Creates a new object that is a copy of the current instance.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyle.Dispose">
+      <summary>
+            Clean up any resources being used.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyle.ResetBarColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BarStyle.BarColor" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyle.ResetStartColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BarStyle.StartColor" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyle.ResetEndColor">
+      <summary>
+            Resets the value of the <see cref="P:C1.Win.C1GanttView.BarStyle.EndColor" /> property.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyle.OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs)">
+      <summary>
+            Raises the <see cref="E:C1.Win.C1GanttView.BarStyle.PropertyChanged" /> event.
+            </summary>
+      <param name="e">
+        <see cref="T:System.ComponentModel.PropertyChangedEventArgs" /> that contains the event data.</param>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.View">
+      <summary>
+            Gets the owner <see cref="T:C1.Win.C1GanttView.C1GanttView" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.BarType">
+      <summary>
+            Gets or sets a value indicating the target bar type for the <see cref="T:C1.Win.C1GanttView.BarStyle" />.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.BarShape">
+      <summary>
+            Gets or sets the shape of the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.BarPattern">
+      <summary>
+            Gets or sets the hatch style used for filling the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.BarColor">
+      <summary>
+            Gets or sets the background color for the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.StartShape">
+      <summary>
+            Gets or sets the shape for the bar start.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.StartPattern">
+      <summary>
+            Gets or sets the hatch style used for filling the shape at the bar start.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.StartColor">
+      <summary>
+            Gets or sets the background color for the shape at the bar start.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.EndShape">
+      <summary>
+            Gets or sets the shape for the bar end.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.EndPattern">
+      <summary>
+            Gets or sets the hatch style used for filling the shape at the bar end.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.EndColor">
+      <summary>
+            Gets or sets the background color for the shape at the bar end.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.LeftText1_ID">
+      <summary>
+            Gets or sets the column ID displayed to the left of the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.LeftText1">
+      <summary>
+            Gets or sets the column displayed to the left of the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.LeftText2_ID">
+      <summary>
+            Gets or sets the second column ID displayed to the left of the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.LeftText2">
+      <summary>
+            Gets or sets the second column displayed to the left of the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.RightText1_ID">
+      <summary>
+            Gets or sets the column ID displayed to the right of the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.RightText1">
+      <summary>
+            Gets or sets the column displayed to the right of the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.RightText2_ID">
+      <summary>
+            Gets or sets the second column ID displayed to the right of the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.RightText2">
+      <summary>
+            Gets or sets the second column displayed to the right of the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.TopText1_ID">
+      <summary>
+            Gets or sets the column ID displayed above the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.TopText1">
+      <summary>
+            Gets or sets the column displayed above the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.TopText2_ID">
+      <summary>
+            Gets or sets the second column ID displayed above the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.TopText2">
+      <summary>
+            Gets or sets the second column displayed above the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.BottomText1_ID">
+      <summary>
+            Gets or sets the column ID displayed below the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.BottomText1">
+      <summary>
+            Gets or sets the column displayed below the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.BottomText2_ID">
+      <summary>
+            Gets or sets the second column ID displayed below the bar.
+            </summary>
+    </member>
+    <member name="P:C1.Win.C1GanttView.BarStyle.BottomText2">
+      <summary>
+            Gets or sets the second column displayed below the bar.
+            </summary>
+    </member>
+    <member name="E:C1.Win.C1GanttView.BarStyle.PropertyChanged">
+      <summary>
+            Occurs when the value of a property changes.
+            </summary>
+    </member>
+    <member name="T:C1.Win.C1GanttView.BarStyleCollection">
+      <summary>
+            Represents a collection of bar styles.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyleCollection.Search(C1.Win.C1GanttView.BarType)">
+      <summary>
+            Searches for a <see cref="T:C1.Win.C1GanttView.BarStyle" /> with the specified bar type.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyleCollection.IndexOf(C1.Win.C1GanttView.BarType)">
+      <summary>
+            Searches for the specified bar type and returns the zero-based index of the first occurrence.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyleCollection.ClearAndDispose">
+      <summary>
+            Removes all styles from the collection, then disposes the styles.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyleCollection.InsertItem(System.Int32,C1.Win.C1GanttView.BarStyle)">
+      <summary>
+            Inserts an item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyleCollection.SetItem(System.Int32,C1.Win.C1GanttView.BarStyle)">
+      <summary>
+            Replaces the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyleCollection.RemoveItem(System.Int32)">
+      <summary>
+            Removes the item at the specified index.
+            </summary>
+    </member>
+    <member name="M:C1.Win.C1GanttView.BarStyleCollection.ClearItems">
+      <summary>
+            Removes all items from the collection.
+            </summary>
+    </member>
+  </members>
+</doc>

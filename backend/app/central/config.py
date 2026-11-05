@@ -40,6 +40,7 @@ def connect() -> "MemoryRepo | SqlRepo":
         sealed = secure_fields.seal(_env("CENTRAL_DB_PASSWORD"))
     db.use_settings(host, _env("CENTRAL_DB_PORT"), _env("CENTRAL_DB_NAME") if host else "",
                     _env("CENTRAL_DB_USER") if host else "", "sql", sealed if host else "")
+    db.READ_ONLY = False   # the central site owns its database; only a shop's own database is read-only
     if host:
         # Never memory once a database is set: pushes would be accepted and lost. Until it can be reached,
         # every call answers 503 and the shops send the day again later.
