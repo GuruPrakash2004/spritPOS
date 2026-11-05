@@ -46,8 +46,6 @@ backend/data/
 /App/
 
 # Local-only notes and settings
-CLAUDE.local.md
-.claude/settings.local.json
 
 # Test / build caches
 .pytest_cache/
