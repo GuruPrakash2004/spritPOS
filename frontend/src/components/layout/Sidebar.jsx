@@ -24,7 +24,7 @@ import { isPlainClick, pathForModule } from '../../lib/routes';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import { prefetchScreen } from '../../lib/screenLoaders';
 
-const ICONS = {
+export const ICONS = {
   'Dashboard': LayoutDashboard, 'About': Info, 'Company Master': Building, 'Item Master': Package, 'Price List Maintenance': IndianRupee,
   'Item Group Master': Database, 'UOM Master': Scale, 'Supplier Master': Truck, 'Customer Master': Users, 'Ledger Master': FileText,
   'Ledger Group Master': FolderTree, 'Sales Counter Master': Monitor, 'Sales Person Master': UserCheck, 'Package Master': Package, 'Brand Master': Tag,

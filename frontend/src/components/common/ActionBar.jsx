@@ -1,4 +1,4 @@
-// The floating action bar at the bottom of every master and document screen (the exe's btnCtrl bar):
+// The action bar flush against the bottom of every master and document screen (the exe's btnCtrl bar):
 //
 //   [ New ] [ Edit ] [ Delete ] [ Print ] [ List ] [ Close ] [ Options ▾ ]                    ⏮ ◀ 🔍 ▶ ⏭
 //
@@ -9,7 +9,7 @@
 // Keys (not while typing in a dialog): Alt+N New, Alt+E Edit, Alt+D Delete, Alt+P Print, Alt+L List, Alt+O Close, Alt+S Save,
 // Alt+C Cancel (as the exe's Alt-letters), Alt+Home / Alt+PageUp / Alt+PageDown / Alt+End move between records, Alt+F Find.
 //
-// Put the bar last inside <ScreenFrame> so it floats at the bottom of the screen.
+// Put the bar last inside <ScreenFrame> so it sticks flush to the bottom of the screen, edge to edge.
 
 import { useRef, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FilePlus, ListTree, Pencil, Printer, Save, Search, Trash2, X } from 'lucide-react';
@@ -28,7 +28,7 @@ const round = 'inline-flex h-10 w-10 items-center justify-center rounded-full bo
 export function ScreenFrame({ children, bar }) {
   return (
     <div className="flex min-h-[calc(100dvh-8.5rem)] flex-col">
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="min-w-0 flex-1 pb-20">{children}</div>
       {bar}
     </div>
   );
@@ -58,8 +58,8 @@ export default function ActionBar({
   const noDel = canDelete ? undefined : (noDeleteReason ?? 'Your role is not allowed to delete here');
 
   return (
-    <div role="toolbar" aria-label="Actions" className="sticky bottom-3 z-20 mt-6">
-      <div className="flex flex-wrap items-center gap-2 rounded-[28px] border border-[#DDE3EC] bg-white/95 px-4 py-3 shadow-[0_10px_40px_rgba(27,43,75,0.14)] backdrop-blur dark:border-[#2A2A2A] dark:bg-[#141414]/95 dark:shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
+    <div role="toolbar" aria-label="Actions" className="sticky bottom-0 z-20 -mx-4 sm:-mx-6">
+      <div className="flex flex-wrap items-center gap-2 border-t border-[#DDE3EC] bg-white px-4 py-3 dark:border-[#2A2A2A] dark:bg-[#141414]">
         {editing ? (
           <>
             <button type="button" onClick={onSave} disabled={saving} className={filled} title="Save (Alt+S)"><Save size={16} />{saving ? 'Saving…' : saveLabel}<Kbd combo="Alt+S" /></button>

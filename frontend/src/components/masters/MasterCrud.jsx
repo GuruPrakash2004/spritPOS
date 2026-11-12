@@ -9,7 +9,8 @@
 import GroupBox from '../common/GroupBox';
 import { FIELD_RULES, cleanInput, fieldProblem } from '../../lib/validation';
 import { useEffect, useMemo, useRef, useState, } from 'react';
-import { Search } from 'lucide-react';
+import { Database } from 'lucide-react';
+import { ICONS } from '../layout/Sidebar';
 import ActionBar, { ScreenFrame } from '../common/ActionBar';
 import ListModal from '../common/ListModal';
 import { goHome } from '../../lib/nav';
@@ -25,7 +26,18 @@ import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { canDo, canSeeCost, createMaster, deleteMaster, errorText, fieldRight, listMaster, updateMaster } from '../../lib/api';
 import { cn } from '../../lib/utils';
-import { badge, field, fieldTone, label as labelClass, pageHeader, pageSub, pageTitle, panel, sectionTitle } from '../../lib/styles';
+import { badge, field, fieldTone, label as labelClass, pageHeader, pageIconTile, pageSub, pageTitle, panel, sectionTitle } from '../../lib/styles';
+
+// vLQMS.exe's own compiled field set for these three forms (frmMstItem / frmMstParty), mirroring
+// backend/app/schema_meta.py's compiled_columns() exactly, by lower-case database column name (`f.column`).
+// A field whose column is NOT in this set never appeared on the exe's main form at all — MRP, GST %, ROL/ROQ
+// etc. are typed in this web app's own schema, but on the real form they only ever lived in the Additional
+// Fields grid (tbAdnlFlds) on the right, same as a genuinely "extra" designer column.
+const LEGACY_FORM_COLUMNS = {
+  'Item Master': new Set(['itemcode', 'itemname', 'itemseries', 'itemno', 'inactive', 'inactivermks', 'shortname', 'hotkey', 'hsncode', 'itemgroupid', 'liqtype', 'nonstkable', 'uomid', 'botpercases']),
+  'Supplier Master': new Set(['suppcode', 'suppname', 'suppseries', 'suppno', 'inactive', 'inactivermks', 'suppaliasname', 'badd1', 'badd2', 'badd3', 'badd4', 'city', 'state', 'pincode', 'country', 'remarks', 'suppgroupid', 'ledgroupid']),
+  'Customer Master': new Set(['custcode', 'custname', 'custseries', 'custno', 'inactive', 'inactivermks', 'custaliasname', 'badd1', 'badd2', 'badd3', 'badd4', 'city', 'state', 'pincode', 'country', 'remarks', 'custgroupid', 'ledgroupid']),
+};
 
  
 
@@ -144,13 +156,9 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
 
   const readOnly = mode === 'View';
   const listFields = fields.filter(f => !f.designerHidden && f.showInList !== false).slice(0, 4);
-  // The simple list beside the form (large screens): the records, filtered by what is typed in its search box; clicking one shows it.
-  const [find, setFind] = useState('');
-  const visible = useMemo(() => {
-    const q = find.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(r => [r.code, r.name, ...listFields.map(f => valueOf(r, f))].some(v => String(v ?? '').toLowerCase().includes(q)));
-  }, [rows, find, listFields]);
+  // Record order for the record-navigation buttons (the desktop's Move First / Previous / Next / Last) and the List
+  // window's search (the record picker beside the form is gone — the bottom bar's List button covers the same job).
+  const visible = rows;
 
   const select = (row) => {
     setSelected(String(row.code));
@@ -387,17 +395,42 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
     return () => window.removeEventListener('keydown', handleKeyDown);
   });
 
-  // Fields with the same `section` (masterConfigs.js) that follow each other are drawn together in one titled group box.
-  // The designer's sub-sections are tabs (vLQMS.exe: one grid per SubSectionName); the first, nameless one is "Header Info".
-  const tabNames = [...new Set(fields.filter(f => !f.designerHidden).map(f => f.tab ?? ''))];
+  // The legacy form's layout: the web app's own (typed) fields usually sit on the left; the designer's extra
+  // fields (vLQMS.exe's "Additional Fields" grid, tbAdnlFlds) live in a persistent "Additional Information" panel
+  // on the right, one tab per SubSectionName — the first, nameless one is "Header Info" (designerFields.js).
+  // `f.standard` extra fields are vLQMS.exe's own fixed fields for this form (compiled_columns in
+  // schema_meta.py — e.g. Item Master's HotKey, InActiveRmks) that just aren't modelled as typed columns
+  // here; they belong with the typed fields on the left, not the "Additional Fields" grid on the right.
+  // When the exact legacy column set is known (LEGACY_FORM_COLUMNS, title match) it overrides both of
+  // those: a field outside it never appeared on the exe's own form, however this web app models it.
+  const legacyFormColumns = LEGACY_FORM_COLUMNS[title];
+  const onLegacyForm = f => legacyFormColumns && f.column && legacyFormColumns.has(String(f.column).toLowerCase());
+  const rightFields = fields.filter(f => !f.designerHidden && ((f.tab ?? '') !== '' ||
+    (legacyFormColumns && f.column ? !onLegacyForm(f) : (f.extra && !f.standard))));
+  const leftFields = fields.filter(f => !f.designerHidden && (f.tab ?? '') === '' &&
+    (legacyFormColumns && f.column ? onLegacyForm(f) : (!f.extra || f.standard)));
+  const tabNames = [...new Set(rightFields.map(f => f.tab ?? ''))];
   const [activeTab, setActiveTab] = useState('');
   const shownTab = tabNames.includes(activeTab) ? activeTab : (tabNames[0] ?? '');
-  const sections = [];
-  for (const f of fields.filter(f => !f.designerHidden && (tabNames.length < 2 || (f.tab ?? '') === shownTab))) {   // designer-hidden fields are not drawn but still saved as they are
-    const title = f.section ?? '';
-    const last = sections.at(-1);
-    if (last && last.title === title) last.fields.push(f); else sections.push({ title, fields: [f] });
-  }
+  const groupBySection = list => {
+    const out = [];
+    for (const f of list) {
+      const title = f.section ?? '';
+      const last = out.at(-1);
+      if (last && last.title === title) last.fields.push(f); else out.push({ title, fields: [f] });
+    }
+    return out;
+  };
+  const TitleIcon = ICONS[title] ?? Database;
+  // The legacy Windows screens these three masters are modelled on (frmMstItem / frmMstParty) use a dark
+  // header bar over a light-blue form body; reuse colours already in lib/styles.js (the navy ActionBar/
+  // Sidebar accent, the `info` tone's light blue) rather than inventing a new palette.
+  const legacySkin = title === 'Item Master' || title === 'Supplier Master' || title === 'Customer Master';
+  // The legacy main form has no group-box headers of its own either — just one continuous set of fields.
+  const leftSections = legacySkin ? [{ title: '', fields: leftFields }] : groupBySection(leftFields);
+  const shownRightFields = rightFields.filter(f => (f.tab ?? '') === shownTab);
+  // The legacy grid (vLQMS.exe's tbAdnlFlds) is one flat table under the tab, not sub-boxed by section.
+  const rightSections = legacySkin ? [{ title: '', fields: shownRightFields }] : groupBySection(shownRightFields);
 
   const barOptions = [
     ...(path === 'customers' || path === 'suppliers' ? [{ label: 'Contacts, addresses, alerts, notes', onClick: () => setPartyOpen(true), disabled: !selected }] : []),
@@ -421,6 +454,159 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
     />
   );
 
+  // The value/control for one field, with no opinion on where its label goes — shared by the left column's
+  // stacked blocks and the "Additional Information" panel's compact rows (vLQMS.exe's right-hand tab grid).
+  // The legacy form's inputs sit on light-blue fill, not white, against its light-blue body.
+  const fieldCls = legacySkin ? cn(field, '!bg-[#EAF1FB] dark:!bg-[#16222C]') : field;
+  const renderFieldControl = (f, ctx) => {
+    const { id, value, locked, hasError, required, opts, compact } = ctx;
+    if (readOnly) {
+      return f.type === 'lines'
+        ? <span className="whitespace-pre-line">{(Array.isArray(value) ? value : []).join('\n') || '—'}</span>
+        : f.type === 'lookup'
+        ? <LookupSelect docId={f.lookup.docId} code={f.lookup.code} value={value} disabled onChange={() => undefined} className="w-full cursor-default appearance-none border-0 bg-transparent p-0 text-sm" />
+        : f.type === 'bool'
+        ? <span className={badge(value ? 'success' : 'neutral')}>{value ? 'Yes' : 'No'}</span>
+        : String(value ?? '') === '' ? <span className="text-stone-400">—</span> : String(value);
+    }
+    if (f.type === 'bool') {
+      return <input id={id} type="checkbox" checked={Boolean(value)} onChange={e => handleFieldChange(f.key, e.target.checked)} className="h-4 w-4 accent-accent" />;
+    }
+    const errorClass = hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : '';
+    return (
+      <>
+        {f.type === 'lines' ? (
+          <textarea id={id} rows={compact ? 2 : 4} readOnly={locked} value={(Array.isArray(value) ? value : []).join('\n')}
+            onChange={e => handleFieldChange(f.key, e.target.value.split('\n'))} className={`${fieldCls} resize-y`} />
+        ) : f.type === 'lookup' ? (
+          <LookupSelect id={id} docId={f.lookup.docId} code={f.lookup.code} value={value} disabled={locked}
+            onChange={v => handleFieldChange(f.key, v)} invalid={hasError} className={`${fieldCls} ${errorClass}`} />
+        ) : f.type === 'select' || f.optionsFrom ? (
+          <select id={id} required={required} disabled={f.extra && locked} value={String(value ?? '')} onChange={e => handleFieldChange(f.key, e.target.value)}
+            aria-invalid={hasError} aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined} className={`${fieldCls} ${errorClass}`}>
+            <option value="">Select…</option>
+            {opts.map(o => <option key={o}>{o}</option>)}
+          </select>
+        ) : f.extra && f.multiline ? (
+          <textarea id={id} rows={compact ? 2 : 3} readOnly={locked} disabled={locked} maxLength={f.maxLength} value={String(value ?? '')}
+            onChange={e => handleFieldChange(f.key, e.target.value)} aria-invalid={hasError} aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
+            className={`${fieldCls} resize-y ${errorClass}`} />
+        ) : (
+          <>
+            <input
+              id={id}
+              type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+              step={f.extra && f.type === 'number' ? (f.decimals > 0 ? 10 ** -f.decimals : 1) : undefined}
+              readOnly={locked}
+              disabled={locked}
+              maxLength={f.extra ? f.maxLength : FIELD_RULES[f.key]?.max}
+              inputMode={FIELD_RULES[f.key]?.digits ? 'numeric' : undefined}
+              required={required}
+              value={String(value ?? '')}
+              list={path === 'items' && f.key === 'code' ? 'mc-items-code-list' : path === 'items' && f.key === 'short_name' ? 'mc-items-shortname-list' : undefined}
+              onChange={e => handleFieldChange(f.key, e.target.value)}
+              aria-invalid={hasError}
+              aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
+              className={cn(fieldCls, f.type === 'number' ? 'text-right tabular-nums' : '', f.lockedAlways && 'text-blue-700 dark:text-blue-300', errorClass)}
+            />
+            {path === 'items' && f.key === 'code' && (
+              <datalist id="mc-items-code-list">
+                {rows.map(r => <option key={String(r.code)} value={String(r.code)}>{String(r.name || '')}</option>)}
+              </datalist>
+            )}
+            {path === 'items' && f.key === 'short_name' && (
+              <datalist id="mc-items-shortname-list">
+                {rows.filter(r => r.short_name).map(r => <option key={String(r.code)} value={String(r.short_name)}>{String(r.name || '')}</option>)}
+              </datalist>
+            )}
+          </>
+        )}
+        <InlineError message={formErrors[f.key]} id={`err-${path}-${f.key}`} />
+      </>
+    );
+  };
+
+  // One titled box of fields; `nested` drops the box's own border/background and draws a compact label-left/
+  // value-right row per field (vLQMS.exe's right-hand "Additional Fields" grid) instead of the left column's
+  // stacked label-above-value blocks.
+  const renderSection = (sec, i, nested = false) => (
+    <GroupBox key={`${nested ? 'r' : 'l'}${i}-${sec.title || 'main'}`} title={sec.title} className={nested ? '!border-0 !bg-transparent' : undefined}>
+      <div className={nested && legacySkin ? 'overflow-hidden rounded-sm border border-[#B9D3E8] text-xs dark:border-[#2A3A48]'
+        : nested ? 'divide-y divide-line-soft'
+        : legacySkin ? 'grid grid-cols-1 gap-4 sm:grid-cols-2'
+        : !listOpen || sec.fields.every(f => f.extra) ? 'grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4'
+        : `grid gap-4 ${sec.fields.length > 4 || (!sec.title && fields.length > 8) ? '2xl:grid-cols-2' : ''}`}>
+        {sec.fields.map((f, fi) => {
+          const values = ruleValues(form);
+          if (f.hideWhen && ruleHolds(f.hideWhen, values)) return null;   // hidden by the designer's rule
+          // Read-only by Field Level Rights: can be filled in for a new record, not changed afterwards.
+          const locked = readOnly || f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values))
+            || ((f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit') || (f.key === 'code' && !!live.screen?.flags?.auto_code);
+          const value = f.extra && f.type === 'date' ? String(valueOf(form, f) ?? '').slice(0, 10) : valueOf(form, f);
+          const opts = f.options ?? options[f.key] ?? [];
+          const id = `mc-${path}-${f.key}`;
+          const hasError = !readOnly && !!formErrors[f.key];
+          const required = f.required || (f.mandatoryWhen && ruleHolds(f.mandatoryWhen, values));
+          const tone = fieldTone(required, f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values)));   // red = mandatory, blue = read-only, as in vLQMS.exe
+          const ctx = { id, value, locked, hasError, required, opts, compact: nested };
+
+          if (nested && legacySkin) {
+            // The legacy grid: a bordered two-column table, its first row highlighted the way the exe's grid
+            // highlights the selected cell.
+            return (
+              <div key={f.key} className={cn('grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] border-b border-[#B9D3E8] last:border-b-0 dark:border-[#2A3A48]', fi === 0 && 'bg-[#F8EDDA] dark:bg-amber-500/10')}>
+                <span className={cn('border-r border-[#B9D3E8] px-2 py-1 font-medium text-stone-700 dark:border-[#2A3A48] dark:text-stone-300 break-words', tone)}>
+                  {f.label}{required && !tone.includes('blue') && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}
+                </span>
+                <span className="min-w-0 px-2 py-1 text-right text-stone-900 dark:text-stone-50">
+                  {f.type === 'bool' && !readOnly ? (
+                    <label htmlFor={id} className="inline-flex cursor-pointer items-center justify-end">{renderFieldControl(f, ctx)}</label>
+                  ) : renderFieldControl(f, ctx)}
+                </span>
+              </div>
+            );
+          }
+
+          if (nested) {
+            return (
+              <div key={f.key} className="flex items-center justify-between gap-3 py-1.5 text-xs">
+                <span className={cn('shrink-0 font-medium text-stone-600 dark:text-stone-400 break-words', tone)}>
+                  {f.label}{required && !tone.includes('blue') && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}
+                </span>
+                <span className="min-w-0 flex-1 text-right text-stone-900 dark:text-stone-50">
+                  {f.type === 'bool' && !readOnly ? (
+                    <label htmlFor={id} className="inline-flex cursor-pointer items-center justify-end">{renderFieldControl(f, ctx)}</label>
+                  ) : renderFieldControl(f, ctx)}
+                </span>
+              </div>
+            );
+          }
+
+          return (
+            <div key={f.key} className={`min-w-0 ${f.extra && f.wide ? 'col-span-full' : ''}`}>
+              {readOnly ? (
+                <>
+                  <div className={cn('mb-1 text-xs font-medium text-stone-500 dark:text-stone-400', tone)}>{f.label}{required && !tone.includes('blue') && <span className="ml-0.5" aria-hidden="true">*</span>}</div>
+                  <div className={`min-h-5 text-sm text-stone-900 dark:text-stone-50 ${f.type === 'number' ? 'tabular-nums' : ''}`}>{renderFieldControl(f, ctx)}</div>
+                </>
+              ) : f.type === 'bool' ? (
+                <label htmlFor={id} className="flex items-center gap-2 pt-1 text-xs font-medium text-stone-700 dark:text-stone-200">
+                  {renderFieldControl(f, ctx)}
+                  {f.label}
+                </label>
+              ) : (
+                <>
+                  <label htmlFor={id} title={f.tooltip} className={cn(labelClass, 'break-words', tone)}>{f.label}{required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
+                  {renderFieldControl(f, ctx)}
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </GroupBox>
+  );
+
   return (
     <ScreenFrame bar={bar}>
     <div className="mx-auto max-w-7xl">
@@ -433,191 +619,83 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
       {dialog}
       {attachOpen && selected && <AttachmentsDialog master={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setAttachOpen(false)} />}
       {partyOpen && selected && <PartyRecords party={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setPartyOpen(false)} />}
-      <div className={`${pageHeader} mb-5`}>
-        <div>
-          <h1 className={pageTitle}>{title}</h1>
-          <p className={pageSub}>{subtitle}</p>
-        </div>
-        <span className={badge(readOnly ? 'neutral' : 'warning')}>{mode === 'New' ? 'New record' : mode === 'Edit' ? 'Editing' : 'View'}</span>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(230px,290px)_minmax(0,1fr)]">
-        <aside aria-label={`${title} list`} className={`${panel} hidden self-start overflow-hidden lg:flex lg:max-h-[calc(100dvh-14rem)] lg:flex-col`}>
-          <div className="relative border-b border-line p-2">
-            <Search size={13} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
-            <input id="ml-search" value={find} onChange={e => setFind(e.target.value)} disabled={!readOnly} placeholder="Search…" aria-label={`Search ${title}`}
-              className="w-full rounded-lg border border-[#D5DCE7] bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#1B2B4B] disabled:opacity-50 dark:border-[#2A2A2A] dark:focus:border-[#D4A847]" />
+      {legacySkin ? (
+        <div className="-mx-4 flex items-center justify-between gap-3 bg-[#1B2B4B] px-4 py-3 sm:-mx-6 sm:px-6 dark:bg-[#141414]">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white dark:bg-[#D4A847]/15 dark:text-[#D4A847]" aria-hidden="true"><TitleIcon size={18} /></span>
+            <div>
+              <h1 className="text-lg font-bold text-white dark:text-stone-50">{title}</h1>
+              <p className="text-xs text-white/70 dark:text-stone-400">{subtitle}</p>
+            </div>
           </div>
-          <ul role="listbox" aria-label={`${title} records`} className="min-h-0 flex-1 overflow-y-auto">
-            {!loaded && <li className="px-3 py-4 text-xs text-stone-500">Loading…</li>}
-            {loaded && !visible.length && <li className="px-3 py-4 text-xs text-stone-500">{find ? 'Nothing matches.' : 'No records yet.'}</li>}
-            {visible.map(r => {
-              const on = String(r.code) === selected;
-              const second = listFields.find(f => f.key !== 'code');
-              return (
-                <li key={r.code} role="option" aria-selected={on}>
-                  <button type="button" tabIndex={-1} disabled={!readOnly} onClick={() => select(r)}
-                    className={`flex w-full items-baseline gap-2 border-b border-line-soft px-3 py-1.5 text-left text-xs disabled:cursor-not-allowed ${on ? 'bg-[#BBD7F0] text-stone-900 dark:bg-[#27405A] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
-                    <span className="shrink-0 font-mono">{String(r.code)}</span>
-                    {second && <span className="min-w-0 flex-1 truncate">{String(valueOf(r, second) ?? '')}</span>}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="border-t border-line px-3 py-1.5 text-[10px] text-stone-500">{visible.length} of {rows.length} records</p>
-        </aside>
-        <section id={`mc-${path}-details`} aria-label="Record details" className={`${panel} scroll-mt-20 self-start`}>
-          <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+          <span className={badge(readOnly ? 'neutral' : 'warning')}>{mode === 'New' ? 'New record' : mode === 'Edit' ? 'Editing' : 'View'}</span>
+        </div>
+      ) : (
+        <div className={`${pageHeader} mb-5`}>
+          <div className="flex items-center gap-3">
+            <span className={pageIconTile} aria-hidden="true"><TitleIcon size={20} /></span>
+            <div>
+              <h1 className={pageTitle}>{title}</h1>
+              <p className={pageSub}>{subtitle}</p>
+            </div>
+          </div>
+          <span className={badge(readOnly ? 'neutral' : 'warning')}>{mode === 'New' ? 'New record' : mode === 'Edit' ? 'Editing' : 'View'}</span>
+        </div>
+      )}
+
+      <section id={`mc-${path}-details`} aria-label="Record details" className={`${legacySkin ? '-mx-4 rounded-none border-0 bg-[#E7EEF3] dark:bg-[#15212B] sm:-mx-6' : panel} scroll-mt-20 self-start`}>
+          <div className={`flex items-center justify-between border-b border-line px-5 ${legacySkin ? 'py-2' : 'py-3.5'}`}>
             <h2 className={sectionTitle}>{mode === 'New' ? 'New record' : mode === 'Edit' ? `Editing ${selected}` : selected ?? 'Details'}</h2>
-            {readOnly
+            {legacySkin
+              ? (!readOnly && <span className="text-[11px] text-stone-500"><span className="text-red-600">*</span> required</span>)
+              : readOnly
               ? <span className={badge('neutral')}>View</span>
               : <span className="text-[11px] text-stone-500"><span className="text-red-600">*</span> required</span>}
           </div>
 
-          <div className="p-5">
+          <div className={legacySkin ? 'p-4' : 'p-5'}>
             {/* Amazon-style "There was a problem" alert summary box */}
             {!readOnly && <FormErrorSummary errors={formErrors} onFocusField={focusField} />}
 
-            {tabNames.length > 1 && (
-              <div role="tablist" aria-label="Sections" className="mb-3 flex gap-1 overflow-x-auto border-b border-line">
-                {tabNames.map(name => (
-                  <button key={name || 'header'} type="button" role="tab" aria-selected={shownTab === name} onClick={() => setActiveTab(name)}
-                    className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition-colors ${shownTab === name ? 'border-accent text-stone-900 dark:text-stone-50' : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50'}`}>
-                    {name || 'Header Info'}
-                  </button>
-                ))}
+            <div className={rightFields.length > 0 ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]' : ''}>
+              <div className="space-y-4">
+                {leftSections.map((sec, i) => renderSection(sec, i))}
               </div>
-            )}
-            <div className="space-y-4">
-            {sections.map(sec => (
-            <GroupBox key={sec.title || 'main'} title={sec.title}>
-            {/* Fields read from the database flow into as many columns as fit (never wider than the panel); typed ones keep the old layout, except while the list is hidden: then every field flows side by side instead of one long column. */}
-            <div className={!listOpen || sec.fields.every(f => f.extra)
-              ? 'grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4'
-              : `grid gap-4 ${sec.fields.length > 4 || (!sec.title && fields.length > 8) ? '2xl:grid-cols-2' : ''}`}>
-              {sec.fields.map(f => {
-                const values = ruleValues(form);
-                if (f.hideWhen && ruleHolds(f.hideWhen, values)) return null;   // hidden by the designer's rule
-                // Read-only by Field Level Rights: can be filled in for a new record, not changed afterwards.
-                const locked = readOnly || f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values))
-                  || ((f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit') || (f.key === 'code' && !!live.screen?.flags?.auto_code);
-                const value = f.extra && f.type === 'date' ? String(valueOf(form, f) ?? '').slice(0, 10) : valueOf(form, f);
-                const opts = f.options ?? options[f.key] ?? [];
-                const id = `mc-${path}-${f.key}`;
-                const hasError = !readOnly && !!formErrors[f.key];
-                const required = f.required || (f.mandatoryWhen && ruleHolds(f.mandatoryWhen, values));
-                const tone = fieldTone(required, f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values)));   // red = mandatory, blue = read-only, as in vLQMS.exe
 
-                return (
-                  <div key={f.key} className={`min-w-0 ${f.extra && f.wide ? 'col-span-full' : ''}`}>
-                    {readOnly ? (
-                      <>
-                        <div className={cn('mb-1 text-xs font-medium text-stone-500 dark:text-stone-400', tone)}>{f.label}{required && !tone.includes('blue') && <span className="ml-0.5" aria-hidden="true">*</span>}</div>
-                        <div className={`min-h-5 text-sm text-stone-900 dark:text-stone-50 ${f.type === 'number' ? 'tabular-nums' : ''}`}>
-                          {f.type === 'lines'
-                            ? <span className="whitespace-pre-line">{(Array.isArray(value) ? value : []).join('\n') || '—'}</span>
-                            : f.type === 'lookup'
-                            ? <LookupSelect docId={f.lookup.docId} code={f.lookup.code} value={value} disabled onChange={() => undefined} className="w-full cursor-default appearance-none border-0 bg-transparent p-0 text-sm" />
-                            : f.type === 'bool'
-                            ? <span className={badge(value ? 'success' : 'neutral')}>{value ? 'Yes' : 'No'}</span>
-                            : String(value ?? '') === '' ? <span className="text-stone-400">—</span> : String(value)}
-                        </div>
-                      </>
-                    ) : f.type === 'bool' ? (
-                      <label htmlFor={id} className="flex items-center gap-2 pt-1 text-xs font-medium text-stone-700 dark:text-stone-200">
-                        <input id={id} type="checkbox" checked={Boolean(value)} onChange={e => handleFieldChange(f.key, e.target.checked)} className="h-4 w-4 accent-accent" />
-                        {f.label}
-                      </label>
-                    ) : (
-                      <>
-                        <label htmlFor={id} title={f.tooltip} className={cn(labelClass, 'break-words', tone)}>{f.label}{required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
-                        {f.type === 'lines' ? (
-                          <textarea id={id} rows={4} readOnly={locked} value={(Array.isArray(value) ? value : []).join('\n')}
-                            onChange={e => handleFieldChange(f.key, e.target.value.split('\n'))} className={`${field} resize-y`} />
-                        ) : f.type === 'lookup' ? (
-                          <LookupSelect id={id} docId={f.lookup.docId} code={f.lookup.code} value={value} disabled={locked}
-                            onChange={v => handleFieldChange(f.key, v)} invalid={hasError}
-                            className={`${field} ${hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`} />
-                        ) : f.type === 'select' || f.optionsFrom ? (
-                          <select
-                            id={id}
-                            required={required}
-                            disabled={f.extra && locked}
-                            value={String(value ?? '')}
-                            onChange={e => handleFieldChange(f.key, e.target.value)}
-                            aria-invalid={hasError}
-                            aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
-                            className={`${field} ${hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`}
-                          >
-                            <option value="">Select…</option>
-                            {opts.map(o => <option key={o}>{o}</option>)}
-                          </select>
-                        ) : f.extra && f.multiline ? (
-                          <textarea
-                            id={id}
-                            rows={3}
-                            readOnly={locked}
-                            disabled={locked}
-                            maxLength={f.maxLength}
-                            value={String(value ?? '')}
-                            onChange={e => handleFieldChange(f.key, e.target.value)}
-                            aria-invalid={hasError}
-                            aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
-                            className={`${field} resize-y ${hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`}
-                          />
-                        ) : (
-                          <>
-                            <input
-                              id={id}
-                              type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
-                              step={f.extra && f.type === 'number' ? (f.decimals > 0 ? 10 ** -f.decimals : 1) : undefined}
-                              readOnly={locked}
-                              disabled={locked}
-                              maxLength={f.extra ? f.maxLength : FIELD_RULES[f.key]?.max}
-                              inputMode={FIELD_RULES[f.key]?.digits ? 'numeric' : undefined}
-                              required={required}
-                              value={String(value ?? '')}
-                              list={path === 'items' && f.key === 'code' ? 'mc-items-code-list' : path === 'items' && f.key === 'short_name' ? 'mc-items-shortname-list' : undefined}
-                              onChange={e => handleFieldChange(f.key, e.target.value)}
-                              aria-invalid={hasError}
-                              aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
-                              className={cn(field, f.type === 'number' ? 'text-right tabular-nums' : '', f.lockedAlways && 'text-blue-700 dark:text-blue-300', hasError && '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake')}
-                            />
-                            {path === 'items' && f.key === 'code' && (
-                              <datalist id="mc-items-code-list">
-                                {rows.map(r => (
-                                  <option key={String(r.code)} value={String(r.code)}>
-                                    {String(r.name || '')}
-                                  </option>
-                                ))}
-                              </datalist>
-                            )}
-                            {path === 'items' && f.key === 'short_name' && (
-                              <datalist id="mc-items-shortname-list">
-                                {rows.filter(r => r.short_name).map(r => (
-                                  <option key={String(r.short_name)} value={String(r.short_name)}>
-                                    {String(r.name || '')}
-                                  </option>
-                                ))}
-                              </datalist>
-                            )}
-                          </>
-                        )}
-                        <InlineError message={formErrors[f.key]} id={`err-${path}-${f.key}`} />
-                      </>
-                    )}
+              {rightFields.length > 0 && (legacySkin ? (
+                // The legacy grid has no "Additional Information" caption of its own — just the tab, then the grid.
+                <div className="rounded-sm border border-[#B9D3E8] bg-white/30 p-2 dark:border-[#2A3A48] dark:bg-[#1A2733]/40">
+                  <div role="tablist" aria-label="Sections" className="mb-2 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-[#B9D3E8] dark:border-[#2A3A48]">
+                    {tabNames.map(name => (
+                      <button key={name || 'header'} type="button" role="tab" aria-selected={shownTab === name} onClick={() => setActiveTab(name)}
+                        className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition-colors ${shownTab === name ? 'border-accent text-stone-900 dark:text-stone-50' : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50'}`}>
+                        {name || 'Header Info'}
+                      </button>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-            </GroupBox>
-            ))}
+                  <div className="space-y-4">
+                    {rightSections.map((sec, i) => renderSection(sec, i, true))}
+                  </div>
+                </div>
+              ) : (
+                <GroupBox title="Additional Information">
+                  <div role="tablist" aria-label="Sections" className="mb-3 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line">
+                    {tabNames.map(name => (
+                      <button key={name || 'header'} type="button" role="tab" aria-selected={shownTab === name} onClick={() => setActiveTab(name)}
+                        className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition-colors ${shownTab === name ? 'border-accent text-stone-900 dark:text-stone-50' : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50'}`}>
+                        {name || 'Header Info'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="space-y-4">
+                    {rightSections.map((sec, i) => renderSection(sec, i, true))}
+                  </div>
+                </GroupBox>
+              ))}
             </div>
           </div>
 
         </section>
-      </div>
     </div>
     </ScreenFrame>
   );

@@ -27,14 +27,14 @@ export const BRAND_FIELDS = [
 ];
 
 export const CUSTOMER_FIELDS = [
-  { key: 'code', label: 'Customer Code', required: true },
-  { key: 'name', label: 'Customer Name', required: true },
-  { key: 'mobile', label: 'Mobile No' },
-  { key: 'gstin', label: 'GSTIN', required: true, showInList: false },
-  { key: 'currency', label: 'Currency', optionsFrom: 'currencies', required: true, default: 'Rupees', showInList: false },
-  { key: 'loyalty_card_no', label: 'Loyalty Card Number' },
-  { key: 'points', label: 'Loyalty Points', type: 'number' },
-  { key: 'send_sms', label: 'Send SMS to customer', type: 'bool', showInList: false },
+  { key: 'code', label: 'Customer Code', required: true, section: 'Customer Details' },
+  { key: 'name', label: 'Customer Name', required: true, section: 'Customer Details' },
+  { key: 'mobile', label: 'Mobile No', section: 'Customer Details' },
+  { key: 'gstin', label: 'GSTIN', required: true, showInList: false, section: 'Customer Details' },
+  { key: 'currency', label: 'Currency', optionsFrom: 'currencies', required: true, default: 'Rupees', showInList: false, section: 'Customer Details' },
+  { key: 'loyalty_card_no', label: 'Loyalty Card Number', section: 'Loyalty' },
+  { key: 'points', label: 'Loyalty Points', type: 'number', section: 'Loyalty' },
+  { key: 'send_sms', label: 'Send SMS to customer', type: 'bool', showInList: false, section: 'Loyalty' },
 ];
 
 export const LEDGER_GROUP_FIELDS = [

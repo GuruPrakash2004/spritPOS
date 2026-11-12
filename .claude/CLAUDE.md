@@ -17,6 +17,8 @@ cp .env.example .env          # JWT/SMTP settings; DB_* keys are written by the 
 .venv/bin/python -m pip install -r requirements-dev.txt && .venv/bin/python -m pytest   # API tests
 ```
 
+Activate the venv (Windows PowerShell, from `backend/`): `.venv\Scripts\Activate.ps1` (bash/Git Bash: `source .venv/bin/activate`).
+
 Port matters: `frontend/vite.config.js` proxies `/api/*` to **:8001** (prefix stripped). uvicorn ignores `API_PORT` in `.env`, so pass `--port 8001`. `GET /` reports whether the DB is connected.
 
 Frontend, from `frontend/`:

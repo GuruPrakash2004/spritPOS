@@ -24,6 +24,7 @@ export const tableRow = 'transition-colors hover:bg-[#F7F9FC] dark:hover:bg-subt
 export const pageHeader = 'flex flex-wrap items-end justify-between gap-3';
 export const pageTitle = 'text-xl font-bold tracking-tight text-[#1A2236] dark:text-stone-50';
 export const pageSub = 'mt-0.5 text-xs text-[#5F6B80] dark:text-stone-400';
+export const pageIconTile = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#1B2B4B]/10 text-[#1B2B4B] dark:bg-gradient-to-br dark:from-[#D4A847]/20 dark:to-[#C8952E]/10 dark:text-[#D4A847] dark:ring-1 dark:ring-[#D4A847]/20';
 export const sectionTitle = 'text-sm font-semibold text-[#1A2236] dark:text-stone-50';
 
  

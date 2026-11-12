@@ -15,6 +15,7 @@ import DesignerNotice from './components/common/DesignerNotice';
 import { Suspense, useEffect, useState } from 'react';
 import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard, KeyRound } from 'lucide-react';
 import ChangePasswordDialog from './components/auth/ChangePasswordDialog';
+import VlqmsLogo from './components/layout/VlqmsLogo';
 import ScreenBoundary from './components/common/ScreenBoundary';
 import KeyboardShortcutsModal from './components/common/KeyboardShortcutsModal';
 import CalculatorDialog from './components/common/CalculatorDialog';
@@ -347,7 +348,12 @@ export default function App() {
 
   // After login, always start on Dashboard first and reset path to /
   if (restoring) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#FFFFFF] text-sm text-stone-500 dark:bg-[#0B0B0B] dark:text-stone-400">Signing you back in…</div>;
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#F4F6FA] dark:bg-[#0A0A0A]">
+        <VlqmsLogo size="md" />
+        <p className="text-sm text-stone-500 dark:text-stone-400">Signing you back in…</p>
+      </div>
+    );
   }
   if (!session) return <Login notice={sessionNotice} onLogin={(user, finYear) => {
     writeSaved(FY_KEY, finYear);
@@ -426,7 +432,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 sm:p-6 bg-[#F4F6FA] dark:bg-[#0A0A0A]">
+        <main className="flex-1 overflow-auto p-4 pb-0 sm:p-6 sm:pb-0 bg-[#F4F6FA] dark:bg-[#0A0A0A]">
           <div key={activeTab} className={QUIET_SCREENS.includes(activeTab) ? undefined : "screen-enter"}>
             <ScreenBoundary onHome={() => openModule('Dashboard')}><Suspense fallback={<ScreenSkeleton />}>{renderContent()}</Suspense></ScreenBoundary>
           </div>
