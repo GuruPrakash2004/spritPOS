@@ -216,6 +216,41 @@ async def test_clean_stock_needs_no_rewrite(client):
     assert (await client.post("/tools/rewrite-stock")).json()["message"] == "Re-Write not Required"
 
 
+async def test_rewrite_stock_screen_loads_without_the_slow_desktop_checks(client, monkeypatch):
+    """The screen asks with desktop=false: the web check comes back at once and no desktop SQL runs."""
+    from app import db
+    monkeypatch.setattr(db, "read_only_own", lambda *a, **k: (_ for _ in ()).throw(AssertionError("desktop check ran")))
+    body = (await client.get("/tools/rewrite-stock?desktop=false")).json()
+    assert body["desktop"] is None and "tabs" in body["web"]
+
+
+async def test_each_desktop_check_runs_on_its_own_connection_and_is_kept(client, monkeypatch):
+    from app import db, stock_rewrite
+    monkeypatch.setattr(db, "is_db_available", lambda: True)
+    stock_rewrite._LEGACY_CACHE.clear()
+    calls = []
+
+    def own(sql, max_rows=5000, lock_timeout_ms=10000):
+        calls.append(sql)
+        return {"columns": ["item_name", "item_code", "trn_stock", "sys_stock", "diff"],
+                "rows": [["Vodka", "V1", 5, 3, 2]], "truncated": False}
+    monkeypatch.setattr(db, "read_only_own", own)
+    monkeypatch.setattr(db, "read_only", lambda *a, **k: (_ for _ in ()).throw(AssertionError("used the shared connection")))
+
+    tab = (await client.get("/tools/rewrite-stock/desktop/sales_invoice")).json()
+    assert tab["key"] == "sales_invoice" and tab["rows"][0]["diff"] == 2 and tab["error"] is None
+    await client.get("/tools/rewrite-stock/desktop/sales_invoice")
+    assert len(calls) == 1   # the second look is answered from the two-minute cache
+    await client.get("/tools/rewrite-stock/desktop/sales_invoice?fresh=true")
+    assert len(calls) == 2
+    assert (await client.get("/tools/rewrite-stock/desktop/nope")).status_code == 404
+    stock_rewrite._LEGACY_CACHE.clear()
+
+
+async def test_desktop_check_needs_a_connection(client):
+    assert (await client.get("/tools/rewrite-stock/desktop/purchase")).status_code == 409
+
+
 async def test_rewrite_repairs_a_lost_movement_and_a_wrong_qoh(client):
     stock = store.ITEMS["VIN-750"]["qoh"]
     rc = store.ITEMS["RC-750"]["qoh"]

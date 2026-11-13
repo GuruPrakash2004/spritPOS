@@ -7,17 +7,23 @@
 // it asks first, then waits for its popup (Cancel stops it). With SQL Server connected, the desktop
 // database's own checks are shown too, read-only: those are fixed with Re Write Stock in the desktop app.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, AlertTriangle, RefreshCw, Wrench } from 'lucide-react';
 import { useConfirm } from '../common/ConfirmDialog';
 import { toastStore } from '../common/toastStore';
-import { errorText, getRewriteStock, runRewriteStock, } from '../../lib/api';
+import { errorText, getRewriteStock, getRewriteStockDesktopTab, runRewriteStock, } from '../../lib/api';
 import { badge, dangerButton, pageHeader, pageSub, pageTitle, panel, secondaryButton, sectionTitle, tableBody, tableHead } from '../../lib/styles';
 
 const qty = (n) => (n === undefined ? '' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 3 }));
 
+// The desktop database's checks, in the order of the desktop screen's tabs (keys as in backend stock_rewrite.LEGACY_KEYS).
+const DESKTOP_TABS = [['purchase', 'Purchase'], ['sales_invoice', 'Sales Invoice'], ['stock_deduction', 'Stock Deduction'],
+  ['sales_return', 'Sales Return'], ['ledger', 'Ledger vs QOH']];
+const waitingDesktop = () => ({ tabs: DESKTOP_TABS.map(([key, caption]) => ({ key, caption, rows: [], error: null, loading: true })), rewrite_required: false });
+
 function DiffTable({ tab }) {
   const ledger = tab.key === 'ledger';
+  if (tab.loading) return <p className="flex items-center gap-2 p-4 text-xs text-stone-500"><RefreshCw size={14} className="animate-spin" />Checking {tab.caption} in the desktop database… the Sales Invoice check reads every bill ever saved and can take a while. You can keep working.</p>;
   if (tab.error) return <p className="p-4 text-xs text-[#9A4B45] dark:text-red-400">Could not check {tab.caption}: {tab.error}</p>;
   if (!tab.rows.length) return <p className="flex items-center gap-2 p-4 text-xs text-emerald-700 dark:text-emerald-400"><CheckCircle2 size={14} />No differences in {tab.caption}.</p>;
   return (
@@ -49,20 +55,22 @@ function CheckPanel({ title, sub, check }) {
   const tab = check.tabs.find(t => t.key === active) ?? check.tabs[0];
   return (
     <section className={`${panel} overflow-hidden`}>
-      <div className="flex flex-wrap items-center gap-3 border-b border-[#DDE3EC] px-5 py-3 dark:border-line">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[#E3D9CD] px-5 py-3 dark:border-line">
         <div className="mr-auto">
           <h2 className={sectionTitle}>{title}</h2>
           <p className="text-[11px] text-stone-500">{sub}</p>
         </div>
-        {check.rewrite_required
-          ? <span className={badge('danger')}><AlertTriangle size={12} />Re-Write required</span>
-          : <span className={badge('success')}><CheckCircle2 size={12} />Re-Write not Required</span>}
+        {check.tabs.some(t => t.loading)
+          ? <span className={badge('neutral')}><RefreshCw size={12} className="animate-spin" />Checking…</span>
+          : check.rewrite_required
+            ? <span className={badge('danger')}><AlertTriangle size={12} />Re-Write required</span>
+            : <span className={badge('success')}><CheckCircle2 size={12} />Re-Write not Required</span>}
       </div>
-      <div role="tablist" className="flex flex-wrap gap-1 border-b border-[#DDE3EC] px-3 pt-2 dark:border-line">
+      <div role="tablist" className="flex flex-wrap gap-1 border-b border-[#E3D9CD] px-3 pt-2 dark:border-line">
         {check.tabs.map(t => (
           <button key={t.key} role="tab" aria-selected={t.key === tab?.key} onClick={() => setActive(t.key)}
             className={`-mb-px rounded-t-lg border px-3 py-1.5 text-xs font-medium ${t.key === tab?.key
-              ? 'border-[#DDE3EC] border-b-[#FFFFFF] bg-[#FFFFFF] text-[#1B2B4B] dark:border-line dark:border-b-surface dark:bg-surface dark:text-[#D4A847]'
+              ? 'border-[#E3D9CD] border-b-[#FFFFFF] bg-[#FFFCF7] text-[#64283A] dark:border-line dark:border-b-surface dark:bg-surface dark:text-[#D4A847]'
               : 'border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'}`}>
             {t.caption}{t.rows.length > 0 && <span className="ml-1.5 rounded-full bg-[#9A4B45] px-1.5 text-[10px] text-white">{t.rows.length}</span>}
           </button>
@@ -79,18 +87,44 @@ export default function ReWriteStock() {
   const [writing, setWriting] = useState(false);
   const { confirm, dialog } = useConfirm();
 
-  // Resolves true when the check loaded (the popup for a failure is shown here).
-  const load = useCallback(() => getRewriteStock()
-    .then(d => { setData(d); return true; })
-    .catch(e => { toastStore.add('error', errorText(e)); return false; })
-    .finally(() => setLoading(false)), []);
+  const round = useRef(0);   // a newer check makes the answers of an older one (still running on the server) be ignored
+
+  // The web app's check is answered at once. The desktop database's five checks are asked for side by side afterwards and
+  // fill in as each one arrives (the Sales Invoice one reads every bill ever saved), so the screen is never held up by them.
+  // Resolves true when the web check loaded (the popup for a failure is shown here).
+  const load = useCallback((fresh = false) => {
+    const mine = ++round.current;
+    return getRewriteStock()
+      .then(d => {
+        if (mine !== round.current) return true;
+        setData({ ...d, desktop: d.db_connected ? waitingDesktop() : null });
+        if (d.db_connected) {
+          DESKTOP_TABS.forEach(([key, caption]) => {
+            getRewriteStockDesktopTab(key, fresh)
+              .then(tab => ({ ...tab, loading: false }))
+              .catch(e => ({ key, caption, rows: [], error: errorText(e), loading: false }))
+              .then(tab => {
+                if (mine !== round.current) return;
+                setData(cur => {
+                  if (!cur?.desktop) return cur;
+                  const tabs = cur.desktop.tabs.map(t => (t.key === key ? tab : t));
+                  return { ...cur, desktop: { tabs, rewrite_required: tabs.some(t => t.rows.length > 0) } };
+                });
+              });
+          });
+        }
+        return true;
+      })
+      .catch(e => { toastStore.add('error', errorText(e)); return false; })
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const checkAgain = async () => {
     if (!(await toastStore.defer('refresh', 'Stock will be checked again when this closes.', 'Check cancelled.'))) return;
     setLoading(true);
-    if (await load()) toastStore.add('refresh', 'Stock checked again.');
+    if (await load(true)) toastStore.add('refresh', 'Stock checked again.');
   };
 
   const reWrite = async () => {

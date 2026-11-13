@@ -37,6 +37,8 @@ COMPANY_FALLBACK = {"CompName": "name", "Address1": "address", "GSTNO": "gstin",
                     "EMAIL": "email", "EMAILID": "email", "WEB": "website", "PANNO": "pan", "CINNO": "cin"}
 _COMPANY_FALLBACK_UPPER = {k.upper(): v for k, v in COMPANY_FALLBACK.items()}
 DEFAULT_INVOICE_RPT = "FMTSINV.rpt"
+# Documents the desktop prints from ONE fixed file, with no print option (frmTrnPSE.btnPrint: "fmtPSE.rpt", {TrnHdrPSE.PSEID} = id).
+FIXED_RPT = {"physical_stock": "fmtPSE.rpt"}
 
 
 def company_values() -> dict[str, str]:
@@ -70,6 +72,13 @@ def document_id(kind: str, doc_no: str) -> int:
     if not sqlstore.enabled():
         raise HTTPException(409, "Nothing is saved to the database right now (it is offline), so there is no saved "
                                  "document for Crystal Reports to print.")
+    if kind == "physical_stock":   # TrnHdrPSE has no number column: the entry is "PSE-<PSEID>" once read, or carries its ID when just saved
+        saved = store.DOCS["physical_stock"].get(doc_no) or {}
+        m = re.fullmatch(r"PSE-(\d+)", str(doc_no))
+        pse_id = saved.get("pse_id") or (int(m.group(1)) if m else 0)
+        if not pse_id:
+            raise HTTPException(404, f"{doc_no} is not in the database yet.")
+        return int(pse_id)
     # The desktop's number columns are varchar(12): the web's "26/PB-0000012" is saved as "26PB0000012" (db_store.short_no),
     # so look for the number either way.
     rows = db.fetchall(f"SELECT TOP 1 [{sh}ID] AS id FROM dbo.[TrnHdr{sh}] WHERE [{sh}NO] IN (?, ?)",
@@ -88,6 +97,11 @@ def scalar(table: str, field: str) -> str:
     from_company = str(store.COMPANY.get(key, "") or "").strip() if key else ""
     if not sqlstore.enabled():
         return from_company
+    if company and not rpt_bridge.table_prefix():   # one cached read of the row serves every field
+        row = {k.upper(): v for k, v in rpt_bridge.comp_row().items()}
+        if row:
+            value = row.get(field.upper())
+            return ("" if value is None else str(value).strip()) or from_company
     try:
         rows = db.fetchall(f"SELECT TOP 1 [{field}] AS v FROM dbo.[{rpt_bridge.table_prefix()}{table}]")
     except Exception:   # noqa: BLE001 - a column this database doesn't have (e.g. PHNO for TELNO) must not blank the print
@@ -136,6 +150,9 @@ def build(kind: str, doc_no: str, option_name: str = "", click: str = "N", fallb
     if not sh:
         raise HTTPException(422, f"'{kind}' has no print format")
     doc_id = document_id(kind, doc_no)
+    if kind in FIXED_RPT:   # the desktop's own fixed file and selection, nothing else
+        return {"rpt": FIXED_RPT[kind], "selection": f"{selection_for(sh)} {doc_id}", "parameters": {}, "copies": 1,
+                "printer": "", "action": "preview", "option": "", "stored_proc": ""}
     doc = designer.doc_for(sh)
     option = None
     if doc:

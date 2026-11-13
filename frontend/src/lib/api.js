@@ -277,6 +277,10 @@ export const getNextFinYear = () => request('/masters/company/fin-years/next');
 export const createFinYear = (body) => request('/masters/company/fin-years', { method: 'POST', body });
 export const activateFinYear = (start) => request(`/masters/company/fin-years/${start}/activate`, { method: 'PUT' });   // makes that year the active one; returns the company profile
 export const removeFinYear =(start) => request(`/masters/company/fin-years/${start}`, { method: 'DELETE' });
+// Stock carry forward into a year: the previous year's closing stock becomes its opening stock (Administrator).
+// Preview: {from_year, to_year, items, lines, qty, value}; carry forward body {admin_password} (encrypted for "admin"): {from_year, to_year, lines, items, qty}.
+export const previewStockCarryForward = (start) => request(`/masters/company/fin-years/${start}/carry-forward`);
+export const carryForwardStock = (start, body) => request(`/masters/company/fin-years/${start}/carry-forward`, { method: 'POST', body });
 export const getCompanyHours = () => request('/company/hours');
 
 // Company Master's pictures and documents (routers/company_files.py).
@@ -574,7 +578,10 @@ export const getSqlScript = (obj, kind, target) =>
 export const getSqlTop = (obj, n, target) =>
   request(`/tools/sql/top${qs({ name: obj.name, schema: obj.schema, n, target })}`);
 
-export const getRewriteStock = () => request('/tools/rewrite-stock');
+// The web app's own check answers at once; the desktop database's checks scan the whole bill history (tens of seconds on a
+// big shop), so the screen asks for them one by one: getRewriteStockDesktopTab(key, fresh) → {key, caption, error, rows}.
+export const getRewriteStock = () => request('/tools/rewrite-stock?desktop=false');
+export const getRewriteStockDesktopTab = (key, fresh = false) => request(`/tools/rewrite-stock/desktop/${encodeURIComponent(key)}${fresh ? '?fresh=true' : ''}`);
 export const runRewriteStock = () => request('/tools/rewrite-stock', { method: 'POST' });
 
 // ─── The hosted central site (backend/app/central, central.html): its own backend, see CENTRAL_API_BASE ─

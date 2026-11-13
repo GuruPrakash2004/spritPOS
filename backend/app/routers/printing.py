@@ -13,6 +13,7 @@
 Nothing here changes the shop's data, so these POSTs are in main.NOT_WRITES.
 """
 import base64
+import logging
 import re
 import time
 from datetime import date
@@ -80,6 +81,8 @@ def print_options(kind: str, user: dict = Depends(get_current_user)):
         o["available"] = (o["rpt"] if o["rpt"].lower().endswith(".rpt") else o["rpt"] + ".rpt").lower() in on_disk
         o["preferred"] = o["name"] == mine
     files = [f for f in rpt_bridge.rpt_files() if kind == "sales_invoice" and f.lower().startswith("fmtsinv")]
+    if kind in rpt_print.FIXED_RPT:   # one fixed desktop file, no designer option
+        files = [f for f in rpt_bridge.rpt_files() if f.lower() == rpt_print.FIXED_RPT[kind].lower()]
     return {
         "kind": kind, "short_form": info["short_form"], "doc_id": int(doc["DocID"]) if doc else None,
         "doc_name": str(doc.get("DocName") or "") if doc else "",
@@ -207,15 +210,22 @@ def _job(body: PrintIn) -> dict:
 async def render(body: PrintIn, user: dict = Depends(get_current_user)):
     """PDF bytes for a preview; for a direct print the report goes to the option's printer and the reply is JSON."""
     _check_print_right(user, body.kind)
+    t0 = time.perf_counter()
     job = await run_in_threadpool(_job, body)
+    t1 = time.perf_counter()
     if job["action"] == "direct":
         await run_in_threadpool(rpt_bridge.print_direct, job)
         return {"printed": True, "printer": job["printer"], "copies": job["copies"], "rpt": job["rpt"]}
     if job["action"] == "email":
         raise HTTPException(409, "This print option e-mails the document: use the Email button.")
     pdf = await run_in_threadpool(rpt_bridge.render_pdf, job)
+    t2 = time.perf_counter()
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", body.doc_no) + ".pdf"
     pdf, size = await run_in_threadpool(rpt_bridge.preview_pdf, pdf)
+    # Where a preview's time goes: building the job (database lookups), the bridge (Crystal), trimming the PDF.
+    logging.getLogger("uvicorn.error").info("print timing %s: job=%dms bridge=%dms trim=%dms total=%dms", job["rpt"],
+                                            (t1 - t0) * 1000, (t2 - t1) * 1000, (time.perf_counter() - t2) * 1000,
+                                            (time.perf_counter() - t0) * 1000)
     return Response(pdf, media_type="application/pdf", headers={
         "Content-Disposition": f'inline; filename="{name}"', "X-Print-Rpt": job["rpt"], "X-Print-Option": job["option"],
         "X-Page-Size": size})

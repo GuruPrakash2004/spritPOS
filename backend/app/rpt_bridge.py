@@ -18,6 +18,8 @@ Settings:
     RPT_TABLE_PREFIX      prefix of the table names the reports read (default none: the desktop's own tables,
                           which hold the bills made on the web too)
     RPT_BRIDGE_ALLOW_REMOTE=1   allow a real bridge that is not on this PC (the database logon is sent to it)
+    RPT_LAYOUT_PRINTER    the local printer previews/PDFs are laid out on (default "Microsoft Print to PDF" when installed; "off" =
+                          the Windows default printer). A network default printer made the first preview after ~60 s idle take ~8.5 s.
 """
 import logging
 import os
@@ -57,7 +59,7 @@ def local_bridge() -> bool:
 
 
 def url() -> str:
-    return (_env("RPT_BRIDGE_URL") or (DEFAULT_URL if local_bridge() else "")).rstrip("/")
+    return (_env("RPT_BRIDGE_URL") or (DEFAULT_URL if local_bridge() and _env("RPT_BUILTIN_PRINT") != "1" else "")).rstrip("/")
 
 
 def key() -> str:
@@ -65,8 +67,26 @@ def key() -> str:
 
 
 def using_mock() -> bool:
-    """No bridge at all (none set, none built on this PC): the built-in print (mock_bridge.py) lays the pages out."""
-    return not url()
+    """The built-in print (mock_bridge.py, our own approximate layout) is used ONLY when RPT_BUILTIN_PRINT=1 (the test suite).
+    A shop always prints through the original .rpt files run by the Crystal bridge, never a redrawn copy."""
+    return _env("RPT_BUILTIN_PRINT") == "1" and not _env("RPT_BRIDGE_URL")
+
+
+def _no_bridge() -> HTTPException:
+    return HTTPException(503, "The Crystal Reports bridge is not available on this server, so nothing can be printed. "
+                              "Build backend/tools/rptbridge (see its README) or set RPT_BRIDGE_URL / RPT_BRIDGE_KEY.")
+
+
+LAYOUT_PRINTER = "Microsoft Print to PDF"
+
+
+def layout_printer() -> str:
+    """The printer Crystal lays a PREVIEW / PDF out on. Crystal measures text against a printer driver and re-contacts the Windows
+    default printer about every 60 s; when that is a network (WSD) printer the next preview then takes ~8.5 s instead of ~0.3 s.
+    A local driver has no such delay. The bridge uses it only if this PC has it installed. RPT_LAYOUT_PRINTER=<name> picks another
+    local printer, RPT_LAYOUT_PRINTER=off keeps the Windows default. Direct prints are not affected."""
+    v = _env("RPT_LAYOUT_PRINTER", LAYOUT_PRINTER)
+    return "" if v.lower() in ("off", "none", "default") else v
 
 
 def configured() -> bool:
@@ -149,18 +169,35 @@ def _call_mock(path: str, job: dict | None) -> httpx.Response:
     return httpx.Response(200, content=mock_bridge.render(job))
 
 
+_CLIENT: httpx.Client | None = None
+
+
+def _client() -> httpx.Client:
+    """One client for every call to the bridge. httpx.request()/httpx.get() build a new client each time, and building it loads
+    the SSL certificate store: ~290 ms on this PC for every print, and the bridge is plain http on this PC, so no TLS is
+    needed. Idle connections expire before the bridge's own 120 s idle limit, so a kept connection is never a dead one."""
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = httpx.Client(verify=False, trust_env=False, limits=httpx.Limits(max_keepalive_connections=4, keepalive_expiry=30))
+    return _CLIENT
+
+
 def _call(path: str, job: dict | None, method: str = "POST") -> httpx.Response:
     if using_mock():
         return _call_mock(path, job)
+    if not url():
+        raise _no_bridge()
     base = _check_target()
     body = None
     if job is not None:
         body = {**job, "parameters": {**company_parameters(), **(job.get("parameters") or {})},
                 "rpt": safe_rpt_name(job["rpt"]), "folder": str(folder()), "table_prefix": table_prefix(),
-                "logon": _logon(), "label_values": label_values(), "address_lines": address_lines()}
+                "logon": _logon(), "label_values": label_values(), "address_lines": address_lines(),
+                # previews/exports are laid out on a local driver (see layout_printer()); a direct print uses its own printer
+                "layout_printer": layout_printer() if path == "/render" else ""}
     started = time.perf_counter()
     try:
-        r = httpx.request(method, base + path, json=body, headers={"X-Bridge-Key": key()}, timeout=TIMEOUT)
+        r = _client().request(method, base + path, json=body, headers={"X-Bridge-Key": key()}, timeout=TIMEOUT)
     except httpx.HTTPError as e:
         logger.warning("Crystal bridge %s %s failed after %.1fs: %s", path, (job or {}).get("rpt", ""), time.perf_counter() - started, e.__class__.__name__)
         raise HTTPException(503, f"The Crystal Reports bridge can't be reached ({e.__class__.__name__}). Is it running?")
@@ -192,14 +229,28 @@ LABEL_FIELDS = {
 }
 
 
+_COMP = {"at": 0.0, "row": None}
+_COMP_TTL = 30.0   # the shop's own row changes rarely; every print used to read it once per parameter (8-20 round trips)
+
+
+def comp_row() -> dict:
+    """MstComp's first row, read once and kept for 30 seconds (empty when the database can't be read)."""
+    now = time.monotonic()
+    if _COMP["row"] is not None and now - _COMP["at"] < _COMP_TTL:
+        return _COMP["row"]
+    try:
+        row = dict(db.fetchall(f"SELECT TOP 1 * FROM dbo.[{table_prefix()}MstComp]")[0])
+    except Exception:   # noqa: BLE001 - offline, or no such table: callers fall back to Company Master
+        row = {}
+    _COMP.update(at=now, row=row)
+    return row
+
+
 def address_lines() -> list[str]:
     """The shop's address lines (MstComp Address1..4, as the desktop's print takes them; else Company Master's address) for
     a format's blank address placeholder (FillLabels in the bridge)."""
-    try:
-        row = db.fetchall("SELECT TOP 1 Address1, Address2, Address3, Address4 FROM dbo.MstComp")[0]
-        lines = [str(row.get(k) or "").strip() for k in ("Address1", "Address2", "Address3", "Address4")]
-    except Exception:   # noqa: BLE001 - offline, or a database with other columns: Company Master's address will do
-        lines = []
+    row = comp_row()
+    lines = [str(row.get(k) or "").strip() for k in ("Address1", "Address2", "Address3", "Address4")]
     lines = [x for x in lines if x]
     return lines or ([str(store.COMPANY.get("address") or "").strip()] if str(store.COMPANY.get("address") or "").strip() else [])
 
@@ -371,6 +422,8 @@ def status() -> dict:
     if using_mock():
         return {"configured": True, "ok": True, "message": "Built-in print (approximate layout; set RPT_BRIDGE_URL for Crystal Reports)",
                 "version": "built-in", "printers": []}
+    if not url():
+        return {"configured": False, "ok": False, "message": _no_bridge().detail}
     try:
         r = _call("/health", None, "GET")
         return {"configured": True, "ok": True, "message": "", **{k: v for k, v in r.json().items() if k in ("version", "printers")}}

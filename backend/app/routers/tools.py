@@ -450,11 +450,24 @@ REWRITE = Depends(require_module(REWRITE_TOOL))
 
 
 @router.get("/rewrite-stock")
-def rewrite_stock_check(user: dict = REWRITE):
+def rewrite_stock_check(desktop: bool = True, user: dict = REWRITE):
     """Differences between documents, stock movements and QOH (web data), plus the desktop database's
-    own checks when SQL Server is connected (read-only)."""
-    return {"web": stock_rewrite.check_stock(), "desktop": stock_rewrite.legacy_check(),
+    own checks when SQL Server is connected (read-only). The desktop checks scan the whole bill history and take
+    tens of seconds on a big shop, so the screen asks with desktop=false (answered at once) and then asks for each
+    check on its own: GET /tools/rewrite-stock/desktop/{key}."""
+    return {"web": stock_rewrite.check_stock(), "desktop": stock_rewrite.legacy_check() if desktop else None,
             "db_connected": db.is_db_available()}
+
+
+@router.get("/rewrite-stock/desktop/{key}")
+def rewrite_stock_desktop_tab(key: str, fresh: bool = False, user: dict = REWRITE):
+    """One of the desktop database's five checks (purchase, sales_invoice, stock_deduction, sales_return, ledger)."""
+    if not db.is_db_available():
+        raise HTTPException(409, "SQL Server is not connected, so the desktop database's check can't run.")
+    tab = stock_rewrite.legacy_tab(key, fresh)
+    if tab is None:
+        raise HTTPException(404, f"'{key}' is not one of the stock checks")
+    return tab
 
 
 @router.post("/rewrite-stock")

@@ -14,7 +14,9 @@ ones), because there is nothing to rebuild them from.
 legacy_check() runs the desktop app's own five checks read-only against SQL Server. The web app never
 writes the legacy tables, so a difference there is fixed with Re Write Stock in the desktop app.
 """
+import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 from . import db, sqlstore, store
 
@@ -201,21 +203,42 @@ _LEGACY_CHECKS = [
 ]
 
 
-def legacy_check() -> dict | None:
-    """The desktop checks on SQL Server (read-only), or None without a connection. A tab whose table is
-    missing in this database (Sales Return is optional in the desktop app) reports an empty list."""
+LEGACY_KEYS = [key for key, _, _ in _LEGACY_CHECKS]
+_LEGACY_CACHE: dict[str, tuple[float, dict]] = {}
+_LEGACY_TTL = 120.0   # the Sales Invoice check scans every bill ever saved (25-40 s on a big shop): keep the answer for two minutes
+
+
+def legacy_tab(key: str, fresh: bool = False) -> dict | None:
+    """ONE of the desktop's checks (read-only), or None for an unknown key. It runs on a connection of its own (db.read_only_own),
+    so a slow scan never holds the shared connection that billing uses. A table that is missing in this database (Sales
+    Return is optional in the desktop app) gives an empty list with the error text. Kept for two minutes unless `fresh`."""
+    spec = next((s for s in _LEGACY_CHECKS if s[0] == key), None)
+    if spec is None:
+        return None
+    now = time.monotonic()
+    hit = _LEGACY_CACHE.get(key)
+    if hit and not fresh and now - hit[0] < _LEGACY_TTL:
+        return hit[1]
+    _, caption, sql = spec
+    try:
+        res = db.read_only_own(sql, max_rows=2000)
+        rows = [dict(zip(res["columns"], r)) for r in res["rows"]]
+        error = None
+    except Exception as exc:   # e.g. TrnDtlSR not created in this database, or the connection dropped
+        rows, error = [], db.safe_error(exc)[:300]
+    tab = {"key": key, "caption": caption, "error": error,
+           "rows": [{k: (float(v) if isinstance(v, (int, float)) or hasattr(v, "as_tuple") else v)
+                     for k, v in r.items()} for r in rows]}
+    if error is None:   # a failure is not kept: the next look tries again
+        _LEGACY_CACHE[key] = (time.monotonic(), tab)
+    return tab
+
+
+def legacy_check(fresh: bool = False) -> dict | None:
+    """All five desktop checks on SQL Server (read-only), or None without a connection. They run side by side, so the wait is
+    the slowest one, not the sum."""
     if not db.is_db_available():
         return None
-    tabs = []
-    for key, caption, sql in _LEGACY_CHECKS:
-        # Read-only runner: a lock timeout instead of waiting behind a busy counter, and always rolled back.
-        try:
-            res = db.read_only(sql, max_rows=2000)
-            rows = [dict(zip(res["columns"], r)) for r in res["rows"]]
-            error = None
-        except Exception as exc:   # e.g. TrnDtlSR not created in this database, or the connection dropped
-            rows, error = [], db.safe_error(exc)[:300]
-        tabs.append({"key": key, "caption": caption, "error": error,
-                     "rows": [{k: (float(v) if isinstance(v, (int, float)) or hasattr(v, "as_tuple") else v)
-                               for k, v in r.items()} for r in rows]})
+    with ThreadPoolExecutor(max_workers=len(LEGACY_KEYS)) as pool:
+        tabs = list(pool.map(lambda k: legacy_tab(k, fresh), LEGACY_KEYS))
     return {"tabs": tabs, "rewrite_required": any(t["rows"] for t in tabs)}

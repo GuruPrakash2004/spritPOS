@@ -482,6 +482,37 @@ def read_only(sql: str, params: tuple = (), max_rows: int = 5000, lock_timeout_m
             _finish(conn, cur)
 
 
+def read_only_own(sql: str, max_rows: int = 5000, lock_timeout_ms: int = 10000) -> dict:
+    """read_only() for a SLOW diagnostic query (Re Write Stock's checks scan the whole bill history): it runs on a connection of
+    its own, so the shared one and _db_lock stay free and billing never waits behind it, and it reads uncommitted rows so it
+    neither blocks nor is blocked by a counter saving a bill. Always rolled back; the connection is closed afterwards."""
+    if not _db_available:
+        raise RuntimeError("No database connection")
+    result = _connect_with_driver(DB_HOST, DB_PORT, DB_NAME, DB_USER, _password(), DB_AUTH)
+    if not result:
+        raise RuntimeError("No database connection")
+    conn, _driver = result
+    try:
+        cur = conn.cursor()
+        cur.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
+        cur.execute(f"SET LOCK_TIMEOUT {int(lock_timeout_ms)}")
+        cur.execute(sql)
+        if cur.description is None:
+            return {"columns": [], "rows": [], "truncated": False}
+        columns = [d[0] or f"(column {i + 1})" for i, d in enumerate(cur.description)]
+        rows = [list(r) for r in cur.fetchmany(max_rows + 1)]
+        return {"columns": columns, "rows": rows[:max_rows], "truncated": len(rows) > max_rows}
+    finally:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def write_statement(sql: str, lock_timeout_ms: int = 10000) -> int:
     """Run ONE already-validated INSERT/UPDATE/DELETE (Tools → SQL Query Execution, Web_* tables only) and
     commit it; roll back if it fails. Returns the rows affected."""

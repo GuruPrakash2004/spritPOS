@@ -78,6 +78,39 @@ static class Program
             Send(ctx, 200, "application/json", Encoding.UTF8.GetBytes(Json.Serialize(new Dictionary<string, object> { { "version", Version }, { "printers", printers } })));
             return;
         }
+        if (path == "/warm" && ctx.Request.HttpMethod == "POST")
+        {
+            // Crystal's first Load in a process costs ~10 s (runtime start-up, JIT) and each report's first open ~1 s (Load + database logon).
+            // The backend calls this once after the bridge starts with the reports the shop prints: each is opened, logged on and KEPT
+            // (the same cache the prints use), so even the first print of a bill is served like the next ones.
+            string wb;
+            using (var r = new StreamReader(ctx.Request.InputStream, Encoding.UTF8)) wb = r.ReadToEnd();
+            var wj = Json.Deserialize<Dictionary<string, object>>(wb);
+            var clock = Stopwatch.StartNew();
+            int kept = 0;
+            lock (Gate)
+            {
+                if (wj.ContainsKey("files") && wj["files"] is System.Collections.ArrayList fl)
+                    foreach (object f in fl)
+                    {
+                        string name = Convert.ToString(f);
+                        string file = Path.Combine(Str(wj, "folder"), name);
+                        if (name.IndexOfAny(new[] { (char)92, '/', ':' }) >= 0 || !File.Exists(file)) continue;
+                        try
+                        {
+                            var one = new Dictionary<string, object>(wj);
+                            one["rpt"] = name; one["selection"] = ""; one["stored_proc"] = "";
+                            if (!wj.ContainsKey("table_prefix")) one["table_prefix"] = "";
+                            bool again;
+                            if (wj.ContainsKey("logon") && CacheOn) { Open(one, out again); kept++; }
+                            else { var d = new ReportDocument(); try { d.Load(file); } finally { try { d.Dispose(); } catch { } } }
+                        }
+                        catch { try { Drop(new Dictionary<string, object>(wj) { { "rpt", name }, { "stored_proc", "" } }); } catch { } }
+                    }
+            }
+            Send(ctx, 200, "application/json", Encoding.UTF8.GetBytes("{\"warm\":true,\"kept\":" + kept + ",\"ms\":" + clock.ElapsedMilliseconds + "}"));
+            return;
+        }
         if (ctx.Request.HttpMethod != "POST" || (path != "/render" && path != "/print")) { Fail(ctx, 404, "Not found"); return; }
         string body;
         using (var r = new StreamReader(ctx.Request.InputStream, Encoding.UTF8)) body = r.ReadToEnd();
@@ -137,7 +170,7 @@ static class Program
     class Kept { public ReportDocument Doc; public DateTime Stamp; public long Used; public List<KeyValuePair<TextObject, string>> Texts = new List<KeyValuePair<TextObject, string>>(); }
     static readonly Dictionary<string, Kept> Reports = new Dictionary<string, Kept>(StringComparer.OrdinalIgnoreCase);
     static long Tick;
-    const int KeepReports = 6;
+    const int KeepReports = 12;
     static readonly bool CacheOn = Environment.GetEnvironmentVariable("RPT_BRIDGE_CACHE") != "0";
 
     static string KeyOf(Dictionary<string, object> job) => Path.Combine(Str(job, "folder"), Str(job, "rpt")) + "|" + Str(job, "stored_proc") + "|" + Str(job, "table_prefix");
@@ -147,6 +180,18 @@ static class Program
         Kept k;
         string key = KeyOf(job);
         if (Reports.TryGetValue(key, out k)) { Reports.Remove(key); try { k.Doc.Dispose(); } catch { } }
+    }
+
+    static HashSet<string> installedPrinters;
+    static bool Installed(string name)
+    {
+        if (installedPrinters == null)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string p in PrinterSettings.InstalledPrinters) set.Add(p);
+            installedPrinters = set;
+        }
+        return installedPrinters.Contains(name);
     }
 
     // The desktop's ShowRptFileFromUtlOptions: load, apply logon to every table (and subreport), selection, parameters.
@@ -166,6 +211,9 @@ static class Program
                 kept.Used = ++Tick;
                 Configure(kept.Doc, job, kept);
                 kept.Doc.Refresh();                                   // read the data again for this document
+                // Refresh() clears the parameter values (the next export then fails with "Missing parameter values"): set them again.
+                if (job.ContainsKey("parameters") && job["parameters"] is Dictionary<string, object> again)
+                    foreach (var kv in again) SetValue(kept.Doc, kv.Key, kv.Value);
                 reused = true;
                 return kept.Doc;
             }
@@ -210,6 +258,13 @@ static class Program
         string sp = Str(job, "stored_proc");
         Apply(rpt, logon, prefix, sp, Str(logon, "database"));
         foreach (ReportDocument sub in rpt.Subreports) Apply(sub, logon, prefix, sp, Str(logon, "database"));
+
+        // Crystal asks the printer driver for text metrics while it lays pages out, and it contacts that printer again about every 60 s.
+        // When the Windows default is a network (WSD) printer, that contact costs ~8.5 s on the next preview/export. The backend sends
+        // "layout_printer" (a local driver such as Microsoft Print to PDF) for previews and exports only; it is used only when installed.
+        // Direct prints are unaffected: PrintToPrinter gets its own printer settings.
+        string layoutPrinter = Str(job, "layout_printer");
+        if (layoutPrinter.Length > 0 && Installed(layoutPrinter)) { try { rpt.PrintOptions.PrinterName = layoutPrinter; } catch { } }
 
         string selection = Str(job, "selection");
         if (selection.Length > 0 || keep != null) rpt.RecordSelectionFormula = selection;   // a kept report must not keep the last job's selection
