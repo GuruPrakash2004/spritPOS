@@ -40,7 +40,7 @@ export default function CashCountDialog({ counts, onApply, onClose }) {
       {!values ? <p className="text-sm text-stone-500">Loading…</p> : (
         <div className="space-y-3">
           <table className="w-full border border-line text-sm">
-            <thead><tr className="bg-subtle text-left text-xs"><th className="w-28 border border-line px-2 py-1 font-medium text-[#1B5FA8]">Currency</th><th className="w-40 border border-line px-2 py-1 font-medium">Nos</th><th className="border border-line px-2 py-1 text-right font-medium">Amount</th></tr></thead>
+            <thead><tr className="bg-subtle text-left text-xs"><th className="w-28 border border-line px-2 py-1 font-medium text-[#64283A] dark:text-[#D4A847]">Currency</th><th className="w-40 border border-line px-2 py-1 font-medium">Nos</th><th className="border border-line px-2 py-1 text-right font-medium">Amount</th></tr></thead>
             <tbody>
               {values.map((v, i) => {
                 const amount = face(v) * (Number(draft[v]) || 0);

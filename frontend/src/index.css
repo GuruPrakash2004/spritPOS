@@ -27,7 +27,7 @@
 /*
  * DUAL LUXURY THEME SYSTEM
  * ─────────────────────────
- * Light → SpiritPOS Light: cool white (#F4F6FA), navy brand (#1B2B4B), amber accent (#D99A2B)
+ * Light → Heritage Luxury Light: warm parchment (#F5F1E9), burgundy brand (#64283A), gold minimal accent (#B08A45)
  * Dark  → Dark Luxury Enterprise: true black (#0A0A0A), charcoal surfaces, rich gold accent (#D4A847)
  *
  * The stone/slate scales resolve through --ms-* variables. `inline` makes
@@ -89,48 +89,48 @@
 	color-scheme: light;
 
 	/* Heritage warm neutral scale */
-	--ms-50:  #FFFFFF;
-	--ms-100: #F7F9FC;
-	--ms-200: #EDF0F6;
-	--ms-300: #DDE3EC;
-	--ms-400: #8592A6;
-	--ms-500: #5F6B80;
-	--ms-600: #4A566B;
-	--ms-700: #364258;
-	--ms-800: #1A2236;
-	--ms-900: #131B2E;
-	--ms-950: #0C1220;
+	--ms-50:  #FFFCF7;
+	--ms-100: #FAF6EF;
+	--ms-200: #F0EBE3;
+	--ms-300: #E3D9CD;
+	--ms-400: #958B81;
+	--ms-500: #70675F;
+	--ms-600: #5A524D;
+	--ms-700: #453E3A;
+	--ms-800: #29231F;
+	--ms-900: #1F1B19;
+	--ms-950: #141110;
 
 	/* Surfaces — warm parchment layers */
-	--ds-canvas:       #F4F6FA;
-	--ds-surface:      #FFFFFF;
-	--ds-subtle:       #F0F3F8;
-	--ds-muted:        #EBEFF5;
-	--ds-line:         #DDE3EC;
-	--ds-line-soft:    #E8ECF3;
-	--ds-line-strong:  #C8D1DF;
+	--ds-canvas:       #F5F1E9;
+	--ds-surface:      #FFFCF7;
+	--ds-subtle:       #F3EEE6;
+	--ds-muted:        #EEE9E1;
+	--ds-line:         #E3D9CD;
+	--ds-line-soft:    #EEE7DD;
+	--ds-line-strong:  #D4C8BA;
 
 	/* Brand — Navy primary (SpiritPOS logo) */
-	--ds-accent:       #1B2B4B;
-	--ds-accent-strong:#121D36;
-	--ds-accent-ink:   #1B2B4B;
-	--ds-accent-soft:  #E6EBF4;
+	--ds-accent:       #64283A;
+	--ds-accent-strong:#542030;
+	--ds-accent-ink:   #64283A;
+	--ds-accent-soft:  #F0E2E6;
 
 	--ds-overlay:      rgb(41 35 31 / 0.45);
 	--ds-shadow:       rgb(72 53 38 / 0.06);
 	--ds-shadow-strong:rgb(72 53 38 / 0.14);
 
 	/* Luxury gold — used sparingly for labels, icons, dividers */
-	--gold:       #D99A2B;
-	--gold-light: #F0CF8A;
-	--gold-dark:  #B87A14;
+	--gold:       #B08A45;
+	--gold-light: #D3BB89;
+	--gold-dark:  #8E6C32;
 	--gold-glow:  rgba(217, 154, 43, 0.10);
 
 	/* Heritage status colours (muted, warm) */
 	--status-success: #55745A;
 	--status-warning: #A87532;
 	--status-danger:  #9A4B45;
-	--status-info:    #687B86;
+	--status-info:    #70675F;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -208,18 +208,18 @@ body {
 
 	/* Light mode inputs — Heritage spec */
 	:where(:root:not(.dark)) :where(input:not([type='checkbox']):not([type='radio']), textarea, select) {
-		background-color: #FFFFFF;
-		border-color: #D5DCE7;
-		color: #1A2236;
+		background-color: #FFFCF7;
+		border-color: #DCD1C5;
+		color: #29231F;
 	}
 	:where(:root:not(.dark)) :where(input, textarea)::placeholder {
-		color: #9AA5B8;
+		color: #A69D94;
 	}
 	:where(:root:not(.dark)) :where(input, textarea, select):hover {
 		border-color: #CBBEAF;
 	}
 	:where(:root:not(.dark)) :where(input, textarea, select):focus {
-		border-color: #1B2B4B;
+		border-color: #64283A;
 		box-shadow: 0 0 0 3px rgba(27, 43, 75, 0.10);
 	}
 }
@@ -230,13 +230,13 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--ds-accent); }
    burgundy accent) are lifted to readable tones. Anything that sets its own dark:text-* colour, or its own
    background, is left alone. Placed in the utilities layer so it competes with the utilities by order. */
 @layer utilities {
-	:where(.dark) :is(.text-stone-500, .text-stone-600, .text-\[\#5F6B80\], .text-\[\#8E8378\], .text-\[\#9AA5B8\]):not([class*="dark:text-"]) {
+	:where(.dark) :is(.text-stone-500, .text-stone-600, .text-\[\#70675F\], .text-\[\#8E8378\], .text-\[\#A69D94\]):not([class*="dark:text-"]) {
 		color: #BDB5AB;
 	}
-	:where(.dark) :is(.text-stone-700, .text-stone-800, .text-stone-900, .text-\[\#1A2236\], .text-black):not([class*="dark:text-"]):not([class*="bg-"]) {
+	:where(.dark) :is(.text-stone-700, .text-stone-800, .text-stone-900, .text-\[\#29231F\], .text-black):not([class*="dark:text-"]):not([class*="bg-"]) {
 		color: #F5F0E8;
 	}
-	:where(.dark) :is(.text-\[\#1B2B4B\], .text-\[\#121D36\]):not([class*="dark:text-"]):not([class*="bg-"]) {
+	:where(.dark) :is(.text-\[\#64283A\], .text-\[\#542030\]):not([class*="dark:text-"]):not([class*="bg-"]) {
 		color: #E8C36A;
 	}
 	:where(.dark) :where(input, textarea)::placeholder { color: #A8A29E; }

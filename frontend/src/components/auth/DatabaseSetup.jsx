@@ -82,16 +82,16 @@ export default function DatabaseSetup({ inputClass, labelClass, onDone, change =
   );
 
   return (
-    <div className={plain ? '' : 'glass-card-login animate-fadeInUp rounded-2xl border border-[#DDE3EC] p-7 shadow-[0_20px_50px_rgba(72,53,38,0.08)] dark:border-[#2A2A2A] dark:shadow-card'}>
+    <div className={plain ? '' : 'glass-card-login animate-fadeInUp rounded-2xl border border-[#E3D9CD] p-7 shadow-[0_20px_50px_rgba(72,53,38,0.08)] dark:border-[#2A2A2A] dark:shadow-card'}>
       <div className="mb-5 flex items-center gap-2">
-        <Database size={18} className="text-[#1B2B4B] dark:text-[#D4A847]" />
+        <Database size={18} className="text-[#64283A] dark:text-[#D4A847]" />
         <h2 className="text-sm font-bold">{change ? 'Database settings' : 'Database setup'}</h2>
-        <span className="ml-auto text-[11px] text-[#5F6B80] dark:text-stone-400">Step {step === 'server' ? 1 : 2} of 2</span>
+        <span className="ml-auto text-[11px] text-[#70675F] dark:text-stone-400">Step {step === 'server' ? 1 : 2} of 2</span>
       </div>
 
       {step === 'server' && (
         <form onSubmit={test} noValidate className="space-y-4">
-          <p className="text-xs text-[#5F6B80] dark:text-stone-400">{change
+          <p className="text-xs text-[#70675F] dark:text-stone-400">{change
             ? 'Change the server, login or database SpiritPOS uses. Test the connection, then pick the database. Back the database up first.'
             : "Connect SpiritPOS to this shop's SQL Server (the one the desktop vLQMS uses). This is done once."}</p>
           {field('host', 'Server', { placeholder: 'localhost or localhost\\SQLEXPRESS' })}
@@ -101,7 +101,7 @@ export default function DatabaseSetup({ inputClass, labelClass, onDone, change =
 
           {error && <ErrorLine text={error} />}
           <div className="flex gap-2">
-            {onCancel && <button type="button" onClick={onCancel} className="rounded-xl border border-[#D5DCE7] px-4 text-xs dark:border-[#2A2A2A]">Cancel</button>}
+            {onCancel && <button type="button" onClick={onCancel} className="rounded-xl border border-[#DCD1C5] px-4 text-xs dark:border-[#2A2A2A]">Cancel</button>}
             <button type="submit" disabled={busy} className={buttonClass}>
             {busy ? <Loader2 size={16} className="animate-spin" /> : <PlugZap size={16} />}{busy ? 'Testing…' : 'Test connection'}
             </button>
@@ -112,7 +112,7 @@ export default function DatabaseSetup({ inputClass, labelClass, onDone, change =
       {step === 'database' && (
         <div className="space-y-4">
           <p className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400"><CheckCircle2 size={14} />Connected. Pick this shop's database.</p>
-          <p className="text-xs text-[#5F6B80] dark:text-stone-400">The app works on this database directly, next to the desktop vLQMS. Back it up first.</p>
+          <p className="text-xs text-[#70675F] dark:text-stone-400">The app works on this database directly, next to the desktop vLQMS. Back it up first.</p>
           <div>
             <label htmlFor="db-database" className={labelClass}>Database</label>
             <select id="db-database" value={database} onChange={e => { setDatabase(e.target.value); setErrors({}); }} className={inputClass} aria-invalid={!!errors.database}>
@@ -122,7 +122,7 @@ export default function DatabaseSetup({ inputClass, labelClass, onDone, change =
           </div>
           {error && <ErrorLine text={error} />}
           <div className="flex gap-2">
-            <button type="button" onClick={() => { setStep('server'); setError(''); }} className="rounded-xl border border-[#D5DCE7] px-4 text-xs dark:border-[#2A2A2A]">Back</button>
+            <button type="button" onClick={() => { setStep('server'); setError(''); }} className="rounded-xl border border-[#DCD1C5] px-4 text-xs dark:border-[#2A2A2A]">Back</button>
             <button type="button" onClick={connect} disabled={busy} className={buttonClass}>
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}{busy ? 'Connecting and loading the data…' : 'Connect'}
             </button>
@@ -134,7 +134,7 @@ export default function DatabaseSetup({ inputClass, labelClass, onDone, change =
 }
 
 const buttonClass = `flex flex-1 w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition
-  disabled:pointer-events-none disabled:opacity-45 bg-[#1B2B4B] text-white hover:bg-[#121D36]
+  disabled:pointer-events-none disabled:opacity-45 bg-[#64283A] text-white hover:bg-[#542030]
   dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F7D98B] dark:to-[#C8952E] dark:text-[#181106]`;
 
 function ErrorLine({ text }) {

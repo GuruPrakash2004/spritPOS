@@ -17,14 +17,17 @@ import Toast from '../common/Toast';
 import { toastStore } from '../common/toastStore';
 import { useConfirm } from '../common/ConfirmDialog';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
-import { activateFinYear, createFinYear, errorText, getBackupStatus, getCompany, getNextFinYear, removeFinYear, saveCompany, startBackup, updateDashboardLink, } from '../../lib/api';
+import { useAdminPassword } from '../common/AdminPasswordPrompt';
+import { encryptSecret } from '../../lib/secureField';
+import { loadStockItems } from '../../data/stockData';
+import { activateFinYear, carryForwardStock, createFinYear, errorText, getBackupStatus, getCompany, getNextFinYear, previewStockCarryForward, removeFinYear, saveCompany, startBackup, updateDashboardLink, } from '../../lib/api';
 import { notifyCompanyProfileUpdated } from '../../hooks/useCompanyProfile';
 import { useScreenFields } from '../../hooks/useScreenFields';
 import { applyDefinition, extraProblem, valueOf } from '../../lib/designerFields';
 import DefinedExtras from './DefinedExtras';
 
 import { cn } from '../../lib/utils';
-import { badge, field, fieldTone, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
+import { badge, dangerButton, field, fieldTone, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
 
 // The shop's map is a plain Google Maps frame searching the company name and registered premises address (no API, no key).
 const mapSrc = (name, address) => (address.trim() ? `https://www.google.com/maps?q=${encodeURIComponent(`${name} ${address}`.trim())}&output=embed` : '');
@@ -69,6 +72,7 @@ let lastProfile = null;
 
 const CompanyMaster = ({ canEditFiles }) => {
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const { ask, dialog: passwordDialog } = useAdminPassword();
   const [tab, setTab] = useState('Company Info');
   const [companyProfile, setCompanyProfile] = useState(lastProfile);
   const [companyName, setCompanyName] = useState(lastProfile?.name ?? '');
@@ -137,6 +141,22 @@ const CompanyMaster = ({ canEditFiles }) => {
     try {
       setCompanyProfile(await activateFinYear(y.start));
       setToast({ kind: 'ok', text: 'Financial year made active.' });
+    } catch (e) { setToast({ kind: 'error', text: errorText(e) }); }
+  };
+  // Stock Balance's "Stock Carry Forward": the year before's closing stock becomes this year's opening stock (needs the ADMIN password).
+  const carryForwardFinYear = async (y) => {
+    let p;
+    try { p = await previewStockCarryForward(y.start); } catch (e) { setToast({ kind: 'error', text: errorText(e) }); return; }
+    if (!(await confirm(`Carry the closing stock of ${dmy(p.from_year.start)} to ${dmy(p.from_year.end)} forward as the opening stock of ${dmy(y.start)} to ${dmy(y.end)}?\n\n`
+      + `${p.items} item(s) on ${p.lines} line(s), ${p.qty} bottle(s) in all. The opening stock already saved for ${dmy(y.start)} is replaced and the stock balance is rebuilt. Take a database backup first.`))) return;
+    const password = await ask();
+    if (password === null) return;
+    if (!(await toastStore.defer('ok', `The stock will be carried forward to ${dmy(y.start)} when this closes.`, 'Cancelled. No stock was carried forward.'))) return;
+    try {
+      const admin_password = await encryptSecret(password, 'admin');   // leaves the browser only encrypted
+      const r = await carryForwardStock(y.start, { admin_password });
+      void loadStockItems();   // the bills' item list shows the rebuilt stock
+      setToast({ kind: 'ok', text: `Stock carried forward: ${r.items} item(s), ${r.qty} bottle(s).` });
     } catch (e) { setToast({ kind: 'error', text: errorText(e) }); }
   };
   const deleteFinYear = async (y) => {
@@ -237,6 +257,7 @@ const CompanyMaster = ({ canEditFiles }) => {
     <div className="mx-auto max-w-6xl">
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {confirmDialog}
+      {passwordDialog}
 
       <div className={`${pageHeader} mb-5`}>
         <div>
@@ -390,7 +411,7 @@ const CompanyMaster = ({ canEditFiles }) => {
                   </tr>
                 </thead>
                 <tbody className={tableBody}>
-                  {[...(companyProfile?.fin_years ?? [])].sort((x, y) => x.start.localeCompare(y.start)).map(y => (
+                  {[...(companyProfile?.fin_years ?? [])].sort((x, y) => x.start.localeCompare(y.start)).map((y, i) => (
                     <tr key={y.start} className={tableRow}>
                       <td className="px-4 py-2.5 tabular-nums text-stone-900 dark:text-stone-50">{dmy(y.start)}</td>
                       <td className="px-4 py-2.5 tabular-nums text-stone-900 dark:text-stone-50">{dmy(y.end)}</td>
@@ -398,8 +419,11 @@ const CompanyMaster = ({ canEditFiles }) => {
                         {y.active ? <span className={badge('success')}><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active</span> : <span className="text-stone-500">—</span>}
                       </td>
                       <td className="px-4 py-2 text-right">
-                        {canEditFiles && !y.active && <button onClick={() => void makeActiveFinYear(y)} className="mr-3 text-xs text-[#1B2B4B] hover:underline dark:text-[#D4A847]">Make active</button>}
-                        {canEditFiles && !y.active && <button onClick={() => deleteFinYear(y)} className="text-xs text-[#9A4B45] hover:underline dark:text-red-400">Remove</button>}
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {canEditFiles && i > 0 && <button type="button" onClick={() => void carryForwardFinYear(y)} className={`${secondaryButton} !px-3 !py-1.5 !text-xs`}>Carry forward stock</button>}
+                          {canEditFiles && !y.active && <button type="button" onClick={() => void makeActiveFinYear(y)} className={`${primaryButton} !px-3 !py-1.5 !text-xs`}>Make active</button>}
+                          {canEditFiles && !y.active && <button type="button" onClick={() => deleteFinYear(y)} className={`${dangerButton} !px-3 !py-1.5 !text-xs`}>Remove</button>}
+                        </div>
                       </td>
                     </tr>
                   ))}

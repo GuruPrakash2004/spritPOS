@@ -12,9 +12,9 @@ export default function DevelopedBy({ className = '', size = 'md' }) {
   const compact = size === 'xs';
   return (
     <div
-      className={`flex w-full flex-col items-center rounded-xl border border-[#0F1A30] bg-gradient-to-b from-[#1B2B4B] to-[#0F1A30] text-center shadow-sm dark:border-[#2A2A2A] dark:from-[#1A1A1A] dark:to-[#141414] ${compact ? 'gap-1 px-2 py-2' : 'gap-2 rounded-2xl px-4 py-3.5'} ${className}`}
+      className={`flex w-full flex-col items-center rounded-xl border border-[#3A1622] bg-gradient-to-b from-[#64283A] to-[#3A1622] text-center shadow-sm dark:border-[#2A2A2A] dark:from-[#1A1A1A] dark:to-[#141414] ${compact ? 'gap-1 px-2 py-2' : 'gap-2 rounded-2xl px-4 py-3.5'} ${className}`}
     >
-      <span className={`whitespace-nowrap font-bold uppercase text-[#C5D0E6]/80 dark:text-[#D4A847]/70 ${compact ? 'text-[8px] tracking-[0.12em]' : 'text-[10px] tracking-[0.18em]'}`}>
+      <span className={`whitespace-nowrap font-bold uppercase text-[#F0E2E6]/80 dark:text-[#D4A847]/70 ${compact ? 'text-[8px] tracking-[0.12em]' : 'text-[10px] tracking-[0.18em]'}`}>
         Designed &amp; developed by
       </span>
       <img src={softventLogoGold} alt="Softvent Services Pvt. Ltd." className={`${HEIGHT[size]} w-auto select-none`} draggable={false} />

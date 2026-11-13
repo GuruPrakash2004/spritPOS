@@ -9,6 +9,8 @@ quantity per item across all lines, so stock can't go below zero.
 Documents are saved to SQL Server's Web_ tables when the request succeeds (app/sqlstore.py); sales invoices
 and purchase bills also in the desktop's format. Held bills are saved whole but not posted until released."""
 from collections import defaultdict
+import threading
+import time
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -773,25 +775,58 @@ def generate_invoice_from_cse(doc_no: str, body: GenerateInvoiceIn, current_user
     return inv
 
 
+# The footer asks for these every 15 seconds from every open screen and PC, and all database reads share one connection lock: a slow
+# TrnHdrSINV scan (no index on SINVDate in a big table) would otherwise hold everything up and let the polls pile up behind it.
+# So the answer is kept for a few seconds, only one request asks the database at a time, and the others get the last answer meanwhile.
+TOTALS_TTL = 10.0   # seconds an answer is reused
+_totals_cache: dict[str, tuple[float, dict]] = {}
+_totals_lock = threading.Lock()
+
+
+def _db_today_totals(day: date) -> dict:
+    from ..db_store import _has
+    net = "ISNULL(NULLIF(GRNDTOT, 0), TOTAMT)" if "grndtot" in _has("TrnHdrSINV") else "TOTAMT"
+    gone = " AND ISNULL(IsDelete, 'N') <> 'Y'" if "isdelete" in _has("TrnHdrSINV") else ""
+    row = db.fetchall(
+        f"SELECT COUNT(*) AS n, ISNULL(SUM({net}), 0) AS amt FROM dbo.TrnHdrSINV WITH (NOLOCK) "
+        f"WHERE SINVDate >= '{day.isoformat()}' AND SINVDate < '{(day + timedelta(days=1)).isoformat()}' {gone}")[0]
+    return {"date": day.isoformat(), "total_bills": int(row["n"]), "sales": round(float(row["amt"]), 2), "source": "db"}
+
+
 @router.get("/today-totals", tags=["Sales Invoice"])
 def today_totals(on: date | None = None):
     """The footer's "Total Bills / Sales" as the desktop's status bar shows them: today's bills in SQL Server's TrnHdrSINV, cancelled ones
     included (as the desktop counts them) but not deleted ones, on every counter and PC (so a bill made in the Windows vLQMS shows at once). Read straight from the database;
-    with it off, from the bills in memory (the same rule)."""
+    with it off, from the bills in memory (the same rule). An answer is reused for TOTALS_TTL seconds, and while one request is asking the
+    database the others are given the last answer instead of queueing behind it."""
     day = on or date.today()
+    key = day.isoformat()
     if db.is_db_available():
+        hit = _totals_cache.get(key)
+        if hit and time.monotonic() - hit[0] < TOTALS_TTL:
+            return hit[1]
+        if not _totals_lock.acquire(blocking=False):   # someone is already asking the database
+            if hit:
+                return hit[1]
+            _totals_lock.acquire()                      # nothing to show yet: wait for that answer
+            try:
+                hit = _totals_cache.get(key)
+                if hit:
+                    return hit[1]
+            finally:
+                _totals_lock.release()
+            return today_totals(on)
         try:
-            from ..db_store import _has
-            net = "ISNULL(NULLIF(GRNDTOT, 0), TOTAMT)" if "grndtot" in _has("TrnHdrSINV") else "TOTAMT"
-            gone = " AND ISNULL(IsDelete, 'N') <> 'Y'" if "isdelete" in _has("TrnHdrSINV") else ""
-            row = db.fetchall(
-                f"SELECT COUNT(*) AS n, ISNULL(SUM({net}), 0) AS amt FROM dbo.TrnHdrSINV WITH (NOLOCK) "
-                f"WHERE SINVDate >= '{day.isoformat()}' AND SINVDate < '{(day + timedelta(days=1)).isoformat()}' {gone}")[0]
-            return {"date": day.isoformat(), "total_bills": int(row["n"]), "sales": round(float(row["amt"]), 2), "source": "db"}
-        except Exception:   # noqa: BLE001 - fall back to the bills in memory
-            pass
-    saved = [d for d in store.DOCS["sales_invoice"].values() if d.get("date") == day.isoformat() and d.get("status") in ("SAVED", "CANCELLED")]
-    return {"date": day.isoformat(), "total_bills": len(saved), "sales": round(sum(d["totals"]["net"] for d in saved), 2), "source": "memory"}
+            out = _db_today_totals(day)
+            _totals_cache[key] = (time.monotonic(), out)
+            return out
+        except Exception:   # noqa: BLE001 - the last answer if there is one, else the bills in memory
+            if hit:
+                return hit[1]
+        finally:
+            _totals_lock.release()
+    saved = [d for d in store.DOCS["sales_invoice"].values() if d.get("date") == key and d.get("status") in ("SAVED", "CANCELLED")]
+    return {"date": key, "total_bills": len(saved), "sales": round(sum(d["totals"]["net"] for d in saved), 2), "source": "memory"}
 
 
 @router.get("/denominations/config", tags=["Sales Invoice"])

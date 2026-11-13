@@ -5,9 +5,7 @@
 
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { errorText, reloadFromDocDesigner } from '../../lib/api';
-import { forceDesignerReload } from '../../lib/designerStore';
-import { toastStore } from '../common/toastStore';
+import { runDesignerRefresh } from './designerRefresh';
 import { iconButton } from '../../lib/styles';
 
 export default function DesignerRefreshButton() {
@@ -15,17 +13,8 @@ export default function DesignerRefreshButton() {
 
   const refresh = async () => {
     if (busy) return;
-    if (!(await toastStore.defer('refresh', 'The Doc Designer settings will be read again when this closes.', 'Cancelled. Nothing was refreshed.'))) return;
     setBusy(true);
-    try {
-      const state = await reloadFromDocDesigner();
-      forceDesignerReload(state?.version, state?.build);
-      toastStore.add('refresh', 'Refreshed from the Doc Designer.');
-    } catch (e) {
-      toastStore.add('error', errorText(e));
-    } finally {
-      setBusy(false);
-    }
+    try { await runDesignerRefresh(); } finally { setBusy(false); }
   };
 
   return (

@@ -9,9 +9,9 @@
 import GroupBox from '../common/GroupBox';
 import { FIELD_RULES, cleanInput, fieldProblem } from '../../lib/validation';
 import { useEffect, useMemo, useRef, useState, } from 'react';
-import { Database } from 'lucide-react';
-import { ICONS } from '../layout/Sidebar';
 import ActionBar, { ScreenFrame } from '../common/ActionBar';
+import AliasGrid from './AliasGrid';
+import { cleanAlias } from '../../lib/aliases';
 import ListModal from '../common/ListModal';
 import { goHome } from '../../lib/nav';
 import LookupSelect from '../common/LookupSelect';
@@ -26,7 +26,7 @@ import { toastStore } from '../common/toastStore';
 import { FormErrorSummary, InlineError } from '../common/FormErrorSummary';
 import { canDo, canSeeCost, createMaster, deleteMaster, errorText, fieldRight, listMaster, updateMaster } from '../../lib/api';
 import { cn } from '../../lib/utils';
-import { badge, field, fieldTone, label as labelClass, pageHeader, pageIconTile, pageSub, pageTitle, panel, sectionTitle } from '../../lib/styles';
+import { badge, field, fieldTone, label as labelClass, panel, sectionTitle } from '../../lib/styles';
 
 // vLQMS.exe's own compiled field set for these three forms (frmMstItem / frmMstParty), mirroring
 // backend/app/schema_meta.py's compiled_columns() exactly, by lower-case database column name (`f.column`).
@@ -71,7 +71,7 @@ const blank = (fields) => {
   return { ...base, extras };
 };
 
-export default function MasterCrud({ title, subtitle, path, fields: baseFields = [], options: extraOptions = [], reloadKey = 0, onSaved, newDefaults, startNew = false }
+export default function MasterCrud({ title, path, fields: baseFields = [], options: extraOptions = [], reloadKey = 0, onSaved, newDefaults, startNew = false }
 
 
 
@@ -155,6 +155,8 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
   }, [startNew, loaded, fields, newDefaults]);
 
   const readOnly = mode === 'View';
+  const isRemarks = f => f.extra && String(f.key).toLowerCase() === 'inactivermks';   // Not Active Remarks (a database column)
+  const inactiveNow = form.active === false || form.inactive === true;
   const listFields = fields.filter(f => !f.designerHidden && f.showInList !== false).slice(0, 4);
   // Record order for the record-navigation buttons (the desktop's Move First / Previous / Next / Last) and the List
   // window's search (the record picker beside the form is gone — the bottom bar's List button covers the same job).
@@ -263,9 +265,20 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
     }
 
     // vLQMS.exe: "Please enter remarks for why the record is inactive!" (the Not Active Remarks column).
-    const remarksField = fields.find(f => f.extra && String(f.key).toLowerCase() === 'inactivermks');
-    const isInactive = form.active === false || form.inactive === true;
+    const remarksField = fields.find(isRemarks);
+    const isInactive = inactiveNow;
     if (remarksField && isInactive && !String(valueOf(form, remarksField) ?? '').trim()) newErrors[remarksField.key] = 'Enter the reason this record is inactive';
+
+    // The exe's alias grid (frmMstItem.ValidFields): no alias twice, and none may be the item's own code.
+    const aliasField = fields.find(f => f.type === 'lines' && f.key === 'aliases');
+    if (aliasField) {
+      const seen = new Set();
+      for (const a of (form[aliasField.key] ?? []).map(x => String(x).trim()).filter(Boolean)) {
+        if (seen.has(a.toLowerCase())) { newErrors[aliasField.key] = `Duplicate alias '${a}'`; break; }
+        seen.add(a.toLowerCase());
+      }
+      if (!newErrors[aliasField.key] && seen.has(String(form.code ?? '').trim().toLowerCase())) newErrors[aliasField.key] = 'Item code and alias cannot be the same';
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setFormErrors(newErrors);
@@ -287,12 +300,12 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
 
     setFormErrors({});
 
-    const body = Object.fromEntries(fields.filter(f => !f.extra).map(f => [f.key, f.type === 'number' ? Number(form[f.key]) || 0 : form[f.key]]));
+    const body = Object.fromEntries(fields.filter(f => !f.extra).map(f => [f.key, f.type === 'number' ? Number(form[f.key]) || 0 : f.type === 'lines' ? (form[f.key] ?? []).map(cleanAlias).map(x => x.trim()).filter(Boolean) : form[f.key]]));
     // Only the extra columns still in the definition are sent: one dropped from the database is left out.
     // On a new record, boxes left empty are not sent, so the table's own defaults stay.
     body.extras = Object.fromEntries(fields
       .filter(f => f.extra && !f.lockedAlways && !(f.hideWhen && ruleHolds(f.hideWhen, ruleValues(form))))
-      .map(f => [f.key, valueOf(form, f) ?? ''])
+      .map(f => [f.key, isRemarks(f) && !inactiveNow ? '' : valueOf(form, f) ?? ''])   // reactivated: the reason is cleared, as in the exe
       .filter(([, v]) => mode !== 'New' || String(v).trim() !== ''));
     const name = title.replace(' Master', '');
     // The save waits for its popup (Cancel stops it): see .claude/rules/popups-and-errors.md.
@@ -421,7 +434,6 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
     }
     return out;
   };
-  const TitleIcon = ICONS[title] ?? Database;
   // The legacy Windows screens these three masters are modelled on (frmMstItem / frmMstParty) use a dark
   // header bar over a light-blue form body; reuse colours already in lib/styles.js (the navy ActionBar/
   // Sidebar accent, the `info` tone's light blue) rather than inventing a new palette.
@@ -457,7 +469,7 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
   // The value/control for one field, with no opinion on where its label goes — shared by the left column's
   // stacked blocks and the "Additional Information" panel's compact rows (vLQMS.exe's right-hand tab grid).
   // The legacy form's inputs sit on light-blue fill, not white, against its light-blue body.
-  const fieldCls = legacySkin ? cn(field, '!bg-[#EAF1FB] dark:!bg-[#16222C]') : field;
+  const fieldCls = legacySkin ? cn(field, '!bg-[#FFFCF7] dark:!bg-[#1A1A1A]') : field;
   const renderFieldControl = (f, ctx) => {
     const { id, value, locked, hasError, required, opts, compact } = ctx;
     if (readOnly) {
@@ -476,8 +488,8 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
     return (
       <>
         {f.type === 'lines' ? (
-          <textarea id={id} rows={compact ? 2 : 4} readOnly={locked} value={(Array.isArray(value) ? value : []).join('\n')}
-            onChange={e => handleFieldChange(f.key, e.target.value.split('\n'))} className={`${fieldCls} resize-y`} />
+          <AliasGrid id={id} value={value} locked={locked} hasError={hasError} onChange={v => handleFieldChange(f.key, v)}
+            confirmRemove={name => confirm(`Do You want to Remove Alias Name --> ${name} ?`)} />
         ) : f.type === 'lookup' ? (
           <LookupSelect id={id} docId={f.lookup.docId} code={f.lookup.code} value={value} disabled={locked}
             onChange={v => handleFieldChange(f.key, v)} invalid={hasError} className={`${fieldCls} ${errorClass}`} />
@@ -531,7 +543,7 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
   // stacked label-above-value blocks.
   const renderSection = (sec, i, nested = false) => (
     <GroupBox key={`${nested ? 'r' : 'l'}${i}-${sec.title || 'main'}`} title={sec.title} className={nested ? '!border-0 !bg-transparent' : undefined}>
-      <div className={nested && legacySkin ? 'overflow-hidden rounded-sm border border-[#B9D3E8] text-xs dark:border-[#2A3A48]'
+      <div className={nested && legacySkin ? 'overflow-hidden rounded-sm border border-[#E3D9CD] text-xs dark:border-[#2A2A2A]'
         : nested ? 'divide-y divide-line-soft'
         : legacySkin ? 'grid grid-cols-1 gap-4 sm:grid-cols-2'
         : !listOpen || sec.fields.every(f => f.extra) ? 'grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-4'
@@ -539,6 +551,7 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
         {sec.fields.map((f, fi) => {
           const values = ruleValues(form);
           if (f.hideWhen && ruleHolds(f.hideWhen, values)) return null;   // hidden by the designer's rule
+          if (isRemarks(f) && !inactiveNow) return null;   // the exe shows the Not Active Remarks box only while the record is inactive
           // Read-only by Field Level Rights: can be filled in for a new record, not changed afterwards.
           const locked = readOnly || f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values))
             || ((f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit') || (f.key === 'code' && !!live.screen?.flags?.auto_code);
@@ -554,8 +567,8 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
             // The legacy grid: a bordered two-column table, its first row highlighted the way the exe's grid
             // highlights the selected cell.
             return (
-              <div key={f.key} className={cn('grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] border-b border-[#B9D3E8] last:border-b-0 dark:border-[#2A3A48]', fi === 0 && 'bg-[#F8EDDA] dark:bg-amber-500/10')}>
-                <span className={cn('border-r border-[#B9D3E8] px-2 py-1 font-medium text-stone-700 dark:border-[#2A3A48] dark:text-stone-300 break-words', tone)}>
+              <div key={f.key} className={cn('grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] border-b border-[#E3D9CD] last:border-b-0 dark:border-[#2A2A2A]', fi === 0 && 'bg-[#F8EDDA] dark:bg-amber-500/10')}>
+                <span className={cn('border-r border-[#E3D9CD] px-2 py-1 font-medium text-stone-700 dark:border-[#2A2A2A] dark:text-stone-300 break-words', tone)}>
                   {f.label}{required && !tone.includes('blue') && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}
                 </span>
                 <span className="min-w-0 px-2 py-1 text-right text-stone-900 dark:text-stone-50">
@@ -609,7 +622,7 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
 
   return (
     <ScreenFrame bar={bar}>
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       {listOpen && (
         <ListModal title={title} subtitle={`Listing of ${title}`} columns={listColumns} defaultKeys={listFields.map(f => f.key)} rows={rows} rowKey={r => r.code}
           loading={!loaded} storageKey={`master-${path}`} exportName={title} onRefresh={() => listMaster(path).then(setRows).catch(e => setToast({ kind: 'error', text: errorText(e) }))}
@@ -619,31 +632,7 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
       {dialog}
       {attachOpen && selected && <AttachmentsDialog master={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setAttachOpen(false)} />}
       {partyOpen && selected && <PartyRecords party={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setPartyOpen(false)} />}
-      {legacySkin ? (
-        <div className="-mx-4 flex items-center justify-between gap-3 bg-[#1B2B4B] px-4 py-3 sm:-mx-6 sm:px-6 dark:bg-[#141414]">
-          <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white dark:bg-[#D4A847]/15 dark:text-[#D4A847]" aria-hidden="true"><TitleIcon size={18} /></span>
-            <div>
-              <h1 className="text-lg font-bold text-white dark:text-stone-50">{title}</h1>
-              <p className="text-xs text-white/70 dark:text-stone-400">{subtitle}</p>
-            </div>
-          </div>
-          <span className={badge(readOnly ? 'neutral' : 'warning')}>{mode === 'New' ? 'New record' : mode === 'Edit' ? 'Editing' : 'View'}</span>
-        </div>
-      ) : (
-        <div className={`${pageHeader} mb-5`}>
-          <div className="flex items-center gap-3">
-            <span className={pageIconTile} aria-hidden="true"><TitleIcon size={20} /></span>
-            <div>
-              <h1 className={pageTitle}>{title}</h1>
-              <p className={pageSub}>{subtitle}</p>
-            </div>
-          </div>
-          <span className={badge(readOnly ? 'neutral' : 'warning')}>{mode === 'New' ? 'New record' : mode === 'Edit' ? 'Editing' : 'View'}</span>
-        </div>
-      )}
-
-      <section id={`mc-${path}-details`} aria-label="Record details" className={`${legacySkin ? '-mx-4 rounded-none border-0 bg-[#E7EEF3] dark:bg-[#15212B] sm:-mx-6' : panel} scroll-mt-20 self-start`}>
+      <section id={`mc-${path}-details`} aria-label="Record details" className={`${legacySkin ? '-mx-4 rounded-none border-0 bg-[#F3EEE6] dark:bg-[#141414] sm:-mx-6' : panel} scroll-mt-20 self-start`}>
           <div className={`flex items-center justify-between border-b border-line px-5 ${legacySkin ? 'py-2' : 'py-3.5'}`}>
             <h2 className={sectionTitle}>{mode === 'New' ? 'New record' : mode === 'Edit' ? `Editing ${selected}` : selected ?? 'Details'}</h2>
             {legacySkin
@@ -657,15 +646,15 @@ export default function MasterCrud({ title, subtitle, path, fields: baseFields =
             {/* Amazon-style "There was a problem" alert summary box */}
             {!readOnly && <FormErrorSummary errors={formErrors} onFocusField={focusField} />}
 
-            <div className={rightFields.length > 0 ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]' : ''}>
+            <div className={rightFields.length > 0 ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(380px,520px)]' : ''}>
               <div className="space-y-4">
                 {leftSections.map((sec, i) => renderSection(sec, i))}
               </div>
 
               {rightFields.length > 0 && (legacySkin ? (
                 // The legacy grid has no "Additional Information" caption of its own — just the tab, then the grid.
-                <div className="rounded-sm border border-[#B9D3E8] bg-white/30 p-2 dark:border-[#2A3A48] dark:bg-[#1A2733]/40">
-                  <div role="tablist" aria-label="Sections" className="mb-2 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-[#B9D3E8] dark:border-[#2A3A48]">
+                <div className="rounded-sm border border-[#E3D9CD] bg-white/30 p-2 dark:border-[#2A2A2A] dark:bg-[#1A1A1A]/40">
+                  <div role="tablist" aria-label="Sections" className="mb-2 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-[#E3D9CD] dark:border-[#2A2A2A]">
                     {tabNames.map(name => (
                       <button key={name || 'header'} type="button" role="tab" aria-selected={shownTab === name} onClick={() => setActiveTab(name)}
                         className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition-colors ${shownTab === name ? 'border-accent text-stone-900 dark:text-stone-50' : 'border-transparent text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50'}`}>

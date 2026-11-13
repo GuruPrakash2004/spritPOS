@@ -114,26 +114,26 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
     else if (e.key === 'Enter' && current && e.target.tagName !== 'BUTTON') { e.preventDefault(); open(); }
   };
 
-  const footerButton = 'inline-flex items-center gap-2 rounded-full border border-[#DDE3EC] bg-white px-4 py-2 text-xs font-semibold text-[#1A2236] transition hover:bg-[#F0F3F8] aria-pressed:border-[#1B2B4B] aria-pressed:bg-[#1B2B4B]/8 dark:border-[#2A2A2A] dark:bg-transparent dark:text-stone-100 dark:hover:bg-[#1C1C1C] dark:aria-pressed:border-[#D4A847] dark:aria-pressed:bg-[#D4A847]/10';
+  const footerButton = 'inline-flex items-center gap-2 rounded-full border border-[#E3D9CD] bg-white px-4 py-2 text-xs font-semibold text-[#29231F] transition hover:bg-[#F3EEE6] aria-pressed:border-[#64283A] aria-pressed:bg-[#64283A]/8 dark:border-[#2A2A2A] dark:bg-transparent dark:text-stone-100 dark:hover:bg-[#1C1C1C] dark:aria-pressed:border-[#D4A847] dark:aria-pressed:bg-[#D4A847]/10';
 
   return createPortal(
     <div className="modal-backdrop fixed inset-0 z-[900] flex items-center justify-center bg-black/65 p-3 dark:bg-black/80" onClick={onClose}>
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={e => e.stopPropagation()} onKeyDown={onKeyDown}
-        className="animate-slideUp flex h-[min(88vh,820px)] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-[#DDE3EC] bg-white text-[#1A2236] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100">
-        <header className="relative bg-[#1B2B4B] px-12 py-4 text-center text-white dark:bg-[#0F0F0F] dark:text-[#F5D88A]">
+        className="animate-slideUp flex h-[min(88vh,820px)] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-[#E3D9CD] bg-white text-[#29231F] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100">
+        <header className="relative bg-[#64283A] px-12 py-4 text-center text-white dark:bg-[#0F0F0F] dark:text-[#F5D88A]">
           <h3 id={titleId} className="text-lg font-bold uppercase tracking-wide">{title}</h3>
           <p className="text-xs opacity-80">{subtitle || `Listing of ${title}`}</p>
           <button type="button" onClick={onClose} tabIndex={-1} aria-label="Close" title="Close (Esc)" className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/80 transition hover:bg-white/10 hover:text-white"><X size={18} /></button>
         </header>
 
-        <div className="flex flex-wrap items-center gap-3 border-b border-[#EAEEF5] px-4 py-3 dark:border-[#2A2A2A]">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[#EFE9DF] px-4 py-3 dark:border-[#2A2A2A]">
           <div className="relative min-w-60 max-w-[640px] flex-1">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
             <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} placeholder="Global search across all columns…" aria-label="Global search across all columns"
-              className="w-full rounded-xl border border-[#1B2B4B]/70 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-stone-400 focus:ring-[3px] focus:ring-[#1B2B4B]/10 dark:border-[#D4A847]/50 dark:bg-transparent dark:focus:ring-[#D4A847]/10" />
+              className="w-full rounded-xl border border-[#64283A]/70 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-stone-400 focus:ring-[3px] focus:ring-[#64283A]/10 dark:border-[#D4A847]/50 dark:bg-transparent dark:focus:ring-[#D4A847]/10" />
           </div>
           {toolbar}
-          {onRefresh && <button type="button" onClick={onRefresh} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#DDE3EC] transition hover:bg-[#F0F3F8] dark:border-[#2A2A2A] dark:hover:bg-[#1C1C1C]" aria-label="Refresh" title="Refresh"><RefreshCw size={15} className={loading ? 'animate-spin' : ''} /></button>}
+          {onRefresh && <button type="button" onClick={onRefresh} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E3D9CD] transition hover:bg-[#F3EEE6] dark:border-[#2A2A2A] dark:hover:bg-[#1C1C1C]" aria-label="Refresh" title="Refresh"><RefreshCw size={15} className={loading ? 'animate-spin' : ''} /></button>}
           <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-stone-500"><MousePointerClick size={13} />Double-click row to load</span>
         </div>
 
@@ -143,7 +143,7 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
             <div className="p-6">
               {!current ? <p className="text-sm text-stone-500">Select a record to see it as a list of fields.</p> : (
                 <table className="w-full max-w-3xl text-xs"><tbody>
-                  {columns.map(c => <tr key={c.key} className="border-b border-[#EAEEF5] dark:border-[#1F1F1F]"><th scope="row" className="w-1/3 py-2 pr-4 text-left font-semibold text-[#5F6B80] dark:text-stone-400">{c.label}</th><td className="py-2">{text(c, current) || <span className="text-stone-400">—</span>}</td></tr>)}
+                  {columns.map(c => <tr key={c.key} className="border-b border-[#EFE9DF] dark:border-[#1F1F1F]"><th scope="row" className="w-1/3 py-2 pr-4 text-left font-semibold text-[#70675F] dark:text-stone-400">{c.label}</th><td className="py-2">{text(c, current) || <span className="text-stone-400">—</span>}</td></tr>)}
                 </tbody></table>
               )}
             </div>
@@ -155,7 +155,7 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
                     const on = sort.key === c.key;
                     return (
                       <th key={c.key} scope="col" aria-sort={on ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
-                        className={`border-b border-r border-[#E3DBCB] px-3 pt-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-[#1B2B4B] dark:border-[#2A2A2A] dark:text-[#D4A847] ${NUMERIC.has(c.kind) ? 'text-right' : ''} ${frozen && i === 0 ? 'sticky left-0 z-[3] bg-[#F7F4EC] dark:bg-[#181818]' : ''}`}>
+                        className={`border-b border-r border-[#E3DBCB] px-3 pt-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-[#64283A] dark:border-[#2A2A2A] dark:text-[#D4A847] ${NUMERIC.has(c.kind) ? 'text-right' : ''} ${frozen && i === 0 ? 'sticky left-0 z-[3] bg-[#F7F4EC] dark:bg-[#181818]' : ''}`}>
                         <button type="button" onClick={() => sortBy(c.key)} className="flex w-full items-center justify-between gap-3 uppercase" title={`Sort by ${c.label}`} aria-label={`Sort by ${c.label}`}>
                           <span>{c.label}</span>
                           {on ? (sort.dir === 1 ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={12} className="text-stone-400" />}
@@ -168,7 +168,7 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
                   {cols.map((c, i) => (
                     <th key={c.key} className={`border-b border-r border-[#E3DBCB] px-2 pb-2 pt-1.5 dark:border-[#2A2A2A] ${frozen && i === 0 ? 'sticky left-0 z-[3] bg-[#F7F4EC] dark:bg-[#181818]' : ''}`}>
                       <input value={filters[c.key] ?? ''} onChange={e => setFilters(f => ({ ...f, [c.key]: e.target.value }))} placeholder="Filter…" aria-label={`Filter ${c.label}`}
-                        className="w-full min-w-24 rounded-md border border-[#DDE3EC] bg-white px-2 py-1.5 text-xs font-normal normal-case outline-none focus:border-[#1B2B4B] dark:border-[#2A2A2A] dark:bg-transparent dark:focus:border-[#D4A847]" />
+                        className="w-full min-w-24 rounded-md border border-[#E3D9CD] bg-white px-2 py-1.5 text-xs font-normal normal-case outline-none focus:border-[#64283A] dark:border-[#2A2A2A] dark:bg-transparent dark:focus:border-[#D4A847]" />
                     </th>
                   ))}
                 </tr>
@@ -179,9 +179,9 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
                   const on = k === selected;
                   return (
                     <tr key={k} role="row" aria-selected={on} onClick={() => setSelected(k)} onDoubleClick={() => open(r)}
-                      className={`cursor-pointer border-b border-[#EAEEF5] transition-colors dark:border-[#1F1F1F] ${on ? 'bg-[#1B2B4B]/10 dark:bg-[#D4A847]/15' : n % 2 ? 'bg-[#FBF8F2] hover:bg-[#F5EFE2] dark:bg-[#171717] dark:hover:bg-[#1C1C1C]' : 'hover:bg-[#F5EFE2] dark:hover:bg-[#1C1C1C]'}`}>
+                      className={`cursor-pointer border-b border-[#EFE9DF] transition-colors dark:border-[#1F1F1F] ${on ? 'bg-[#64283A]/10 dark:bg-[#D4A847]/15' : n % 2 ? 'bg-[#FBF8F2] hover:bg-[#F5EFE2] dark:bg-[#171717] dark:hover:bg-[#1C1C1C]' : 'hover:bg-[#F5EFE2] dark:hover:bg-[#1C1C1C]'}`}>
                       {cols.map((c, i) => (
-                        <td key={c.key} className={`whitespace-nowrap px-3 py-2.5 ${NUMERIC.has(c.kind) ? 'text-right tabular-nums' : ''} ${frozen && i === 0 ? `sticky left-0 ${on ? 'bg-[#E9ECF2] dark:bg-[#2A2415]' : 'bg-white dark:bg-[#141414]'}` : ''}`}>
+                        <td key={c.key} className={`whitespace-nowrap px-3 py-2.5 ${NUMERIC.has(c.kind) ? 'text-right tabular-nums' : ''} ${frozen && i === 0 ? `sticky left-0 ${on ? 'bg-[#EFE9DF] dark:bg-[#2A2415]' : 'bg-white dark:bg-[#141414]'}` : ''}`}>
                           {c.kind === 'bool' ? <span className={badge(raw(c, r) ? 'success' : 'neutral')}>{text(c, r)}</span> : text(c, r)}
                         </td>
                       ))}
@@ -200,10 +200,10 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
           )}
         </div>
 
-        <footer className="flex flex-wrap items-center gap-3 border-t border-[#EAEEF5] px-4 py-3 dark:border-[#2A2A2A]">
-          <span className="rounded-xl border border-[#DDE3EC] px-3 py-2 text-sm font-bold dark:border-[#2A2A2A]" aria-live="polite">Total Records: {shown.length} / {rows.length}</span>
+        <footer className="flex flex-wrap items-center gap-3 border-t border-[#EFE9DF] px-4 py-3 dark:border-[#2A2A2A]">
+          <span className="rounded-xl border border-[#E3D9CD] px-3 py-2 text-sm font-bold dark:border-[#2A2A2A]" aria-live="polite">Total Records: {shown.length} / {rows.length}</span>
           <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
-            <input type="checkbox" checked={keepOpen} onChange={e => toggleKeep(e.target.checked)} className="h-4 w-4 accent-[#1B2B4B]" />Do NOT hide after loading the record.
+            <input type="checkbox" checked={keepOpen} onChange={e => toggleKeep(e.target.checked)} className="h-4 w-4 accent-[#64283A]" />Do NOT hide after loading the record.
           </label>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => setPickerOpen(true)} className={footerButton} title="Select Columns (Alt+S)"><Columns3 size={14} />Select Columns</button>

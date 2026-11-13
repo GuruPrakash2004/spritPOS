@@ -18,11 +18,11 @@ import Kbd from './Kbd';
 import { useShortcuts } from '../../lib/keys';
 
 const base = 'inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold whitespace-nowrap transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
-const filled = `${base} bg-[#1B2B4B] text-white shadow-[0_6px_16px_rgba(27,43,75,0.25)] hover:bg-[#121D36] dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F5D88A] dark:to-[#C8952E] dark:text-[#180E09] dark:shadow-[0_0_18px_rgba(212,168,71,0.35)] dark:hover:brightness-110`;
-const soft = `${base} bg-[#EEE9E3] text-[#1B2B4B] hover:bg-[#E5DED6] dark:bg-[#1F1F1F] dark:text-[#D4A847] dark:hover:bg-[#262626]`;
+const filled = `${base} bg-[#64283A] text-white shadow-[0_6px_16px_rgba(27,43,75,0.25)] hover:bg-[#542030] dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F5D88A] dark:to-[#C8952E] dark:text-[#180E09] dark:shadow-[0_0_18px_rgba(212,168,71,0.35)] dark:hover:brightness-110`;
+const soft = `${base} bg-[#EEE9E3] text-[#64283A] hover:bg-[#E5DED6] dark:bg-[#1F1F1F] dark:text-[#D4A847] dark:hover:bg-[#262626]`;
 const danger = `${base} bg-[#FCE9E7] text-[#B3392F] hover:bg-[#F9D9D5] dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60`;
-const outline = `${base} border border-[#DDE3EC] bg-white text-[#1A2236] hover:bg-[#F0F3F8] dark:border-[#2A2A2A] dark:bg-transparent dark:text-stone-100 dark:hover:bg-[#1C1C1C]`;
-const round = 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#DDE3EC] bg-white text-[#1A2236] transition hover:bg-[#F0F3F8] disabled:pointer-events-none disabled:opacity-35 dark:border-[#2A2A2A] dark:bg-transparent dark:text-stone-100 dark:hover:bg-[#1C1C1C]';
+const outline = `${base} border border-[#E3D9CD] bg-white text-[#29231F] hover:bg-[#F3EEE6] dark:border-[#2A2A2A] dark:bg-transparent dark:text-stone-100 dark:hover:bg-[#1C1C1C]`;
+const round = 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E3D9CD] bg-white text-[#29231F] transition hover:bg-[#F3EEE6] disabled:pointer-events-none disabled:opacity-35 dark:border-[#2A2A2A] dark:bg-transparent dark:text-stone-100 dark:hover:bg-[#1C1C1C]';
 
 /** Wraps a screen so its action bar floats at the bottom of the window even when the screen is short. */
 export function ScreenFrame({ children, bar }) {
@@ -59,7 +59,7 @@ export default function ActionBar({
 
   return (
     <div role="toolbar" aria-label="Actions" className="sticky bottom-0 z-20 -mx-4 sm:-mx-6">
-      <div className="flex flex-wrap items-center gap-2 border-t border-[#DDE3EC] bg-white px-4 py-3 dark:border-[#2A2A2A] dark:bg-[#141414]">
+      <div className="flex flex-wrap items-center gap-2 border-t border-[#E3D9CD] bg-white px-4 py-3 dark:border-[#2A2A2A] dark:bg-[#141414]">
         {editing ? (
           <>
             <button type="button" onClick={onSave} disabled={saving} className={filled} title="Save (Alt+S)"><Save size={16} />{saving ? 'Saving…' : saveLabel}<Kbd combo="Alt+S" /></button>

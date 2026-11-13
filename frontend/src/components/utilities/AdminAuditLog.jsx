@@ -124,7 +124,7 @@ export default function AdminAuditLog() {
             </tbody>
           </table>
         </div>
-        {rows.length > 0 && <p className="border-t border-[#DDE3EC] px-4 py-2 text-[11px] text-stone-500 dark:border-line">{rows.length} entr{rows.length === 1 ? 'y' : 'ies'}</p>}
+        {rows.length > 0 && <p className="border-t border-[#E3D9CD] px-4 py-2 text-[11px] text-stone-500 dark:border-line">{rows.length} entr{rows.length === 1 ? 'y' : 'ies'}</p>}
       </section>
     </div>
   );

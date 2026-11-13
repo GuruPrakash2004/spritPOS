@@ -77,19 +77,92 @@ def _check_code(code: str) -> str:
     return code
 
 
-def _check_item(body: Item) -> None:
+ITEM_TYPES = ("Wine", "Beer", "IML", "Others")   # frmMstItem's Item Type list (cboType)
+
+
+def _extra(extras: dict | None, column: str) -> str:
+    """A database column the web has no typed field for (HotKey, InActiveRmks, ItemSell ...), from `extras`, any letter case."""
+    for k, v in (extras or {}).items():
+        if k.lower() == column:
+            return str(v if v is not None else "").strip()
+    return ""
+
+
+def _item_used_in_trn(code: str) -> bool:
+    """frmMstItem.CheckforItemUsedInTrn: the item is on any TrnDtl* table (bills, indents, returns ...) or has stock movements."""
+    if _item_in_use(code):
+        return True
+    item_id = (store.ITEMS.get(code) or {}).get("_itemid")
+    from .. import db
+    if not item_id or not db.is_db_available():
+        return False
+    try:
+        for t in db.fetchall("SELECT TABLE_NAME AS t FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME = 'ItemID' AND TABLE_NAME LIKE 'TrnDtl%'"):
+            if db.fetchone(f"SELECT TOP 1 1 AS x FROM [{t['t']}] WITH (NOLOCK) WHERE ItemID = ?", (item_id,)):
+                return True
+    except Exception:   # a database that can't say: don't block the edit on a guess
+        return False
+    return False
+
+
+def _check_item_names(body: Item, original: str | None) -> None:
+    """frmMstItem.ValidFields: an item's code, aliases, short name and hot key may not repeat among its own entries, and may not
+    be another item's code, alias, short name or hot key (the find box and the barcode scan look all of them up)."""
+    aliases = [a.strip() for a in body.aliases if a and a.strip()]
+    for a in aliases:   # the exe's alias grid: 30 characters, no apostrophe
+        if len(a) > 30:
+            raise HTTPException(422, f"Alias '{a[:30]}...' is longer than 30 characters")
+    seen: set[str] = set()
+    for a in aliases:
+        if a.casefold() in seen:
+            raise HTTPException(422, f"Duplicate alias '{a}'")
+        seen.add(a.casefold())
+    if body.code.casefold() in seen:
+        raise HTTPException(422, "Item code and alias cannot be the same")
+    short, hot = (body.short_name or "").strip(), _extra(body.extras, "hotkey")
+    own = {t.casefold() for t in [body.code, short, hot, *aliases] if t}
+    for other_code, other in store.ITEMS.items():
+        if other_code == (original or body.code):
+            continue
+        if other_code.casefold() in own:
+            raise HTTPException(422, f"Duplicate item code: '{other_code}' is already an item's code")
+        if own & {a.strip().casefold() for a in other.get("aliases", []) if a and a.strip()}:
+            raise HTTPException(422, "Duplicate item alias: another item already uses it")
+        if short and (other.get("short_name") or "").strip().casefold() == short.casefold() and other_code.casefold() != short.casefold():
+            raise HTTPException(422, f"Duplicate short name '{short}' (item {other_code})")
+        other_hot = _extra(other.get("extras"), "hotkey")
+        if hot and other_hot and other_hot.casefold() == hot.casefold():
+            raise HTTPException(422, f"Duplicate hot key '{hot}' (item {other_code})")
+
+
+def _check_item(body: Item, original: str | None = None) -> None:
     if body.rol < 0 or body.roq < 0:
         raise HTTPException(422, "ROL and ROQ cannot be negative")
     if not (0 <= body.cgst_per <= 100 and 0 <= body.sgst_per <= 100):
         raise HTTPException(422, "CGST % and SGST % must be between 0 and 100")
+    if not body.group.strip():
+        raise HTTPException(422, "Please select an Item Group")
     if body.group not in store.ITEM_GROUPS:
         raise HTTPException(422, f"Unknown item group '{body.group}'")
+    if store.ITEM_GROUPS[body.group].get("active") is False:
+        raise HTTPException(422, f"Item group '{body.group}' is inactive")
+    if not body.liqtype.strip():
+        raise HTTPException(422, "Please select an Item Type")
+    if body.liqtype.strip().casefold() not in {t.casefold() for t in ITEM_TYPES}:
+        raise HTTPException(422, f"Not a valid Item Type (use {', '.join(ITEM_TYPES)})")
+    if not body.uom.strip():
+        raise HTTPException(422, "Please select a UOM")
+    if body.uom not in store.UOMS:
+        raise HTTPException(422, f"Unknown UOM '{body.uom}'")
+    if store.UOMS[body.uom].get("active") is False:
+        raise HTTPException(422, f"UOM '{body.uom}' is inactive")
     if body.package and body.package not in store.PACKAGES:
         raise HTTPException(422, f"Unknown package '{body.package}'")
-    if body.uom and body.uom not in store.UOMS:
-        raise HTTPException(422, f"Unknown UOM '{body.uom}'")
     if body.brand and body.brand not in store.BRANDS:
         raise HTTPException(422, f"Unknown brand '{body.brand}'")
+    _check_item_names(body, original)
+    if original and body.uom != (store.ITEMS.get(original) or {}).get("uom", body.uom) and _item_used_in_trn(original):
+        raise HTTPException(409, "The UOM can't be changed: this item is used in transactions")
 
 
 def _check_margin(row: dict) -> None:
@@ -97,9 +170,36 @@ def _check_margin(row: dict) -> None:
     as it will be saved (with the stored purchase rate when the caller can't see or send it)."""
     pct = gsettings.number("PurSellVarPer")
     rate = row.get("purchase_rate") or 0
-    if pct > 0 and rate and row.get("mrp", 0) < round(rate * (1 + pct / 100), 2):
-        raise HTTPException(422, f"MRP of {row.get('code')} must be at least {pct:g}% above the purchase rate "
-                                 f"(₹ {rate * (1 + pct / 100):.2f}; Global Settings → PurSellVarPer)")
+    if str(row.get("liqtype") or "").strip().upper() == "OTHERS":   # frmMstItem: the variation is not checked for the "Others" type
+        return
+    try:   # the desktop compares the item's selling rate (ItemSell) with the purchase rate; without one, the MRP
+        sell = float(_extra(row.get("extras"), "itemsell") or 0) or row.get("mrp", 0)
+    except ValueError:
+        sell = row.get("mrp", 0)
+    if pct > 0 and rate and sell < round(rate * (1 + pct / 100), 2):
+        raise HTTPException(422, f"Purchase and Sales Variation ({round(sell / rate * 100 - 100, 2):g}%) of {row.get('code')} must be at least "
+                                 f"{pct:g}% (selling rate ₹ {rate * (1 + pct / 100):.2f} or more; Global Settings → PurSellVarPer)")
+
+
+def _check_inactive_remarks(path: str, body: BaseModel) -> None:
+    """vLQMS.exe, every master with an InActive flag: a record made inactive needs remarks for why (the Not Active Remarks column, shown only
+    while it is inactive); made active again, they are cleared. Only checked when the screen sent the database's extra columns (a client that
+    does not know them can't be asked for one) and the master's desktop table really has the column."""
+    if not hasattr(body, "active") or "extras" not in body.model_fields_set:
+        return
+    column = next((k for k in (body.extras or {}) if k.lower() == "inactivermks"), None)
+    if body.active:
+        if column:
+            body.extras[column] = ""
+        return
+    if column and str(body.extras[column] or "").strip():
+        return
+    store_name = security.TABLES.get(path)
+    if not sqlstore.enabled() or store_name not in sqlstore.LEGACY_MASTERS:
+        return
+    if "inactivermks" in {c["name"].lower() for c in schema_meta.columns(sqlstore.LEGACY_MASTERS[store_name][0])}:
+        raise HTTPException(422, "Please enter remarks for why the record is inactive")
+
 
 
 def _clean(path: str, body: BaseModel, table: dict, original: str | None = None) -> BaseModel:
@@ -119,12 +219,13 @@ def _clean(path: str, body: BaseModel, table: dict, original: str | None = None)
                 raise HTTPException(422, str(e))
         else:
             body.extras = {}
+    _check_inactive_remarks(path, body)
     skip = {"gstin"} if path == "customers" and body.gstin.strip() == "-" else set()   # '-' is the desktop's own "none" in a customer's GSTNO
     for key, value in validation.check(body.model_dump(), skip=skip).items():   # mobile / phone / PIN / GSTIN / PAN / HSN / e-mail / tax %
         if hasattr(body, key):
             setattr(body, key, value)
     if path == "items":
-        _check_item(body)
+        _check_item(body, original)
     elif path == "ledgers" and body.group not in store.LEDGER_GROUPS:
         raise HTTPException(422, f"Unknown ledger group '{body.group}'")
     elif path == "sales-counters" and not body.prefix.strip():
@@ -410,6 +511,26 @@ def activate_fin_year(start: date, admin: dict = Depends(require_admin)):
                           f"{was['start']} to {was['end']}" if was else "", f"{target['start']} to {target['end']}")
     db_store.load_fin_year()
     return _company()
+
+
+class CarryForwardIn(BaseModel):
+    admin_password: str | None = Field(None, max_length=1000, description='Encrypted for "admin": the additional ADMIN password, or your own while none is set')
+
+
+@router.get("/company/fin-years/{start}/carry-forward", tags=["Company Master"])
+def carry_forward_preview(start: date, admin: dict = Depends(require_admin)):
+    """What carrying the previous year's closing stock into this year would write (nothing is written)."""
+    from .. import stock_carry_forward
+    return stock_carry_forward.preview(start.isoformat())
+
+
+@router.post("/company/fin-years/{start}/carry-forward", tags=["Company Master"])
+def carry_forward_stock(start: date, body: CarryForwardIn, admin: dict = Depends(require_admin)):
+    """Stock Balance's "Stock Carry Forward": the previous year's closing stock becomes this year's opening stock (MstOpBalance, the
+    'OP' stock rows) and the live balance (TrnQOH) is rebuilt. Needs the ADMIN password; back the database up first."""
+    from .. import stock_carry_forward
+    security.check_admin_password(admin, body.admin_password)
+    return stock_carry_forward.carry_forward(start.isoformat(), admin["user"])
 
 
 @router.post("/items/price-list", response_model=list[Item], tags=["Item Price List Maintenance"],

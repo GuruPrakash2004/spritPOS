@@ -34,7 +34,7 @@ export default function DocViewDialog({ doc, kind, title, position, onClose, onP
       <dl className="mb-4 grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3">
         {head.map(([k, label]) => <div key={k}><dt className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">{label}</dt><dd className="text-xs">{String(doc[k])}</dd></div>)}
       </dl>
-      <div className="overflow-auto rounded-xl border border-[#DDE3EC] dark:border-[#2A2A2A]">
+      <div className="overflow-auto rounded-xl border border-[#E3D9CD] dark:border-[#2A2A2A]">
         <table className="w-full text-xs">
           <thead className={tableHead}><tr><th className="px-3 py-2">#</th>{shownCols.map(([k, label]) => <th key={k} className={`px-3 py-2 ${NUM.has(k) ? 'text-right' : ''}`}>{label}</th>)}</tr></thead>
           <tbody className={tableBody}>

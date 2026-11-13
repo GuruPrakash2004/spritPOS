@@ -14,7 +14,7 @@ import { ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, Check, Columns3, Se
 import { field, iconButton, primaryButton, secondaryButton } from '../../lib/styles';
 import { useDialogKeys } from './useDialogKeys';
 
-const small = 'inline-flex items-center gap-1 rounded-full border border-[#DDE3EC] px-3 py-1 text-[11px] font-semibold text-[#5F6B80] transition hover:bg-[#F0F3F8] disabled:pointer-events-none disabled:opacity-40 dark:border-[#2A2A2A] dark:text-stone-300 dark:hover:bg-[#1C1C1C]';
+const small = 'inline-flex items-center gap-1 rounded-full border border-[#E3D9CD] px-3 py-1 text-[11px] font-semibold text-[#70675F] transition hover:bg-[#F3EEE6] disabled:pointer-events-none disabled:opacity-40 dark:border-[#2A2A2A] dark:text-stone-300 dark:hover:bg-[#1C1C1C]';
 
 export default function ColumnPicker({ columns, order, visible, defaults, onApply, onClose }) {
   const titleId = useId();
@@ -54,16 +54,16 @@ export default function ColumnPicker({ columns, order, visible, defaults, onAppl
   return createPortal(
     <div className="modal-backdrop fixed inset-0 z-[950] flex items-center justify-center bg-black/65 p-4 dark:bg-black/80" onClick={onClose}>
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={e => e.stopPropagation()} onKeyDown={onKeyDown}
-        className="animate-slideUp flex max-h-[88vh] w-full max-w-[500px] flex-col overflow-hidden rounded-3xl border border-[#DDE3EC] bg-white text-[#1A2236] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100">
+        className="animate-slideUp flex max-h-[88vh] w-full max-w-[500px] flex-col overflow-hidden rounded-3xl border border-[#E3D9CD] bg-white text-[#29231F] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100">
         <div className="flex items-center justify-between gap-3 px-6 pt-5">
-          <h3 id={titleId} className="inline-flex items-center gap-2 text-base font-bold"><Columns3 size={18} className="text-[#1B2B4B] dark:text-[#D4A847]" />Select Columns to Display</h3>
+          <h3 id={titleId} className="inline-flex items-center gap-2 text-base font-bold"><Columns3 size={18} className="text-[#64283A] dark:text-[#D4A847]" />Select Columns to Display</h3>
           <button type="button" onClick={onClose} tabIndex={-1} className={iconButton} aria-label="Close" title="Close (Esc)"><X size={16} /></button>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-4">
           <div className="flex gap-2">
-            <button type="button" onClick={() => setTicked(new Set(keys))} className="rounded-full bg-[#1B2B4B]/10 px-4 py-1.5 text-xs font-semibold text-[#1B2B4B] hover:bg-[#1B2B4B]/15 dark:bg-[#D4A847]/15 dark:text-[#D4A847]">Select All</button>
-            <button type="button" onClick={() => setTicked(new Set())} className="rounded-full border border-[#DDE3EC] px-4 py-1.5 text-xs font-semibold hover:bg-[#F0F3F8] dark:border-[#2A2A2A] dark:hover:bg-[#1C1C1C]">Deselect All</button>
+            <button type="button" onClick={() => setTicked(new Set(keys))} className="rounded-full bg-[#64283A]/10 px-4 py-1.5 text-xs font-semibold text-[#64283A] hover:bg-[#64283A]/15 dark:bg-[#D4A847]/15 dark:text-[#D4A847]">Select All</button>
+            <button type="button" onClick={() => setTicked(new Set())} className="rounded-full border border-[#E3D9CD] px-4 py-1.5 text-xs font-semibold hover:bg-[#F3EEE6] dark:border-[#2A2A2A] dark:hover:bg-[#1C1C1C]">Deselect All</button>
           </div>
           <div className="relative min-w-40 flex-1 sm:max-w-52">
             <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -80,14 +80,14 @@ export default function ColumnPicker({ columns, order, visible, defaults, onAppl
         </div>
         <p className="px-6 pt-2 text-right text-[11px] text-stone-500">Click a column to select it</p>
 
-        <ul role="listbox" aria-label="Columns" aria-multiselectable className="mx-6 mt-1 min-h-40 flex-1 overflow-y-auto rounded-xl border border-[#EAEEF5] dark:border-[#2A2A2A]">
+        <ul role="listbox" aria-label="Columns" aria-multiselectable className="mx-6 mt-1 min-h-40 flex-1 overflow-y-auto rounded-xl border border-[#EFE9DF] dark:border-[#2A2A2A]">
           {shown.map(k => {
             const on = ticked.has(k);
             return (
               <li key={k} role="option" aria-selected={k === current} onClick={() => setCurrent(k)}
-                className={`flex cursor-pointer items-center gap-3 border-b border-[#EAEEF5] px-4 py-2.5 text-sm last:border-0 dark:border-[#1F1F1F] ${k === current ? 'bg-[#1B2B4B]/8 dark:bg-[#D4A847]/10' : 'hover:bg-[#F7F9FC] dark:hover:bg-[#1A1A1A]'}`}>
+                className={`flex cursor-pointer items-center gap-3 border-b border-[#EFE9DF] px-4 py-2.5 text-sm last:border-0 dark:border-[#1F1F1F] ${k === current ? 'bg-[#64283A]/8 dark:bg-[#D4A847]/10' : 'hover:bg-[#FAF6EF] dark:hover:bg-[#1A1A1A]'}`}>
                 <button type="button" role="checkbox" aria-checked={on} aria-label={byKey.get(k)?.label ?? k} onClick={e => { e.stopPropagation(); setCurrent(k); toggle(k); }}
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#1B2B4B] bg-[#1B2B4B] text-white dark:border-[#D4A847] dark:bg-[#D4A847] dark:text-[#180E09]' : 'border-stone-300 dark:border-stone-600'}`}>
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${on ? 'border-[#64283A] bg-[#64283A] text-white dark:border-[#D4A847] dark:bg-[#D4A847] dark:text-[#180E09]' : 'border-stone-300 dark:border-stone-600'}`}>
                   {on && <Check size={12} strokeWidth={3} />}
                 </button>
                 <span className="min-w-0 truncate">{byKey.get(k)?.label ?? k}</span>

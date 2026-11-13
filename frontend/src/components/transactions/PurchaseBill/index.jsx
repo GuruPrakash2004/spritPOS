@@ -466,7 +466,7 @@ export default function PurchaseBill() {
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {dialog}
       {editing && (
-        <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D99A2B]/60 bg-[#D99A2B]/10 px-4 py-2 text-xs font-semibold text-[#1B2B4B] dark:text-[#D4A847]">
+        <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#B08A45]/60 bg-[#B08A45]/10 px-4 py-2 text-xs font-semibold text-[#64283A] dark:text-[#D4A847]">
           <span>Editing purchase bill {editing.no}: Save updates it in place (the old bill's stock goes out, then the changed bill comes in).</span>
           <button type="button" onClick={() => void stopEditing()} className={secondaryButton}>Stop editing</button>
         </div>

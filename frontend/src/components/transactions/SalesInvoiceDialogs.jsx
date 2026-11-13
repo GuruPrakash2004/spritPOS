@@ -69,8 +69,8 @@ export function ReprintDialog({ onClose, onEdit, onPrint }) {
   const move = (d) => { const next = shown[Math.max(0, Math.min(shown.length - 1, (at === -1 ? 0 : at) + d))]; if (next) setPicked(next.r.no); };
   const print = () => { if (current) { onPrint?.(current.r.no, format); onClose(); } };
   const edit = () => { if (isLive(current)) { onEdit?.(current.b); onClose(); } };
-  const dateBox = 'rounded-md border border-[#B7C7DA] bg-white px-2 py-1 text-xs';
-  const th = 'sticky top-0 border border-[#C9D3DF] bg-[#F0F0F0] px-2 py-1 text-left text-xs font-normal text-[#1B3FD0]';
+  const dateBox = 'rounded-md border border-[#DCD1C5] bg-white px-2 py-1 text-xs';
+  const th = 'sticky top-0 border border-[#D4C8BA] bg-[#F3EEE6] px-2 py-1 text-left text-xs font-normal text-[#64283A] dark:bg-[#1A1A1A] dark:text-[#D4A847]';
 
   return (
     <Modal title="Re-Print Bill" onClose={onClose} wide footer={
@@ -114,14 +114,14 @@ export function ReprintDialog({ onClose, onEdit, onPrint }) {
                 return (
                   <tr key={x.r.no} aria-selected={on} onClick={() => setPicked(x.r.no)} onDoubleClick={() => { setPicked(x.r.no); onPrint?.(x.r.no, format); onClose(); }}
                     className={`cursor-pointer ${on ? 'bg-[#FF8000] text-white' : 'text-stone-900 hover:bg-[#FFE9D0]'}`}>
-                    <td className="border border-[#C9D3DF] px-2 py-0.5 font-mono">{x.r.no}</td>
-                    <td className="border border-[#C9D3DF] px-2 py-0.5 tabular-nums">{x.r.date}</td>
-                    <td className="border border-[#C9D3DF] px-2 py-0.5 text-right tabular-nums">{x.r.amount.toFixed(2)}</td>
-                    <td className="border border-[#C9D3DF] px-2 py-0.5">{x.r.person}</td>
-                    <td className="border border-[#C9D3DF] px-2 py-0.5">{x.r.counter}</td>
-                    <td className="border border-[#C9D3DF] px-2 py-0.5">{x.r.cancelled}</td>
-                    <td className="border border-[#C9D3DF] px-2 py-0.5">{x.r.deleted}</td>
-                    <td className="border border-[#C9D3DF] px-2 py-0.5">{x.r.party}</td>
+                    <td className="border border-[#D4C8BA] px-2 py-0.5 font-mono">{x.r.no}</td>
+                    <td className="border border-[#D4C8BA] px-2 py-0.5 tabular-nums">{x.r.date}</td>
+                    <td className="border border-[#D4C8BA] px-2 py-0.5 text-right tabular-nums">{x.r.amount.toFixed(2)}</td>
+                    <td className="border border-[#D4C8BA] px-2 py-0.5">{x.r.person}</td>
+                    <td className="border border-[#D4C8BA] px-2 py-0.5">{x.r.counter}</td>
+                    <td className="border border-[#D4C8BA] px-2 py-0.5">{x.r.cancelled}</td>
+                    <td className="border border-[#D4C8BA] px-2 py-0.5">{x.r.deleted}</td>
+                    <td className="border border-[#D4C8BA] px-2 py-0.5">{x.r.party}</td>
                   </tr>
                 );
               })}
@@ -179,7 +179,7 @@ export function CancelInvoiceDialog({ initialNo, onClose, onDone, onEdit }) {
       .catch(e => setError(errorText(e)));
   };
 
-  const th = 'px-3 py-1.5 text-left font-medium text-[#1B5FA8]';
+  const th = 'px-3 py-1.5 text-left font-medium text-[#64283A] dark:text-[#D4A847]';
   return (
     <>
     {confirmDialog}
@@ -215,7 +215,7 @@ export function CancelInvoiceDialog({ initialNo, onClose, onDone, onEdit }) {
           {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
           <div className="h-80 overflow-auto border border-line bg-surface">
             <table className="w-full text-xs" aria-label="Saved bills">
-              <thead className="sticky top-0 bg-[#F0F3F8] dark:bg-[#1E1E1E]">
+              <thead className="sticky top-0 bg-[#F3EEE6] dark:bg-[#1E1E1E]">
                 <tr><th className="w-12 px-3 py-1.5 text-left font-medium">Sel</th><th className={th}>Bill No</th><th className={th}>Bill Date</th><th className={`${th} text-right`}>Bill Amt</th><th className={th}>Sales Person</th><th className={th}>Counter</th><th className={th}>Party</th></tr>
               </thead>
               <tbody>

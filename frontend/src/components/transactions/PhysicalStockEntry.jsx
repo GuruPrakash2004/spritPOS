@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Download, Eraser, Save } from 'lucide-react';
 import Toast from '../common/Toast';
 import Kbd from '../common/Kbd';
+import MultiSelectDropdown from '../common/MultiSelectDropdown';
 import WithHistory from './DocHistoryPanel';
 import { InlineError } from '../common/FormErrorSummary';
 import { enterMovesNext, useShortcuts } from '../../lib/keys';
@@ -44,7 +45,6 @@ export default function PhysicalStockEntry() {
 
   const groupOptions = useMemo(() => uniq(catalogue, 'group'), [catalogue]);
   const packageOptions = useMemo(() => uniq(catalogue, 'package'), [catalogue]);
-  const picked = (e) => [...e.target.selectedOptions].map(o => o.value);
 
   const load = () => {
     const text = itemText.trim().toLowerCase();
@@ -112,15 +112,11 @@ export default function PhysicalStockEntry() {
       <div className={`${panel} flex flex-wrap items-end gap-3 px-5 py-3`}>
         <div>
           <label htmlFor="ps-groups" className={label}>Selected Group</label>
-          <select id="ps-groups" multiple size={4} value={groups} onChange={e => { setGroups(picked(e)); setProblem(''); }} className={`${field} min-w-40`}>
-            {groupOptions.map(g => <option key={g} value={g}>{g}</option>)}
-          </select>
+          <MultiSelectDropdown id="ps-groups" value={groups} options={groupOptions} onChange={v => { setGroups(v); setProblem(''); }} placeholder="Select groups" className="w-48" />
         </div>
         <div>
           <label htmlFor="ps-pkgs" className={label}>Selected Package</label>
-          <select id="ps-pkgs" multiple size={4} value={packages} onChange={e => { setPackages(picked(e)); setProblem(''); }} className={`${field} min-w-32`}>
-            {packageOptions.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <MultiSelectDropdown id="ps-pkgs" value={packages} options={packageOptions} onChange={v => { setPackages(v); setProblem(''); }} placeholder="Select packages" className="w-44" />
         </div>
         <div>
           <label htmlFor="ps-item" className={label}>Selected Item (code or name contains)</label>

@@ -26,7 +26,7 @@ logger = logging.getLogger("vlqms.designer")
 # The desktop's own short forms (UtlTransactions.DocShForm) of the documents the web app prints.
 SHORT_FORMS = {
     "sales_invoice": "SINV", "purchase_bill": "PB", "purchase_indent": "PI", "sales_return": "SR",
-    "stock_deduction": "STKDED", "expense": "EXP",
+    "stock_deduction": "STKDED", "expense": "EXP", "physical_stock": "PSE",
 }
 CLICK_ACTIONS = {"P": "preview", "D": "direct", "E": "email", "M": "multi", "": ""}
 

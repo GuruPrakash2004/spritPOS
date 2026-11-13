@@ -543,6 +543,7 @@ def _sales_header_values(cur, doc: dict, user: str | None) -> dict:
         "CASHAMT": _num(pay.get("cash")), "CARDAMT": _num(pay.get("card")), "OTHPAYAMT": _num(pay.get("upi")) + _num(pay.get("credit")),
         "RCVDAMT": _num(tot.get("collected")), "PAYBACKAMT": _num(tot.get("payback")), "BILLSYSTEM": "WEB",
         "SALTYP": doc.get("payment_type") or "", "Authorised": "Y",
+        "WRITEOFFAMT": 0, "TOTCESS": 0, "TOTCOMPCESS": 0,   # the desktop writes 0.00, not NULL
     }
 
 
@@ -556,6 +557,12 @@ def _write_invoice_lines(cur, doc: dict, sinv_id: int) -> None:
             "STKQty": _num(l.get("qty")), "SINVRate": _num(l.get("rate")), "SINVAmt": amount, "MRP": _num(l.get("rate")),
             "CGSTAMT": _num(l.get("cgst")), "SGSTAMT": _num(l.get("sgst")), "SINVQtyInLtrs": _num(l.get("litres")),
             "ITEMAMT": amount, "NETTOT": round(amount + _num(l.get("cgst")) + _num(l.get("sgst")), 2),
+            # The desktop writes every one of these (0.00, or the rate / line amount), never NULL. fmtSInv.rpt's Amount is the formula
+            # {SINVQty} * {SINVRate} - {TOTITEMDISCAMT}: a NULL discount makes the whole formula NULL and the Amount prints blank.
+            "BASICRATE": _num(l.get("rate")), "SUBTOT": amount, "GSTAMT": round(_num(l.get("cgst")) + _num(l.get("sgst")), 2),
+            "ITEMSELRATE": _num(l.get("rate")), "TOTITEMSELRATE": amount,
+            "CGSTPER": 0, "SGSTPER": 0, "DISCAMT": 0, "DISCPER": 0, "UNITSPLDISCAMT": 0, "TOTSPLDISCAMT": 0, "TOTITEMDISCAMT": 0,
+            "DISCAMT2": 0, "TOTITEMDISCAMT2": 0, "CESSPER": 0, "CESSAMT": 0, "COMPCESSAMT": 0, "COMPCESS": 0,
         })
 
 
@@ -683,6 +690,7 @@ def _write_physical_stock(cur, doc: dict, user: str | None) -> None:
     import socket
     pse_id = _insert(cur, "TrnHdrPSE", {"PSEDATE": doc["date"], "SYSNAME": (doc.get("sys_name") or socket.gethostname())[:50], "USERNAME": (user or "")[:50]},
                      identity_out="PSEID")
+    doc["pse_id"] = pse_id   # the entry prints by this ID (fmtPSE.rpt selects {TrnHdrPSE.PSEID}); TrnHdrPSE has no number column
     for n, l in enumerate(doc.get("lines", []), start=1):
         item_id, _ = _item_ids(cur, l["item_code"])
         _insert(cur, "TrnDtlPSE", {"PSEID": pse_id, "Slno": n, "ItemID": item_id, "PRate": _num(l.get("pur_rate")), "MRate": _num(l.get("mrp")),

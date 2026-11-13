@@ -12,7 +12,7 @@ import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
 import { errorText, getItemGroups, getItems, getRateColumns, setItemRates } from '../../lib/api';
 import { changedRate, ROUNDINGS } from '../../lib/priceRound';
-import { downloadXlsRows } from '../../lib/xlsExport';
+import { downloadXls } from '../../lib/xlsExport';
 import { field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
 // A rate column is a typed Item Master field (item.mrp) or one of the item's extra columns (item.extras.MINLEVEL); both read the same way.
@@ -111,10 +111,11 @@ export default function PriceListMaintenance() {
     } catch (e) { setProblem(errorText(e)); }
   };
 
-  const exportGrid = () => downloadXlsRows('PriceList', [
-    ['Code', 'Item', 'Group', ...cols.flatMap(c => [caption(c), `${caption(c)}-New`])],
-    ...rows.map(i => [i.code, i.name, i.group, ...cols.flatMap(c => [rateOf(i, c), newOf(i, c)])]),
-  ]);
+  const exportGrid = () => {
+    const head = ['Code', 'Item', 'Group', ...cols.flatMap(c => [caption(c), `${caption(c)}-New`])];
+    const body = rows.map(i => [i.code, i.name, i.group, ...cols.flatMap(c => [rateOf(i, c), newOf(i, c)])]);
+    downloadXls('PriceList', 'Price List', '', head.map((label, k) => ({ key: k, label })), body.map(r => Object.fromEntries(r.map((v, k) => [k, v]))));
+  };
 
   const radio = 'flex items-center gap-1.5 text-sm';
 

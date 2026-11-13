@@ -193,7 +193,7 @@ function SettingsGrid() {
       )}
 
       <section className={`${panel} overflow-hidden`}>
-        <div className="flex flex-wrap items-end gap-3 border-b border-[#DDE3EC] p-4 dark:border-line">
+        <div className="flex flex-wrap items-end gap-3 border-b border-[#E3D9CD] p-4 dark:border-line">
           <div>
             <label htmlFor="gs-group" className={label}>Set Group</label>
             <select id="gs-group" value={group} onChange={e => setGroup(e.target.value)} className={field}>
@@ -259,10 +259,10 @@ export default function GlobalSettings() {
   const [part, setPart] = useState('settings');
   return (
     <div className="mx-auto max-w-7xl">
-      <div role="tablist" aria-label="Global Settings" className="mb-4 flex gap-1 overflow-x-auto whitespace-nowrap border-b border-[#DDE3EC] dark:border-[#2A2A2A]">
+      <div role="tablist" aria-label="Global Settings" className="mb-4 flex gap-1 overflow-x-auto whitespace-nowrap border-b border-[#E3D9CD] dark:border-[#2A2A2A]">
         {PARTS.map(([id, name]) => (
           <button key={id} role="tab" aria-selected={part === id} onClick={() => setPart(id)}
-            className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold ${part === id ? 'border-[#1B2B4B] text-[#1B2B4B] dark:border-[#D4A847] dark:text-[#D4A847]' : 'border-transparent text-stone-500'}`}>{name}</button>
+            className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold ${part === id ? 'border-[#64283A] text-[#64283A] dark:border-[#D4A847] dark:text-[#D4A847]' : 'border-transparent text-stone-500'}`}>{name}</button>
         ))}
       </div>
       {part === 'settings' && <SettingsGrid />}

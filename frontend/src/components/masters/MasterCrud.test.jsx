@@ -38,7 +38,7 @@ describe('Item Master by role', () => {
     setAuthRights(['Item Master'], { 'Item Master': { add: false, edit: false, delete: false } })
     renderItems()
 
-    await screen.findByRole('heading', { name: 'Item Master' })
+    await screen.findByRole('region', { name: 'Record details' })
     expect(screen.queryByRole('button', { name: /^new$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^edit$/i })).not.toBeInTheDocument()
   })
@@ -57,7 +57,7 @@ describe('Item Master loading', () => {
     vi.stubGlobal('fetch', fetchMock)
     setAuthRights(['Item Master'])
     renderItems()
-    await screen.findByRole('heading', { name: 'Item Master' })
+    await screen.findByRole('region', { name: 'Record details' })
     await new Promise(r => setTimeout(r, 200))   // a loop would keep fetching during this wait
     const uomCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/masters/uoms')).length
     expect(uomCalls).toBe(1)

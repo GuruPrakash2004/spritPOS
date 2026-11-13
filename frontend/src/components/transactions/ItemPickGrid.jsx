@@ -38,7 +38,7 @@ export default function ItemPickGrid({ id, items, at, onPick, showStock = false,
   if (windowsOrder) return <WindowsGrid {...{ id, items, at, onPick, className, empty, box, narrow, sort, onSort }} />;
   return (
     <div id={id} role="listbox" aria-label="Items" ref={box} className={`overflow-auto border border-line bg-surface text-xs ${className}`}>
-      <div role="presentation" style={cols} className="sticky top-0 z-10 grid border-b border-line bg-[#F0F3F8] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
+      <div role="presentation" style={cols} className="sticky top-0 z-10 grid border-b border-line bg-[#F3EEE6] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
         <span className={cell}>ItemCode</span>{!narrow && <span className={cell}>ShortName</span>}{!narrow && <span className={cell}>HotKey</span>}<span className={cell}>ItemName</span>
         {showStock && <span className={`${cell} text-right`}>QOH</span>}
         {showRate && <span className={`${cell} text-right`}>MRP</span>}
@@ -47,7 +47,7 @@ export default function ItemPickGrid({ id, items, at, onPick, showStock = false,
         <div key={item.code} id={`${id}-${i}`} role="option" aria-selected={i === at}
           onMouseDown={e => { e.preventDefault(); onPick(item); }}
           style={cols}
-          className={`grid cursor-pointer border-b border-line-soft ${i === at ? 'bg-[#BBD7F0] text-stone-900 dark:bg-[#27405A] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
+          className={`grid cursor-pointer border-b border-line-soft ${i === at ? 'bg-[#F0E2E6] text-stone-900 dark:bg-[#2A2415] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
           <span className={`${cell} font-mono`}>{item.code}</span>
           {!narrow && <span className={cell}>{item.shortName || item.name}</span>}
           {!narrow && <span className={cell}>{item.hotKey}</span>}
@@ -68,7 +68,7 @@ function WindowsGrid({ id, items, at, onPick, className, empty, box, narrow, sor
   return (
     <div id={id} role="listbox" aria-label="Items" ref={box} className={`overflow-auto border border-line bg-surface text-xs ${className}`}>
       <table role="presentation" className="w-max min-w-full border-collapse">
-        <thead className="sticky top-0 z-10 bg-[#F0F3F8] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
+        <thead className="sticky top-0 z-10 bg-[#F3EEE6] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
           <tr className="border-b border-line">
             <th className="text-left"><Head k="shortName" label="ShortName" sort={sort} onSort={onSort} /></th>
             <th className="text-right"><Head k="clQty" label="QOH" right sort={sort} onSort={onSort} /></th>
@@ -84,7 +84,7 @@ function WindowsGrid({ id, items, at, onPick, className, empty, box, narrow, sor
           {items.map((item, i) => (
             <tr key={item.code} id={`${id}-${i}`} role="option" aria-selected={i === at}
               onMouseDown={e => { e.preventDefault(); onPick(item); }}
-              className={`cursor-pointer border-b border-line-soft ${i === at ? 'bg-[#BBD7F0] text-stone-900 dark:bg-[#27405A] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
+              className={`cursor-pointer border-b border-line-soft ${i === at ? 'bg-[#F0E2E6] text-stone-900 dark:bg-[#2A2415] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
               <td className={full}>{narrow ? (item.shortName || item.name) : item.shortName}</td>
               <td className={`${full} text-right tabular-nums`}>{item.clQty}</td>
               <td className={`${full} text-right tabular-nums`}>{money(item.rate)}</td>

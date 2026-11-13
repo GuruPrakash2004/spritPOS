@@ -76,8 +76,8 @@ export default function ItemPickerModal({ onPick, onClose }) {
   return createPortal(
     <div className="modal-backdrop fixed inset-0 z-[900] flex items-center justify-center bg-black/65 p-4 dark:bg-black/80" onClick={onClose}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label="Please Select Item" onClick={e => e.stopPropagation()} onKeyDown={keyDown}
-        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[#DDE3EC] bg-white text-[#1A2236] shadow-2xl animate-slideUp dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100">
-        <div className="flex items-center justify-between border-b border-[#DDE3EC] px-4 py-2.5 dark:border-[#2A2A2A]">
+        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[#E3D9CD] bg-white text-[#29231F] shadow-2xl animate-slideUp dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100">
+        <div className="flex items-center justify-between border-b border-[#E3D9CD] px-4 py-2.5 dark:border-[#2A2A2A]">
           <h3 className="text-sm font-semibold">Please Select Item</h3>
           <button onClick={onClose} tabIndex={-1} className={iconButton} aria-label="Close" title="Close (Esc)"><X size={16} /></button>
         </div>
@@ -87,7 +87,7 @@ export default function ItemPickerModal({ onPick, onClose }) {
             onChange={e => { setText(e.target.value); setAt(0); }} className={`${field} h-9 flex-1 text-sm`} />
         </div>
         <div ref={listRef} role="listbox" aria-label="Items" className="mx-4 h-[26rem] overflow-auto border border-line bg-surface text-xs">
-          <div role="presentation" style={grid} className="sticky top-0 z-10 grid w-max min-w-full border-b border-line bg-[#F0F3F8] font-semibold dark:bg-[#1E1E1E]">
+          <div role="presentation" style={grid} className="sticky top-0 z-10 grid w-max min-w-full border-b border-line bg-[#F3EEE6] font-semibold dark:bg-[#1E1E1E]">
             {COLUMNS.map(c => (
               <span key={c.key} className={`relative ${cell} ${c.right ? 'text-right' : ''}`}>
                 {c.label}
@@ -105,7 +105,7 @@ export default function ItemPickerModal({ onPick, onClose }) {
           {!items.length && <p className="px-3 py-6 text-center text-stone-500">No items match.</p>}
         </div>
         <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-xs text-[#1B5FA8] dark:text-sky-400">Total Records : {items.length} / {total}</span>
+          <span className="text-xs text-[#64283A] dark:text-[#D4A847]">Total Records : {items.length} / {total}</span>
           <div data-dialog-footer className="flex gap-2">
             <button type="button" onClick={onClose} className={secondaryButton}>Cancel</button>
             <button type="button" onClick={() => items[row] && onPick(items[row])} className={primaryButton}>Ok</button>

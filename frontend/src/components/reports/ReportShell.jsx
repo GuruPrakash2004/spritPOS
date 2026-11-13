@@ -4,11 +4,10 @@
 import Pager from '../common/Pager';
 import { usePage } from '../common/usePage';
 import { useEffect, useState } from 'react';
-import { FileDown, Play, Printer } from 'lucide-react';
+import { FileDown, Play } from 'lucide-react';
 import { errorText, getItems, getReport, todayIso, } from '../../lib/api';
 import { downloadXls } from '../../lib/xlsExport';
-import { badge, field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow, exportButton, printButton } from '../../lib/styles';
-import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
+import { badge, field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow, exportButton } from '../../lib/styles';
 import { SkeletonTableRows } from '../common/Skeleton';
 
  
@@ -30,7 +29,6 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
-  const [showPrintModal, setShowPrintModal] = useState(false);
 
   useEffect(() => {
     if (filters.includes('item')) {
@@ -72,7 +70,6 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
           <p className={pageSub}>{subtitle}</p>
         </div>
         <div className="flex gap-2 print:hidden">
-          <button onClick={() => setShowPrintModal(true)} disabled={!rows?.length} title={rows?.length ? undefined : 'Run the report first; there is nothing to print'} className={printButton}><Printer size={14} />Print</button>
           <button onClick={exportCsv} disabled={!rows} className={exportButton}><FileDown size={14} />Export Excel</button>
         </div>
       </div>
@@ -136,15 +133,6 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
         </table>
         <Pager p={pager} />
       </div>
-
-      {showPrintModal && (
-        <PrintFormatSelectorModal
-          category="GENERIC_REPORT"
-          data={{ title, subtitle, columns, rows: rows || [] }}
-          title={`Print Report: ${title}`}
-          onClose={() => setShowPrintModal(false)}
-        />
-      )}
     </div>
   );
 }

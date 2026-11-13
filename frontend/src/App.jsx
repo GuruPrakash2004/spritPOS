@@ -13,7 +13,7 @@ import { OPEN_MODULE } from './lib/nav';
 import { SnackbarContainer } from './components/common/Toast';
 import DesignerNotice from './components/common/DesignerNotice';
 import { Suspense, useEffect, useState } from 'react';
-import { ChevronRight, Menu, Settings, Moon, Sun, LogOut, ShieldAlert, Keyboard, KeyRound } from 'lucide-react';
+import { ChevronRight, Menu, Settings, ShieldAlert, Keyboard } from 'lucide-react';
 import ChangePasswordDialog from './components/auth/ChangePasswordDialog';
 import VlqmsLogo from './components/layout/VlqmsLogo';
 import ScreenBoundary from './components/common/ScreenBoundary';
@@ -23,7 +23,8 @@ import { getAuthToken, getDsr, getMe, getTodayTotals, requestTokenFromOtherTabs,
 import { ADMIN_MASTER, ADMIN_ROLE, MODULE_GROUPS, canOpen } from './lib/modules';
 import { moduleForPath, pathForModule } from './lib/routes';
 import { iconButton, primaryButton } from './lib/styles';
-import DesignerRefreshButton from './components/layout/DesignerRefreshButton';
+import { setExportCompany } from './lib/xlsExport';
+import UserMenu from './components/layout/UserMenu';
 import { SIMPLE_MASTERS } from './lib/simpleMasters';
 import { isTypingTarget, useAdvanceAfterSelect, useShortcuts } from './lib/keys';
 import { withViewTransition } from './lib/viewTransition';
@@ -47,6 +48,7 @@ import PurchaseBill from './components/transactions/PurchaseBill';
 import SalesCounterMaster from './components/masters/SalesCounterMaster';
 import { NO_COUNTER, } from './data/salesCounters';
 import { finYearLabel } from './lib/formatters';
+import FinYearSwitch from './components/layout/FinYearSwitch';
 import SalesInvoice from './components/transactions/SalesInvoice';
 import SalesInvoiceSetup from './components/transactions/SalesInvoiceSetup';
 import Sidebar from './components/layout/Sidebar';
@@ -124,6 +126,7 @@ export default function App() {
   const [totals, setTotals] = useState(null);   // the footer's Total Bills / Sales, read from the database
   const [session, setSession] = useState(null);
   const { company } = useCompanyProfile();
+  useEffect(() => { setExportCompany(company?.name || session?.user?.company?.name); }, [company?.name, session]);   // first title row of every Excel export
   // Why the last session ended (shown on the sign-in page), e.g. "Your session has expired".
   const [sessionNotice, setSessionNotice] = useState('');
 
@@ -263,10 +266,10 @@ export default function App() {
 
   const renderContent = () => {
     if (session && !canOpen(session.user.modules, session.user.role, activeTab)) return (
-      <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#C8D1DF] bg-[#FFFFFF] p-8 text-center dark:border-line-strong dark:bg-surface">
+      <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#D4C8BA] bg-[#FFFCF7] p-8 text-center dark:border-line-strong dark:bg-surface">
         <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#9A4B45]/10 text-[#9A4B45] dark:text-red-400"><ShieldAlert size={22} /></span>
-        <h3 className="text-base font-semibold text-[#1A2236] dark:text-stone-50">You don't have access to {activeTab}</h3>
-        <p className="mt-1 max-w-md text-sm text-[#5F6B80] dark:text-stone-400">Your role ({session.user.role}) doesn't include this module. Ask an Administrator to grant it in Admin Master.</p>
+        <h3 className="text-base font-semibold text-[#29231F] dark:text-stone-50">You don't have access to {activeTab}</h3>
+        <p className="mt-1 max-w-md text-sm text-[#70675F] dark:text-stone-400">Your role ({session.user.role}) doesn't include this module. Ask an Administrator to grant it in Admin Master.</p>
         <button onClick={() => openModule('Dashboard')} className={`${primaryButton} mt-5`}>Go to Dashboard</button>
       </div>
     );
@@ -337,10 +340,10 @@ export default function App() {
       case 'Bulk Master Update': return <BulkMasterUpdate />;
       case 'Label Printing': return <LabelPrinting />;
       default: return (
-        <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#C8D1DF] bg-[#FFFFFF] p-8 text-center dark:border-line-strong dark:bg-surface">
+        <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#D4C8BA] bg-[#FFFCF7] p-8 text-center dark:border-line-strong dark:bg-surface">
           <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-stone-500"><Settings size={22} /></span>
-          <h3 className="text-base font-semibold text-[#1A2236] dark:text-stone-50">{activeTab}</h3>
-          <p className="mt-1 text-sm text-[#5F6B80] dark:text-stone-400">This screen isn't available in the web edition yet.</p>
+          <h3 className="text-base font-semibold text-[#29231F] dark:text-stone-50">{activeTab}</h3>
+          <p className="mt-1 text-sm text-[#70675F] dark:text-stone-400">This screen isn't available in the web edition yet.</p>
         </div>
       );
     }
@@ -349,7 +352,7 @@ export default function App() {
   // After login, always start on Dashboard first and reset path to /
   if (restoring) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#F4F6FA] dark:bg-[#0A0A0A]">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#F5F1E9] dark:bg-[#0A0A0A]">
         <VlqmsLogo size="md" />
         <p className="text-sm text-stone-500 dark:text-stone-400">Signing you back in…</p>
       </div>
@@ -376,24 +379,24 @@ export default function App() {
     : activeTab === ADMIN_MASTER ? 'Admin Master (Security)' : activeTab;
 
   return (
-    <div className={`app-shell flex h-screen overflow-hidden font-sans ${darkMode ? 'dark bg-[#0A0A0A] text-stone-100' : 'bg-[#F4F6FA] text-[#1A2236]'}`}>
+    <div className={`app-shell flex h-screen overflow-hidden font-sans ${darkMode ? 'dark bg-[#0A0A0A] text-stone-100' : 'bg-[#F5F1E9] text-[#29231F]'}`}>
       <Sidebar isOpen={isSidebarOpen} collapsed={navCollapsed} onToggleCollapse={toggleNav} activeTab={activeTab} onClose={() => setSidebarOpen(false)} onOpenModule={openModule} user={user.user} canOpen={name => canOpen(user.modules, user.role, name)} />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* z-20 so the search results drop down over the workspace. */}
         <header className="relative z-20 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-3 py-2.5 sm:h-16 sm:flex-nowrap sm:gap-4 sm:px-6 sm:py-0
-                           bg-[#FFFFFF] border-[#DDE3EC]
+                           bg-[#FFFCF7] border-[#E3D9CD]
                            dark:border-[#1E1E1E] dark:bg-[#0E0E0E]/95 dark:backdrop-blur-xl">
           <button className={`${iconButton} shrink-0 md:hidden print:hidden`} onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
             <Menu size={20} />
           </button>
           <div className="min-w-0 flex-1 sm:flex-none sm:shrink">
-            <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs text-[#5F6B80] dark:text-stone-400">
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs text-[#70675F] dark:text-stone-400">
               <span className="hidden truncate sm:inline">{company?.name || user.company.name}</span>
               <ChevronRight size={12} className="hidden shrink-0 sm:block" />
               <span className="truncate">{moduleGroup}</span>
             </nav>
-            <h2 className="truncate text-[15px] font-semibold leading-tight text-[#1A2236] dark:text-stone-50">{moduleLabel}</h2>
+            <h2 className="truncate text-[15px] font-semibold leading-tight text-[#29231F] dark:text-stone-50">{moduleLabel}</h2>
           </div>
 
           <div className="order-last w-full sm:order-0 sm:ml-auto sm:w-auto sm:flex-1 sm:max-w-md flex items-center gap-2">
@@ -402,44 +405,33 @@ export default function App() {
             </div>
             <button
               onClick={() => setShowShortcuts(true)}
-                className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#DDE3EC] bg-[#FFFFFF] text-xs font-medium text-[#5F6B80] hover:bg-[#F0F3F8] hover:text-[#1A2236] transition duration-150 active:scale-[0.98] dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-300 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-100 shrink-0 shadow-2xs"
+                className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#E3D9CD] bg-[#FFFCF7] text-xs font-medium text-[#70675F] hover:bg-[#F3EEE6] hover:text-[#29231F] transition duration-150 active:scale-[0.98] dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-300 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-100 shrink-0 shadow-2xs"
               title="Keyboard Shortcuts (Press ?)"
               aria-label="Show keyboard shortcuts"
             >
-              <Keyboard size={14} className="text-[#1B2B4B] dark:text-[#D4A847]" />
+              <Keyboard size={14} className="text-[#64283A] dark:text-[#D4A847]" />
             </button>
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-            <span className="hidden rounded-md border px-2 py-1 text-[11px] font-medium tabular-nums lg:inline
-                             border-[#DDE3EC] text-[#1B2B4B]
-                             dark:border-[#2A2A2A] dark:text-[#D4A847]" title="Financial year">FY {finYear || finYearLabel(company?.fy_start, company?.fy_end) || '—'}</span>
-            {user.role === ADMIN_ROLE && <DesignerRefreshButton />}
-            <button onClick={() => setDarkMode(!darkMode)} className={`${iconButton} print:hidden`} title={darkMode ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}>
-              {darkMode ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
-            <div className="ml-1 flex items-center gap-2 border-l pl-3 border-[#DDE3EC] dark:border-[#2A2A2A]">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold
-                              bg-[#1B2B4B]/10 text-[#1B2B4B]
-                              dark:bg-linear-to-br dark:from-[#D4A847]/20 dark:to-[#C8952E]/10 dark:text-[#D4A847] dark:ring-1 dark:ring-[#D4A847]/20" aria-hidden="true">{user.user.slice(0, 2)}</div>
-              <div className="hidden leading-tight sm:block">
-                <div className="text-xs font-medium text-[#1A2236] dark:text-stone-50">{user.user}</div>
-                <div className="text-[11px] text-[#5F6B80] dark:text-stone-400">{user.role}</div>
-              </div>
-              <button onClick={() => setChangingPassword(true)} className={`${iconButton} print:hidden`} title="Change my password" aria-label="Change my password"><KeyRound size={16} /></button>
-              <button onClick={async () => { if (!(await confirm(billOpen ? 'A sales bill is open. Are you sure you want to log out?' : 'Are you sure you want to log out?'))) return; setSession(null); setAuthUser('', '', ''); setBillOpen(false); setActiveTab('Dashboard'); window.history.replaceState(null, '', '/'); }} className={`${iconButton} hover:text-[#9A4B45] print:hidden dark:hover:text-red-400`} title="Log out" aria-label="Log out"><LogOut size={16} /></button>
-            </div>
+            <FinYearSwitch label={finYear || finYearLabel(company?.fy_start, company?.fy_end)} years={company?.fin_years ?? []} canChange={user.role === ADMIN_ROLE}
+              onChanged={label => { writeSaved(FY_KEY, label); setSession(s => (s ? { ...s, finYear: label } : s)); }} />
+            <UserMenu user={user.user} role={user.role} isAdmin={user.role === ADMIN_ROLE} darkMode={darkMode}
+              onToggleDark={() => setDarkMode(!darkMode)}
+              onShortcuts={() => setShowShortcuts(true)}
+              onChangePassword={() => setChangingPassword(true)}
+              onSignOut={async () => { if (!(await confirm(billOpen ? 'A sales bill is open. Are you sure you want to log out?' : 'Are you sure you want to log out?'))) return; setSession(null); setAuthUser('', '', ''); setBillOpen(false); setActiveTab('Dashboard'); window.history.replaceState(null, '', '/'); }} />
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 pb-0 sm:p-6 sm:pb-0 bg-[#F4F6FA] dark:bg-[#0A0A0A]">
+        <main className="flex-1 overflow-auto p-4 pb-0 sm:p-6 sm:pb-0 bg-[#F5F1E9] dark:bg-[#0A0A0A]">
           <div key={activeTab} className={QUIET_SCREENS.includes(activeTab) ? undefined : "screen-enter"}>
             <ScreenBoundary onHome={() => openModule('Dashboard')}><Suspense fallback={<ScreenSkeleton />}>{renderContent()}</Suspense></ScreenBoundary>
           </div>
         </main>
 
         <footer className="flex h-9 shrink-0 items-center justify-between gap-4 border-t px-4 text-[11px] sm:px-6 print:hidden
-                           bg-[#FFFFFF] border-[#DDE3EC] text-[#5F6B80]
+                           bg-[#FFFCF7] border-[#E3D9CD] text-[#70675F]
                            dark:border-[#1E1E1E] dark:bg-[#0E0E0E] dark:text-stone-500">
          <div className="flex items-center gap-2 sm:gap-3">
             <span className="flex items-center gap-1.5 font-medium">
@@ -451,8 +443,8 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4 tabular-nums">
             {/* The desktop's status bar: today's saved bills (cancelled / deleted / held ones left out) and their value. */}
-            <span className="font-semibold text-[#1A2236] dark:text-stone-200">Total Bills: {totals?.total_bills ?? '—'}</span>
-            <span className="font-semibold text-[#1A2236] dark:text-stone-200">Sales: {totals ? Math.round(Number(totals.sales) || 0) : '—'}</span>
+            <span className="font-semibold text-[#29231F] dark:text-stone-200">Total Bills: {totals?.total_bills ?? '—'}</span>
+            <span className="font-semibold text-[#29231F] dark:text-stone-200">Sales: {totals ? Math.round(Number(totals.sales) || 0) : '—'}</span>
           </div>
         </footer>
       </div>

@@ -11,7 +11,6 @@ import { InlineError } from '../common/FormErrorSummary';
 import { errorText, getCustomReportRights, listMaster, renderCustomReportPrint, runCustomReport, todayIso } from '../../lib/api';
 import { downloadXls, } from '../../lib/xlsExport';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
-import PrintFormatSelectorModal from '../print/PrintFormatSelectorModal';
 import ReportPrintModal from '../print/ReportPrintModal';
 import ReportEmailDialog, { } from './ReportEmailDialog';
 
@@ -315,7 +314,7 @@ const ReportsDashboard = () => {
             <div className="flex items-center gap-2 text-xs text-stone-500">
               <span className="tabular-nums">{toDmy(result.from_date)} – {toDmy(result.to_date)}</span>
               <span className={badge('neutral')}>{result.rows.length} row{result.rows.length === 1 ? '' : 's'}</span>
-              <button onClick={() => setShowPrintModal(true)} disabled={!result.rows.length} className={iconButton} aria-label="Print report" title={result.rows.length ? 'Print report' : 'Nothing to print for this period'}><Printer size={14} /></button>
+              {result.rpt && <button onClick={() => setShowPrintModal(true)} disabled={!result.rows.length} className={iconButton} aria-label="Print report" title={result.rows.length ? 'Print report' : 'Nothing to print for this period'}><Printer size={14} /></button>}
               <button onClick={exportXls} className={iconButton} aria-label="Export XLS" title="Export XLS"><Download size={14} /></button>
             </div>
           </div>
@@ -346,7 +345,7 @@ const ReportsDashboard = () => {
                 )}
               </tbody>
               {result.rows.length > 0 && result.columns.some(c => c.total) && (
-                <tfoot className="sticky bottom-0 bg-[#F4F6FA] font-semibold dark:bg-[#101010]">
+                <tfoot className="sticky bottom-0 bg-[#F5F1E9] font-semibold dark:bg-[#101010]">
                   <tr>
                     {result.columns.map((c, i) => (
                       <td key={c.key} className={`px-4 py-2 ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>
@@ -371,25 +370,6 @@ const ReportsDashboard = () => {
           formats={[result.rpt]}
           render={(_rpt, printer) => renderCustomReportPrint({ name: result.name, from_date: result.from_date, to_date: result.to_date,
             ledger: filterCodes('ledger'), supplier: filterCodes('supplier'), group: filterCodes('group') }, printer)}
-          onClose={() => setShowPrintModal(false)}
-        />
-      )}
-
-      {showPrintModal && result && !result.rpt && (
-        <PrintFormatSelectorModal
-          category="GENERIC_REPORT"
-          data={{
-            title: result.name,
-            subtitle: `Period: ${toDmy(result.from_date)} to ${toDmy(result.to_date)}`,
-            columns: result.columns.map(column => ({
-              key: column.key,
-              label: column.label,
-              kind: column.align === 'right' ? 'number' : 'text',
-              total: result.rows.length > 0 && result.rows.every(row => typeof row[column.key] === 'number'),
-            })),
-            rows: result.rows,
-          }}
-          title={`Print: ${result.name}`}
           onClose={() => setShowPrintModal(false)}
         />
       )}

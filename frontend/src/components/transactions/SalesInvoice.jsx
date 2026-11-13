@@ -747,7 +747,7 @@ export default function SalesInvoice({ setup, onClose }) {
           onApply={applyCols} onClose={() => { setPickCols(false); }} />
       )}
       {editing && (
-        <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D99A2B]/60 bg-[#D99A2B]/10 px-4 py-2 text-xs font-semibold text-[#1B2B4B] dark:text-[#D4A847]">
+        <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-[#B08A45]/60 bg-[#B08A45]/10 px-4 py-2 text-xs font-semibold text-[#64283A] dark:text-[#D4A847]">
           <span>Editing bill {editing.no}: Save updates it in place (its stock and points are put back first, then the changed bill is posted).</span>
           <button type="button" onClick={() => void stopEditing()} className={secondaryButton}>Stop editing</button>
         </div>
@@ -789,7 +789,7 @@ export default function SalesInvoice({ setup, onClose }) {
             {/* The picked item: one small line at the top right, above the buttons */}
             {pickedItem && (
               <p className="absolute right-4 top-2 hidden max-w-[45%] truncate text-[11px] text-stone-500 lg:block dark:text-stone-400" aria-live="polite" title={pickedName}>
-                <span className="font-semibold text-[#1B2B4B] dark:text-[#D4A847]">{pickedName}</span>
+                <span className="font-semibold text-[#64283A] dark:text-[#D4A847]">{pickedName}</span>
               </p>
             )}
             <div className="flex flex-wrap items-end gap-2.5">

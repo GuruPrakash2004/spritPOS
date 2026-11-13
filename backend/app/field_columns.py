@@ -53,7 +53,7 @@ for _s in SPECS:   # the simple masters are described once in master_specs.py
 # with it, and flags the screens act on (opening stock only for a new item, the purchase rate hidden from roles without cost
 # access). Everything else about a field comes from the designer.
 WEB_HINTS: dict[str, dict[str, dict]] = {
-    "items": {"aliases": {"caption": "Item aliases (one per line)"}, "qoh": {"caption": "Opening stock (new items only)", "new_only": True}, "purchase_rate": {"cost": True},
+    "items": {"aliases": {"caption": "Item aliases"}, "qoh": {"caption": "Opening stock (new items only)", "new_only": True}, "purchase_rate": {"cost": True},
               # the designer hides these key columns (the desktop draws its own drop-downs); the web's choices are the masters' codes
               "group": {"caption": "Item Group", "options_from": "item-groups", "required": True},
               "uom": {"caption": "UOM", "options_from": "uoms", "required": True},
@@ -69,6 +69,7 @@ def web_fields(path: str) -> list[dict]:
     """The typed fields of a master's request model, as the browser needs them to build the screen from the designer's
     definition: the key, the kind of value the web stores (bool / number / text / list), whether it is required, the
     desktop column it is stored in ('' when none), and the hints above. `code` and the server-only fields are left out."""
+    import types
     import typing
 
     from . import schemas, security
@@ -81,7 +82,8 @@ def web_fields(path: str) -> list[dict]:
         if key in ("extras", "authorised", "auth_by", "auth_on", "changed_by"):
             continue
         ann = info.annotation
-        args = [a for a in typing.get_args(ann) if a is not type(None)]
+        # `X | None` -> X; a plain list[str] is NOT unwrapped (its argument is the item type, not an alternative)
+        args = [a for a in typing.get_args(ann) if a is not type(None)] if typing.get_origin(ann) in (typing.Union, types.UnionType) else []
         base = args[0] if args else ann
         options = []
         if typing.get_origin(base) is typing.Literal:

@@ -75,7 +75,7 @@ export default function ScreenPreview() {
       <section className={`${panel} overflow-hidden`} aria-label="Screens">
         {!data && !error && <p className="p-8 text-center text-xs text-stone-500">Reading the database…</p>}
         {data && !screens.length && <p className="p-8 text-center text-xs text-stone-500">{data.screens.length ? 'No screen matches.' : 'The Doc Designer has no screens in this database.'}</p>}
-        <ul className="divide-y divide-[#E8ECF3] dark:divide-line-soft">
+        <ul className="divide-y divide-[#EEE7DD] dark:divide-line-soft">
           {screens.map(s => {
             const isOpen = open === s.doc_id;
             const level = worst(s.problems);

@@ -27,14 +27,14 @@ export default function Modal({ title, onClose, children, footer, wide = false }
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={e => e.stopPropagation()}
-        className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-[#DDE3EC] bg-[#FFFFFF] text-[#1A2236] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100 animate-slideUp ${wide ? 'max-w-4xl' : 'max-w-lg'}`}
+        className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] text-[#29231F] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100 animate-slideUp ${wide ? 'max-w-4xl' : 'max-w-lg'}`}
       >
-        <div className="flex items-center justify-between gap-4 border-b border-[#DDE3EC] bg-[#F7F9FC] px-5 py-4 dark:border-[#2A2A2A] dark:bg-[#181818]">
-          <h3 id={titleId} className="text-sm font-bold text-[#1A2236] dark:text-stone-50">{title}</h3>
+        <div className="flex items-center justify-between gap-4 border-b border-[#E3D9CD] bg-[#FAF6EF] px-5 py-4 dark:border-[#2A2A2A] dark:bg-[#181818]">
+          <h3 id={titleId} className="text-sm font-bold text-[#29231F] dark:text-stone-50">{title}</h3>
           <button onClick={onClose} tabIndex={-1} className={`${iconButton} -mr-2 text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100`} aria-label="Close" title="Close (Esc)"><X size={16} /></button>
         </div>
         <div data-dialog-body className="flex-1 overflow-auto p-5 text-xs text-stone-700 dark:text-stone-200">{children}</div>
-        {footer && <div data-dialog-footer className="flex justify-end gap-2 border-t border-[#DDE3EC] bg-[#F4F6FA] px-5 py-3 dark:border-[#2A2A2A] dark:bg-[#101010]">{footer}</div>}
+        {footer && <div data-dialog-footer className="flex justify-end gap-2 border-t border-[#E3D9CD] bg-[#F5F1E9] px-5 py-3 dark:border-[#2A2A2A] dark:bg-[#101010]">{footer}</div>}
       </div>
     </div>,
     document.body,

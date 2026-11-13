@@ -57,13 +57,13 @@ export default function CustomerPicker({ id, value, onChange, customers, disable
       <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-stone-400" />
       {shown && (
         <div id={listId} role="listbox" aria-label="Customers" className="absolute left-0 top-full z-40 mt-1 max-h-64 w-[min(420px,calc(100vw-3rem))] overflow-auto border border-line bg-surface text-xs shadow-2xl">
-          <div role="presentation" className="sticky top-0 grid grid-cols-[5rem_minmax(0,1fr)_6.5rem_3.5rem] border-b border-line bg-[#F0F3F8] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
+          <div role="presentation" className="sticky top-0 grid grid-cols-[5rem_minmax(0,1fr)_6.5rem_3.5rem] border-b border-line bg-[#F3EEE6] font-semibold text-stone-700 dark:bg-[#1E1E1E] dark:text-stone-200">
             <span className="px-2 py-1.5">Code</span><span className="px-2 py-1.5">Name</span><span className="px-2 py-1.5">Mobile</span><span className="px-2 py-1.5 text-right">Points</span>
           </div>
           {matches.map((c, i) => (
             <div key={c.code} role="option" aria-selected={i === current} ref={i === current ? el => el?.scrollIntoView({ block: 'nearest' }) : undefined}
               onMouseDown={e => { e.preventDefault(); pick(c); }}
-              className={`grid cursor-pointer grid-cols-[5rem_minmax(0,1fr)_6.5rem_3.5rem] border-b border-line-soft ${i === current ? 'bg-[#BBD7F0] text-stone-900 dark:bg-[#27405A] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
+              className={`grid cursor-pointer grid-cols-[5rem_minmax(0,1fr)_6.5rem_3.5rem] border-b border-line-soft ${i === current ? 'bg-[#F0E2E6] text-stone-900 dark:bg-[#2A2415] dark:text-stone-50' : 'text-stone-700 hover:bg-subtle dark:text-stone-200'}`}>
               <span className="truncate px-2 py-1.5 font-mono">{c.code}</span><span className="truncate px-2 py-1.5">{c.name}</span>
               <span className="truncate px-2 py-1.5">{c.mobile}</span><span className="px-2 py-1.5 text-right tabular-nums">{c.points || ''}</span>
             </div>

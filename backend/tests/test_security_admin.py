@@ -82,7 +82,7 @@ async def test_field_rights_hide_and_lock_fields(client, cashier_client):
 
 async def test_master_approval_blocks_unapproved_rows_until_approved(client, cashier_client):
     await client.put("/admin/master-approval", json={"masters": ["items", "customers"]})
-    new = dict(store.ITEMS["VIN-750"], code="NEW-1", name="New item", qoh=5, purchase_rate=None)
+    new = dict(store.ITEMS["VIN-750"], code="NEW-1", name="New item", short_name="NEW-1", qoh=5, purchase_rate=None)
     assert (await cashier_client.post("/masters/items", json=new)).status_code == 201
     assert store.ITEMS["NEW-1"]["authorised"] is False
     bill = {"date": TODAY, "counter": "counter10", "customer": "CASH", "salesperson": "GURU", "lines": [{"item_code": "NEW-1", "bottles": 1}]}
@@ -126,7 +126,7 @@ async def test_hidden_fields_get_the_default_on_create_and_billing_fields_cannot
     res = await client.put("/admin/field-rights/Manager", json={"masters": {"items": {"mrp": "hidden"}}})
     assert res.status_code == 422 and "read-only" in res.json()["detail"]
     await client.put("/admin/field-rights/Manager", json={"masters": {"items": {"hsn_code": "hidden"}}})
-    new = dict(store.ITEMS["VIN-750"], code="NEW-2", name="New", hsn_code="9999", qoh=0, purchase_rate=None)
+    new = dict(store.ITEMS["VIN-750"], code="NEW-2", name="New", short_name="NEW-2", hsn_code="9999", qoh=0, purchase_rate=None)
     assert (await manager_client.post("/masters/items", json=new)).status_code == 201
     assert store.ITEMS["NEW-2"]["hsn_code"] == ""
 

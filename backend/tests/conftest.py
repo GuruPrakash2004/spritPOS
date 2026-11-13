@@ -25,6 +25,7 @@ os.environ["DB_PASSWORD_ENC"] = ""
 os.environ["PASSWORD_HASH_ITERATIONS"] = "1000"
 # The encryption keys are made in memory, not in backend/data/.
 os.environ["VLQMS_KEYS_IN_MEMORY"] = "1"
+os.environ["RPT_BUILTIN_PRINT"] = "1"   # tests print through the built-in layouts (no Crystal here)
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402

@@ -21,7 +21,6 @@ import {
 import { useMenuHidden } from '../../hooks/useMenuHidden';
 import { ADMIN_MASTER, MODULE_GROUPS, NAV_TREE } from '../../lib/modules';
 import { isPlainClick, pathForModule } from '../../lib/routes';
-import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import { prefetchScreen } from '../../lib/screenLoaders';
 
 export const ICONS = {
@@ -78,20 +77,19 @@ const SidebarItem = ({ icon, label, module, href, onClick, active, collapsed, de
     style={collapsed ? undefined : { paddingLeft: `${8 + depth * 14}px` }}
     className={`flex w-full items-center gap-2 rounded-md py-1 pr-2 text-left text-[12px] leading-5 transition-colors ${collapsed ? 'md:justify-center md:px-0 md:py-2.5' : ''} ${
       active
-        ? 'bg-[#1B2B4B] text-white font-semibold dark:bg-[#D4A847]/12 dark:text-[#E8C36A]'
-        : 'text-[#5F6B80] hover:bg-[#E1E7F0] hover:text-[#1A2236] dark:text-stone-400 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-200'
+        ? 'bg-[#64283A] text-white font-semibold dark:bg-[#D4A847]/12 dark:text-[#E8C36A]'
+        : 'text-[#70675F] hover:bg-[#EFE9DF] hover:text-[#29231F] dark:text-stone-400 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-200'
     }`}
   >
-    <span className={`shrink-0 ${active ? 'text-[#F0CF8A] dark:text-[#D4A847]' : 'text-[#7B879B] dark:text-stone-500'}`}>{icon}</span>
+    <span className={`shrink-0 ${active ? 'text-[#D3BB89] dark:text-[#D4A847]' : 'text-[#8E847A] dark:text-stone-500'}`}>{icon}</span>
     <span className={`truncate ${collapsed ? 'md:sr-only' : ''}`}>{label}</span>
   </a>
 );
 
-export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user, canOpen: mayOpen, collapsed = false, onToggleCollapse }) {
+export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, canOpen: mayOpen, collapsed = false, onToggleCollapse }) {
   // The desktop's menu (MstMenu) decides which screens are listed; the screen that is open always is.
   const menuHidden = useMenuHidden();
   const canOpen = (name) => mayOpen(name) && (name === activeTab || !menuHidden.has(String(name).toLowerCase()));
-  const { company, isOnline } = useCompanyProfile();
   const [open, setOpenState] = useState(() => {
     const s = readOpen();
     branchesOf(NAV_TREE, activeTab)?.forEach(k => s.add(k));   // the branch of the screen already open
@@ -139,10 +137,10 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
             if (e.key === 'ArrowLeft') { e.preventDefault(); toggle(key, false); }
           }}
           style={{ paddingLeft: `${8 + depth * 14}px` }}
-          className={`flex w-full items-center gap-2 rounded-md py-1 pr-2 text-left text-[12px] leading-5 hover:bg-[#E1E7F0] dark:hover:bg-[#1C1C1C] ${depth === 0 ? 'font-bold uppercase tracking-wide text-[#1A2236] dark:text-stone-100' : 'font-semibold text-[#3D352F] dark:text-stone-200'}`}>
-          {(() => { const Icon = BRANCH_ICONS[n.label] ?? FolderTree; return <Icon size={15} className="shrink-0 text-[#1B2B4B] dark:text-[#D4A847]" aria-hidden="true" />; })()}
+          className={`flex w-full items-center gap-2 rounded-md py-1 pr-2 text-left text-[12px] leading-5 hover:bg-[#EFE9DF] dark:hover:bg-[#1C1C1C] ${depth === 0 ? 'font-bold uppercase tracking-wide text-[#29231F] dark:text-stone-100' : 'font-semibold text-[#3D352F] dark:text-stone-200'}`}>
+          {(() => { const Icon = BRANCH_ICONS[n.label] ?? FolderTree; return <Icon size={15} className="shrink-0 text-[#64283A] dark:text-[#D4A847]" aria-hidden="true" />; })()}
           <span className="min-w-0 flex-1 truncate">{n.label}</span>
-          {expanded ? <ChevronDown size={13} className="shrink-0 text-[#7B879B]" aria-hidden="true" /> : <ChevronRight size={13} className="shrink-0 text-[#7B879B]" aria-hidden="true" />}
+          {expanded ? <ChevronDown size={13} className="shrink-0 text-[#8E847A]" aria-hidden="true" /> : <ChevronRight size={13} className="shrink-0 text-[#8E847A]" aria-hidden="true" />}
         </button>
         {expanded && <div>{kids}</div>}
       </div>
@@ -160,7 +158,7 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
     return (
       <button key={key} type="button" title={node.label} aria-label={node.label}
         onClick={() => { const next = new Set(open); (branchesOf(NAV_TREE, namesIn(node.children)[0]) ?? [key]).forEach(k => next.add(k)); writeOpen(next); setOpenState(next); onToggleCollapse?.(); }}
-        className="flex w-full items-center justify-center rounded-md py-2.5 text-[#7B879B] hover:bg-[#E1E7F0] hover:text-[#1A2236] dark:text-stone-500 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-200">
+        className="flex w-full items-center justify-center rounded-md py-2.5 text-[#8E847A] hover:bg-[#EFE9DF] hover:text-[#29231F] dark:text-stone-500 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-200">
         <Icon size={21} />
       </button>
     );
@@ -181,7 +179,7 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
       {isOpen && <div className="fixed inset-0 z-30 bg-overlay md:hidden print:hidden" onClick={onClose} />}
 
       <aside aria-label="Main navigation" className={`fixed inset-y-0 left-0 z-40 flex w-56 transform flex-col
-        border-r bg-[#F0EBE2] text-[#1A2236] border-[#E2D8CC]
+        border-r bg-[#F0EBE2] text-[#29231F] border-[#E2D8CC]
         dark:border-[#1E1E1E] dark:bg-[#0E0E0E] dark:text-stone-100
         transition-transform duration-250 ease-out ${isOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full'}
         ${collapsed ? 'md:w-[76px]' : ''}
@@ -196,7 +194,7 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
           </a>
           {onToggleCollapse && (
             <button
-              className="hidden rounded-lg p-1.5 text-[#7B879B] hover:bg-[#E1E7F0] hover:text-[#1A2236] md:block dark:text-stone-500 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-50"
+              className="hidden rounded-lg p-1.5 text-[#8E847A] hover:bg-[#EFE9DF] hover:text-[#29231F] md:block dark:text-stone-500 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-50"
               onClick={onToggleCollapse}
               aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
               aria-expanded={!collapsed}
@@ -205,7 +203,7 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
               {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
             </button>
           )}
-          <button className="rounded-lg p-1.5 text-[#7B879B] hover:bg-[#E1E7F0] hover:text-[#1A2236] md:hidden dark:text-stone-500 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-50" onClick={onClose} aria-label="Close navigation">
+          <button className="rounded-lg p-1.5 text-[#8E847A] hover:bg-[#EFE9DF] hover:text-[#29231F] md:hidden dark:text-stone-500 dark:hover:bg-[#1C1C1C] dark:hover:text-stone-50" onClick={onClose} aria-label="Close navigation">
             <X size={18} />
           </button>
         </div>
@@ -219,16 +217,8 @@ export default function Sidebar({ isOpen, activeTab, onClose, onOpenModule, user
             : tree.map(n => (isBranch(n) ? branch(n, 0) : leaf(n, 0)))}
         </nav>
 
-        <div className={`shrink-0 border-t border-[#E2D8CC] dark:border-[#1E1E1E] px-4 py-3 text-[11px] text-[#5F6B80] dark:text-stone-500 ${collapsed ? 'md:hidden' : ''}`}>
-          <div className="flex items-center justify-between">
-            <span className="truncate">{company?.name || 'SpiritPOS'}</span>
-            <span className={`flex items-center gap-1.5 ${isOnline ? 'text-emerald-700 dark:text-emerald-400' : 'text-[#9A4B45] dark:text-red-400'}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-[#9A4B45]'}`} />
-              {isOnline === null ? 'Checking' : isOnline ? 'Online' : 'Offline'}
-            </span>
-          </div>
-          <div className="mt-0.5 truncate">Signed in as <span className="font-medium text-[#1B2B4B] dark:text-[#D4A847]">{user}</span></div>
-          <DevelopedBy className="mt-2" size="xs" />
+        <div className={`shrink-0 border-t border-[#E2D8CC] dark:border-[#1E1E1E] px-4 py-3 text-[11px] text-[#70675F] dark:text-stone-500 ${collapsed ? 'md:hidden' : ''}`}>
+          <DevelopedBy size="xs" />
         </div>
       </aside>
     </>

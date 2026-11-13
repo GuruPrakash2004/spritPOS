@@ -399,21 +399,21 @@ export default function Login({ onLogin, notice = '' }) {
   };
 
   const inputClass = `w-full rounded-xl border px-4 py-3 text-sm outline-none transition duration-150
-    border-[#D5DCE7] bg-[#FFFFFF] text-[#1A2236] placeholder:text-[#9AA5B8]
+    border-[#DCD1C5] bg-[#FFFCF7] text-[#29231F] placeholder:text-[#A69D94]
     hover:border-[#CBBEAF]
-    focus:border-[#1B2B4B] focus:ring-[3px] focus:ring-[#1B2B4B]/10
+    focus:border-[#64283A] focus:ring-[3px] focus:ring-[#64283A]/10
     dark:border-[#2A2A2A] dark:bg-[#1A1A1A] dark:text-stone-50
     dark:placeholder:text-stone-600 dark:hover:border-[#3A3A3A]
     dark:focus:border-[#D4A847] dark:focus:ring-[#D4A847]/20`;
 
-  const labelClass = 'mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5F6B80] dark:text-stone-400';
+  const labelClass = 'mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#70675F] dark:text-stone-400';
 
   // Sign-in form fields shrink with the window height so the page never scrolls.
   const fitInput = inputClass.replace('py-3', 'py-[clamp(0.4rem,1.4dvh,0.75rem)]');
   const fitLabel = labelClass.replace('mb-2', 'mb-[clamp(0.125rem,0.8dvh,0.5rem)]');
 
   return (
-    <div className="flex h-dvh overflow-hidden font-sans bg-[#F4F6FA] dark:bg-[#0A0A0A] text-[#1A2236] dark:text-stone-100 transition-colors duration-250">
+    <div className="flex h-dvh overflow-hidden font-sans bg-[#F5F1E9] dark:bg-[#0A0A0A] text-[#29231F] dark:text-stone-100 transition-colors duration-250">
       
       {/* â•â•â• TOP-RIGHT THEME SWITCHER â•â•â• */}
       <div className="fixed top-5 right-5 z-50">
@@ -422,8 +422,8 @@ export default function Login({ onLogin, notice = '' }) {
           onClick={() => setDark(!dark)}
           aria-label="Toggle theme"
           className="inline-flex h-10 w-10 items-center justify-center rounded-xl border
-                     bg-[#FFFFFF]/90 border-[#DDE3EC] text-[#5F6B80] shadow-md
-                     hover:text-[#1B2B4B] hover:border-[#1B2B4B]/30
+                     bg-[#FFFCF7]/90 border-[#E3D9CD] text-[#70675F] shadow-md
+                     hover:text-[#64283A] hover:border-[#64283A]/30
                      dark:bg-[#1C1C1C]/90 dark:border-[#2A2A2A] dark:text-[#D4A847] dark:hover:bg-[#252525]
                      backdrop-blur-md transition active:scale-95"
           title={dark ? 'Switch to Heritage Light' : 'Switch to Dark Luxury'}
@@ -460,7 +460,7 @@ export default function Login({ onLogin, notice = '' }) {
 
           {/* Bottom — Hero Typography & Metric Badges */}
           <div className="max-w-[min(32rem,100%)] mb-4">
-            <p className="animate-fadeInUp animate-fadeInUp-d1 text-[11px] font-bold tracking-[0.35em] text-[#F0CF8A] uppercase">
+            <p className="animate-fadeInUp animate-fadeInUp-d1 text-[11px] font-bold tracking-[0.35em] text-[#D3BB89] uppercase">
               Enterprise Resource Planning
             </p>
             <h1 className="animate-fadeInUp animate-fadeInUp-d2 mt-3 font-extrabold text-white leading-[1.1]"
@@ -479,11 +479,11 @@ export default function Login({ onLogin, notice = '' }) {
       </div>
 
       {/* â•â•â• RIGHT — Login Form Panel â•â•â• */}
-      <div className="flex min-h-0 flex-1 flex-col bg-[#F4F6FA] dark:bg-[#0A0A0A] transition-colors duration-250">
+      <div className="flex min-h-0 flex-1 flex-col bg-[#F5F1E9] dark:bg-[#0A0A0A] transition-colors duration-250">
         {/* Mobile top hero header */}
         <div className="relative h-[clamp(4.5rem,16dvh,12rem)] shrink-0 overflow-hidden lg:hidden">
           <img src={IMAGES.login.hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-65" />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#180E09]/75 via-[#180E09]/40 to-[#F4F6FA] dark:to-[#0A0A0A]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#180E09]/75 via-[#180E09]/40 to-[#F5F1E9] dark:to-[#0A0A0A]" />
           <div className="relative z-10 flex items-center gap-3 p-6">
             <VlqmsLogo size="md" onDark />
           </div>
@@ -494,20 +494,20 @@ export default function Login({ onLogin, notice = '' }) {
           <div className="w-full max-w-sm">
             {/* Custom VLQMS Crest Logo & Welcome Headline */}
             <div className="mb-[clamp(0.5rem,3dvh,2rem)] hidden flex-col items-center text-center lg:flex animate-fadeInUp">
-              <h1 className="text-2xl font-bold tracking-tight text-[#1A2236] dark:text-white"
+              <h1 className="text-2xl font-bold tracking-tight text-[#29231F] dark:text-white"
                   style={{ fontFamily: 'var(--font-display)' }}>
                 {setup ? 'Set up SpiritPOS' : 'Welcome back'}
               </h1>
-              <p className="mt-1 text-xs text-[#5F6B80] dark:text-stone-400">
+              <p className="mt-1 text-xs text-[#70675F] dark:text-stone-400">
                 {setup ? 'Connect this shop\'s database once, then sign in.' : `Sign in to SpiritPOS · ${company?.name || 'Company profile'}`}
               </p>
             </div>
 
             {/* Mobile heading */}
             <div className="mb-[clamp(0.25rem,2dvh,1.5rem)] lg:hidden">
-              <h1 className="text-xl font-bold text-[#1A2236] dark:text-white"
+              <h1 className="text-xl font-bold text-[#29231F] dark:text-white"
                   style={{ fontFamily: 'var(--font-display)' }}>Welcome back</h1>
-              <p className="mt-1 text-xs text-[#5F6B80] dark:text-stone-400">
+              <p className="mt-1 text-xs text-[#70675F] dark:text-stone-400">
                 Sign in to SpiritPOS · {company?.name || 'Company profile'}
               </p>
             </div>
@@ -517,7 +517,7 @@ export default function Login({ onLogin, notice = '' }) {
             {!setup && editingDb && (
               <div className="space-y-4">
                 <DatabaseSetup inputClass={inputClass} labelClass={labelClass} change onDone={() => { setEditingDb(false); window.location.reload(); }} onCancel={() => setEditingDb(false)} />   {/* another database: the page starts again, so nothing of the old one stays in the browser */}
-                <button type="button" onClick={() => setEditingDb(false)} className="w-full rounded-xl border border-[#D5DCE7] py-2.5 text-xs font-semibold dark:border-[#2A2A2A]">Back to sign in</button>
+                <button type="button" onClick={() => setEditingDb(false)} className="w-full rounded-xl border border-[#DCD1C5] py-2.5 text-xs font-semibold dark:border-[#2A2A2A]">Back to sign in</button>
               </div>
             )}
             {offline && !editingDb && (
@@ -535,7 +535,7 @@ export default function Login({ onLogin, notice = '' }) {
               onSubmit={submit}
               className="animate-fadeInUp animate-fadeInUp-d2
                          glass-card-login rounded-2xl p-[clamp(1rem,3.2dvh,1.75rem)]
-                         border border-[#DDE3EC] dark:border-[#2A2A2A]
+                         border border-[#E3D9CD] dark:border-[#2A2A2A]
                          shadow-[0_20px_50px_rgba(72,53,38,0.08)] dark:shadow-card"
               noValidate
             >
@@ -552,13 +552,13 @@ export default function Login({ onLogin, notice = '' }) {
                       className={`${fitInput} pr-11`} autoComplete="current-password" placeholder="Enter password" aria-invalid={!!error} />
                     <button type="button" onClick={() => setShowPwd(v => !v)} tabIndex={-1}
                       aria-label={showPwd ? 'Hide password' : 'Show password'} title={showPwd ? 'Hide password' : 'Show password'}
-                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#5F6B80] hover:text-[#1B2B4B] dark:text-stone-400 dark:hover:text-[#D4A847]">
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#70675F] hover:text-[#64283A] dark:text-stone-400 dark:hover:text-[#D4A847]">
                       {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
                 </div>
                 {offerRemember && (
-                  <label className="flex items-center gap-2 text-xs text-[#5F6B80] dark:text-stone-400">
+                  <label className="flex items-center gap-2 text-xs text-[#70675F] dark:text-stone-400">
                     <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
                     Remember me on this device (until Sign out)
                   </label>
@@ -579,7 +579,7 @@ export default function Login({ onLogin, notice = '' }) {
                            rounded-xl py-[clamp(0.5rem,1.6dvh,0.875rem)] text-sm font-bold
                            transition duration-150 active:scale-[0.98]
                            disabled:pointer-events-none disabled:opacity-45
-                           bg-[#1B2B4B] text-white shadow-[0_4px_16px_rgba(100,40,58,0.25)] hover:bg-[#121D36]
+                           bg-[#64283A] text-white shadow-[0_4px_16px_rgba(100,40,58,0.25)] hover:bg-[#542030]
                            dark:bg-gradient-to-r dark:from-[#D4A847] dark:via-[#F7D98B] dark:to-[#C8952E]
                            dark:text-[#181106] dark:font-extrabold dark:shadow-[0_0_24px_rgba(212,168,71,0.55)]
                            dark:hover:shadow-[0_0_36px_rgba(212,168,71,0.75)] dark:hover:brightness-110"
@@ -593,19 +593,19 @@ export default function Login({ onLogin, notice = '' }) {
 
             {!setup && !editingDb && (
               <button type="button" onClick={() => setEditingDb(true)}
-                className="mt-4 flex w-full items-center justify-center gap-2 text-xs font-semibold text-[#1B2B4B] underline-offset-2 hover:underline dark:text-[#D4A847]">
+                className="mt-4 flex w-full items-center justify-center gap-2 text-xs font-semibold text-[#64283A] underline-offset-2 hover:underline dark:text-[#D4A847]">
                 <Database size={13} />Database settings
               </button>
             )}
 
             {/* Decorative wine icon */}
             <div className="mt-6 flex justify-center animate-float [@media(max-height:760px)]:hidden opacity-20 dark:opacity-15" aria-hidden="true">
-              <Wine size={28} className="text-[#D99A2B] dark:text-[#D4A847]" />
+              <Wine size={28} className="text-[#B08A45] dark:text-[#D4A847]" />
             </div>
           </div>
         </main>
 
-        <footer className="shrink-0 pb-[clamp(0.25rem,1.5dvh,1.5rem)] text-center text-[11px] text-[#8592A6] dark:text-stone-600">
+        <footer className="shrink-0 pb-[clamp(0.25rem,1.5dvh,1.5rem)] text-center text-[11px] text-[#958B81] dark:text-stone-600">
           Softvent SpiritPOS
         </footer>
       </div>
