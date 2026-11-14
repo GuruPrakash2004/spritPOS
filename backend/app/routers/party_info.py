@@ -10,7 +10,7 @@ The rows belong to the party through `PartyID` (its id in MstCUST / MstSUPP) and
 anyone who may see the master; changing needs the master's Edit right. Contacts, addresses and alerts are replaced as a list
 (the desktop adds, edits and deletes row by row; the result is the same); activities are only added.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -141,6 +141,7 @@ ITEM_TABLES = {"customers": ("MstCUSTITEM", "CUSTITEM", "CustID"), "suppliers": 
 
 class PartyItem(BaseModel):
     item_code: str
+    uom: str = ""   # the unit the rate is for (the exe's UOM column: one of the item's own units, MstItemUOM); empty = the item's main unit
     rate: float = Field(0, ge=0)
     eff_from: str | None = None
     eff_to: str | None = None
@@ -152,52 +153,102 @@ class PartyItemsIn(BaseModel):
 
 
 def party_items(party: str, code: str, user: dict = Depends(get_current_user)):
-    """[{item_code, item_name, rate, eff_from, eff_to, remarks}] for the party."""
+    """[{item_code, item_name, uom, rate, eff_from, eff_to, remarks}] for the party: the active rows only (`InActive = 'N'`), in the order they were added."""
     party_id, _doc = _party(party, code)
     table, stem, key = ITEM_TABLES[party]
     by_id = {str(i.get("_itemid")): c for c, i in store.ITEMS.items()}
-    rows = db.fetchall(f"SELECT ItemID, Rate, EffDateFrom, EffDateTo, RMKS FROM dbo.[{table}] WITH (NOLOCK) WHERE [{key}] = ? ORDER BY [{stem}ID]", (party_id,))
+    rows = db.fetchall(f"SELECT m.ItemID, m.Rate, m.EffDateFrom, m.EffDateTo, m.RMKS, u.UOMCode FROM dbo.[{table}] m WITH (NOLOCK) "
+                       f"LEFT JOIN dbo.MstUOM u ON u.UOMID = m.UOMID WHERE m.[{key}] = ? AND ISNULL(m.InActive, 'N') = 'N' ORDER BY m.[{stem}ID]", (party_id,))
     out = []
     for r in rows:
         c = by_id.get(str(r["ItemID"]))
         if c:
-            out.append({"item_code": c, "item_name": store.ITEMS[c]["name"], "rate": float(r["Rate"] or 0),
-                        "eff_from": str(r["EffDateFrom"])[:10] if r["EffDateFrom"] else None, "eff_to": str(r["EffDateTo"])[:10] if r["EffDateTo"] else None,
+            out.append({"item_code": c, "item_name": store.ITEMS[c]["name"], "uom": (r["UOMCode"] or "").strip(), "rate": float(r["Rate"] or 0),
+                        "eff_from": str(r["EffDateFrom"])[:10] if r["EffDateFrom"] else None,
+                        "eff_to": str(r["EffDateTo"])[:10] if r["EffDateTo"] and str(r["EffDateTo"])[:4] != "9999" else None,
                         "remarks": (r["RMKS"] or "").strip()})
     return out
 
 
 def save_party_items(party: str, code: str, body: PartyItemsIn, user: dict = Depends(get_current_user)):
-    """Replace the party's item rates (the desktop deletes the party's rows and writes the list again)."""
+    """Replace the party's item rates, as frmPartyItem.btnSave does: checks (the list is not empty, no item + unit twice, an active item, a rate above
+    zero), then in one transaction the party's rows are deleted and the list written again with the code and name the exe makes (the time to the
+    millisecond), InActive 'N', the user and today, effective from today to 31-12-9999 unless the row has its own dates."""
     master = PARTIES.get(party, ("", "", "", ""))[3]
     require_right("edit", master, VS_ITEM_MODULES.get(party, master))(user)   # the party master's right, or the Customer / Supplier Vs Item Master screen's
     party_id, _doc = _party(party, code)
     table, stem, key = ITEM_TABLES[party]
-    seen = set()
-    for r in body.rows:
+    if not body.rows:
+        raise HTTPException(422, "Details section should not be Empty....")
+    seen: dict[tuple, int] = {}
+    uoms: dict[int, str] = {}
+    for n, r in enumerate(body.rows, 1):
         item = store.ITEMS.get(r.item_code)
+        if not r.item_code.strip():
+            raise HTTPException(422, f"Row {n}: Item Code Empty....")
         if not item or not item.get("_itemid"):
-            raise HTTPException(422, f"Unknown item '{r.item_code}'")
-        if r.item_code in seen:
-            raise HTTPException(422, f"Item '{r.item_code}' is on the list twice")
-        seen.add(r.item_code)
+            raise HTTPException(422, f"Row {n}: item code '{r.item_code}' does not exist!")
+        if item.get("active") is False:
+            raise HTTPException(422, f"Row {n}: item code '{r.item_code}' is inactive! Please select an active item from the list.")
+        uom = (r.uom or item.get("uom") or "").strip()
+        k = (r.item_code, uom.upper())
+        if k in seen:
+            raise HTTPException(422, f"Duplicate Data present (in row {n}) for combination of columns Item and UOM")
+        seen[k] = n
+        if r.rate <= 0:
+            raise HTTPException(422, f"Row {n}: Rate Empty....")
         if r.eff_from and r.eff_to and r.eff_to < r.eff_from:
-            raise HTTPException(422, f"'{r.item_code}': the To date is before the From date")
+            raise HTTPException(422, f"Row {n}: the To date is before the From date")
+        uoms[n] = uom
+    today = datetime.now()
     with db.transaction() as cur:
         cur.execute(f"DELETE FROM dbo.[{table}] WHERE [{key}] = ?", (party_id,))
-        for r in body.rows:
+        for n, r in enumerate(body.rows, 1):
             item = store.ITEMS[r.item_code]
-            uom = db.fetchall("SELECT TOP 1 UOMID FROM dbo.MstUOM WHERE UOMCODE = ?", (item.get("uom"),))
-            sqlstore._insert(cur, table, {f"{stem}CODE": item["code"], f"{stem}NAME": item["name"], "ItemID": int(item["_itemid"]), key: party_id,
-                                          "Rate": r.rate, "EffDateFrom": r.eff_from or None, "EffDateTo": r.eff_to or None,
-                                          "UOMID": int(uom[0]["UOMID"]) if uom else None, "RMKS": r.remarks, "InActive": "N",
-                                          "AddedBy": user.get("user") or "", "AddedOn": datetime.now()})
+            uom = db.fetchall("SELECT TOP 1 UOMID FROM dbo.MstUOM WHERE UOMCODE = ?", (uoms[n],))
+            stamp = (today + timedelta(milliseconds=n - 1)).strftime("%Y%m%d%H%M%S%f")[:17]   # the exe's Date.Now.ToString("yyyyMMddHHmmssfff"); +1 ms a row so each is its own
+            sqlstore._insert(cur, table, {f"{stem}CODE": stamp, f"{stem}NAME": stamp, "ItemID": int(item["_itemid"]), key: party_id,
+                                          "Rate": r.rate, "EffDateFrom": r.eff_from or today.date().isoformat(), "EffDateTo": r.eff_to or "9999-12-31",
+                                          "UOMID": int(uom[0]["UOMID"]) if uom else None, "RMKS": r.remarks, "InActiveRmks": "", "InActive": "N",
+                                          "AddedBy": user.get("user") or "", "AddedOn": today})
     admin_audit.record(master, "Edited", code, "", f"item rates: {len(body.rows)}")
     return party_items(party, code, user)
 
 
+@router.get("/party-item-search/{party}")
+def party_item_search(party: str, q: str = "", user: dict = Depends(get_current_user)):
+    """The exe's item pick list (applyFilterFromGrid :370-381): active, authorised items, one line per unit the item has (MstItemUOM), whose code or name contains the text."""
+    if party not in ITEM_TABLES:
+        raise HTTPException(404, "Not a customer or supplier")
+    if not q.strip() or not sqlstore.enabled():
+        return []
+    from ..db_store import _has
+    like = f"%{q.strip()}%"
+    authorised = "AND i.Authorised = 'Y' " if "authorised" in _has("MstITEM") else ""   # a client without the column has nothing to approve
+    # one line per unit the item has in MstItemUOM (the exe's list); an item with no such rows (this edition leaves the table empty) shows its own unit
+    cond = f"i.InActive = 'N' {authorised}AND (i.ItemCode LIKE ? OR i.ItemName LIKE ?)"
+    rows = db.fetchall("SELECT TOP 100 ItemCode, UOMCode, ItemName FROM ("
+                       f"SELECT i.ItemCode, u.UOMCode, i.ItemName FROM MstItem i JOIN MstItemUOM iu ON iu.ItemID = i.ItemID JOIN MstUOM u ON u.UOMID = iu.UOMID WHERE {cond} "
+                       "UNION "
+                       f"SELECT i.ItemCode, u.UOMCode, i.ItemName FROM MstItem i JOIN MstUOM u ON u.UOMID = i.UOMID WHERE {cond} "
+                       "AND NOT EXISTS (SELECT 1 FROM MstItemUOM x WHERE x.ItemID = i.ItemID)) t ORDER BY ItemCode", (like, like, like, like))
+    return [{"item_code": (r["ItemCode"] or "").strip(), "uom": (r["UOMCode"] or "").strip(), "item_name": (r["ItemName"] or "").strip()} for r in rows]
+
+
+@router.get("/party-item-counts/{party}")
+def party_item_counts(party: str, user: dict = Depends(get_current_user)):
+    """{party code: items attached}: the exe's party picker shows 'ItemsAttached' beside each party (btSearch :997)."""
+    if party not in ITEM_TABLES:
+        raise HTTPException(404, "Not a customer or supplier")
+    table, stem, key = ITEM_TABLES[party]
+    ptable, id_col, code_col, _m = PARTIES[party]
+    rows = db.fetchall(f"SELECT p.[{code_col}] c, COUNT(*) n FROM dbo.[{table}] m WITH (NOLOCK) JOIN dbo.[{ptable}] p ON p.[{id_col}] = m.[{key}] "
+                       "WHERE ISNULL(m.InActive, 'N') = 'N' GROUP BY p." + f"[{code_col}]")
+    return {str(r["c"]).strip(): int(r["n"]) for r in rows}
+
+
 def _rates_view(party: str, code: str, user: dict) -> dict:
     """party_items in the {columns, rows} shape the Records window shows for every other list."""
-    cols = [("item_code", "text", 50), ("rate", "text", 12), ("eff_from", "text", 10), ("eff_to", "text", 10), ("remarks", "text", 250)]
+    cols = [("item_code", "text", 50), ("uom", "text", 20), ("rate", "text", 12), ("eff_from", "text", 10), ("eff_to", "text", 10), ("remarks", "text", 250)]
     return {"columns": [{"key": k, "type": t, "width": w} for k, t, w in cols],
             "rows": [{**{k: ("" if r.get(k) is None else r[k]) for k, _t, _w in cols}, "item_name": r.get("item_name", "")} for r in party_items(party, code, user)]}

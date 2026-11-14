@@ -18,9 +18,12 @@ SPECS: list[dict] = [
      "used_by": [("MstCUST", "CUSTGROUPID")]},
     {"path": "states", "title": "State Master", "store": "STATES", "table": "MstSTATE",
      "id": "STATEID", "code": "STATECODE", "name": "STATENAME", "extras": [], "used_by": []},
+    # frmMstSCC: a city with its state (from State Master, by name) and country. City is the code.
+    {"path": "state-city-country", "title": "State City Country", "store": "STATE_CITY_COUNTRY", "table": "MstSCC",
+     "id": "SCCID", "code": "City", "name": "State", "extras": [("country", "Country", "text")], "used_by": []},
     {"path": "currencies", "title": "Currency Master", "store": "CURRENCIES", "table": "MstCUR",
      "id": "CURID", "code": "CURCODE", "name": "CURNAME",
-     "extras": [("decimals", "CurDecimal", "text"), ("words_in_millions", "WORDSINMILLIONS", "text")],
+     "extras": [("decimals", "CurDecimal", "text"), ("exchange_rate", "ExRate", "num"), ("words_in_millions", "WORDSINMILLIONS", "text")],
      "used_by": [("MstSUPP", "CurID")]},
     {"path": "locations", "title": "Location Master", "store": "LOCATIONS", "table": "MstLOC",
      "id": "LOCID", "code": "LOCCODE", "name": "LOCNAME", "extras": [], "used_by": []},

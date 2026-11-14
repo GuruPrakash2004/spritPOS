@@ -22,7 +22,7 @@ describe('PhysicalStockEntry', () => {
     const user = userEvent.setup()
     render(<PhysicalStockEntry />)
     await user.click(screen.getByRole('button', { name: /^Load/ }))
-    expect(await screen.findByText(/select at least one Item/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Select Alteast One Item/i)).toBeInTheDocument()
   })
 
   it('shows the difference between the counted and the system stock, and clears the counts', async () => {

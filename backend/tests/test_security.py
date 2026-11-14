@@ -358,7 +358,7 @@ async def test_transport_key_is_public_and_login_works_with_it(anon_client):
 async def test_stale_encrypted_password_is_refused(anon_client, monkeypatch):
     from app import secure_fields
     old = enc("admin")
-    monkeypatch.setattr(secure_fields.time, "time", lambda: 10**10)
+    monkeypatch.setattr(secure_fields.time, "time", lambda: 4 * 10**9)   # far in the future, yet inside gzip's 32-bit mtime (the patch reaches the shared time module)
     res = await anon_client.post("/auth/login", json={"user": "ADMIN", "password": old})
     assert res.status_code == 400 and "too long ago" in res.json()["detail"]
 

@@ -182,11 +182,47 @@ def _client() -> httpx.Client:
     return _CLIENT
 
 
+# Crystal's engine inside the bridge can run out of its own memory after many reports ("Memory full. Failed to export the report. Not enough
+# memory for operation."). A new bridge process starts clean, so such an error restarts the bridge (when this backend started it) and the
+# print is tried once more; and the bridge is recycled after RECYCLE_AFTER reports so it never gets that far.
+MEMORY_ERRORS = ("memory full", "not enough memory", "out of memory", "insufficient memory")
+RECYCLE_AFTER = 300
+_reports_since_start = 0
+
+
+def _is_memory_error(detail: str) -> bool:
+    low = (detail or "").lower()
+    return any(m in low for m in MEMORY_ERRORS)
+
+
+def _restart_bridge(reason: str) -> bool:
+    global _reports_since_start
+    from . import bridge_launcher   # imported here: bridge_launcher imports this module
+    ok = bridge_launcher.restart(reason)
+    if ok:
+        _reports_since_start = 0
+    return ok
+
+
 def _call(path: str, job: dict | None, method: str = "POST") -> httpx.Response:
+    global _reports_since_start
     if using_mock():
         return _call_mock(path, job)
     if not url():
         raise _no_bridge()
+    if job is not None and path in ("/render", "/print"):
+        if _reports_since_start >= RECYCLE_AFTER:
+            _restart_bridge(f"recycled after {_reports_since_start} reports")
+        _reports_since_start += 1
+    try:
+        return _call_once(path, job, method)
+    except HTTPException as e:
+        if e.status_code == 502 and _is_memory_error(str(e.detail)) and _restart_bridge("Crystal ran out of memory"):
+            return _call_once(path, job, method)   # one more try on the fresh bridge
+        raise
+
+
+def _call_once(path: str, job: dict | None, method: str = "POST") -> httpx.Response:
     base = _check_target()
     body = None
     if job is not None:

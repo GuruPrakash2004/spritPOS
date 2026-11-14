@@ -22,7 +22,7 @@ MENU_CAPTIONS = {
     "Profit Margin": "Profit Margin Report", "Brand-wise Sales": "Brand Wise Report", "Stock Level / Reorder": "Stock Level Report",
     "Package-wise Sales": "Package Wise Sales Report", "Package-wise Purchase": "Package Wise Purchase Report",
     "Drops Sales Summary": "Drops Reports", "Drops Purchase": "Drops Reports", "Drops Petty Cash": "Drops Reports", "Drops Consolidated": "Drops Reports",
-    "Reports Dashboard": "Customised Reports...", "Global Settings": "Global Settings...", "Web Sync": "Data Port To Cloud (203)",
+    "Reports Dashboard": "Customised Reports...", "Global Settings": "Global Settings...",
 }
 ALWAYS = ("Dashboard", "About")
 ADD, EDIT, DELETE, PRINT, VIEW = 1, 2, 3, 4, 5

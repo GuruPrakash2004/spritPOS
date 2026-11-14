@@ -81,7 +81,7 @@ export const MATRIX_SCREENS = [
   { id: 'Stock Level / Reorder', name: 'Stock Level / Reorder', group: 'REPORTS', sub: 'Reorder levels (ROL) and minimum order quantities', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'Reports Dashboard', name: 'Reports Dashboard', group: 'REPORTS', sub: 'Customised MIS reports across inventory and ledgers', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
 
-  // Tools (SQL Query Execution and Screen Preview are Administrator-only, so it has no tick here)
+  // Tools (SQL Query Execution is Administrator-only, so it has no tick here)
   { id: 'Re Write Stock', name: 'Re Write Stock', group: 'TOOLS', sub: 'Check stock against documents and rebuild QOH', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
 
   // Utilities (Global Settings and the ADMIN Audit Log are Administrator-only, so they have no tick here)
@@ -90,7 +90,6 @@ export const MATRIX_SCREENS = [
   { id: 'Merge Items', name: 'Merge Items', group: 'UTILITIES', sub: 'Fold one item into another (bills, stock, QOH)', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'Bulk Master Update', name: 'Bulk Master Update', group: 'UTILITIES', sub: 'Set one Item Master field on many items at once', hasOpen: true, hasAdd: false, hasEdit: true, hasDelete: false },
   { id: 'Label Printing', name: 'Label Printing', group: 'UTILITIES', sub: 'Item barcode labels', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
-  { id: 'Web Sync', name: 'Web Sync', group: 'UTILITIES', sub: "Send the day's summary and stock to the central site", hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'Delete Non-Liquor Items', name: 'Delete Non-Liquor Items', group: 'UTILITIES', sub: 'Administrator only: delete a non-liquor group with its stock and bills', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'Shared Documents', name: 'Shared Documents', group: 'UTILITIES', sub: 'Documents the shop shares (read only)', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
   { id: 'PDF Generator', name: 'PDF Generator', group: 'UTILITIES', sub: 'Make PDFs of many documents at once', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },

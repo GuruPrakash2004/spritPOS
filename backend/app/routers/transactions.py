@@ -44,7 +44,8 @@ def next_number(kind: str, counter: str = "", current_user: dict = Depends(get_c
     if store.NUMBER_SYNC:
         store.NUMBER_SYNC(kind)   # other PCs may have saved since start-up
     seq = store._seq.setdefault(kind, store.Seq(1))
-    return {"doc_no": f"{store.FY_PREFIX}/{prefix}-{seq.value:07d}", "fy_prefix": store.FY_PREFIX, "prefix": prefix,
+    shown = f"{store.FY_PREFIX}{prefix}{seq.value:05d}" if kind in store.EXE_NUMBERED else f"{store.FY_PREFIX}/{prefix}-{seq.value:07d}"
+    return {"doc_no": shown, "fy_prefix": store.FY_PREFIX, "prefix": prefix,
             "number": seq.value}
 
 SALES = Depends(require_right("add", "Sales Invoice"))
@@ -66,7 +67,7 @@ def _price_lines(lines: list[Line], rate_field: str, with_gst: bool, kind: str |
         it = _item(ln.item_code)
         qty = ln.cases * it["bottles_per_case"] + ln.bottles
         if qty <= 0:
-            raise HTTPException(422, f"Quantity for '{ln.item_code}' must be > 0")
+            raise HTTPException(422, f"Qty cannot Be zero or less than One.... ({ln.item_code})")
         rate = ln.rate if ln.rate is not None else it[rate_field]
         amt = round(qty * rate, 2)
         cgst = round(amt * it["cgst_per"] / 100, 2) if with_gst else 0.0
@@ -95,7 +96,7 @@ def _check_stock(lines: list[dict]) -> None:
     for code, qty in need.items():
         qoh = store.ITEMS[code]["qoh"]
         if qty > qoh:
-            raise HTTPException(422, f"Insufficient stock for {code}: {qoh:g} in stock, {qty:g} needed")
+            raise HTTPException(422, f"Stock is Less... Cannot Proceed.. ({code}: {qoh:g} in stock, {qty:g} needed)")
 
 
 def _check_liquor_limits(lines: list[dict]) -> None:
@@ -110,7 +111,9 @@ def _check_liquor_limits(lines: list[dict]) -> None:
             litres[kind] += float(l.get("litres") or 0)
     for kind, code in (("BEER", "AllowBeerInLtr"), ("WINE", "AllowWineInLtr"), ("IML", "AllowIMLinLtr")):
         if code in store.GSETTINGS and litres[kind] > gsettings.number(code):
-            raise HTTPException(422, f"{kind.title() if kind != 'IML' else 'IML'} quantity exceeds the limit of {gsettings.number(code):g} Ltr ({litres[kind]:g} Ltr on this bill)")
+            limit = gsettings.number(code)   # frmTrnInv.validFlds 1063-1078 (Beer says "exceeds more than", Wine / IML "exceeds limit more than")
+            text = f"Beer quantity exceeds more than {limit:g} Ltr" if kind == "BEER" else f"{kind.title() if kind == 'WINE' else 'IML'} quantity exceeds limit more than {limit:g} Ltr"
+            raise HTTPException(422, f"{text} ({litres[kind]:g} Ltr on this bill)")
 
 
 def _is_liquor(item: dict) -> bool:
@@ -189,7 +192,7 @@ def _editable(kind: str, doc_no: str, label: str) -> dict:
     gsettings.check_not_frozen(old["date"], f"{label} {doc_no}")
     doc_settings.check_edit_days(kind, old["date"], f"{label} {doc_no}")
     if old.get("status") in ("CANCELLED", "DELETED"):
-        raise HTTPException(409, f"{label} {doc_no} is cancelled; it can't be edited")
+        raise HTTPException(409, "Current record is cancelled. Cannot edit!")
     return old
 
 
@@ -294,6 +297,8 @@ def edit_purchase_bill(doc_no: str, body: PurchaseBillIn):
     """Change a saved purchase bill in place (same number): the old bill's stock goes out, the new lines come in, and the bill's rows are rewritten.
     Refused when the old or new date is on or before the freeze date, or when the stock the old bill added has been sold since."""
     old = _get("purchase_bill", doc_no)
+    if old.get("status") in ("CANCELLED", "DELETED"):   # frmTrnPBM.ChkEditRights 5950
+        raise HTTPException(409, "Current record is cancelled. Cannot edit!")
     gsettings.check_not_frozen(old["date"], f"Purchase bill {doc_no}")
     doc_settings.check_edit_days("purchase_bill", old["date"], f"Purchase bill {doc_no}")
     if body.copy_from_indent:
@@ -316,6 +321,32 @@ def edit_purchase_bill(doc_no: str, body: PurchaseBillIn):
     return doc
 
 
+@router.post("/purchase-bill/{doc_no:path}/cancel", tags=["Purchase Bill"], dependencies=[Depends(require_right("delete", "Purchase Bill"))])
+def cancel_purchase_bill(doc_no: str):
+    """frmTrnPBM.deleteDoc with the CANCELLED choice: the bill's stock rows go (a purchase's stock comes off, a purchase return's goes back) and the
+    header is marked Cancelled = 'Y'. Refused while a stock re-write runs, on or before the Freeze Date, when already cancelled, and when taking the
+    stock off would leave an item below zero ("Stock Is going negative. Cannot Save.", unless Global Settings AllowNegative = Y)."""
+    if gsettings.rewrite_in_progress():
+        raise HTTPException(409, "re-Writing Stocks.. Try after few mins.")
+    doc = _get("purchase_bill", doc_no)
+    if doc.get("status") in ("CANCELLED", "DELETED"):
+        raise HTTPException(409, "Current record is cancelled. Deletion not possible!")
+    gsettings.check_not_frozen(doc["date"], f"Purchase bill {doc_no}")
+    sign = -1 if doc.get("purchase_type") == "Purchase Return" else 1
+    if sign > 0 and not gsettings.yes("AllowNegative"):
+        need: dict[str, float] = defaultdict(float)
+        for l in doc["lines"]:
+            need[l["item_code"]] += l["qty"]
+        if any(store.ITEMS.get(code, {}).get("qoh", 0) < qty for code, qty in need.items()):
+            raise HTTPException(409, "Stock Is going negative. Cannot Save.")
+    for l in doc["lines"]:   # the bill's stock effect is taken back (its rows in the stock list go, as in the desktop's cancel)
+        store.move_stock(l["item_code"], -sign * l["qty"], "purchase", doc_no, date.fromisoformat(doc["date"]), l["rate"])
+        store.MOVEMENTS[-1]["reverses"] = True
+    doc["status"] = "CANCELLED"
+    admin_audit.record("Purchase Bill", "Cancelled", doc_no, "status: SAVED", "status: CANCELLED", admin_audit.doc_items(doc, "Removed"))
+    return doc
+
+
 # ---------- Sales Invoice (reduces stock) ----------
 def _post_sale(doc: dict, cust: dict) -> None:
     """Take a saved bill's stock out and settle its loyalty points (the bill must already be checked)."""
@@ -324,7 +355,13 @@ def _post_sale(doc: dict, cust: dict) -> None:
         store.move_stock(l["item_code"], -l["qty"], "sale", doc["doc_no"], on, l["rate"])
     tot = doc["totals"]
     earned = 0.0   # Global Settings: MinBillForPoints, PointsForOneRs
-    if doc["customer"] != "CASH" and tot["net"] > gsettings.number("MinBillForPoints"):
+    if "BillValueGreaterThan" in store.GSETTINGS:
+        # The shop's desktop loyalty rule (frmTrnInv.showPoints / savePoints 4133-4144): only the amount of lines whose item group is
+        # "consider for loyalty" counts; at or above BillValueGreaterThan it earns Round(amount x PointsForOneRs, 0) whole points.
+        base = sum(l["amount"] for l in doc["lines"] if store.ITEM_GROUPS.get(store.ITEMS.get(l["item_code"], {}).get("group"), {}).get("consider_for_loyalty", True))
+        if doc["customer"] != "CASH" and base >= gsettings.number("BillValueGreaterThan"):
+            earned = float(round(base * gsettings.number("PointsForOneRs")))
+    elif doc["customer"] != "CASH" and tot["net"] > gsettings.number("MinBillForPoints"):
         earned = round(tot["net"] * gsettings.number("PointsForOneRs"), 2)
     tot["points_earned"] = earned
     cust["points"] = round(cust["points"] - tot["points_redeemed"] + earned, 2)
@@ -445,6 +482,8 @@ def _build_sales_invoice(body: SalesInvoiceIn, current_user: dict, doc_no: str |
         raise HTTPException(422, f"Customer has only {cust['points']} points")
     if body.redeem_points and cust["code"] == "CASH":
         raise HTTPException(422, "Points can only be redeemed on a customer's bill")
+    if body.redeem_points and body.redeem_points > tot["net"]:   # frmTrnInv.validFlds 1079-1086
+        raise HTTPException(422, "Redeem Points exceeds Invoice Value")
     if body.discount + body.redeem_points > tot["net"]:
         raise HTTPException(422, "Discount and redeemed points can't be more than the bill amount")
     tot["discount"] = body.discount
@@ -487,7 +526,7 @@ def edit_sales_invoice(doc_no: str, body: SalesInvoiceIn, current_user: dict = D
     gsettings.check_not_frozen(old["date"], f"Bill {doc_no}")
     doc_settings.check_edit_days("sales_invoice", old["date"], f"Bill {doc_no}")
     if old["status"] != "SAVED":
-        raise HTTPException(409, {"HOLD": "Held bills are changed on the counter: recall them", "CANCELLED": "A cancelled bill can't be edited",
+        raise HTTPException(409, {"HOLD": "Held bills are changed on the counter: recall them", "CANCELLED": "Current record is cancelled. Cannot edit!",
                                   "DELETED": "This bill was removed as a duplicate"}.get(old["status"], "Only a saved bill can be edited"))
     if body.hold:
         raise HTTPException(422, "A saved bill can't be put on hold")
@@ -556,7 +595,7 @@ def cancel_invoice(doc_no: str, body: CancelIn):
     gsettings.check_not_frozen(doc["date"], f"Bill {doc_no}")
     doc_settings.check_edit_days("sales_invoice", doc["date"], f"Bill {doc_no}")
     if doc["status"] == "CANCELLED":
-        raise HTTPException(409, "Already cancelled")
+        raise HTTPException(409, "Document is already cancelled")
     if doc["status"] == "DELETED":
         raise HTTPException(409, "This bill was removed as a duplicate (Utilities → Remove Duplicate Invoice); its stock is already back")
     if doc["status"] == "HOLD":
@@ -574,6 +613,36 @@ def cancel_invoice(doc_no: str, body: CancelIn):
     doc["cancel_remarks"] = body.remarks
     admin_audit.record("Sales Invoice", "Cancelled", doc_no, "status: SAVED", f"status: CANCELLED; reason: {body.remarks}",
                        admin_audit.doc_items(doc, "Removed"))
+    return doc
+
+
+@router.post("/sales-invoice/{doc_no:path}/delete", tags=["Sales Invoice"], dependencies=[SALES_CANCEL])
+def delete_invoice(doc_no: str):
+    """frmTrnInv.deleteDoc / btnDelete_Click with the exe's DELETED choice: the bill's stock goes back and its points are reversed, and the bill is
+    marked deleted (status DELETED, saved as Cancelled = 'Y' and IsDelete = 'Y', like KeepDelData in Remove Duplicate Invoice); the web never
+    removes rows from the shop's tables. Refused on or before the Freeze Date ("Document cannot be Deleted. Date is before Freezed Date
+    (Global Settings)!!"), when already cancelled or deleted, held, or already returned against."""
+    doc = _get("sales_invoice", doc_no)
+    frozen = gsettings.freeze_date()
+    if frozen and date.fromisoformat(str(doc["date"])[:10]) <= frozen:
+        raise HTTPException(409, "Document cannot be Deleted. Date is before Freezed Date (Global Settings)!!")
+    if doc["status"] == "CANCELLED":
+        raise HTTPException(409, "Document is already cancelled")
+    if doc["status"] == "DELETED":
+        raise HTTPException(409, "Document is already deleted")
+    if doc["status"] == "HOLD":
+        raise HTTPException(409, "Held bills are not posted yet: recall and discard them instead of deleting")
+    if _returned_qty(doc_no):
+        raise HTTPException(409, "Goods from this bill were already returned (Sales Return); it can't be deleted")
+    for l in doc["lines"]:
+        store.move_stock(l["item_code"], l["qty"], "sale-cancel", doc_no, date.fromisoformat(doc["date"]), l["rate"])
+    cust = store.CUSTOMERS.get(doc["customer"])
+    if cust:
+        cust["points"] = round(cust["points"] + doc["totals"]["points_redeemed"] - doc["totals"]["points_earned"], 2)
+        store.touch("CUSTOMERS", cust["code"])
+    doc["status"] = "DELETED"
+    doc["deleted_at"] = datetime.now().isoformat(timespec="seconds")
+    admin_audit.record("Sales Invoice", "Deleted", doc_no, "status: SAVED", "status: DELETED", admin_audit.doc_items(doc, "Removed"))
     return doc
 
 
@@ -654,6 +723,14 @@ def create_expense(body: ExpenseIn, current_user: dict = Depends(get_current_use
     return doc
 
 
+@router.post("/expense/{doc_no:path}/cancel", tags=["Expense Entry"], dependencies=[Depends(require_right("delete", "Expense Entry"))])
+def cancel_expense(doc_no: str, current_user: dict = Depends(get_current_user)):
+    """frmTrnNonPartyNonItem.deleteDoc (CANCELLED): the entry is marked cancelled; an expense moves no stock."""
+    if db.configured():
+        return expense_db.cancel_expense(doc_no, current_user["user"])
+    return _cancel_stock_doc("expense", doc_no, "Expense entry", None, 0)
+
+
 @router.put("/expense/{doc_no:path}", tags=["Expense Entry"], dependencies=[Depends(require_right("edit", "Expense Entry"))])
 def edit_expense(doc_no: str, body: ExpenseIn, current_user: dict = Depends(get_current_user)):
     """Change a saved expense entry in place (same number): its date and lines are rewritten. Receipts into the petty cash fund are kept."""
@@ -722,6 +799,47 @@ def edit_stock_deduction(doc_no: str, body: StockDeductionIn):
     return _edit_stock_doc("stock_deduction", doc_no, "Stock deduction", body, _build_stock_deduction, "deduction", -1)
 
 
+def _cancel_stock_doc(kind: str, doc_no: str, label: str, move_kind: str | None, sign: int) -> dict:
+    """frmTrnPBM / frmTrnSR / frmTrnSTKDED deleteDoc with the CANCELLED choice: the document's stock rows go and the header is marked Cancelled = 'Y'.
+    `sign` is what the document did to stock when saved (+1 a sales return added it, -1 a stock deduction took it out, 0 a purchase indent moves none).
+    Refused while a stock re-write runs, when already cancelled, on or before the Freeze Date, and when taking added stock off would leave an item
+    below zero ("Stock Is going negative. Cannot Save.", unless Global Settings AllowNegative = Y)."""
+    if gsettings.rewrite_in_progress():
+        raise HTTPException(409, "re-Writing Stocks.. Try after few mins.")
+    doc = _get(kind, doc_no)
+    if doc.get("status") in ("CANCELLED", "DELETED"):
+        raise HTTPException(409, "Current record is cancelled. Deletion not possible!")
+    gsettings.check_not_frozen(doc["date"], f"{label} {doc_no}")
+    if sign > 0 and not gsettings.yes("AllowNegative"):
+        need: dict[str, float] = defaultdict(float)
+        for l in doc["lines"]:
+            need[l["item_code"]] += l["qty"]
+        if any(store.ITEMS.get(code, {}).get("qoh", 0) < qty for code, qty in need.items()):
+            raise HTTPException(409, "Stock Is going negative. Cannot Save.")
+    if sign and move_kind:
+        for l in doc["lines"]:   # the document's stock effect is taken back (its rows in the stock list go)
+            store.move_stock(l["item_code"], -sign * l["qty"], move_kind, doc_no, date.fromisoformat(doc["date"]), l["rate"])
+            store.MOVEMENTS[-1]["reverses"] = True
+    doc["status"] = "CANCELLED"
+    admin_audit.record(label, "Cancelled", doc_no, "status: SAVED", "status: CANCELLED", admin_audit.doc_items(doc, "Removed"))
+    return doc
+
+
+@router.post("/purchase-indent/{doc_no:path}/cancel", tags=["Purchase Indent"], dependencies=[Depends(require_right("delete", "Purchase Indent"))])
+def cancel_purchase_indent(doc_no: str):
+    return _cancel_stock_doc("purchase_indent", doc_no, "Purchase indent", None, 0)
+
+
+@router.post("/sales-return/{doc_no:path}/cancel", tags=["Sales Return"], dependencies=[Depends(require_right("delete", "Sales Return"))])
+def cancel_sales_return(doc_no: str):
+    return _cancel_stock_doc("sales_return", doc_no, "Sales return", "sales-return", +1)
+
+
+@router.post("/stock-deduction/{doc_no:path}/cancel", tags=["Stock Deduction"], dependencies=[Depends(require_right("delete", "Stock Deduction"))])
+def cancel_stock_deduction(doc_no: str):
+    return _cancel_stock_doc("stock_deduction", doc_no, "Stock deduction", "deduction", -1)
+
+
 # ---------- Closing Stock Entry ----------
 @router.get("/closing-stock/load", tags=["Closing Stock Entry"])
 def load_closing_stock(as_on: date):
@@ -735,7 +853,26 @@ CLOSING = Depends(require_right("add", "Closing Stock Entry"))
 
 @router.post("/closing-stock", status_code=201, tags=["Closing Stock Entry"], dependencies=[CLOSING])
 def create_closing_stock(body: ClosingStockIn):
-    """Physical closing stock per item; Sales Qty = OP − Closing."""
+    return _build_closing_stock(body)
+
+
+@router.put("/closing-stock/{doc_no:path}", tags=["Closing Stock Entry"], dependencies=[Depends(require_right("edit", "Closing Stock Entry"))])
+def edit_closing_stock(doc_no: str, body: ClosingStockIn):
+    """frmTrnCloseStk edit: refused when cancelled ("Current record is cancelled. Cannot edit!") or once the sales invoice is generated ("Invoice Generated
+    Cannot To Edit"); same number, the lines are rewritten (an entry moves no stock)."""
+    old = _get("closing_stock", doc_no)
+    if old.get("status") in ("CANCELLED", "DELETED"):
+        raise HTTPException(409, "Current record is cancelled. Cannot edit!")
+    if old.get("invoice_no"):
+        raise HTTPException(409, "Invoice Generated Cannot To Edit")
+    gsettings.check_not_frozen(old["date"], f"Closing stock {doc_no}")
+    doc = _build_closing_stock(body, doc_no=doc_no, base=old)
+    doc["revision"] = int(old.get("revision", 0)) + 1
+    return doc
+
+
+def _build_closing_stock(body: ClosingStockIn, doc_no: str | None = None, base: dict | None = None) -> dict:
+    """Physical closing stock per item; Sales Qty = OP − Closing. With `doc_no` / `base` it edits that saved entry."""
     gsettings.check_not_frozen(body.as_on, "This closing stock entry")
     doc_settings.check_lines("closing_stock", [], body.as_on)
     lines = []
@@ -748,20 +885,31 @@ def create_closing_stock(body: ClosingStockIn):
             raise HTTPException(422, f"Closing qty for {l.item_code} exceeds opening ({it['qoh']})")
         lines.append({"item_code": it["code"], "op_qty": it["qoh"], "closing_qty": l.closing_qty,
                       "sales_qty": sales, "mrp": it["mrp"], "amount": round(sales * it["mrp"], 2)})
-    doc_no = store.next_doc_no("closing_stock", doc_settings.prefix("closing_stock"))
+    doc_no = doc_no or store.next_doc_no("closing_stock", doc_settings.prefix("closing_stock"))
     doc = {"doc_no": doc_no, "date": body.as_on.isoformat(), "lines": lines, "invoice_no": None,
            "total_amount": round(sum(l["amount"] for l in lines), 2)}
     store.DOCS["closing_stock"][doc_no] = doc
-    admin_audit.record("Closing Stock Entry", "Added", doc_no, "", f"total {doc['total_amount']}",
+    admin_audit.record("Closing Stock Entry", "Edited" if base else "Added", doc_no, f"total {base['total_amount']}" if base else "", f"total {doc['total_amount']}",
                        [{"code": l["item_code"], "name": store.ITEMS.get(l["item_code"], {}).get("name", ""), "status": "Added",
                          "details": f"OP {l['op_qty']}, closing {l['closing_qty']}, sold {l['sales_qty']}"} for l in lines])
     return doc
+
+
+@router.post("/closing-stock/{doc_no:path}/cancel", tags=["Closing Stock Entry"], dependencies=[Depends(require_right("delete", "Closing Stock Entry"))])
+def cancel_closing_stock(doc_no: str):
+    """frmTrnCloseStk delete (CANCELLED): refused once the sales invoice is generated ("Invoice Generated Cannot To Delete"); a closing stock entry moves no stock."""
+    cse = _get("closing_stock", doc_no)
+    if cse.get("invoice_no"):
+        raise HTTPException(409, "Invoice Generated Cannot To Delete")
+    return _cancel_stock_doc("closing_stock", doc_no, "Closing stock entry", None, 0)
 
 
 @router.post("/closing-stock/{doc_no:path}/generate-invoice", status_code=201, tags=["Closing Stock Entry"], dependencies=[CLOSING])
 def generate_invoice_from_cse(doc_no: str, body: GenerateInvoiceIn, current_user: dict = Depends(get_current_user)):
     """Generate Sales Invoice from the computed sales quantities."""
     cse = _get("closing_stock", doc_no)
+    if cse.get("status") in ("CANCELLED", "DELETED"):
+        raise HTTPException(409, "Current record is cancelled. Cannot edit!")
     gsettings.check_not_frozen(cse["date"], f"Closing stock {doc_no}")
     if cse["invoice_no"]:
         raise HTTPException(409, f"Invoice {cse['invoice_no']} already generated")
@@ -771,6 +919,7 @@ def generate_invoice_from_cse(doc_no: str, body: GenerateInvoiceIn, current_user
     inv = create_sales_invoice(SalesInvoiceIn(date=date.fromisoformat(cse["date"]), counter=body.counter,
                                               salesperson=body.salesperson, lines=lines), current_user)
     cse["invoice_no"] = inv["doc_no"]
+    cse["revision"] = int(cse.get("revision", 0)) + 1   # the database's INVNO is updated through the entry's rewrite
     admin_audit.record("Closing Stock Entry", "Invoice generated", doc_no, "", f"invoice {inv['doc_no']}")
     return inv
 
@@ -778,7 +927,7 @@ def generate_invoice_from_cse(doc_no: str, body: GenerateInvoiceIn, current_user
 # The footer asks for these every 15 seconds from every open screen and PC, and all database reads share one connection lock: a slow
 # TrnHdrSINV scan (no index on SINVDate in a big table) would otherwise hold everything up and let the polls pile up behind it.
 # So the answer is kept for a few seconds, only one request asks the database at a time, and the others get the last answer meanwhile.
-TOTALS_TTL = 10.0   # seconds an answer is reused
+TOTALS_TTL = 60.0   # seconds an answer is reused (the scan behind it can take 20-30 s on a big shop: SINVDate has no index)
 _totals_cache: dict[str, tuple[float, dict]] = {}
 _totals_lock = threading.Lock()
 
@@ -816,6 +965,16 @@ def today_totals(on: date | None = None):
             finally:
                 _totals_lock.release()
             return today_totals(on)
+        if hit:   # an older answer exists: give it now and refresh it in the background, so a slow scan never holds a screen's footer up
+            def _refresh():
+                try:
+                    _totals_cache[key] = (time.monotonic(), _db_today_totals(day))
+                except Exception:   # noqa: BLE001 - keep the last answer
+                    pass
+                finally:
+                    _totals_lock.release()
+            threading.Thread(target=_refresh, daemon=True).start()
+            return hit[1]
         try:
             out = _db_today_totals(day)
             _totals_cache[key] = (time.monotonic(), out)

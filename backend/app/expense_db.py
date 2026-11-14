@@ -49,7 +49,7 @@ def update_expense(doc_no: str, body, user: str) -> dict:
     if not h:
         raise HTTPException(404, f"Expense entry '{doc_no}' not found")
     if h.get("Cancelled") == "Y":
-        raise HTTPException(409, "This expense entry is cancelled; it can't be edited")
+        raise HTTPException(409, "Current record is cancelled. Cannot edit!")   # frmTrnNonPartyNonItem 160
     gsettings.check_not_frozen(str(h["EXPDate"])[:10], "This expense entry")
     gsettings.check_not_frozen(body.date, "This expense entry")
     codes = sorted({l.ledger for l in body.lines})
@@ -79,6 +79,27 @@ def update_expense(doc_no: str, body, user: str) -> dict:
     db_store.load_expenses()
     return {"doc_no": doc_no, "date": body.date.isoformat(), "paid_from": body.paid_from, "total": total,
             "lines": [{"ledger": l.ledger, "amount": l.amount, "narration": l.narration} for l in body.lines]}
+
+
+def cancel_expense(doc_no: str, user: str) -> dict:
+    """frmTrnNonPartyNonItem.deleteDoc with the CANCELLED choice: the header is marked Cancelled = 'Y' (an expense moves no stock). Refused while a
+    stock re-write runs, when already cancelled ("Current record is cancelled. Deletion not possible!") and on or before the Freeze Date."""
+    accounting._need("TrnHdrEXP", "TrnDtlEXP")
+    if gsettings.rewrite_in_progress():
+        raise HTTPException(409, "re-Writing Stocks.. Try after few mins.")
+    h = db.fetchone("SELECT EXPID, EXPDate, Cancelled FROM TrnHdrEXP WITH (NOLOCK) WHERE PrintEXPNO = ? OR EXPNO = ?", (doc_no, doc_no))
+    if not h:
+        raise HTTPException(404, f"Expense entry '{doc_no}' not found")
+    if h.get("Cancelled") == "Y":
+        raise HTTPException(409, "Current record is cancelled. Deletion not possible!")
+    gsettings.check_not_frozen(str(h["EXPDate"])[:10], "This expense entry")
+    have = accounting._columns("TrnHdrEXP")
+    vals = {k: v for k, v in {"Cancelled": "Y", "ChangedBy": user, "ChangedOn": datetime.now()}.items() if k.lower() in have}
+    with db.direct_writes():
+        with db.transaction() as cur:
+            cur.execute(f"UPDATE TrnHdrEXP SET {', '.join(f'{k} = ?' for k in vals)} WHERE EXPID = ? AND Cancelled <> 'Y'", (*vals.values(), int(h["EXPID"])))
+    db_store.load_expenses()
+    return {"doc_no": doc_no, "status": "CANCELLED"}
 
 
 def load_opening() -> None:

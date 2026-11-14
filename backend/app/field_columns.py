@@ -21,7 +21,7 @@ _EXPLICIT: dict[str, dict[str, str]] = {
                   "pin": "PinCode", "state": "State", "country": "Country", "phone": "PHNO", "gstin": "GSTNO"},
     "item-groups": {"code": "ITEMGROUPCODE", "name": "ITEMGROUPNAME", "liquor": "LiqItem", "consider_for_loyalty": "LOYALTY"},
     "brands": {"code": "BRANDCODE", "name": "BRANDNAME"},
-    "uoms": {"code": "UOMCODE", "name": "UOMNAME"},
+    "uoms": {"code": "UOMCODE", "name": "UOMNAME", "decimals": "Decimals"},
     "packages": {"litres_per_bottle": "LTRPERBOT"},
     "ledger-groups": {"code": "LEDGROUPCODE", "name": "LEDGROUPNAME"},
     "ledgers": {"code": "LEDCODE", "name": "LEDNAME", "group": "LEDGROUPID"},
@@ -115,3 +115,9 @@ def web_key_for(path: str, column: str) -> str:
         if col.lower() == want:
             return key
     return ""
+
+
+def is_typed_column(column: str) -> bool:
+    """True when some master writes this column through a typed field of its own (e.g. MstItem.PURRATE = `purchase_rate`)."""
+    low = str(column).lower()
+    return any(c.lower() == low for cols in _EXPLICIT.values() for c in cols.values())

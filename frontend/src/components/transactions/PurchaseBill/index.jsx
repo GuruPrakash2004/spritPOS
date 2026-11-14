@@ -163,6 +163,8 @@ export default function PurchaseBill() {
   }, [priced, tcsPct]);
 
   const balance = (Number(invValue) || 0) - totals.net;
+  // Global Settings PurchaseBill / CheckPBValue (frmTrnPBM.validFlds 2184-2191): only when Y must the bill's total equal the invoice value to save.
+  const [checkPbValue, setCheckPbValue] = useState(true);
   const balanced = invValue !== '' && Math.abs(balance) < 0.005;
   // As in the desktop, items can only be entered once the supplier and the PB (invoice) value are in.
   // The bill date, supplier and supplier invoice no. / date are mandatory too.
@@ -178,7 +180,7 @@ export default function PurchaseBill() {
   }, [docSettings.allow_edit_date]);
 
   useEffect(() => {
-    getSettingValues().then(v => setMinMargin(Number(v?.PurSellVarPer) || 0)).catch(() => undefined);
+    getSettingValues().then(v => { setMinMargin(Number(v?.PurSellVarPer) || 0); if (v && 'CheckPBValue' in v) setCheckPbValue(String(v.CheckPBValue).toUpperCase() === 'Y'); }).catch(() => undefined);
   }, []);
 
   const selectSupplier = (name) => {
@@ -401,7 +403,7 @@ export default function PurchaseBill() {
     if (!invNo.trim() || !invDate) return setToast({ kind: 'error', text: 'Enter the supplier Inv No and Inv Date.' });
     if (!filled.length) return setToast({ kind: 'error', text: 'Add at least one item.' });
     if (filled.some(r => !r.qty || !r.rate)) return setToast({ kind: 'error', text: 'Every item needs a PB Qty and PB Rate.' });
-    if (!balanced) return setToast({ kind: 'error', text: `PB value differs from Inv Value by ₹ ${money(Math.abs(balance))}.` });
+    if (checkPbValue && !balanced) return setToast({ kind: 'error', text: `PB value differs from Inv Value by ₹ ${money(Math.abs(balance))}.` });
     if (filled.some(r => r.stock === null)) return setToast({ kind: 'error', text: 'Pick every item with Add Item so it has an item code.' });
     if (headDef('remarks').required && !remarks.trim()) return setToast({ kind: 'error', text: `Enter the ${headDef('remarks').label}.` });
     if (!extrasBill.check()) return setToast({ kind: 'error', text: 'Fill the additional details marked in red.' });

@@ -125,27 +125,6 @@ async def version(user: dict = Depends(get_current_user)):
     return await _check()
 
 
-@router.get("/designer/preview")
-async def preview(admin: dict = Depends(require_admin)):
-    """For an Administrator: every screen the designer defines, what the server builds from it and what looks wrong."""
-    def build():
-        paths = _master_paths()
-        out = []
-        for d in sorted(store.UTL_DOCS.values(), key=lambda d: int(d["DocID"])):
-            doc_id = int(d["DocID"])
-            path = paths.get(str(d.get("HdrTblName") or "").lower(), "") if str(d.get("DocType") or "") == "Master" else ""
-            rows = designer.fields_for(doc_id)
-            hdr, dtl = schema_meta.columns(d.get("HdrTblName")), schema_meta.columns(d.get("DtlTblName"))
-            screen = schema_meta.build_screen(d, rows, hdr, dtl, schema_meta.captions())
-            problems = schema_meta.review(d, rows, hdr, dtl, path)
-            out.append({"doc_id": doc_id, "name": screen["name"], "type": screen["type"], "short_form": screen["short_form"],
-                        "header_table": screen["header_table"], "detail_table": screen["detail_table"], "master_path": path,
-                        "designer_fields": len(rows), "shown_fields": len([f for f in screen["fields"] if not f["hidden"]]),
-                        "problems": problems, "fields": screen["fields"]})
-        return out
-    return {"version": _last["version"] or "", "screens": await run_in_threadpool(build)}
-
-
 @router.get("/designer/menu")
 async def menu(user: dict = Depends(get_current_user)):
     """The desktop's menu (MstMenu) with each entry's document, group and order."""

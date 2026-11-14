@@ -5,7 +5,8 @@
 // Keyboard: Enter moves to the next field (Shift+Enter back); ⌘/Ctrl+S saves.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Eraser, Save } from 'lucide-react';
+import { Download, Eraser, FileSpreadsheet, Save } from 'lucide-react';
+import { downloadXls } from '../../lib/xlsExport';
 import Toast from '../common/Toast';
 import Kbd from '../common/Kbd';
 import MultiSelectDropdown from '../common/MultiSelectDropdown';
@@ -49,7 +50,7 @@ export default function PhysicalStockEntry() {
   const load = () => {
     const text = itemText.trim().toLowerCase();
     const items = text ? catalogue.filter(i => i.code.toLowerCase().includes(text) || i.name.toLowerCase().includes(text)).map(i => i.code) : [];
-    if (!groups.length && !packages.length && !items.length) return setProblem('Please select at least one Item / Item Group / Package.');
+    if (!groups.length && !packages.length && !items.length) return setProblem('Please Select Alteast One Item / ItemGroup / Package..');
     setProblem('');
     loadPhysicalStock({ groups: groups.join(','), packages: packages.join(','), items: items.join(',') })
       .then(list => { setRows(list.map(r => ({ ...r, physical: String(r.system_qty), pur: r.pur_rate == null ? null : String(r.pur_rate), mrpNew: String(r.mrp) }))); setKey(newIdempotencyKey()); })
@@ -66,18 +67,34 @@ export default function PhysicalStockEntry() {
     const m = new Map();
     for (const r of rows) {
       const k = `${r.group}\u0000${r.package}`;
-      const s = m.get(k) || { group: r.group, package: r.package, phys: 0, sys: 0, physL: 0, sysL: 0, physCases: 0, sysCases: 0 };
+      const s = m.get(k) || { group: r.group, package: r.package, phys: 0, sys: 0, physL: 0, sysL: 0, physCases: 0, sysCases: 0, physLoose: 0, sysLoose: 0 };
       s.phys += num(r.physical); s.sys += r.system_qty;
       s.physL += num(r.physical) * r.litres_per_bottle; s.sysL += r.system_qty * r.litres_per_bottle;
-      if (r.bottles_per_case > 0) { s.physCases += num(r.physical) / r.bottles_per_case; s.sysCases += r.system_qty / r.bottles_per_case; }
+      if (r.bottles_per_case > 0) {   // frmTrnPSE.btnShowSumm: whole cases and the loose bottles left over, per item
+        const pc = Math.floor(num(r.physical) / r.bottles_per_case), sc = Math.floor(r.system_qty / r.bottles_per_case);
+        s.physCases += pc; s.sysCases += sc; s.physLoose += num(r.physical) - pc * r.bottles_per_case; s.sysLoose += r.system_qty - sc * r.bottles_per_case;
+      }
       m.set(k, s);
     }
     return [...m.values()];
   }, [rows]);
+  const casesText = (cases, loose) => [cases ? `${cases} ${cases > 1 ? 'Cases' : 'Case'}` : '', loose ? `${loose} ${loose > 1 ? 'Bottles' : 'Bottle'}` : ''].filter(Boolean).join(',');
+  const exportGrid = async () => {
+    if (!rows.length) return;
+    if (!(await toastStore.defer('ok', `${rows.length} items will be exported to Excel when this closes.`, 'Export cancelled.'))) return;
+    const cols = ['Group', 'Item name', 'Package', 'Pur Rate', 'MRP Rate', 'Physical Stock', 'System Stock', 'Diff'].map(l => ({ key: l, label: l }));
+    downloadXls('Physical_Stock_Entry', 'Physical Stock Entry', '', cols, rows.map(r => ({ Group: r.group, 'Item name': r.item_name, Package: r.package, 'Pur Rate': r.pur ?? '', 'MRP Rate': r.mrpNew, 'Physical Stock': num(r.physical), 'System Stock': r.system_qty, Diff: diff(r) })));
+  };
+  const exportSummary = async () => {
+    if (!summary.length) return;
+    if (!(await toastStore.defer('ok', 'The summary will be exported to Excel when this closes.', 'Export cancelled.'))) return;
+    const cols = ['Group', 'Package', 'Physical Stock (Bottles)', 'System Stock (Bottles)', 'Difference', 'Physical Stock (Ltrs)', 'System Stock (Ltrs)', 'Physical Stock Cases', 'System Stock Cases'].map(l => ({ key: l, label: l }));
+    downloadXls('Physical_Stock_Summary', 'Physical Stock Summary Report', `as on ${new Date().toLocaleDateString('en-GB')}`, cols, summary.map(s => ({ Group: s.group, Package: s.package, 'Physical Stock (Bottles)': s.phys, 'System Stock (Bottles)': s.sys, Difference: s.phys - s.sys, 'Physical Stock (Ltrs)': Math.round(s.physL * 1000) / 1000, 'System Stock (Ltrs)': Math.round(s.sysL * 1000) / 1000, 'Physical Stock Cases': casesText(s.physCases, s.physLoose), 'System Stock Cases': casesText(s.sysCases, s.sysLoose) })));
+  };
 
   const save = async () => {
     setProblem('');
-    if (!dirty.length) return setProblem('There are no changes to update.');
+    if (!dirty.length) return setProblem('There are no Changes to Update!');
     if (dirty.some(r => num(r.physical) < 0 || !Number.isInteger(num(r.physical)))) return setProblem('Physical stock must be a whole number, zero or more.');
     if (asSales && dirty.some(r => diff(r) < 0) && !counter) return setProblem('Choose a sales counter for the reduced quantity.');
     const body = {
@@ -124,6 +141,7 @@ export default function PhysicalStockEntry() {
         </div>
         <button type="button" onClick={load} className={secondaryButton}><Download size={14} />Load</button>
         <button type="button" onClick={() => setRows(rs => rs.map(r => ({ ...r, physical: '0' })))} disabled={!rows.length} className={secondaryButton}><Eraser size={14} />Clear Physical Stock</button>
+        <button type="button" onClick={() => void exportGrid()} disabled={!rows.length} className={secondaryButton}><FileSpreadsheet size={14} />Export to Excel</button>
         <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={asSales} onChange={e => { setAsSales(e.target.checked); setProblem(''); }} />Show Reduced Qty as Sales</label>
         {asSales && (<>
           <select value={counter} onChange={e => setCounter(e.target.value)} className={field} aria-label="Sales counter">
@@ -165,13 +183,15 @@ export default function PhysicalStockEntry() {
 
       {summary.length > 0 && (
         <div className={`${panel} overflow-auto`}>
-          <div className="border-b border-line px-4 py-2 text-xs font-bold">Summary Report</div>
+          <div className="flex items-center justify-between border-b border-line px-4 py-2 text-xs font-bold">Summary Report
+            <button type="button" onClick={() => void exportSummary()} className={secondaryButton}><FileSpreadsheet size={14} />Export to Excel</button></div>
           <table className="w-full text-xs">
             <thead className={tableHead}>
               <tr>
                 <th className="px-3 py-2">Group</th><th className="px-3 py-2">Package</th>
                 <th className="px-3 py-2 text-right">Physical (Bottles)</th><th className="px-3 py-2 text-right">System (Bottles)</th><th className="px-3 py-2 text-right">Difference</th>
                 <th className="px-3 py-2 text-right">Physical (Ltrs)</th><th className="px-3 py-2 text-right">System (Ltrs)</th>
+                <th className="px-3 py-2 text-right">Physical Stock Cases</th><th className="px-3 py-2 text-right">System Stock Cases</th>
               </tr>
             </thead>
             <tbody className={tableBody}>
@@ -181,6 +201,7 @@ export default function PhysicalStockEntry() {
                   <td className="px-3 py-1.5 text-right tabular-nums">{s.phys}</td><td className="px-3 py-1.5 text-right tabular-nums">{s.sys}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{s.phys - s.sys}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{money(s.physL)}</td><td className="px-3 py-1.5 text-right tabular-nums">{money(s.sysL)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{casesText(s.physCases, s.physLoose)}</td><td className="px-3 py-1.5 text-right tabular-nums">{casesText(s.sysCases, s.sysLoose)}</td>
                 </tr>
               ))}
             </tbody>

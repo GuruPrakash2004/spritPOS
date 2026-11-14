@@ -6,7 +6,10 @@ import { Upload } from 'lucide-react';
 import MasterCrud from './MasterCrud';
 import Modal from '../common/Modal';
 import { toastStore } from '../common/toastStore';
-import { errorText, getItems, importItems } from '../../lib/api';
+import { errorText, getItems, importItems, recalculateItemRates } from '../../lib/api';
+import { openModule } from '../../lib/nav';
+import { useConfirm } from '../common/ConfirmDialog';
+import { DataLinkProblemDialog, UpdateItemFieldsDialog } from './ItemOptionDialogs';
 import { readTableFile } from '../../lib/readTableFile';
 import { ITEM_FIELDS, ITEM_IMPORT_ALIASES, ITEM_IMPORT_COLUMNS, ITEM_IMPORT_EXTRAS, ITEM_IMPORT_NUMERIC } from './masterConfigs';
 import { primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
@@ -21,6 +24,8 @@ export default function ItemMaster() {
   const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState('');
   const fileInput = useRef(null);
+  const [dialog, setDialog] = useState('');   // 'datalink' | 'fields'
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const downloadTemplate = () => {
     const link = document.createElement('a');
@@ -69,6 +74,15 @@ export default function ItemMaster() {
     }));
   };
 
+  // Options → Update Item Rates (frmMstItem.updateItemRates): recalculate every Item Master formula field for all items.
+  const updateRates = async () => {
+    if (!(await confirm('Are you sure you want to Update/Recalulate Rates?'))) return;
+    if (!(await toastStore.defer('ok', 'Item rates will be recalculated when this closes.', 'Update cancelled. No rates were changed.'))) return;
+    recalculateItemRates()
+      .then(r => { setReloadKey(k => k + 1); setMessage(r.message); })
+      .catch(e => setMessage(errorText(e)));
+  };
+
   const importRows = async () => {
     const good = preview?.filter(p => !p.duplicate && !p.problem) ?? [];
     if (!good.length) return setMessage('Nothing to import: every row is a duplicate or has a problem.');
@@ -91,11 +105,20 @@ export default function ItemMaster() {
         path="items"
         fields={ITEM_FIELDS}
         reloadKey={reloadKey}
-        options={[
-          { label: 'Download Template', onClick: downloadTemplate },
+        options={[   // the exe's Options menu, in its order
+          { label: 'Items-DataLink Problem', onClick: () => setDialog('datalink') },
           { label: 'Import Item from Excel', onClick: () => fileInput.current?.click() },
+          { label: 'Download Template', onClick: downloadTemplate },
+          { label: 'Update Stock from Excel', onClick: () => openModule('Update Item Stock') },
+          { label: 'Item Vs Brand', onClick: () => openModule('Item Vs Brand') },
+          { label: 'Update Item Master Fields', onClick: () => setDialog('fields') },
+          { label: 'Update Item Rates', onClick: () => void updateRates() },
+          { label: 'Print Barcode', onClick: () => openModule('Label Printing') },
         ]}
       />
+      {confirmDialog}
+      {dialog === 'datalink' && <DataLinkProblemDialog onClose={() => setDialog('')} />}
+      {dialog === 'fields' && <UpdateItemFieldsDialog onClose={() => setDialog('')} onDone={() => setReloadKey(k => k + 1)} />}
       <input ref={fileInput} type="file" accept=".xls,.xlsx,.csv" hidden onChange={e => { const f = e.target.files?.[0]; if (f) void loadFile(f); e.target.value = ''; }} />
       {message && !preview && (
         <p role="status" className="mx-auto mt-3 max-w-6xl rounded-lg bg-accent/10 px-4 py-2 text-xs font-medium text-accent-ink">{message}</p>

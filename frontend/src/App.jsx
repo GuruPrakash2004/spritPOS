@@ -61,13 +61,11 @@ import { ScreenSkeleton } from './components/common/Skeleton';
 // Rarely used screens load on demand (lib/screenLoaders.js); the rest are in the main bundle.
 const AdminMaster = lazyScreen('Admin Master');
 const SqlQueryExecution = lazyScreen('SQL Query Execution');
-const ScreenPreview = lazyScreen('Screen Preview');
 const ReWriteStock = lazyScreen('Re Write Stock');
 const GlobalSettings = lazyScreen('Global Settings');
 const AdminAuditLog = lazyScreen('ADMIN Audit Log');
 const About = lazyScreen('About');
 const RemoveDuplicateInvoice = lazyScreen('Remove Duplicate Invoice');
-const WebSync = lazyScreen('Web Sync');
 const BulkMasterUpdate = lazyScreen('Bulk Master Update');
 const LabelPrinting = lazyScreen('Label Printing');
 const MergeItems = lazyScreen('Merge Items');
@@ -308,7 +306,6 @@ export default function App() {
       case 'Reports Dashboard':
       case 'Customised Reports': return <ReportsDashboard />;
       case 'SQL Query Execution': return <SqlQueryExecution />;
-      case 'Screen Preview': return <ScreenPreview />;
       case 'Re Write Stock': return <ReWriteStock />;
       case 'Global Settings': return <GlobalSettings />;
       case 'ADMIN Audit Log': return <AdminAuditLog />;
@@ -336,7 +333,6 @@ export default function App() {
       case 'Journal Voucher': return <VoucherEntry kind="journal" title="Journal Voucher" />;
       case 'Shared Documents': return <SharedDocuments />;
       case 'Delete Non-Liquor Items': return <DeleteNonLiquorItems />;
-      case 'Web Sync': return <WebSync />;
       case 'Bulk Master Update': return <BulkMasterUpdate />;
       case 'Label Printing': return <LabelPrinting />;
       default: return (

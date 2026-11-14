@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app import passwords, store, websync
+from app import passwords, store
 from app.central import auth as cauth, config, main as central, repo as crepo, tables as T
 
 from conftest import enc
@@ -188,26 +188,6 @@ async def test_stock_across_shops(shops):
         res = (await c.get("/stock?q=kingf")).json()
         kf = res["items"][0]
         assert kf["total_qoh"] == 40 and {s["client"]: s["short"] for s in kf["shops"]} == {"SHOP1": True, "SHOP2": False}
-
-
-async def test_a_real_web_sync_payload_is_accepted(shops, client):
-    """What a shop's websync.build() sends is what the central site accepts, with nothing dropped."""
-    day = max(date.fromisoformat(i["date"]) for i in store.DOCS["sales_invoice"].values() if i["status"] == "SAVED")
-    await client.post("/transactions/purchase-indent", json={"date": day.isoformat(), "supplier": "USL",
-                                                             "lines": [{"item_code": "RC-750", "cases": 1}]})
-    payload, stock = websync.build(day), websync.build_stock()
-    async with _client() as c:
-        h = {"Authorization": f"Bearer {shops['SHOP1']}"}
-        res = await c.post("/sync", json=payload, headers=h)
-        assert res.status_code == 200, res.text
-        sent = {name: len(rows) for name, rows in payload["tables"].items() if rows}
-        assert res.json()["rows"] == sent and sent["TrnHdrPI"] >= 1
-        assert (await c.post("/sync/stock", json=stock, headers=h)).json()["items"] == len(store.ITEMS)
-        await _signed_in(c, "OWNER")
-        body = (await c.get(f"/dsr?day={day}&client=SHOP1")).json()
-        assert body["summary"]["TotSalesAmt"] == payload["tables"]["RptDSRSmry"][0]["TotSalesAmt"]
-        indents = (await c.get(f"/indents?day={day}&client=SHOP1")).json()
-        assert indents and indents[0]["lines"][0]["ItemCode"] == "RC-750"
 
 
 class _DownDb:

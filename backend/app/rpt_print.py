@@ -64,6 +64,9 @@ def selection_for(short_form: str) -> str:
     return f"{{TrnHdr{short_form}.{short_form}ID}} ="
 
 
+_NUMBERS: dict[int, str] = {}   # id -> the number column's stored text, filled by document_id (the report selects by it, see key_selection)
+
+
 def document_id(kind: str, doc_no: str) -> int:
     """The saved document's ID in TrnHdr<short form> (the report selects by it)."""
     sh = designer.SHORT_FORMS.get(kind)
@@ -81,11 +84,29 @@ def document_id(kind: str, doc_no: str) -> int:
         return int(pse_id)
     # The desktop's number columns are varchar(12): the web's "26/PB-0000012" is saved as "26PB0000012" (db_store.short_no),
     # so look for the number either way.
-    rows = db.fetchall(f"SELECT TOP 1 [{sh}ID] AS id FROM dbo.[TrnHdr{sh}] WHERE [{sh}NO] IN (?, ?)",
+    # CAST: the number column is varchar, a unicode parameter would turn the key seek into a scan of the whole table (2 s on a big shop).
+    rows = db.fetchall(f"SELECT TOP 1 [{sh}ID] AS id, [{sh}NO] AS no FROM dbo.[TrnHdr{sh}] WITH (NOLOCK) WHERE [{sh}NO] IN (CAST(? AS VARCHAR(30)), CAST(? AS VARCHAR(30)))",
                        (doc_no, db_store.short_no(doc_no)))
     if not rows:
         raise HTTPException(404, f"{doc_no} is not in the database yet.")
+    if len(_NUMBERS) > 500:
+        _NUMBERS.clear()
+    _NUMBERS[int(rows[0]["id"])] = str(rows[0]["no"] or "").strip()
     return int(rows[0]["id"])
+
+
+_ID_SELECTION = re.compile(r"^\s*\{\s*(TrnHdr\w+)\.(\w+?)ID\s*\}\s*=\s*$", re.I)
+
+
+def key_selection(sel: str, doc_id: int) -> str:
+    """The record selection for a document: the option's `{TrnHdr<X>.<X>ID} =` plus the ID. The header tables are keyed (clustered) on the NUMBER column
+    and have no index on the ID, so Crystal's query `WHERE ID = n` reads the whole header table (806,000 bills here: 25 s once the cache is cold);
+    `{TrnHdr<X>.<X>NO} = 'number'` is a key seek (milliseconds) and selects the very same row. Anything else is left exactly as designed."""
+    m = _ID_SELECTION.match(sel or "")
+    no = _NUMBERS.get(doc_id, "")
+    if not m or not no or "'" in no:
+        return f"{sel} {doc_id}" if sel else ""
+    return f"{{{m.group(1)}.{m.group(2)}NO}} = '{no}'"
 
 
 def scalar(table: str, field: str) -> str:
@@ -151,7 +172,7 @@ def build(kind: str, doc_no: str, option_name: str = "", click: str = "N", fallb
         raise HTTPException(422, f"'{kind}' has no print format")
     doc_id = document_id(kind, doc_no)
     if kind in FIXED_RPT:   # the desktop's own fixed file and selection, nothing else
-        return {"rpt": FIXED_RPT[kind], "selection": f"{selection_for(sh)} {doc_id}", "parameters": {}, "copies": 1,
+        return {"rpt": FIXED_RPT[kind], "selection": key_selection(selection_for(sh), doc_id), "parameters": {}, "copies": 1,
                 "printer": "", "action": "preview", "option": "", "stored_proc": ""}
     doc = designer.doc_for(sh)
     option = None
@@ -168,7 +189,7 @@ def build(kind: str, doc_no: str, option_name: str = "", click: str = "N", fallb
         if not rpt:
             raise HTTPException(404, "No print format is set up for this document (Doc Designer → Print options).")
         params = {n: scalar("MstComp", c) for n, c in COMPANY_PARAMS.items()} if kind == "sales_invoice" else {}
-        return {"rpt": rpt, "selection": f"{selection_for(sh)} {doc_id}",
+        return {"rpt": rpt, "selection": key_selection(selection_for(sh), doc_id),
                 "parameters": params, "copies": 1, "printer": "", "action": "preview", "option": "", "stored_proc": ""}
 
     rpt = str(option.get("CrptFileName") or "").strip()
@@ -187,7 +208,7 @@ def build(kind: str, doc_no: str, option_name: str = "", click: str = "N", fallb
     log.info("print %s %s: %s %s", kind, doc_no, rpt, {k: (v if len(str(v)) < 40 else str(v)[:40] + "…") for k, v in params.items()})
     return {
         "rpt": rpt,
-        "selection": f"{sel} {doc_id}" if sel else "",
+        "selection": key_selection(sel, doc_id),
         "parameters": params,
         "copies": max(1, int(float(option.get("NoOfCopies") or 1))),
         "printer": str(option.get("DirectPrinterName") or "").strip(),

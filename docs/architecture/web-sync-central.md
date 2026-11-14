@@ -1,3 +1,5 @@
+> **Removed 2026-11-14:** the shop-side Web Sync (the Utilities screen, `/utilities/web-sync` and `app/websync.py`) and the Tools → Screen Preview screen (`/designer/preview`) were taken out at the owner's request. The central site (`app/central/`) remains in the repo but nothing sends it data.
+
 # Web Sync and central site
 
 Moved verbatim from `.claude/CLAUDE.md`.

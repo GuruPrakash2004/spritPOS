@@ -22,7 +22,7 @@ The first time the backend starts without `DB_*` settings, the sign-in page show
 
 As with the desktop app, every shop bills on its own PC against its own SQL Server, and sends a summary of each day plus its stock to a hosted **central site** every few minutes.
 
-- **Shop side:** Utilities → Web Sync (`app/websync.py`). Set `WEB_SYNC_URL` and `WEB_SYNC_KEY` in `.env`; the key comes from the central site's administrator.
+- **Shop side:** removed (2026-11-14): the Utilities → Web Sync screen and `app/websync.py` no longer exist, so a shop does not push to the central site.
 - **Central site:** `app/central/`, run with `uvicorn app.central.main:app --port 8002`. `tools/central.py` adds shops and owners.
 - **How to set it up:** [`../deploy/central/README.md`](../deploy/central/README.md).
 

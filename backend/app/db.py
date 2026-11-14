@@ -407,6 +407,22 @@ class TxCursor:
         self._cur.execute(sql.replace("?", "%s") if self._pymssql else sql, params)
         return self._cur.rowcount
 
+    def executemany(self, sql: str, rows: list[tuple]) -> None:
+        """Many rows in one round trip (pyodbc's fast_executemany): hundreds of single INSERTs to a networked server take seconds."""
+        if not rows:
+            return
+        global _last_sql
+        _last_sql = sql
+        self._drain()
+        if self._pymssql:
+            self._cur.executemany(sql.replace("?", "%s"), rows)
+            return
+        try:
+            self._cur.fast_executemany = True
+            self._cur.executemany(sql, rows)
+        finally:
+            self._cur.fast_executemany = False
+
     def fetchone(self):
         """The first row; the rest of the result is discarded now, so a nested db.fetchall() (a second cursor on
         this connection, e.g. a schema lookup) is not refused as "Connection is busy"."""

@@ -122,7 +122,8 @@ async def test_next_number_is_only_a_preview(client):
     second = (await client.get("/transactions/next-number", params={"kind": "sales_invoice", "counter": "counter10"})).json()
     assert first == second and first["doc_no"].startswith(f"{store.FY_PREFIX}/c10-")
     assert (await client.get("/transactions/next-number", params={"kind": "sales_invoice", "counter": "nope"})).status_code == 404
-    assert (await client.get("/transactions/next-number", params={"kind": "purchase_bill"})).json()["prefix"]
+    pb = (await client.get("/transactions/next-number", params={"kind": "purchase_bill"})).json()
+    assert pb["prefix"] == "" and pb["doc_no"] == f"{store.FY_PREFIX}{pb['doc_no'][2:]}" and pb["doc_no"][2:].isdigit() and len(pb["doc_no"]) == 7   # the exe's "2600202" shape
 
 
 async def test_sales_person_master(client):

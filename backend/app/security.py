@@ -106,7 +106,7 @@ def login_settings() -> dict:
 # ─── Rights (role based) ──────────────────────────────────────────────────────
 
 # Screens only an Administrator may open (the same set as frontend/src/lib/modules.js ADMIN_ONLY): a desktop menu right never opens them.
-ADMIN_ONLY_MODULES = {"Admin Master", "SQL Query Execution", "Screen Preview", "Global Settings", "Global Settings...", "ADMIN Audit Log", "Audit Trail",
+ADMIN_ONLY_MODULES = {"Admin Master", "SQL Query Execution", "Global Settings", "Global Settings...", "ADMIN Audit Log", "Audit Trail",
                       "Delete Non-Liquor Items"}
 
 

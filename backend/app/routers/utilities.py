@@ -7,7 +7,6 @@ Built so far:
 - Compare Stock (714): two stock sheets compared in the browser; this gives the web app's current stock.
 - ADMIN Audit Log (frmRptAdminAuditLog): what was changed, by whom, when (app/admin_audit.py), plus the
   Tools runs (tool_audit). Administrator only.
-- Web Sync (frmModWebSync): the day's summary and the stock sent to the central site (app/websync.py).
 - About (frmUtlAbout).
 The web app never writes the desktop tables; every utility acts on the web app's own data.
 """
@@ -22,7 +21,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, db, db_backup, delete_nonliquor, doc_settings, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store, websync
+from .. import admin_audit, db, db_backup, delete_nonliquor, doc_settings, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store
 from .auth import get_current_user, hides_cost, require_admin, require_module
 
 router = APIRouter(prefix="/utilities", tags=["Utilities"])
@@ -506,36 +505,6 @@ def print_settings_list():
 @router.put("/print-settings/{doc_id}/{order}")
 def print_settings_save(doc_id: int, order: int, body: PrintOptionUpdate, admin: dict = Depends(require_admin)):
     return print_settings.update(doc_id, order, body.model_dump(exclude_unset=True), admin["user"])
-
-
-# ─── Web Sync (frmModWebSync) ────────────────────────────────────────────────
-
-class WebSyncIn(BaseModel):
-    day: date | None = None   # blank: today
-
-
-def _web_sync_status() -> dict:
-    """Whether Web Sync is set up and how the last push went; the central site by host only, never the key."""
-    return {"configured": websync.configured(), "central": websync.central_host(), "every_minutes": websync.minutes(),
-            **websync.STATUS}
-
-
-@router.get("/web-sync", dependencies=[Depends(require_module("Web Sync"))])
-def web_sync_status():
-    return _web_sync_status()
-
-
-@router.post("/web-sync", dependencies=[Depends(require_module("Web Sync"))])
-def web_sync_now(body: WebSyncIn):
-    """Sync now: send that day's summary (today by default) and the current stock to the central site."""
-    day = body.day or date.today()
-    if day > date.today():
-        raise HTTPException(422, "Choose today or an earlier day")
-    try:
-        websync.sync([day])
-    except websync.SyncFailed as exc:
-        raise HTTPException(502, str(exc)) from None
-    return _web_sync_status()
 
 
 @router.post("/backup", tags=["Company Master"])

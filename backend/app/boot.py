@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 
-from . import db, db_store, designer, setup_db, sqlstore, store, websync
+from . import db, db_store, designer, setup_db, sqlstore, store
 
 logger = logging.getLogger("vlqms.boot")
 
@@ -52,8 +52,7 @@ def load_data() -> None:
     if needs_admin():
         logger.warning("No active Administrator: create one on the sign-in page")
     if ok:
-        # Heavy history loads in the background so the server starts at once; Web Sync (to the central
-        # site, if WEB_SYNC_URL / WEB_SYNC_KEY are set) starts after it, so it never sends a half-loaded day.
+        # Heavy history loads in the background so the server starts at once.
         threading.Thread(target=_load_history_then_sync, daemon=True).start()
 
 
@@ -65,7 +64,6 @@ def _load_history_then_sync() -> None:
     except Exception as e:
         logger.warning("Extra master columns not read: %s", e)
     db_store.load_transactions()
-    websync.start()
 
 
 def forget_old_database() -> None:
@@ -98,4 +96,3 @@ def reload_after_setup() -> None:
     forget_old_database()   # the connection may now point at another database
     sqlstore.reload()   # also loads the bill history
     designer.load()
-    websync.start()

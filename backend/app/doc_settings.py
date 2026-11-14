@@ -64,19 +64,22 @@ def check_lines(kind: str, lines: list, on: date | str) -> None:
 def check_edit_days(kind: str, on: str, what: str) -> None:
     days = int(settings(kind)["edit_days"] or 0)
     if days and (date.today() - date.fromisoformat(str(on)[:10])).days > days:
-        raise HTTPException(409, f"{what} is more than {days} day(s) old and can't be changed any more "
+        raise HTTPException(409, f"Edit limit days crossed... Cannot edit! ({what} is more than {days} day(s) old) "
                                  "(Global Settings → Transaction Settings)")
 
 
 # ─── Document numbers ─────────────────────────────────────────────────────────
 
 def prefix(kind: str) -> str:
+    if kind in store.EXE_NUMBERED:   # blank unless the shop chose one (the exe's prefix box)
+        return store.NUMBER_SERIES.get(kind, {}).get("prefix") or store.EXE_DEFAULT_PREFIX.get(kind, "")
     return store.NUMBER_SERIES.get(kind, {}).get("prefix") or KINDS[kind][1]
 
 
 def highest_used(kind: str) -> int:
     """The highest number on any document of this kind (all its prefixes share one counter)."""
-    nums = [int(m.group(1)) for no in store.DOCS.get(kind, {}) if (m := re.search(r"-(\d+)$", no))]
+    pattern = r"(\d{5})$" if kind in store.EXE_NUMBERED else r"-(\d+)$"
+    nums = [int(m.group(1)) for no in store.DOCS.get(kind, {}) if (m := re.search(pattern, no))]
     return max(nums, default=0)
 
 
@@ -86,7 +89,8 @@ def numbering() -> list[dict]:
         seq = store._seq.get(kind)
         out.append({"kind": kind, "screen": screen, "prefix": prefix(kind) if default else None,
                     "default_prefix": default, "next_number": seq.value if seq else 1,
-                    "example": f"{store.FY_PREFIX}/{prefix(kind) if default else '<counter prefix>'}-{(seq.value if seq else 1):07d}",
+                    "example": (f"{store.FY_PREFIX}{prefix(kind)}{(seq.value if seq else 1):05d}" if kind in store.EXE_NUMBERED
+                                else f"{store.FY_PREFIX}/{prefix(kind) if default else '<counter prefix>'}-{(seq.value if seq else 1):07d}"),
                     "from_counter": default is None})
     return out
 
@@ -97,9 +101,9 @@ def set_series(kind: str, new_prefix: str | None, next_number: int | None) -> di
     if new_prefix is not None:
         if KINDS[kind][1] is None:
             raise HTTPException(409, "Sales invoices take their prefix from the Sales Counter Master")
-        if not PREFIX_RE.match(new_prefix):
-            raise HTTPException(422, "Prefix: 1 to 6 letters or digits")
-        store.NUMBER_SERIES.setdefault(kind, {})["prefix"] = new_prefix.upper()
+        if not PREFIX_RE.match(new_prefix) and not (kind in store.EXE_NUMBERED and new_prefix == ""):
+            raise HTTPException(422, "Prefix: 1 to 6 letters or digits" + (" (or blank)" if kind in store.EXE_NUMBERED else ""))
+        store.NUMBER_SERIES.setdefault(kind, {})["prefix"] = new_prefix.upper()   # "" = no prefix (exe-numbered documents)
     if next_number is not None:
         used = highest_used(kind)
         if next_number <= used:

@@ -123,7 +123,7 @@ def _checked_totals(body) -> tuple[float, float]:
     ids = sorted({l.ledger_id for l in body.lines})
     found = {int(r["AcLedID"]) for r in db.fetchall(f"SELECT AcLedID FROM MstAcLed WHERE InActive = 'N' AND AcLedID IN ({','.join('?' * len(ids))})", tuple(ids))}
     if set(ids) - found:
-        raise HTTPException(422, f"Unknown or inactive ledger id(s): {sorted(set(ids) - found)}")
+        raise HTTPException(422, f"AcLedName does not exist!! (unknown or inactive ledger id(s): {sorted(set(ids) - found)})")   # frmTrnVch 1398 / 1104
     dr = round(sum(l.amount for l in body.lines if l.side == "Dr"), 2)
     cr = round(sum(l.amount for l in body.lines if l.side == "Cr"), 2)
     if dr != cr:
@@ -185,7 +185,8 @@ def _open_voucher(kind: str, voucher_id: int, what: str) -> tuple[str, str, dict
     if not h:
         raise HTTPException(404, f"{title} {voucher_id} not found")
     if h.get("Cancelled") == "Y":
-        raise HTTPException(409, f"This {title.lower()} is cancelled; it can't be {what}")
+        # frmTrnVch: edit 3479 "Current record is cancelled. Cannot edit!", delete 370 "Current record is cancelled. Deletion not possible!"
+        raise HTTPException(409, "Current record is cancelled. Cannot edit!" if what == "edited" else "Current record is cancelled. Deletion not possible!")
     gsettings.check_not_frozen(str(h.get(n["date"]))[:10], f"This {title.lower()}")
     return sh, title, n, h
 

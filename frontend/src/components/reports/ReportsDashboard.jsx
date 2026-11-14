@@ -8,7 +8,7 @@ import { Mail, Download, Eye, Plus, X, Loader2, Printer } from 'lucide-react';
 import { badge, field, fieldError, ghostButton, iconButton, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, sectionTitle, tableBody, tableHead, tableRow } from '../../lib/styles';
 import { toast } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { errorText, getCustomReportRights, listMaster, renderCustomReportPrint, runCustomReport, todayIso } from '../../lib/api';
+import { errorText, getCustomReportFilters, getCustomReportFilterValues, getCustomReportRights, listMaster, renderCustomReportPrint, runCustomReport, todayIso } from '../../lib/api';
 import { downloadXls, } from '../../lib/xlsExport';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import ReportPrintModal from '../print/ReportPrintModal';
@@ -45,6 +45,10 @@ const ReportsDashboard = () => {
   const [filterError, setFilterError] = useState('');
   const [filterValue, setFilterValue] = useState('');
   const [masters, setMasters] = useState({});
+  // The report's own filter fields (the desktop's FilterReq fields): a field to pick values of, and whether it takes a period.
+  const [defFields, setDefFields] = useState([]);
+  const [hasDate, setHasDate] = useState(true);
+  const [defValues, setDefValues] = useState({});
 
   // Load the value list the first time a master-based Filter On is picked.
   useEffect(() => {
@@ -54,6 +58,18 @@ const ReportsDashboard = () => {
       .then(list => setMasters(m => ({ ...m, [filterOn]: list })))
       .catch(e => toast.error(errorText(e)));
   }, [filterOn, masters]);
+
+  useEffect(() => {
+    getCustomReportFilters(selectedReport).then(r => { setDefFields(r.fields); setHasDate(r.has_date); }).catch(() => undefined);
+  }, [selectedReport]);
+
+  const defField = filterOn.startsWith('fld:') ? defFields.find(f => `fld:${f.field}` === filterOn) : null;
+  useEffect(() => {
+    if (!defField || defValues[defField.field]) return;
+    getCustomReportFilterValues(selectedReport, defField.field)
+      .then(list => setDefValues(v => ({ ...v, [defField.field]: list })))
+      .catch(e => toast.error(errorText(e)));
+  }, [defField, selectedReport, defValues]);
 
   // Reports this user may run (Admin Master (Security) → Report rights); null until loaded = show all.
   // Only reports the server has and this user may not run are hidden ("not available yet" ones stay listed).
@@ -143,6 +159,12 @@ const ReportsDashboard = () => {
   const addFilter = () => {
     if (!checkPeriod()) return;
     const mf = masterFilter(filterOn);
+    if (defField) {
+      if (!filterValue) { setFilterError(`Pick a ${defField.caption} to filter on`); return document.getElementById('cr-val')?.focus(); }
+      if (activeFilters.some(f => f.code === `${defField.field}|${filterValue}`)) return setFilterError('That filter is already applied');
+      setFilterError('');
+      return setActiveFilters([...activeFilters, { on: defField.caption, val: filterValue, param: 'ff', code: `${defField.field}|${filterValue}` }]);
+    }
     if (mf && !filterValue) {
       setFilterError(`Pick a ${filterOn} to filter on`);
       return document.getElementById('cr-val')?.focus();
@@ -160,7 +182,7 @@ const ReportsDashboard = () => {
   const openEmail = () => {
     if (!checkPeriod()) return;
     setEmailRequest({ name: selectedReport, from_date: fromDate, to_date: toDate,
-      ledger: filterCodes('ledger'), supplier: filterCodes('supplier'), group: filterCodes('group') });
+      ledger: filterCodes('ledger'), supplier: filterCodes('supplier'), group: filterCodes('group'), ff: filterCodes('ff') });
   };
 
   const fetchReport = async () => {
@@ -224,7 +246,7 @@ const ReportsDashboard = () => {
               {group.reports.map(rep => (
                 <button
                   key={rep}
-                  onClick={() => setSelectedReport(rep)}
+                  onClick={() => { setSelectedReport(rep); setDefFields([]); setHasDate(true); setDefValues({}); setActiveFilters([]); setFilterError(''); setFilterOn('Exp Date'); }}
                   aria-current={selectedReport === rep ? 'true' : undefined}
                   className={`block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors ${
                     selectedReport === rep
@@ -247,7 +269,7 @@ const ReportsDashboard = () => {
           </div>
 
           <div className="space-y-4 p-5">
-            <div className={`grid grid-cols-1 gap-4 ${masterFilter(filterOn) ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'}`}>
+            <div className={`grid grid-cols-1 gap-4 ${masterFilter(filterOn) || defField ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'}`}>
               <div>
                 <label htmlFor="cr-on" className={label}>Filter on</label>
                 <select id="cr-on" value={filterOn} onChange={(e) => { setFilterOn(e.target.value); setFilterValue(''); }} className={field}>
@@ -256,8 +278,20 @@ const ReportsDashboard = () => {
                   <option>Ledger Name</option>
                   <option>Supplier Name</option>
                   <option>Item Group</option>
+                  {defFields.map(f => <option key={f.field} value={`fld:${f.field}`}>{f.caption}</option>)}
                 </select>
               </div>
+              {defField && (
+                <div>
+                  <label htmlFor="cr-val" className={label}>{defField.caption}</label>
+                  <select id="cr-val" value={filterValue} onChange={(e) => { setFilterValue(e.target.value); setFilterError(''); }}
+                    className={`${field} ${filterError && !filterValue ? fieldError : ''}`}>
+                    <option value="">{defValues[defField.field] ? `Select ${defField.caption}…` : 'Loading…'}</option>
+                    {defValues[defField.field]?.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  {!filterValue && <InlineError message={filterError} />}
+                </div>
+              )}
               {masterFilter(filterOn) && (
                 <div>
                   <label htmlFor="cr-val" className={label}>{filterOn}</label>
@@ -269,6 +303,7 @@ const ReportsDashboard = () => {
                   {!filterValue && <InlineError message={filterError} />}
                 </div>
               )}
+              {hasDate && (<>
               <div>
                 <label htmlFor="cr-from" className={label}>From</label>
                 <input id="cr-from" type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setDateError(''); }}
@@ -280,6 +315,7 @@ const ReportsDashboard = () => {
                   aria-invalid={!!dateError} className={`${field} tabular-nums ${dateError ? fieldError : ''}`} />
                 <InlineError message={dateError} />
               </div>
+              </>)}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -312,7 +348,7 @@ const ReportsDashboard = () => {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-3.5">
             <h2 className={sectionTitle}>{result.name}</h2>
             <div className="flex items-center gap-2 text-xs text-stone-500">
-              <span className="tabular-nums">{toDmy(result.from_date)} – {toDmy(result.to_date)}</span>
+              <span className="tabular-nums">{result.header || `${toDmy(result.from_date)} – ${toDmy(result.to_date)}`}</span>
               <span className={badge('neutral')}>{result.rows.length} row{result.rows.length === 1 ? '' : 's'}</span>
               {result.rpt && <button onClick={() => setShowPrintModal(true)} disabled={!result.rows.length} className={iconButton} aria-label="Print report" title={result.rows.length ? 'Print report' : 'Nothing to print for this period'}><Printer size={14} /></button>}
               <button onClick={exportXls} className={iconButton} aria-label="Export XLS" title="Export XLS"><Download size={14} /></button>
@@ -330,7 +366,7 @@ const ReportsDashboard = () => {
               </thead>
               <tbody className={tableBody}>
                 {result.rows.map((row, i) => (
-                  <tr key={i} className={`${tableRow} text-stone-700 dark:text-stone-200`}>
+                  <tr key={i} className={`${tableRow} text-stone-700 dark:text-stone-200 ${row._subtotal ? 'bg-subtle font-semibold' : ''}`}>
                     {result.columns.map(c => (
                       <td key={c.key} className={`px-4 py-2 ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>{fmtCell(row[c.key], c)}</td>
                     ))}
@@ -349,7 +385,7 @@ const ReportsDashboard = () => {
                   <tr>
                     {result.columns.map((c, i) => (
                       <td key={c.key} className={`px-4 py-2 ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>
-                        {c.total ? fmtCell(result.rows.reduce((sum, row) => sum + (typeof row[c.key] === 'number' ? (row[c.key] ) : 0), 0), c) : i === 0 ? 'Total' : ''}
+                        {c.total ? fmtCell(result.rows.reduce((sum, row) => sum + (!row._subtotal && typeof row[c.key] === 'number' ? (row[c.key] ) : 0), 0), c) : i === 0 ? 'Total' : ''}
                       </td>
                     ))}
                   </tr>
@@ -369,7 +405,7 @@ const ReportsDashboard = () => {
           title={`Print: ${result.name}`}
           formats={[result.rpt]}
           render={(_rpt, printer) => renderCustomReportPrint({ name: result.name, from_date: result.from_date, to_date: result.to_date,
-            ledger: filterCodes('ledger'), supplier: filterCodes('supplier'), group: filterCodes('group') }, printer)}
+            ledger: filterCodes('ledger'), supplier: filterCodes('supplier'), group: filterCodes('group'), ff: filterCodes('ff') }, printer)}
           onClose={() => setShowPrintModal(false)}
         />
       )}

@@ -101,7 +101,7 @@ export default function AdminMaster({ currentUser }) {
 
   const saveUser = async () => {
     if (!userForm) return;
-    const { user, password, role, active, isNew, full_name, email, mobile, department, dob, password_reset_on, inactive_reason } = userForm;
+    const { user, password, confirm_password = '', role, active, isNew, full_name, email, mobile, department, dob, password_reset_on, inactive_reason } = userForm;
     const errors = {};
     if (email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) errors.email = 'EmailID is not valid!!';
     if (fieldProblem('mobile', mobile)) errors.mobile = fieldProblem('mobile', mobile);
@@ -113,6 +113,7 @@ export default function AdminMaster({ currentUser }) {
     const pwProblem = passwordProblem(password, user);
     if (isNew && !password) errors.password = 'Enter a password for the new user';
     else if (password && pwProblem) errors.password = pwProblem;
+    else if (password && password !== confirm_password) errors.confirm_password = 'Confirm Password should be same as password!!';   // frmMstUser.ValidFields
 
     if (Object.keys(errors).length > 0) {
       setUserFormErrors(errors);
@@ -286,12 +287,12 @@ export default function AdminMaster({ currentUser }) {
         errors={userFormErrors}
         onNew={() => {
           setUserFormErrors({});
-          setUserForm({ user: '', password: '', role: roles.find(r => r.name !== ADMIN_ROLE)?.name ?? ADMIN_ROLE, active: true, isNew: true, ...EMPTY_USER_DETAILS });
+          setUserForm({ user: '', password: '', confirm_password: '', role: roles.find(r => r.name !== ADMIN_ROLE)?.name ?? ADMIN_ROLE, active: true, isNew: true, ...EMPTY_USER_DETAILS });
         }}
         onEdit={user => {
           setUserFormErrors({});
           setUserForm({
-            user: user.user, password: '', role: user.role, active: user.active, isNew: false, full_name: user.full_name ?? '',
+            user: user.user, password: '', confirm_password: '', role: user.role, active: user.active, isNew: false, full_name: user.full_name ?? '',
             email: user.email ?? '', mobile: user.mobile ?? '', department: user.department ?? '', dob: user.dob ?? '',
             password_reset_on: user.password_reset_on ?? '', inactive_reason: user.inactive_reason ?? '',
           });

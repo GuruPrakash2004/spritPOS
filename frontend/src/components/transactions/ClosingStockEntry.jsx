@@ -11,7 +11,7 @@ import Kbd from '../common/Kbd';
 import WithHistory from './DocHistoryPanel';
 import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
-import { errorText, generateClosingStockInvoice, getSalesCounters, getSalesPersons, loadClosingStock, saveClosingStock, todayIso, } from '../../lib/api';
+import { errorText, generateClosingStockInvoice, getSalesCounters, getSalesPersons, loadClosingStock, saveClosingStock, todayIso, updateClosingStock, } from '../../lib/api';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
 
 
@@ -22,6 +22,7 @@ export default function ClosingStockEntry() {
   const [asOn, setAsOn] = useState(todayIso());
   const [rows, setRows] = useState([]);
   const [savedDoc, setSavedDoc] = useState(null);
+  const [editNo, setEditNo] = useState(null);   // a saved entry being changed (frmTrnCloseStk Edit, until its invoice is generated)
   const [generateOpen, setGenerateOpen] = useState(false);
   const [counters, setCounters] = useState([]);
   const [counter, setCounter] = useState('');
@@ -46,8 +47,19 @@ export default function ClosingStockEntry() {
 
   const load = () => {
     loadClosingStock(asOn)
-      .then(list => { setRows(list.map(r => ({ ...r, closing: '' }))); setSavedDoc(null); })
+      .then(list => { setRows(list.map(r => ({ ...r, closing: '' }))); setSavedDoc(null); setEditNo(null); })
       .catch(e => setToast({ kind: 'error', text: errorText(e) }));
+  };
+
+  // List / bar Edit: the entry's items and closing quantities come back into the grid; Save then rewrites it under the same number.
+  const editEntry = async (doc) => {
+    if (doc.invoice_no) { setToast({ kind: 'error', text: 'Invoice Generated Cannot To Edit' }); return; }
+    try {
+      const list = await loadClosingStock(doc.date);
+      const closing = Object.fromEntries((doc.lines ?? []).map(l => [l.item_code, l.closing_qty]));
+      setAsOn(doc.date); setSavedDoc(null); setEditNo(doc.doc_no);
+      setRows(list.map(r => ({ ...r, closing: closing[r.item_code] ?? '' })));
+    } catch (e) { setToast({ kind: 'error', text: errorText(e) }); }
   };
 
   const salesQty = (r) => (r.closing === '' ? 0 : r.op_qty - Number(r.closing));
@@ -59,8 +71,9 @@ export default function ClosingStockEntry() {
     if (!entered.length) return setToast({ kind: 'error', text: 'Enter the closing stock for at least one item.' });
     if (invalid) return setToast({ kind: 'error', text: 'Closing stock cannot be more than the opening stock.' });
     if (!(await toastStore.defer('ok', `Closing stock for ${entered.length} items will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
-    saveClosingStock({ as_on: asOn, lines: entered.map(r => ({ item_code: r.item_code, closing_qty: Number(r.closing) })) }).then(doc => {
-      setSavedDoc(doc.doc_no);
+    const body = { as_on: asOn, lines: entered.map(r => ({ item_code: r.item_code, closing_qty: Number(r.closing) })) };
+    (editNo ? updateClosingStock(editNo, body) : saveClosingStock(body)).then(doc => {
+      setSavedDoc(doc.doc_no); setEditNo(null);
       setToast({ kind: 'ok', text: `Closing Stock ${doc.doc_no} saved. You can now generate the sales invoice.` });
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
@@ -80,7 +93,7 @@ export default function ClosingStockEntry() {
   useShortcuts({ 'Mod+S': () => { void save(); } });
 
   return (
-    <WithHistory kind="closing_stock" title="closing stock entries" onNew={() => { setRows([]); setSavedDoc(null); }}>
+    <WithHistory kind="closing_stock" title="closing stock entries" onNew={() => { setRows([]); setSavedDoc(null); setEditNo(null); }} onEdit={doc => { void editEntry(doc); }}>
     <div className="mx-auto flex max-w-6xl flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       <div className={pageHeader}>

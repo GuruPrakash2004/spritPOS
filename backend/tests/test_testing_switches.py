@@ -32,18 +32,3 @@ async def test_dashboard_panels_can_be_hidden_per_role(client, cashier_client):
     assert (await cashier_client.get("/reports/restock")).status_code == 403
     assert (await cashier_client.get("/reports/stock-movement")).status_code == 403
     assert (await client.get("/reports/restock")).status_code == 200   # the Administrator sees everything
-
-
-def test_web_sync_never_sends_once_the_store_is_unloaded(monkeypatch):
-    from app import websync
-    import datetime
-    monkeypatch.setattr(websync, "configured", lambda: True)
-    monkeypatch.setattr(websync, "_url_problem", lambda: None)
-    calls = iter([True, False])
-    monkeypatch.setattr(websync, "_live", lambda: next(calls, False))
-    sent = []
-    monkeypatch.setattr(websync, "push", lambda day: sent.append(day))
-    import pytest
-    with pytest.raises(websync.SyncFailed):
-        websync.sync([datetime.date.today()])
-    assert sent == []

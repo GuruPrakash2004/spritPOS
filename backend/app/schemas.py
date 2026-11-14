@@ -50,20 +50,30 @@ class Company(BaseModel):
             raise ValueError("Paste the Google Maps embed code (Share → Embed a map) or its https://www.google.com/maps/embed link")
         return link
 
-    @field_validator("name", "address")
+    @field_validator("name")
     @classmethod
     def required_company_text(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            raise ValueError("This company field cannot be blank")
+            raise ValueError("Company Name Should not be blank!!!")
+        if len(value) > 250:   # frmMstComp.vsfCDET_SetupEditor: the name box holds 250
+            raise ValueError("Company name can be at most 250 characters")
+        return value
+
+    @field_validator("address1", "address2", "address3", "email")
+    @classmethod
+    def company_text_length(cls, value: str) -> str:
+        value = (value or "").strip()
+        if len(value) > 100:   # the address rows and the e-mail box hold 100
+            raise ValueError("This company field can be at most 100 characters")
         return value
 
     @field_validator("email")
     @classmethod
     def valid_company_email(cls, value: str) -> str:
         value = value.strip()
-        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
-            raise ValueError("Enter a valid company email address")
+        if value and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):   # frmMstComp.validateEmail; blank is allowed
+            raise ValueError("EmailID is not valid!!")
         return value
 
 
@@ -86,7 +96,7 @@ class Item(MasterRow):
     liqtype: str = "IML"
     uom: str = "BTL"
     package: str = ""
-    bottles_per_case: int = Field(12, ge=1, description="Must be ≥ 1")
+    bottles_per_case: int = Field(12, ge=0, description="The exe accepts any number (blank saves 0)")
     mrp: float = Field(0.0, ge=0)
     # None when hidden from the caller (roles without cost access) or not sent: an edit then keeps the cost.
     purchase_rate: float | None = Field(None, ge=0)
@@ -105,16 +115,20 @@ class ItemGroup(MasterRow):
     name: str
     liquor: bool = True
     consider_for_loyalty: bool = True
+    active: bool = True
 
 
 class Uom(MasterRow):
     code: str
     name: str
+    decimals: int = Field(0, ge=0, description="MstUOM.Decimals: whole numbers only (frmMstUOM)")
+    active: bool = True
 
 
 class Package(MasterRow):
     code: str
     litres_per_bottle: float   # above 0 on save (masters._clean); desktop rows may hold 0
+    active: bool = True
 
 
 def _simple_models() -> dict:
@@ -138,6 +152,7 @@ SIMPLE_MODELS = _simple_models()
 class Brand(MasterRow):
     code: str
     name: str
+    active: bool = True
 
 
 class Supplier(MasterRow):
@@ -164,6 +179,7 @@ class Customer(MasterRow):
     points: float = 0
     gstin: str = ""
     currency: str = ""   # a Currency Master code (MstCUR); mandatory in the desktop's Customer Master
+    active: bool = True
 
 
 class FinYear(BaseModel):
@@ -492,6 +508,7 @@ class ReportEmailIn(BaseModel):
     ledger: list[str] = []
     supplier: list[str] = []
     group: list[str] = []
+    ff: list[str] = []
     to: list[str] = Field(min_length=1, max_length=5)
     message: str = Field("", max_length=1000)
 

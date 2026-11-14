@@ -12,7 +12,7 @@ import Modal from '../common/Modal';
 import { fetchPrintOptions, savedFormat } from '../../lib/printing';
 import { useConfirm } from '../common/ConfirmDialog';
 import { toastStore } from '../common/toastStore';
-import { cancelSalesInvoice, errorText, listSalesInvoices, todayIso } from '../../lib/api';
+import { cancelSalesInvoice, deleteSavedSalesInvoice, errorText, listSalesInvoices, todayIso } from '../../lib/api';
 import { dangerButton, field, iconButton, label, money, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 import { SkeletonTableRows } from '../common/Skeleton';
 
@@ -169,6 +169,16 @@ export function CancelInvoiceDialog({ initialNo, onClose, onDone, onEdit }) {
     setReasonFor(bill.doc_no);
     setTimeout(() => document.getElementById('ci-rmk')?.focus(), 0);
   };
+  // frmUtlDelCancelDoc's second choice: DELETE ("Are you sure to DELETE this Document ?"); stock and points go back, the bill is marked deleted.
+  const deleteBill = async () => {
+    if (!bill) return setError('Select a bill to delete.');
+    setError('');
+    if (!(await confirm('Are you sure to DELETE this Document ?'))) return;
+    if (!(await toastStore.defer('delete', `Bill ${bill.doc_no} will be deleted when this closes.`, 'Bill not deleted. Nothing was changed.'))) return;
+    deleteSavedSalesInvoice(bill.doc_no)
+      .then(inv => onDone(`Deleted Sales Invoice Successfully! Bill ${inv.doc_no}: stock returned.`))
+      .catch(e => setError(errorText(e)));
+  };
   const submit = async () => {
     if (remarks.trim().length < 3) return setError('A reason for cancelling is required.');
     setError('');
@@ -193,6 +203,7 @@ export function CancelInvoiceDialog({ initialNo, onClose, onDone, onEdit }) {
       </> : <>
         {onEdit && <button onClick={() => bill && onEdit(bill)} disabled={!bill} className={secondaryButton}>Edit Bill</button>}
         <button onClick={askReason} disabled={!bill} className={secondaryButton}>Cancel Bill</button>
+        <button onClick={() => void deleteBill()} disabled={!bill} className={dangerButton}>Delete Bill</button>
         <button onClick={onClose} className={secondaryButton}>Close</button>
       </>}
     >

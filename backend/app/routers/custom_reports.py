@@ -277,14 +277,14 @@ def _check_report_right(user: dict, name: str) -> None:
 
 @router.get("")
 def run_report(name: str, from_date: date, to_date: date, ledger: list[str] = Query([]),
-               supplier: list[str] = Query([]), group: list[str] = Query([]),
+               supplier: list[str] = Query([]), group: list[str] = Query([]), ff: list[str] = Query([]),
                current_user: dict = Depends(get_current_user)):
     _check_report_right(current_user, name)
     if from_date > to_date:
         raise HTTPException(422, "From Date cannot be after To Date")
     if (to_date - from_date).days > 3660:
         raise HTTPException(422, "Choose a period of ten years or less")
-    flt = {"ledger": set(ledger), "supplier": set(supplier), "group": set(group)}
+    flt = {"ledger": set(ledger), "supplier": set(supplier), "group": set(group), "ff": set(ff)}   # ff: "FIELD|value" of a filter field of the report
     token = _filters.set(flt)
     try:
         defn = custom_engine.definition(name)   # the desktop's own definition (UtlReportsCR*) comes first
@@ -297,7 +297,28 @@ def run_report(name: str, from_date: date, to_date: date, ledger: list[str] = Qu
     finally:
         _filters.reset(token)
     return {"name": name, "from_date": from_date, "to_date": to_date, "columns": columns, "rows": rows,
-            "rpt": rpt_custom.usable_file(defn) if defn else "", "group": (defn or {}).get("group", "")}
+            "rpt": rpt_custom.usable_file(defn) if defn else "", "group": (defn or {}).get("group", ""),
+            "header": custom_engine.describe(defn, from_date, to_date, flt) if defn else ""}
+
+
+@router.get("/filters")
+def report_filters(name: str, current_user: dict = Depends(get_current_user)):
+    """The filter fields a report offers (its definition's FilterReq fields) and whether it takes a period; built-in reports: no fields, a period."""
+    _check_report_right(current_user, name)
+    defn = custom_engine.definition(name)
+    if not defn:
+        return {"fields": [], "has_date": True, "defined": False}
+    fields = custom_engine.filter_fields(defn)
+    return {"fields": [f for f in fields if f["type"] != "DATE"], "has_date": any(f["type"] == "DATE" for f in fields), "defined": True}
+
+
+@router.get("/filter-values")
+def report_filter_values(name: str, field: str, current_user: dict = Depends(get_current_user)):
+    _check_report_right(current_user, name)
+    defn = custom_engine.definition(name)
+    if not defn:
+        raise HTTPException(404, "This report has no filter fields")
+    return custom_engine.filter_values(defn, field)
 
 
 @router.post("/email")
@@ -310,7 +331,7 @@ async def email_report(body: ReportEmailIn, current_user: dict = Depends(get_cur
     _check_report_right(current_user, body.name)
     _check_email_rate(current_user["user"])
     report = await run_in_threadpool(run_report, body.name, body.from_date, body.to_date, body.ledger, body.supplier,
-                                     body.group, current_user)
+                                     body.group, body.ff, current_user)
     if not report["rows"]:
         raise HTTPException(422, "Nothing to email for this period")
     company = store.COMPANY.get("name") or "Company"

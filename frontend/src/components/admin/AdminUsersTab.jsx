@@ -96,6 +96,12 @@ export default function AdminUsersTab({ users, roles, currentUser, userForm, err
             {!userForm.isNew && <p id="am-pwd-hint" className="mt-1 text-[11px] text-stone-500">Leave empty to keep current password.</p>}
           </div>
           <div>
+            <label htmlFor="am-confirm_password" className={label}>Confirm password</label>
+            <input id="am-confirm_password" type="password" value={userForm.confirm_password ?? ''} onChange={event => onChange('confirm_password', event.target.value)}
+              className={`${field} ${errors.confirm_password ? bad : ''}`} autoComplete="new-password" aria-invalid={!!errors.confirm_password} />
+            <InlineError message={errors.confirm_password} />
+          </div>
+          <div>
             <label htmlFor="am-role" className={label}>Role{required}</label>
             <select id="am-role" value={userForm.role} onChange={event => onChange('role', event.target.value)}
               className={`${field} ${errors.role ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : ''}`} aria-invalid={!!errors.role}>

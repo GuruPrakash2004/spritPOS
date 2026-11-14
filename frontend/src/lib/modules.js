@@ -34,10 +34,10 @@ export const MODULE_GROUPS = [
     ],
   },
   // The desktop app's TOOLS menu (MstMenu type 6), with its captions. Download Latest Exe is left out on purpose.
-  { group: 'Tools', modules: ['SQL Query Execution', 'Re Write Stock', 'Screen Preview'] },
+  { group: 'Tools', modules: ['SQL Query Execution', 'Re Write Stock'] },
   // The desktop app's UTILITIES menu (MstMenu type 7), with its captions; screens are added as they are built.
   // Its Security item is Admin Master, shown as "Admin Master (Security)" under Administration.
-  { group: 'Utilities', modules: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Web Sync', 'Bulk Master Update', 'Update Item Stock', 'Item Vs Brand', 'Shared Documents', 'Delete Non-Liquor Items', 'Label Printing', 'SMS', 'PDF Generator'] },
+  { group: 'Utilities', modules: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Bulk Master Update', 'Update Item Stock', 'Item Vs Brand', 'Shared Documents', 'Delete Non-Liquor Items', 'Label Printing', 'SMS', 'PDF Generator'] },
 ];
 
 // The sidebar's tree, laid out like the desktop's menu (INVENTORY > MASTERS > ITEM RELATED > Item Master, TRANSACTIONS, REPORTS,
@@ -58,7 +58,7 @@ export const NAV_TREE = [
           { label: 'Supplier Related', children: ['Supplier Master', 'Supplier Group Master', 'Supplier Vs Item Master'] },
           {
             label: 'Others',
-            children: ['Ledger Master', 'Ledger Group Master', 'Sales Counter Master', 'Sales Person Master', 'State Master', 'Currency Master',
+            children: ['Ledger Master', 'Ledger Group Master', 'Sales Counter Master', 'Sales Person Master', 'State Master', 'State City Country', 'Currency Master',
               'Location Master', 'Tax Master', 'Bank Master', 'Holiday Master'],
           },
         ],
@@ -77,7 +77,7 @@ export const NAV_TREE = [
       },
     ],
   },
-  { label: 'Tools', children: ['SQL Query Execution', 'Re Write Stock', 'Screen Preview'] },
+  { label: 'Tools', children: ['SQL Query Execution', 'Re Write Stock'] },
   {
     label: 'Utilities',
     children: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Web Sync',
@@ -91,7 +91,7 @@ export const ADMIN_MASTER = 'Admin Master';
 export const ADMIN_PATH = '/adminMaster';
 export const ADMIN_ROLE = 'Administrator';
 // Screens only an Administrator may open, whatever the role's module list says (the server checks too).
-export const ADMIN_ONLY = new Set([ADMIN_MASTER, 'SQL Query Execution', 'Screen Preview', 'Global Settings', 'ADMIN Audit Log', 'Audit Trail', 'Delete Non-Liquor Items']);
+export const ADMIN_ONLY = new Set([ADMIN_MASTER, 'SQL Query Execution', 'Global Settings', 'ADMIN Audit Log', 'Audit Trail', 'Delete Non-Liquor Items']);
 
 // Screens every signed-in user may open, whatever their role.
 export const ALWAYS_OPEN = new Set(['About']);
@@ -168,7 +168,6 @@ export const MODULE_KEYWORDS = {
   'Admin Master': '700 admin users user roles rights assign rights permissions password security',
   // Legacy menu shortcut codes (600, 604) find the tools as they did in the desktop app.
   'SQL Query Execution': '600 sql query select table view procedure database tools',
-  'Screen Preview': 'screen preview doc designer fields layout database columns check problems tools',
   'Re Write Stock': '604 rewrite re-write stock qoh mismatch ledger repair tools',
   // Utilities, with the desktop menu codes (702, 711-714).
   'Remove Duplicate Invoice': '711 remove duplicate invoice bill delete twice double utilities',
@@ -183,6 +182,5 @@ export const MODULE_KEYWORDS = {
   'Compare Stock': '714 compare stock sheet excel difference mismatch closing utilities',
   'Global Settings': '702 ctrl+g global settings setting configuration freeze date salesperson loyalty points utilities print settings printer preview direct email prompt after save other settings transaction settings doc prefix document number menu sequence shortcut',
   'ADMIN Audit Log': 'admin audit log history changes who changed edited deleted trail utilities',
-  'Web Sync': 'web sync central head office owner upload push dsr summary branches shops utilities',
   'About': 'about version softvent help',
 };

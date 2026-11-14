@@ -175,6 +175,40 @@ def start() -> None:
     threading.Thread(target=_supervise, args=(port,), name="rpt-bridge", daemon=True).start()
 
 
+_restart_lock = threading.Lock()
+_last_restart = 0.0
+
+
+def restart(reason: str = "") -> bool:
+    """Stop the bridge this backend started and wait until the supervisor has a fresh one answering (Crystal's engine can run out of its own
+    memory after many reports: "Memory full. Not enough memory for operation"; a new process starts clean). Returns True when a bridge
+    that accepts our key is answering again, False when the bridge is not ours to restart (started by hand, a service, or the built-in
+    service) or did not come back. Safe to call from several requests at once: a restart made in the last 15 s is reused."""
+    global _last_restart
+    port = _port()
+    if port is None or _proc is None or _stop.is_set():
+        return False
+    base = f"http://127.0.0.1:{port}"
+    with _restart_lock:
+        if time.monotonic() - _last_restart > 15:
+            logger.warning("Restarting the Crystal Reports bridge%s", f" ({reason})" if reason else "")
+            _last_restart = time.monotonic()
+            if _proc.poll() is None:
+                _proc.terminate()
+                try:
+                    _proc.wait(5)
+                except subprocess.TimeoutExpired:
+                    _proc.kill()
+        deadline = time.monotonic() + 60
+        time.sleep(0.5)
+        while time.monotonic() < deadline:   # the supervisor starts the next one after 3 s
+            if _key_accepted(base) is True and _proc is not None and _proc.poll() is None:
+                return True
+            time.sleep(0.5)
+    logger.warning("The Crystal Reports bridge did not come back within 60 s")
+    return False
+
+
 def stop() -> None:
     _stop.set()
     if _proc and _proc.poll() is None:

@@ -24,13 +24,19 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from .. import designer, mailer, rpt_bridge, rpt_custom, rpt_dsr, rpt_print, rpt_stock, sqlstore, store
+from .. import db, designer, gsettings, mailer, rpt_bridge, rpt_custom, rpt_dsr, rpt_print, rpt_stock, sqlstore, store
 from .auth import get_current_user, has_right, require_admin, require_module
 
 # The documents whose screens in the desktop check the Print right (frmTrnPBM, frmTrnPartyDoc, frmTrnCloseStk): print kind -> module. The sales
 # invoice screens do not check it in the exe, so a bill can always be printed by whoever may bill.
 PRINT_RIGHT = {"purchase_bill": "Purchase Bill", "purchase_indent": "Purchase Indent", "sales_return": "Sales Return",
                "stock_deduction": "Stock Deduction", "closing_stock": "Closing Stock Entry"}
+
+
+def _check_rewrite_not_running(kind: str) -> None:
+    """frmTrnInv.btnPrint_Click 2551: while a stock re-write is going on (UtlMisc.ReWriteINPROGRESS = 'Y') a sales invoice can't be printed."""
+    if kind in ("sales_invoice", "purchase_bill") and gsettings.rewrite_in_progress():
+        raise HTTPException(409, "re-Writing Stocks.. Try after few mins.")
 
 
 def _check_print_right(user: dict, kind: str) -> None:
@@ -170,6 +176,7 @@ class CustomPrintIn(BaseModel):
     ledger: list[str] = []
     supplier: list[str] = []
     group: list[str] = []
+    ff: list[str] = []
     printer: str = ""
     copies: int = 1
 
@@ -184,7 +191,7 @@ async def print_custom_report(body: CustomPrintIn, user: dict = Depends(get_curr
         raise HTTPException(403, "Access Denied!! Your rights do not allow printing Customised Reports")
     if body.from_date > body.to_date:
         raise HTTPException(422, "From Date cannot be after To Date")
-    flt = {"ledger": set(body.ledger), "supplier": set(body.supplier), "group": set(body.group)}
+    flt = {"ledger": set(body.ledger), "supplier": set(body.supplier), "group": set(body.group), "ff": set(body.ff)}
     pdf = await run_in_threadpool(rpt_custom.render, body.name, body.from_date, body.to_date, flt, user, body.printer, body.copies)
     if pdf is None:
         return {"printed": True, "printer": body.printer, "copies": body.copies}
@@ -210,6 +217,7 @@ def _job(body: PrintIn) -> dict:
 async def render(body: PrintIn, user: dict = Depends(get_current_user)):
     """PDF bytes for a preview; for a direct print the report goes to the option's printer and the reply is JSON."""
     _check_print_right(user, body.kind)
+    _check_rewrite_not_running(body.kind)
     t0 = time.perf_counter()
     job = await run_in_threadpool(_job, body)
     t1 = time.perf_counter()

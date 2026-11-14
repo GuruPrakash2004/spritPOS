@@ -3,7 +3,8 @@
 // GET /reports/dsr. Printable in the DSR audit formats.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Printer, RefreshCw } from 'lucide-react';
+import { FileSpreadsheet, Printer, RefreshCw } from 'lucide-react';
+import { downloadXls } from '../../lib/xlsExport';
 import { toastStore } from '../common/toastStore';
 import { errorText, getDsr, getDsrFormats, renderDsrPrint, todayIso, } from '../../lib/api';
 import ReportPrintModal from '../print/ReportPrintModal';
@@ -120,6 +121,28 @@ export default function DailySummaryReport() {
           </div>
         )}
       </div>
+
+      {dsr?.exe_summary?.length > 0 && (
+        // The desktop's own Daily Summary grid (frmRptDailySummary): caption / value / value, with its section headings and sub-headings.
+        <div className={`${panel} overflow-hidden text-xs`}>
+          <div className="flex items-center justify-between border-b border-line bg-subtle px-3 py-2 font-bold text-stone-600 dark:text-stone-300">
+            Summary as in the desktop
+            <button type="button" className={secondaryButton} onClick={() => downloadXls(`Daily_Summary_${on}`, 'Daily Summary Report', on, ['Particulars', 'Value', 'Value 2'].map((l, i) => ({ key: String(i), label: l })), dsr.exe_summary.map(r => ({ 0: r.caption, 1: r.value, 2: r.value2 })))}>
+              <FileSpreadsheet size={14} />Export to Excel</button>
+          </div>
+          <table className="w-full">
+            <tbody>
+              {dsr.exe_summary.map((r, i) => (
+                <tr key={i} className={r.kind === 'head' ? 'bg-amber-50 font-bold dark:bg-amber-500/10' : r.kind === 'sub' ? 'bg-stone-100 font-semibold text-stone-600 dark:bg-white/5' : 'divide-y divide-line-soft'}>
+                  <td className="px-3 py-1.5">{r.caption}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{typeof r.value === 'number' ? money(r.value) : r.value}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{typeof r.value2 === 'number' ? money(r.value2) : r.value2}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {showPrint && (
         <ReportPrintModal

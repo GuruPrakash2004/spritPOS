@@ -136,7 +136,7 @@ def _field(row: dict, col: dict | None, captions: dict) -> dict:
     width = _num(row.get("FldDataWidth"))
     if not width and col and kind == "text":
         width = col["max_length"] // (2 if str(col["type"]).startswith("n") else 1) if col["max_length"] > 0 else 0
-    options = [o.strip() for o in str(row.get("FldNumStringListContent") or "").split(",") if o.strip()] \
+    options = [o.strip() for o in re.split(r"[,|]", str(row.get("FldNumStringListContent") or "")) if o.strip()] \
         if kind == "list" or _yes(row.get("FldBlnNumOrStringList")) else []
     combo = None
     if _yes(row.get("FldBlnComboData")) and _safe(row.get("FldCmbTblName")):
@@ -247,7 +247,8 @@ def build_screen(doc: dict, field_rows: list[dict], hdr_cols: list[dict], dtl_co
             continue   # the column was dropped from the table: the field disappears with it
         seen.add(code.lower())
         f = _field(row, col, captions)
-        if col is not None and not editable(col):
+        from .field_columns import is_typed_column
+        if col is not None and not editable(col) and not (is_typed_column(code) and not col["is_identity"] and not col["is_computed"]):
             f["readonly"] = True   # a key, computed, stock or odd-typed column: shown, never written as an extra
         fields.append(f)
     compiled = compiled_columns(doc)
@@ -311,7 +312,7 @@ def review(doc: dict, field_rows: list[dict], hdr_cols: list[dict], dtl_cols: li
         if mandatory and (_yes(row.get("FLdBlnHide")) or _yes(row.get("FldBlnReadOnly"))):
             add("warn", code, "Marked mandatory but also hidden or read-only: it is not asked for.")
         kind = str(row.get("FldDataType") or "").strip().lower()
-        if kind == "list string" and not [o for o in str(row.get("FldNumStringListContent") or "").split(",") if o.strip()]:
+        if kind == "list string" and not [o for o in re.split(r"[,|]", str(row.get("FldNumStringListContent") or "")) if o.strip()]:
             add("warn", code, "A list field with no list values.")
         width = _num(row.get("FldDataWidth"))
         if col is not None and kind == "text" and width and col["max_length"] > 0:

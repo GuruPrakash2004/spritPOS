@@ -56,6 +56,7 @@ function useCompanyFiles(kind) {
 
   const save = async (d) => {
     if (d.file && !d.editing && d.file.size > MAX_MB * 1024 * 1024) throw new Error(`File is larger than ${MAX_MB} MB.`);
+    if (kind === 'document' && !String(d.group ?? '').trim()) throw new Error('Group name cannot be empty!');
     const what = d.editing ? `Details of ${d.editing.file_name} will be saved` : `${d.file?.name ?? 'The file'} will be uploaded`;
     if (!(await toastStore.defer('ok', `${what} when this closes.`, d.editing ? 'Save cancelled. Nothing was changed.' : 'Upload cancelled.'))) return;
     if (d.editing) {

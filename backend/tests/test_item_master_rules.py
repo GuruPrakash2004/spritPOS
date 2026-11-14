@@ -31,7 +31,7 @@ async def test_aliases_may_not_repeat_or_equal_the_code(client):
     res = await _post(client, aliases=["X1", "x1"])
     assert res.status_code == 422 and "Duplicate alias" in res.json()["detail"]
     res = await _post(client, aliases=["new-9"])
-    assert res.status_code == 422 and "cannot be the same" in res.json()["detail"]
+    assert res.status_code == 422 and "cannot be same" in res.json()["detail"]
 
 
 async def test_an_alias_holds_at_most_30_characters(client):
@@ -39,24 +39,43 @@ async def test_an_alias_holds_at_most_30_characters(client):
     assert (await _post(client, aliases=["A" * 30])).status_code == 201
 
 
-async def test_code_alias_and_short_name_may_not_be_another_items(client):
+async def test_code_and_aliases_may_not_be_another_items_code_alias_short_name_or_hot_key(client):
+    # frmMstItem.ValidFields: the list searched holds the item's code and aliases only (short name / hot key never match)
     res = await _post(client, aliases=["VIN-750"])                       # another item's code
-    assert res.status_code == 422 and "Duplicate item code" in res.json()["detail"]
+    assert res.status_code == 422 and "Duplicate Item Code" in res.json()["detail"]
     assert (await _post(client, aliases=["BARCODE-1"])).status_code == 201
-    res = await _post(client, code="NEW-10", short_name="barcode-1")      # ... and an alias, whatever the case
-    assert res.status_code == 422 and "alias" in res.json()["detail"]
+    res = await _post(client, code="barcode-1")                          # another item's alias, whatever the case
+    assert res.status_code == 422
     assert (await _post(client, code="NEW-11", short_name="SHORT-1")).status_code == 201
-    res = await _post(client, code="NEW-12", short_name="short-1")
-    assert res.status_code == 422 and "short name" in res.json()["detail"]
+    assert (await _post(client, code="NEW-12", short_name="short-1")).status_code == 201   # two items may share a short name
+    res = await _post(client, code="SHORT-1")                            # ... but a code may not equal one
+    assert res.status_code == 422 and "ShortName" in res.json()["detail"]
+
+
+async def test_bottles_per_case_may_be_zero_and_short_name_saved_as_typed(client):
+    res = await _post(client, code="NEW-BPC", bottles_per_case=0, short_name="")
+    assert res.status_code == 201 and res.json()["bottles_per_case"] == 0 and res.json()["short_name"] == ""
+
+
+async def test_an_item_can_be_recoded_after_it_is_on_bills(client):
+    old = "VIN-750"
+    res = await client.put(f"/masters/items/{old}", json={**store.ITEMS[old], "code": "VIN-750-R"})
+    assert res.status_code == 200 and "VIN-750-R" in store.ITEMS and old not in store.ITEMS
+    assert not any(m["item"] == old for m in store.MOVEMENTS)
+
+
+async def test_an_inactive_item_needs_remarks(client):
+    res = await _post(client, code="NEW-INA", active=False)
+    assert res.status_code == 422 and "remarks" in res.json()["detail"]
 
 
 def test_hot_key_may_not_be_another_items():
     # called directly: without a database the API drops `extras`, which is where the desktop's HotKey column travels
     store.ITEMS["VIN-750"]["extras"] = {"HotKey": "K1"}
     with pytest.raises(HTTPException) as err:
-        masters._check_item_names(Item(**_new(code="NEW-14", extras={"hotkey": "k1"})), None)
-    assert "hot key" in err.value.detail
-    masters._check_item_names(Item(**_new(code="NEW-15", extras={"hotkey": "K2"})), None)
+        masters._check_item_names(Item(**_new(code="k1")), None)          # the code is looked up among the others' hot keys
+    assert "HotKey" in err.value.detail
+    masters._check_item_names(Item(**_new(code="NEW-15")), None)
 
 
 async def test_editing_an_item_keeps_its_own_names(client):
@@ -120,3 +139,31 @@ def test_inactive_remarks_rule_clears_on_reactivation_and_needs_the_database_col
     masters._check_inactive_remarks("suppliers", _remarks_body(False, sent=False))         # a client that sent no extras isn't asked
     monkeypatch.setattr(masters.schema_meta, "columns", lambda table: [{"name": "SomethingElse"}])
     masters._check_inactive_remarks("suppliers", _remarks_body(False))                     # a table without the column: no rule
+
+
+# ─── Item Master options (frmMstItem Options menu, similar-code prompt, UOM lock) ───
+
+async def test_similar_codes_are_found_ignoring_punctuation_and_case(client):
+    res = await client.get("/masters/items/similar", params={"code": "vin 750"})
+    assert res.status_code == 200 and [r["code"] for r in res.json()] == ["VIN-750"]
+    assert (await client.get("/masters/items/similar", params={"code": "vin 750", "exclude": "VIN-750"})).json() == []
+
+
+async def test_uom_lock_is_reported_for_an_item_on_bills(client):
+    assert (await client.get("/masters/items/VIN-750/locks")).json() == {"uom_locked": True}
+    assert (await client.get("/masters/items/NOPE/locks")).status_code == 404
+
+
+async def test_options_that_need_the_database_say_so_without_one(client):
+    invalid = (await client.get("/masters/items/invalid")).json()
+    assert invalid["rows"] == [] and "database" in invalid["note"].lower()
+    assert (await client.get("/masters/items/bulk-fields")).json() == []
+    assert (await client.post("/masters/items/bulk-fields/load", json={"fields": ["HSNCode"]})).status_code == 422
+    assert (await client.post("/masters/items/bulk-fields/import", json={"rows": [{"ItemID": 1}]})).status_code == 503
+    assert (await client.post("/masters/items/recalculate-rates")).status_code == 503
+
+
+async def test_item_find_looks_in_short_name_and_aliases(client):
+    assert (await _post(client, code="FIND-1", short_name="zzshort", aliases=["zzalias"])).status_code == 201
+    for q in ("zzshort", "ZZALIAS", "find-1"):
+        assert [r["code"] for r in (await client.get("/masters/items", params={"q": q})).json()] == ["FIND-1"]

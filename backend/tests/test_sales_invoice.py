@@ -58,6 +58,27 @@ async def test_cancelling_a_bill_puts_the_stock_back(client):
     assert await qoh(client) == before
 
 
+async def test_deleting_a_bill_puts_the_stock_back_and_marks_it_deleted(client):
+    before = await qoh(client)
+    doc_no = (await client.post("/transactions/sales-invoice", json=bill())).json()["doc_no"]
+
+    res = await client.post(f"/transactions/sales-invoice/{doc_no}/delete")
+
+    assert res.status_code == 200 and res.json()["status"] == "DELETED"
+    assert await qoh(client) == before
+    again = await client.post(f"/transactions/sales-invoice/{doc_no}/delete")
+    assert again.status_code == 409 and "already deleted" in again.text
+    assert (await client.post(f"/transactions/sales-invoice/{doc_no}/cancel", json={"remarks": "Wrong item"})).status_code == 409
+
+
+async def test_a_frozen_date_stops_a_delete(client):
+    from app import gsettings
+    doc_no = (await client.post("/transactions/sales-invoice", json=bill())).json()["doc_no"]
+    gsettings.store.GSETTINGS["FreezeDate"] = {"caption": "Freeze Date", "kind": "date", "value": "2999-01-01", "group": "Transaction"}
+    res = await client.post(f"/transactions/sales-invoice/{doc_no}/delete")
+    assert res.status_code == 409 and "Freezed Date" in res.text
+
+
 async def test_cannot_cancel_twice(client):
     doc_no = (await client.post("/transactions/sales-invoice", json=bill())).json()["doc_no"]
     await client.post(f"/transactions/sales-invoice/{doc_no}/cancel", json={"remarks": "Wrong item"})
@@ -71,7 +92,7 @@ async def test_cannot_cancel_twice(client):
     ({"salesperson": None}, "Salesperson is required"),
     ({"counter": "counter12"}, "active Sales Counter"),          # counter12 is inactive in the seed data
     ({"customer": "NOBODY"}, "Unknown customer"),
-    ({"lines": [{"item_code": ITEM, "bottles": 100_000}]}, "Insufficient stock"),
+    ({"lines": [{"item_code": ITEM, "bottles": 100_000}]}, "Stock is Less... Cannot Proceed.."),
 ])
 async def test_invalid_bills_are_rejected(client, overrides, message):
     before = await qoh(client)
@@ -170,3 +191,23 @@ async def test_today_totals_counts_saved_bills_only(client):
     assert after["sales"] > before["sales"]
     await client.post(f"/transactions/sales-invoice/{res.json()['doc_no']}/cancel", json={"remarks": "test"})
     assert (await client.get("/transactions/today-totals")).json()["total_bills"] == before["total_bills"] + 1   # a cancelled bill still counts (as in the desktop)
+
+
+async def test_the_shops_loyalty_rule_earns_whole_points_at_or_above_its_threshold(client):
+    """The desktop's Loyalty settings (UtlGSettings BillValueGreaterThan / PointsForOneRs): >= threshold, whole points, loyalty groups only."""
+    from app import gsettings
+    gsettings.store.GSETTINGS["PointsForOneRs"]["value"] = "0.01"
+    gsettings.store.GSETTINGS["BillValueGreaterThan"] = {"caption": "Bill value", "kind": "number", "value": "1000", "group": "Loyalty"}
+    item = (await client.get(f"/masters/items/{ITEM}")).json()
+    price = item["mrp"]
+    bottles = int(1000 // price) + 1
+    doc = (await client.post("/transactions/sales-invoice", json=bill(customer="SRIRAM", lines=[{"item_code": ITEM, "bottles": bottles}]))).json()
+    expected = float(round(price * bottles * 0.01))
+    assert doc["totals"]["points_earned"] == expected
+    small = (await client.post("/transactions/sales-invoice", json=bill(customer="SRIRAM", lines=[{"item_code": ITEM, "bottles": 1}]))).json()
+    assert small["totals"]["points_earned"] == (float(round(price * 0.01)) if price >= 1000 else 0.0)
+
+
+def test_header_gets_the_finyear_and_the_running_number():
+    from app.sqlstore import _finyear_and_running_no
+    assert _finyear_and_running_no("26/c10-0083754") == {"FINYEAR": 26, "InvCNo": 83754}

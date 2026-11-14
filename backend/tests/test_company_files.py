@@ -45,3 +45,22 @@ async def test_script_files_are_refused(client):
     res = await upload(client, file_name="evil.svg")
 
     assert res.status_code == 422
+
+
+async def test_document_needs_a_group_and_a_new_file_name(client):
+    doc = {"kind": "document", "file_name": "licence.pdf", "data": PNG}
+    assert (await client.post("/company/files", json=doc)).status_code == 422           # Group name cannot be empty!
+    assert (await client.post("/company/files", json={**doc, "group": "Excise"})).status_code == 201
+    again = await client.post("/company/files", json={**doc, "group": "Bank"})
+    assert again.status_code == 409 and "Document already exists!" in again.text
+
+
+async def test_company_save_needs_only_a_name_and_makes_back_quotes(client):
+    current = (await client.get("/masters/company")).json()
+    body = {**current, "name": "D'Souza Wines", "email": "", "address": "", "address1": "", "address2": "", "address3": ""}
+    res = await client.put("/masters/company", json=body)
+    assert res.status_code == 200
+    assert res.json()["name"] == "D`Souza Wines" and res.json()["email"] == ""
+    assert (await client.put("/masters/company", json={**body, "email": "not-an-email"})).status_code == 422
+    assert (await client.put("/masters/company", json={**body, "name": "x" * 251})).status_code == 422
+    await client.put("/masters/company", json=current)

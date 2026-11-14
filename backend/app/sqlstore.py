@@ -48,7 +48,7 @@ SECRET_FIELDS = ("legacy_password", "default_password")
 SECTIONS = ("settings", "gsettings", "denominations", "exp_opening", "seq", "security", "field_rights", "master_approval",
             "report_rights", "doc_settings", "number_series", "menu_layout", "import_fields", "merged_items",
             "merged_item_ids", "company", "print_prefs")
-MIRRORED_DOCS = ("sales_invoice", "purchase_bill", "purchase_indent", "sales_return", "stock_deduction", "physical_stock")
+MIRRORED_DOCS = ("sales_invoice", "purchase_bill", "purchase_indent", "sales_return", "stock_deduction", "physical_stock", "closing_stock")
 MOVE_DOCTYPE = {"sale": "INV", "purchase": "PB", "opening": "OP", "sales-return": "SR", "deduction": "STKDED"}
 LOCID = 1
 WEB_ROW = "WEB:"          # Particulars prefix of the UtlStockList rows the web app wrote
@@ -181,13 +181,13 @@ def _lookup(cur, table: str, id_col: str, value, *cols: str):
 
 def _item_values(cur, r: dict) -> dict:
     return {
-        "ITEMNAME": r.get("name", ""), "ShortName": r.get("short_name") or r.get("name", ""), "HSNCode": r.get("hsn_code") or "",
+        "ITEMNAME": r.get("name", ""), "ShortName": r.get("short_name") or "", "HSNCode": r.get("hsn_code") or "",
         "ITEMGroupID": _lookup(cur, "MstITEMGROUP", "ITEMGROUPID", r.get("group"), "ITEMGROUPCODE", "ITEMGROUPNAME"),
         "LiqType": r.get("liqtype") or "",
         "UOMID": _lookup(cur, "MstUOM", "UOMID", r.get("uom"), "UOMCODE", "UOMNAME"),
         "PKGID": _lookup(cur, "MstPKG", "PKGID", r.get("package"), "PKGCODE", "PKGNAME") or None,
         "BrandID": _lookup(cur, "MstBrand", "BRANDID", r.get("brand"), "BRANDCODE", "BRANDNAME"),
-        "BotPerCases": int(_num(r.get("bottles_per_case")) or 12), "MRP": _num(r.get("mrp")), "PURRATE": _num(r.get("purchase_rate")),
+        "BotPerCases": int(_num(r.get("bottles_per_case", 12))), "MRP": _num(r.get("mrp")), "PURRATE": _num(r.get("purchase_rate")),
         "CGSTPER": _num(r.get("cgst_per")), "SGSTPER": _num(r.get("sgst_per")), "ROL": _num(r.get("rol")), "ROQ": _num(r.get("roq")),
         "InActive": _yn(not r.get("active", True)), "NonStkable": _yn(r.get("non_stockable", False)),
     }
@@ -243,10 +243,11 @@ LEGACY_MASTERS = {
     "SUPPLIERS": ("MstSUPP", "SUPPID", "SUPPCODE", _supplier_values),
     "ITEM_GROUPS": ("MstITEMGROUP", "ITEMGROUPID", "ITEMGROUPCODE",
                     lambda cur, r: {"ITEMGROUPNAME": r.get("name", ""), "LiqItem": _yn(r.get("liquor", True)),
-                                    "LOYALTY": _yn(r.get("consider_for_loyalty"))}),
-    "BRANDS": ("MstBrand", "BRANDID", "BRANDCODE", lambda cur, r: {"BRANDNAME": r.get("name", "")}),
-    "UOMS": ("MstUOM", "UOMID", "UOMCODE", lambda cur, r: {"UOMNAME": r.get("name", "")}),
-    "PACKAGES": ("MstPKG", "PKGID", "PKGNAME", lambda cur, r: {"PKGCODE": r.get("code", ""), "LTRPERBOT": _num(r.get("litres_per_bottle"))}),
+                                    "LOYALTY": _yn(r.get("consider_for_loyalty")), "InActive": _yn(not r.get("active", True))}),
+    "BRANDS": ("MstBrand", "BRANDID", "BRANDCODE", lambda cur, r: {"BRANDNAME": r.get("name", ""), "InActive": _yn(not r.get("active", True))}),
+    "UOMS": ("MstUOM", "UOMID", "UOMCODE", lambda cur, r: {"UOMNAME": r.get("name", ""), "Decimals": int(_num(r.get("decimals"))), "InActive": _yn(not r.get("active", True))}),
+    "PACKAGES": ("MstPKG", "PKGID", "PKGNAME", lambda cur, r: {"PKGCODE": r.get("code", ""), "LTRPERBOT": _num(r.get("litres_per_bottle")),
+                                                                  "InActive": _yn(not r.get("active", True))}),
     "USERS": ("MstUser", "UserID", "UserCode", _user_values),
     "LEDGER_GROUPS": ("MstLedgroup", "LEDGROUPID", "LEDGROUPCODE", lambda cur, r: {"LEDGROUPNAME": r.get("name", ""), "InActive": "N"}),
     "LEDGERS": ("MstLed", "LEDID", "LEDCODE",
@@ -424,6 +425,14 @@ def _write_master(cur, table: str, key: str, row: dict | None, user: str | None)
         if any(t == table and old == key for (t, _new), old in store.RENAMED.items()):
             return   # this code was changed to another: the database row is renamed with the new code, not deleted
         _check_unused(cur, table, id_col, web_table, code_col, key)
+        if table in ("CUSTOMERS", "SUPPLIERS"):   # frmMstParty.deleteDocument: the party's addresses, contact persons and attachments go with it
+            party_id = _one(cur, f"SELECT TOP 1 [{id_col}] FROM dbo.[{web_table}] WHERE [{code_col}] = ?", (key,))
+            doc_id = next((int(d["DocID"]) for d in store.UTL_DOCS.values() if str(d.get("HdrTblName") or "").strip().lower() == web_table.lower()), None)
+            if party_id is not None and doc_id is not None:
+                for child, where in (("MstPartyAddress", "MstDocID = ? AND PartyID = ?"), ("MstPartyContacts", "MstDocID = ? AND PartyID = ?"),
+                                     ("UtlAttachFiles", "DocID = ? AND DocValueID = ?")):
+                    if _meta(child):
+                        cur.execute(f"DELETE FROM dbo.[{child}] WHERE {where}", (doc_id, party_id))
         cur.execute(f"DELETE FROM dbo.[{web_table}] WHERE [{code_col}] = ?", (key,))
         return
     vals = values(cur, row)
@@ -480,7 +489,39 @@ def _write_item_extras(cur, item_id: int, code: str, row: dict, vals: dict, befo
 _short_no = db_store.short_no   # the desktop's varchar(12) header numbers (see db_store.short_no)
 
 
+def _print_no(doc_no: str, hdr_table: str = "") -> str:
+    """The number as the exe prints it, from the document's own number format (UtlDocNoFmt F1..F14, getUtlDocNoFmt: 1 prefix, 2 / 3 the year the
+    financial year starts / ends in four digits, 4 / 5 in two, 6 the last five digits, 7 the running number, 8 / 9 its last four / three digits, 10-12
+    Misc1-3; a "/" or "-" is added only after something): "26//00201", or "27/CSE/00001". Without a format row the year digits, prefix and number
+    are joined with "/". The web's older "26/PB-0000001" style numbers are printed as they are."""
+    m = re.fullmatch(r"(\d{2})([A-Za-z0-9]*)(\d{5})", doc_no or "")
+    if not m:
+        return doc_no
+    doc = next((d for d in store.UTL_DOCS.values() if str(d.get("HdrTblName") or "").lower() == hdr_table.lower()), None) if hdr_table else None
+    row = next((r for r in store.UTL_NUMFMT if doc and int(r.get("DocID") or 0) == int(doc["DocID"])), None)
+    if not row:
+        return f"{m.group(1)}/{m.group(2)}/{m.group(3)}"
+    start, end = str(store.COMPANY.get("fy_start") or ""), str(store.COMPANY.get("fy_end") or "")
+    tokens = {"1": m.group(2), "2": start[:4], "3": end[:4], "4": start[2:4], "5": end[2:4], "6": m.group(3), "7": str(int(m.group(3))),
+              "8": doc_no[-4:], "9": doc_no[-3:], "10": str(row.get("Misc1") or ""), "11": str(row.get("Misc2") or ""), "12": str(row.get("Misc3") or "")}
+    out = ""
+    for i in range(1, 15):
+        part = str(row.get(f"F{i}") or "").strip()
+        if not part:
+            continue
+        if part in tokens:
+            out += tokens[part]
+        elif part in ("/", "-"):
+            out += part if out else ""
+        else:
+            out += part
+    return out or doc_no
+
+
 def _prefix(doc_no: str) -> str:
+    exe = re.fullmatch(r"\d{2}([A-Za-z]*)\d{5}", doc_no or "")   # the exe's shape: year digits + prefix + five digits ("26CSE00001")
+    if exe:
+        return exe.group(1)
     part = doc_no.split("/", 1)[-1]
     return part.rsplit("-", 1)[0] if "-" in part else ""
 
@@ -527,6 +568,18 @@ def _doc_extras(doc: dict) -> dict:
     return dict(doc.get("extras") or {})
 
 
+def _finyear_and_running_no(doc_no: str) -> dict:
+    """frmTrnInv header insert (3290-3317): FINYEAR = the last two digits of the financial year's start year (gSettings.gCompFinYear) and InvCNo =
+    the running number the invoice number was built from (getInvNo: max(InvCNo) + 1 for the FinYear). The number's last digits are that running number."""
+    out = {}
+    if store.FY_PREFIX.isdigit():
+        out["FINYEAR"] = int(store.FY_PREFIX)
+    m = re.search(r"(\d+)$", doc_no or "")
+    if m:
+        out["InvCNo"] = int(m.group(1))
+    return out
+
+
 def _sales_header_values(cur, doc: dict, user: str | None) -> dict:
     tot, pay = doc.get("totals", {}), doc.get("payment", {})
     cust = store.CUSTOMERS.get(doc.get("customer")) or {}
@@ -542,6 +595,7 @@ def _sales_header_values(cur, doc: dict, user: str | None) -> dict:
         "GRNDTOT": _num(tot.get("net")), "INVVALUE": _num(tot.get("net")), "TOT": _num(tot.get("basic")),
         "CASHAMT": _num(pay.get("cash")), "CARDAMT": _num(pay.get("card")), "OTHPAYAMT": _num(pay.get("upi")) + _num(pay.get("credit")),
         "RCVDAMT": _num(tot.get("collected")), "PAYBACKAMT": _num(tot.get("payback")), "BILLSYSTEM": "WEB",
+        **_finyear_and_running_no(doc["doc_no"]),
         "SALTYP": doc.get("payment_type") or "", "Authorised": "Y",
         "WRITEOFFAMT": 0, "TOTCESS": 0, "TOTCOMPCESS": 0,   # the desktop writes 0.00, not NULL
     }
@@ -574,7 +628,7 @@ def _rate_to_item(cur, sinv_id: int) -> None:
 
 def _write_sales_invoice(cur, doc: dict, user: str | None) -> None:
     no, status = doc["doc_no"], doc.get("status", "SAVED")
-    sinv_id = _one(cur, "SELECT SINVID FROM dbo.TrnHdrSINV WHERE SINVNO = ?", (no,))
+    sinv_id = _one(cur, "SELECT SINVID FROM dbo.TrnHdrSINV WHERE SINVNO = CAST(? AS VARCHAR(30))", (no,))
     flags = {"Cancelled": _yn(status in ("CANCELLED", "DELETED")), "IsDelete": _yn(status == "DELETED"),
              "CancelRmks": doc.get("cancel_remarks") or "", "ChangedBy": user or "", "ChangedOn": datetime.now()}
     if sinv_id is not None:
@@ -587,7 +641,7 @@ def _write_sales_invoice(cur, doc: dict, user: str | None) -> None:
 
 def _rewrite_sales_invoice(cur, doc: dict, user: str | None) -> None:
     """A saved bill that was edited: its header is updated in place, and its lines, points and split-payment rows are written again."""
-    sinv_id = _one(cur, "SELECT SINVID FROM dbo.TrnHdrSINV WHERE SINVNO = ?", (doc["doc_no"],))
+    sinv_id = _one(cur, "SELECT SINVID FROM dbo.TrnHdrSINV WHERE SINVNO = CAST(? AS VARCHAR(30))", (doc["doc_no"],))
     if sinv_id is None:
         return _write_sales_invoice(cur, doc, user)
     head = {k: v for k, v in _sales_header_values(cur, doc, user).items() if k not in ("SINVNO", "Prefix", "PrintSINVNO", "AddedBy", "AddedOn")}
@@ -634,7 +688,7 @@ def _purchase_header_values(cur, doc: dict, user: str | None, calc: dict) -> dic
     supp = store.find(store.SUPPLIERS, doc.get("supplier") or "") or {}
     no = doc["doc_no"]
     return _with(calc["header"], {
-        **_doc_extras(doc), "PBNO": _short_no(no), "Prefix": _prefix(no), "PrintPBNO": no, "PBDate": doc["date"],
+        **_doc_extras(doc), "PBNO": _short_no(no), "Prefix": _prefix(no), "PrintPBNO": _print_no(no, "TrnHdrPB"), "PBDate": doc["date"],
         "SUPPID": _lookup(cur, "MstSUPP", "SUPPID", supp.get("code") or doc.get("supplier"), "SUPPCODE", "SUPPNAME"),
         "PartyName": supp.get("name") or doc.get("supplier") or "", "LOCID": LOCID, "AddedBy": user or "", "AddedOn": datetime.now(),
         "SUPPINVNO": doc.get("supplier_inv_no") or "", "SUPPINVDATE": doc.get("supplier_inv_date") or None,
@@ -660,8 +714,11 @@ def _write_purchase_lines(cur, doc: dict, pb_id: int, calc: dict) -> None:
 def _write_purchase_bill(cur, doc: dict, user: str | None) -> None:
     no = doc["doc_no"]
     calc = _calc("purchase_bill", doc)
-    if _one(cur, "SELECT PBID FROM dbo.TrnHdrPB WHERE PBNO = ?", (_short_no(no),)) is not None:
-        return   # purchase bills are not changed after saving (an edit goes through _rewrite_purchase_bill)
+    existing = _one(cur, "SELECT PBID FROM dbo.TrnHdrPB WHERE PBNO = CAST(? AS VARCHAR(30))", (_short_no(no),))
+    if existing is not None:
+        if doc.get("status") == "CANCELLED":   # frmTrnPBM.deleteDoc: Cancelled = 'Y' (the stock rows are taken away by the reversing move)
+            _update(cur, "TrnHdrPB", {"Cancelled": "Y", "ChangedBy": user or "", "ChangedOn": datetime.now()}, "PBID = ?", (existing,))
+        return   # otherwise purchase bills are not changed after saving (an edit goes through _rewrite_purchase_bill)
     pb_id = _insert(cur, "TrnHdrPB", _purchase_header_values(cur, doc, user, calc), identity_out="PBID")
     _write_purchase_lines(cur, doc, pb_id, calc)
 
@@ -669,7 +726,7 @@ def _write_purchase_bill(cur, doc: dict, user: str | None) -> None:
 def _rewrite_purchase_bill(cur, doc: dict, user: str | None) -> None:
     """A saved purchase bill that was edited: its header is updated in place and its lines are written again."""
     no = doc["doc_no"]
-    pb_id = _one(cur, "SELECT PBID FROM dbo.TrnHdrPB WHERE PBNO = ?", (_short_no(no),))
+    pb_id = _one(cur, "SELECT PBID FROM dbo.TrnHdrPB WHERE PBNO = CAST(? AS VARCHAR(30))", (_short_no(no),))
     if pb_id is None:
         return _write_purchase_bill(cur, doc, user)
     calc = _calc("purchase_bill", doc)
@@ -679,7 +736,55 @@ def _rewrite_purchase_bill(cur, doc: dict, user: str | None) -> None:
     _write_purchase_lines(cur, doc, pb_id, calc)
 
 
-_REWRITERS = {"sales_invoice": _rewrite_sales_invoice, "purchase_bill": _rewrite_purchase_bill}
+def _closing_header(cur, doc: dict, user: str | None) -> dict:
+    no = doc["doc_no"]
+    return {"CSENO": _short_no(no), "Prefix": _prefix(no), "PrintCSENO": _print_no(no, "TrnHdrCSE"), "CSEDate": doc["date"], "ASONDT": doc["date"],
+            "TOTINTQTY": sum(_num(l.get("sales_qty")) for l in doc.get("lines", [])), "INVNO": doc.get("invoice_no") or ""}
+
+
+def _closing_lines(cur, doc: dict, cse_id: int) -> None:
+    """frmTrnCloseStk's detail: OPQTY (opening), CLQTY (the closing entered), INVQTY (Sales Qty = OP - closing), and the item's group name."""
+    for n, l in enumerate(doc.get("lines", []), start=1):
+        item_id, uom_id = _item_ids(cur, l["item_code"])
+        item = store.ITEMS.get(l["item_code"]) or {}
+        group = store.ITEM_GROUPS.get(item.get("group") or "", {})
+        _insert(cur, "TrnDtlCSE", {"CSEID": cse_id, "SlNo": n, "ItemSlNO": n, "ITEMID": item_id, "UOMID": uom_id, "ShortClosed": "N", "ShortClosedBy": 0,
+                                   "OPQTY": _num(l.get("op_qty")), "CLQTY": _num(l.get("closing_qty")), "INVQTY": _num(l.get("sales_qty")),
+                                   "ITEMGROUPNAME": (group.get("name") or item.get("group") or "")[:100]})
+
+
+def _need_closing_tables() -> None:
+    if not _meta("TrnHdrCSE") or not _meta("TrnDtlCSE"):
+        raise _NoDesktopTable("closing stock entry can't be saved yet: the desktop database has no table for it")
+
+
+def _write_closing_stock(cur, doc: dict, user: str | None) -> None:
+    """Closing Stock Entry (the Drops client's frmTrnCloseStk) in TrnHdrCSE / TrnDtlCSE, for a database that has them. Without them nothing can
+    be saved and the request is undone (the same message every unsaved document gets)."""
+    _need_closing_tables()
+    existing = _one(cur, "SELECT CSEID FROM dbo.TrnHdrCSE WHERE CSENO = ?", (_short_no(doc["doc_no"]),))
+    if existing is not None:
+        if doc.get("status") == "CANCELLED":   # deleteDoc, CANCELLED
+            _update(cur, "TrnHdrCSE", {"Cancelled": "Y", "ChangedBy": user or "", "ChangedOn": datetime.now()}, "CSEID = ?", (existing,))
+        return
+    cse_id = _insert(cur, "TrnHdrCSE", {**_closing_header(cur, doc, user), "Authorised": "Y", "Cancelled": "N", "AddedBy": user or "", "AddedOn": datetime.now()},
+                     identity_out="CSEID")
+    _closing_lines(cur, doc, cse_id)
+
+
+def _rewrite_closing_stock(cur, doc: dict, user: str | None) -> None:
+    """An edited entry, or one whose sales invoice was just generated (INVNO): header updated in place, lines written again."""
+    _need_closing_tables()
+    cse_id = _one(cur, "SELECT CSEID FROM dbo.TrnHdrCSE WHERE CSENO = ?", (_short_no(doc["doc_no"]),))
+    if cse_id is None:
+        return _write_closing_stock(cur, doc, user)
+    head = {k: v for k, v in _closing_header(cur, doc, user).items() if k not in ("CSENO", "Prefix", "PrintCSENO")}
+    _update(cur, "TrnHdrCSE", {**head, "ChangedBy": user or "", "ChangedOn": datetime.now()}, "CSEID = ?", (cse_id,))
+    cur.execute("DELETE FROM dbo.TrnDtlCSE WHERE CSEID = ?", (cse_id,))
+    _closing_lines(cur, doc, cse_id)
+
+
+_REWRITERS = {"sales_invoice": _rewrite_sales_invoice, "purchase_bill": _rewrite_purchase_bill, "closing_stock": _rewrite_closing_stock}
 
 
 def _write_physical_stock(cur, doc: dict, user: str | None) -> None:
@@ -717,7 +822,7 @@ def _indent_header(cur, doc: dict, user: str | None, calc: dict) -> dict:
     supp = store.find(store.SUPPLIERS, doc.get("supplier") or "") or {}
     no = doc["doc_no"]
     return _with(calc["header"], {
-        **_doc_extras(doc), "PINO": _short_no(no), "Prefix": _prefix(no), "PrintPINO": no, "PIDate": doc["date"],
+        **_doc_extras(doc), "PINO": _short_no(no), "Prefix": _prefix(no), "PrintPINO": _print_no(no, "TrnHdrPI"), "PIDate": doc["date"],
         "SUPPID": _lookup(cur, "MstSUPP", "SUPPID", supp.get("code") or doc.get("supplier"), "SUPPCODE", "SUPPNAME"),
         "PartyName": supp.get("name") or doc.get("supplier") or "", "LOCID": LOCID, "AddedBy": user or "", "AddedOn": datetime.now(),
         "TOTAMT": _num(tot.get("basic")), "GRNDTOT": _num(tot.get("net")), "RMKS": doc.get("remarks") or "",
@@ -739,10 +844,22 @@ def _return_header(cur, doc: dict, user: str | None, calc: dict) -> dict:
     tot = doc.get("totals", {})
     no = doc["doc_no"]
     return _with(calc["header"], {
-        **_doc_extras(doc), "SRNO": _short_no(no), "Prefix": _prefix(no), "PrintSRNO": no, "SRDate": doc["date"], "LOCID": LOCID,
+        **_doc_extras(doc), "SRNO": _short_no(no), "Prefix": _prefix(no), "PrintSRNO": _print_no(no, "TrnHdrSR"), "SRDate": doc["date"], "LOCID": LOCID,
         "AddedBy": user or "", "AddedOn": datetime.now(), "TOTAMT": _num(tot.get("net")), "BILLSYSTEM": "WEB",
-        "Cancelled": "N", "Authorised": "Y",
+        "Cancelled": "N", "Authorised": "Y", **_return_counter_and_person(cur, doc),
     })
+
+
+def _return_counter_and_person(cur, doc: dict) -> dict:
+    """frmTrnSR writes the sales counter and sales person (SCID, SPID) of the return; a web return against an invoice carries that invoice's."""
+    inv = store.DOCS["sales_invoice"].get(doc.get("against_invoice") or "") or {}
+    out = {}
+    scid = int((store.COUNTERS.get(inv.get("counter")) or {}).get("_scid") or 0)
+    if scid:
+        out["SCID"] = scid
+    if inv.get("salesperson"):
+        out["SPID"] = _lookup(cur, "MstSP", "SPID", inv["salesperson"], "SPCODE", "SPNAME")
+    return out
 
 
 def _return_lines(cur, doc: dict, sr_id: int, calc: dict) -> None:
@@ -758,7 +875,7 @@ def _deduction_header(cur, doc: dict, user: str | None, calc: dict) -> dict:
     tot = doc.get("totals", {})
     no = doc["doc_no"]
     return _with(calc["header"], {
-        **_doc_extras(doc), "STKDEDNO": _short_no(no), "Prefix": _prefix(no), "PrintSTKDEDNO": no, "STKDEDDate": doc["date"], "LOCID": LOCID,
+        **_doc_extras(doc), "STKDEDNO": _short_no(no), "Prefix": _prefix(no), "PrintSTKDEDNO": _print_no(no, "TrnHdrSTKDED"), "STKDEDDate": doc["date"], "LOCID": LOCID,
         "AddedBy": user or "", "AddedOn": datetime.now(), "TOTQTY": _num(tot.get("qty")), "BILLSYSTEM": "WEB",
         "Cancelled": "N", "Authorised": "Y",
     })
@@ -786,8 +903,11 @@ def _write_stock_doc(kind: str):
 
     def write(cur, doc: dict, user: str | None) -> None:
         calc = _calc(kind, doc)
-        if _one(cur, f"SELECT {id_col} FROM dbo.{hdr} WHERE {no_col} = ?", (_short_no(doc["doc_no"]),)) is not None:
-            return   # already there (an edit goes through _rewrite_stock_doc)
+        existing = _one(cur, f"SELECT {id_col} FROM dbo.{hdr} WHERE {no_col} = ?", (_short_no(doc["doc_no"]),))
+        if existing is not None:
+            if doc.get("status") == "CANCELLED":   # deleteDoc, CANCELLED: Cancelled = 'Y' (the stock rows go with the reversing move)
+                _update(cur, hdr, {"Cancelled": "Y", "ChangedBy": user or "", "ChangedOn": datetime.now()}, f"{id_col} = ?", (existing,))
+            return   # otherwise already there (an edit goes through _rewrite_stock_doc)
         new_id = _insert(cur, hdr, header_fn(cur, doc, user, calc), identity_out=id_col)
         lines_fn(cur, doc, new_id, calc)
     return write
@@ -818,7 +938,7 @@ _REWRITERS.update({k: _rewrite_stock_doc(k) for k in _STOCK_DOCS})
 
 _MIRROR_WRITERS = {"sales_invoice": _write_sales_invoice, "purchase_bill": _write_purchase_bill,
                    "purchase_indent": _write_purchase_indent, "sales_return": _write_sales_return,
-                   "stock_deduction": _write_stock_deduction, "physical_stock": _write_physical_stock}
+                   "stock_deduction": _write_stock_deduction, "physical_stock": _write_physical_stock, "closing_stock": _write_closing_stock}
 
 
 # stock movement kind -> where the document's id is and the DocType of its UtlStockList rows (for an edit that takes the old rows away)
@@ -847,9 +967,9 @@ def _write_move(cur, seq: int, m: dict) -> None:
     doc_type = MOVE_DOCTYPE.get(m["kind"], m["kind"].upper())
     doc_id = 0
     if doc_type == "INV":
-        doc_id = _one(cur, "SELECT SINVID FROM dbo.TrnHdrSINV WHERE SINVNO = ?", (m.get("doc_no"),)) or 0
+        doc_id = _one(cur, "SELECT SINVID FROM dbo.TrnHdrSINV WHERE SINVNO = CAST(? AS VARCHAR(30))", (m.get("doc_no"),)) or 0
     elif doc_type == "PB":
-        doc_id = _one(cur, "SELECT PBID FROM dbo.TrnHdrPB WHERE PBNO = ?", (_short_no(str(m.get("doc_no") or "")),)) or 0
+        doc_id = _one(cur, "SELECT PBID FROM dbo.TrnHdrPB WHERE PBNO = CAST(? AS VARCHAR(30))", (_short_no(str(m.get("doc_no") or "")),)) or 0
     qty = abs(_num(m["qty"]))
     _insert(cur, "UtlStockList", {
         "ItemID": item_id, "StkMultiplier": 1 if m["qty"] >= 0 else -1, "DocType": doc_type, "DocDate": m["date"],
@@ -992,6 +1112,7 @@ class _NoDesktopTable(Exception):
 def save(user: str | None = None) -> None:
     """Write the request's changes (see the module doc) in one transaction. Raises SaveFailed."""
     global _moves_saved, _rewrite_moves
+    store.STOCK_GEN += 1   # the stock-list totals the reports keep for a few seconds are out of date once anything is saved
     with _lock:
         audit = list(store.AUDIT_OUT)
         store.AUDIT_OUT.clear()
@@ -1077,7 +1198,7 @@ def save(user: str | None = None) -> None:
                             if not direct:
                                 cur.execute("DELETE FROM dbo.Web_AppDoc WHERE Kind = ? AND DocNo = ?", (kind, no))
                             if kind == "sales_invoice":
-                                cur.execute("UPDATE dbo.TrnHdrSINV SET Cancelled = 'Y', IsDelete = 'Y' WHERE SINVNO = ?", (no,))
+                                cur.execute("UPDATE dbo.TrnHdrSINV SET Cancelled = 'Y', IsDelete = 'Y' WHERE SINVNO = CAST(? AS VARCHAR(30))", (no,))
                         for n, text in new_sections.items():
                             if not direct:
                                 _upsert(cur, "Web_AppSetting", {"Section": "state", "Key": n}, {"Value": text, "ChangedAt": datetime.now(), "ChangedBy": user})
@@ -1200,7 +1321,20 @@ def load() -> bool:
 
 
 _NUMBERED = {"purchase_bill": ("TrnHdrPB", "PrintPBNO"), "purchase_indent": ("TrnHdrPI", "PrintPINO"), "sales_return": ("TrnHdrSR", "PrintSRNO"),
-             "stock_deduction": ("TrnHdrSTKDED", "PrintSTKDEDNO")}
+             "stock_deduction": ("TrnHdrSTKDED", "PrintSTKDEDNO"), "closing_stock": ("TrnHdrCSE", "PrintCSENO")}
+
+
+def _exe_series_max(kind: str) -> int | None:
+    """The highest running number of an exe-numbered document this year with the prefix in use (TrnNoAutoGen: the number is the last five digits;
+    the year digits and the prefix start the number, and the row's Prefix column holds the prefix)."""
+    from . import doc_settings
+    table, col = _NUMBERED[kind]
+    short = col.replace("Print", "", 1)
+    pfx = doc_settings.prefix(kind)
+    row = db.fetchone(f"SELECT MAX(TRY_CAST(RIGHT({short}, 5) AS INT)) AS n FROM dbo.{table} WITH (NOLOCK) "
+                      f"WHERE LEFT({short}, {len(store.FY_PREFIX) + len(pfx)}) = CAST(? AS VARCHAR(20)) AND ISNULL(Prefix, '') = CAST(? AS VARCHAR(20))",
+                      (store.FY_PREFIX + pfx, pfx))
+    return int(row["n"]) if row and row["n"] else None
 
 
 def _seed_numbers() -> None:
@@ -1209,6 +1343,12 @@ def _seed_numbers() -> None:
     from . import doc_settings
     for kind, (table, col) in _NUMBERED.items():
         try:
+            if kind in store.EXE_NUMBERED:
+                n = _exe_series_max(kind)
+                if n:
+                    seq = store._seq.setdefault(kind, store.Seq(n + 1))
+                    seq.value = max(seq.value, n + 1)
+                continue
             row = db.fetchone(f"SELECT MAX(TRY_CAST(SUBSTRING({col}, CHARINDEX('-', {col}) + 1, 20) AS INT)) AS n FROM dbo.{table} WITH (NOLOCK) "
                               f"WHERE {col} LIKE CAST(? AS VARCHAR(30))", (f"{store.FY_PREFIX}/{doc_settings.prefix(kind)}-%",))
         except Exception as e:   # noqa: BLE001 - this client's database lacks the table
@@ -1234,6 +1374,9 @@ def sync_number(kind: str) -> None:
         if kind == "sales_invoice":
             row = db.fetchone("SELECT MAX(TRY_CAST(SUBSTRING(SINVNO, CHARINDEX('-', SINVNO) + 1, 20) AS INT)) AS n FROM dbo.TrnHdrSINV WITH (NOLOCK) "
                               "WHERE SINVNO LIKE CAST(? AS VARCHAR(20))", (f"{store.FY_PREFIX}/%",))
+        elif kind in store.EXE_NUMBERED:
+            n = _exe_series_max(kind)
+            row = {"n": n} if n else None
         elif kind in _NUMBERED:
             from . import doc_settings
             table, col = _NUMBERED[kind]

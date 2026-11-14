@@ -17,7 +17,7 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, doc_engine, db_store, gsettings, schema_meta, security, sqlstore, store, validation
+from .. import admin_audit, db, doc_engine, db_store, gsettings, schema_meta, security, sqlstore, store, validation
 from ..master_specs import SPECS
 from ..schemas import SIMPLE_MODELS
 from ..schemas import (
@@ -106,33 +106,35 @@ def _item_used_in_trn(code: str) -> bool:
 
 
 def _check_item_names(body: Item, original: str | None) -> None:
-    """frmMstItem.ValidFields: an item's code, aliases, short name and hot key may not repeat among its own entries, and may not
-    be another item's code, alias, short name or hot key (the find box and the barcode scan look all of them up)."""
+    """frmMstItem.ValidFields (578-616): the item's own entries (alias grid) may not repeat or equal its code, and its code and aliases
+    may not be another item's code, alias, short name or hot key. The exe builds the list it searches with only the code and the
+    aliases (the short name and hot key are glued on without a comma, so they never match), and so does this check."""
     aliases = [a.strip() for a in body.aliases if a and a.strip()]
     for a in aliases:   # the exe's alias grid: 30 characters, no apostrophe
         if len(a) > 30:
             raise HTTPException(422, f"Alias '{a[:30]}...' is longer than 30 characters")
+        if "'" in a:
+            raise HTTPException(422, "An alias cannot contain an apostrophe")
     seen: set[str] = set()
     for a in aliases:
         if a.casefold() in seen:
             raise HTTPException(422, f"Duplicate alias '{a}'")
         seen.add(a.casefold())
-    if body.code.casefold() in seen:
-        raise HTTPException(422, "Item code and alias cannot be the same")
-    short, hot = (body.short_name or "").strip(), _extra(body.extras, "hotkey")
-    own = {t.casefold() for t in [body.code, short, hot, *aliases] if t}
+    if body.code.strip().casefold() in seen:
+        raise HTTPException(422, "ItemCode and Alias cannot be same")
+    mine = {t.casefold() for t in [body.code.strip(), *aliases] if t}
     for other_code, other in store.ITEMS.items():
         if other_code == (original or body.code):
             continue
-        if other_code.casefold() in own:
-            raise HTTPException(422, f"Duplicate item code: '{other_code}' is already an item's code")
-        if own & {a.strip().casefold() for a in other.get("aliases", []) if a and a.strip()}:
-            raise HTTPException(422, "Duplicate item alias: another item already uses it")
-        if short and (other.get("short_name") or "").strip().casefold() == short.casefold() and other_code.casefold() != short.casefold():
-            raise HTTPException(422, f"Duplicate short name '{short}' (item {other_code})")
+        if other_code.casefold() in mine:
+            raise HTTPException(422, f"Duplicate Item Code: '{other_code}' is already an item's code")
+        if mine & {a.strip().casefold() for a in other.get("aliases", []) if a and a.strip()}:
+            raise HTTPException(422, "Duplicate Item Aliase")
+        if (other.get("short_name") or "").strip().casefold() in mine:
+            raise HTTPException(422, f"Duplicate ShortName (item {other_code})")
         other_hot = _extra(other.get("extras"), "hotkey")
-        if hot and other_hot and other_hot.casefold() == hot.casefold():
-            raise HTTPException(422, f"Duplicate hot key '{hot}' (item {other_code})")
+        if other_hot and other_hot.casefold() in mine:
+            raise HTTPException(422, f"Duplicate HotKey (item {other_code})")
 
 
 def _check_item(body: Item, original: str | None = None) -> None:
@@ -144,16 +146,16 @@ def _check_item(body: Item, original: str | None = None) -> None:
         raise HTTPException(422, "Please select an Item Group")
     if body.group not in store.ITEM_GROUPS:
         raise HTTPException(422, f"Unknown item group '{body.group}'")
-    if store.ITEM_GROUPS[body.group].get("active") is False:
-        raise HTTPException(422, f"Item group '{body.group}' is inactive")
+    if store.ITEM_GROUPS[body.group].get("active") is False or store.ITEM_GROUPS[body.group].get("authorised") is False:
+        raise HTTPException(422, "Selected ItemGroup not found in master!")   # the exe's list holds active, authorised groups only
     if not body.liqtype.strip():
         raise HTTPException(422, "Please select an Item Type")
     if body.liqtype.strip().casefold() not in {t.casefold() for t in ITEM_TYPES}:
         raise HTTPException(422, f"Not a valid Item Type (use {', '.join(ITEM_TYPES)})")
     if not body.uom.strip():
         raise HTTPException(422, "Please select a UOM")
-    if body.uom not in store.UOMS:
-        raise HTTPException(422, f"Unknown UOM '{body.uom}'")
+    if body.uom not in store.UOMS or body.uom.strip() == "-":
+        raise HTTPException(422, "Selected UOMCode not found in the master !")
     if store.UOMS[body.uom].get("active") is False:
         raise HTTPException(422, f"UOM '{body.uom}' is inactive")
     if body.package and body.package not in store.PACKAGES:
@@ -185,7 +187,17 @@ def _check_inactive_remarks(path: str, body: BaseModel) -> None:
     """vLQMS.exe, every master with an InActive flag: a record made inactive needs remarks for why (the Not Active Remarks column, shown only
     while it is inactive); made active again, they are cleared. Only checked when the screen sent the database's extra columns (a client that
     does not know them can't be asked for one) and the master's desktop table really has the column."""
-    if not hasattr(body, "active") or "extras" not in body.model_fields_set:
+    if not hasattr(body, "active"):
+        return
+    if path == "items":   # frmMstItem.ValidFields (562): an inactive item always needs its remarks
+        column = next((k for k in (body.extras or {}) if k.lower() == "inactivermks"), None)
+        if body.active:
+            if column:
+                body.extras[column] = ""
+        elif not (column and str(body.extras[column] or "").strip()):
+            raise HTTPException(422, "Please enter remarks for why the item is inactive!")
+        return
+    if "extras" not in body.model_fields_set:
         return
     column = next((k for k in (body.extras or {}) if k.lower() == "inactivermks"), None)
     if body.active:
@@ -202,8 +214,81 @@ def _check_inactive_remarks(path: str, body: BaseModel) -> None:
 
 
 
+# The masters the exe draws with frmMstGeneral (and Holiday): their text boxes turn an apostrophe into a back-quote on save (stringReplace).
+_BACKQUOTE = {"item-groups", "brands", "packages", "uoms", "holidays", "customers", "suppliers", *(sp["path"] for sp in SPECS)}
+
+
+def _backquote(path: str, body: BaseModel) -> None:
+    if path not in _BACKQUOTE:
+        return
+    for key, value in list(body.__dict__.items()):
+        if isinstance(value, str) and "'" in value:
+            setattr(body, key, value.replace("'", "`"))
+    for k, v in list((body.extras or {}).items()):   # in place: assigning would mark `extras` as sent by the screen
+        if isinstance(v, str) and "'" in v:
+            body.extras[k] = v.replace("'", "`")
+
+
+def _within_financial_year(day: date) -> bool:
+    """svtModule.validDate: the date lies between the company's financial year start and end (true when the year is not known)."""
+    start, end = store.COMPANY.get("fy_start") or "", store.COMPANY.get("fy_end") or ""
+    return not (start and day.isoformat() < start[:10]) and not (end and day.isoformat() > end[:10])
+
+
+def _is_numeric(text: str) -> bool:
+    try:
+        float(text.replace(",", ""))
+        return True
+    except ValueError:
+        return False
+
+
+def _master_used_elsewhere(code: str, path: str) -> bool:
+    """frmMstGeneral.Editable: the master's ID appears in another table (same ID column name). In memory: the web's own in-use rule."""
+    if IN_USE[path](code):
+        return True
+    return False
+
+
+def _party_value(body: BaseModel, typed: str, column: str) -> str:
+    """A party field the exe draws as a box: the web's typed field when it has one, else the database column carried in `extras`."""
+    value = getattr(body, typed, "") if typed else ""
+    return str(value or _extra(body.extras, column.lower()) or "").strip()
+
+
+def _check_party(path: str, body: BaseModel, original: str | None) -> None:
+    """frmMstParty.ValidFields. Checked when the screen sent the database's extra columns (it always does; a bare API call that carries only
+    code, name and GSTIN is not asked for an address): first address line, a group from the group master (blank is refused, "-" allowed),
+    and City, Country and State each present in State City Country."""
+    kind = "Customer" if path == "customers" else "Supplier"
+    if "extras" not in body.model_fields_set:
+        return
+    if not _party_value(body, "address", "badd1"):
+        raise HTTPException(422, "Please enter atleast first line address!")
+    group_col = "custgroupid" if path == "customers" else "suppgroupid"
+    given = {k.lower(): v for k, v in (body.extras or {}).items()}
+    if group_col in given:
+        group = str(given[group_col] if given[group_col] is not None else "").strip()
+        groups = store.CUSTOMER_GROUPS if path == "customers" else store.SUPPLIER_GROUPS
+        known = group.isdigit() and int(group) > 0 or group == "-" or (group in groups and groups[group].get("active") is not False)
+        if not known:
+            raise HTTPException(422, f"{kind} Group Code  NOT found in the master !")
+    scc = store.STATE_CITY_COUNTRY
+    for label, typed, column, cities in (("City", "city", "city", {c.casefold() for c in scc}),
+                                         ("Country", "country", "country", {str(r.get("country", "")).strip().casefold() for r in scc.values()}),
+                                         ("State", "state", "state", {str(r.get("name", "")).strip().casefold() for r in scc.values()})):
+        value = _party_value(body, typed, column)
+        if not value:
+            raise HTTPException(422, f"Please Enter The {label}!")
+        if value.casefold() not in cities:
+            raise HTTPException(422, f"{label} Not found in Master!")
+
+
 def _clean(path: str, body: BaseModel, table: dict, original: str | None = None) -> BaseModel:
     """Request-side validation shared by create and update."""
+    _backquote(path, body)
+    if path in ("customers", "suppliers"):   # on the extras exactly as the screen sent them (before they are checked against the table)
+        _check_party(path, body, original)
     body.code = _check_code(body.code)
     if hasattr(body, "name"):
         body.name = body.name.strip()
@@ -226,6 +311,9 @@ def _clean(path: str, body: BaseModel, table: dict, original: str | None = None)
             setattr(body, key, value)
     if path == "items":
         _check_item(body, original)
+    elif path == "state-city-country":   # frmMstSCC.ValidFields: the state must be in State Master (by name)
+        if not any(str(s.get("name", "")).strip().casefold() == body.name.strip().casefold() for s in store.STATES.values()):
+            raise HTTPException(422, "State Not found in Master!")
     elif path == "ledgers" and body.group not in store.LEDGER_GROUPS:
         raise HTTPException(422, f"Unknown ledger group '{body.group}'")
     elif path == "sales-counters" and not body.prefix.strip():
@@ -238,9 +326,15 @@ def _clean(path: str, body: BaseModel, table: dict, original: str | None = None)
         raise HTTPException(422, "Currency is mandatory for a customer")   # ... and CURID
     elif path == "holidays":
         try:
-            date.fromisoformat(body.code)
+            day = date.fromisoformat(body.code)
         except ValueError:
             raise HTTPException(422, "The holiday's date must be a valid date (yyyy-mm-dd)")
+        if not _within_financial_year(day):   # frmMstHoliday.ValidFields
+            raise HTTPException(422, "Holiday Date Should be within the financial year")
+        if _is_numeric(body.name):
+            raise HTTPException(422, "Please Enter holiday in words")
+    elif path == "currencies" and not body.decimals.strip():
+        raise HTTPException(422, "Please enter the Decimal Name!")   # frmMstCurr.ValidFields (the exchange rate is required on the screen)
     elif path == "taxes" and not all(0 <= v <= 100 for v in (body.cgst_per, body.sgst_per, body.igst_per)):
         raise HTTPException(422, "Tax percentages must be between 0 and 100")
     elif path == "suppliers" and not body.gstin.strip():
@@ -280,7 +374,12 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
         rows = table.values()
         if q:
             ql = q.lower()
-            rows = [r for r in rows if ql in r["code"].lower() or ql in r.get("name", "").lower()]
+            def hit(r):   # the item find box (frmMstItem.txtSearch_KeyUp) also looks in ShortName and HotKey
+                names = [r["code"], r.get("name", "")]
+                if path == "items":
+                    names += [r.get("short_name", ""), _extra(r.get("extras"), "hotkey"), *r.get("aliases", [])]
+                return any(ql in str(n or "").lower() for n in names)
+            rows = [r for r in rows if hit(r)]
         return [_shown(path, r, current_user) for r in rows]
 
     @router.get(f"/{path}/{{code}}", response_model=model, tags=[tag], name=f"Get {tag}")
@@ -294,6 +393,8 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
         body = _clean(path, body, table)
         if body.code in table:
             raise HTTPException(409, f"{tag} '{body.code}' already exists")
+        if path in ("customers", "suppliers") and any(str(r.get("name", "")).strip().casefold() == body.name.strip().casefold() for r in table.values()):
+            raise HTTPException(409, f"{path[:-1].capitalize()} Name already exists..")
         row = security.apply_field_rights(current_user, path, body.model_dump(), None)
         if path == "items":
             _check_margin(row)
@@ -313,11 +414,15 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
     def update(code: str, body: model, current_user: dict = Depends(get_current_user)):
         if code not in table:
             raise HTTPException(404, f"{tag} '{code}' not found")
+        if path == "brands" and _master_used_elsewhere(code, path):   # frmMstGeneral: Edit is refused for a brand that is in use
+            raise HTTPException(409, "Editing is not available for this masters")
+        if path == "holidays" and body.code != code:
+            raise HTTPException(422, "A holiday's date cannot be changed: delete it and add the new date")   # frmMstHoliday: the date box is locked
         body = _clean(path, body, table, original=code)
         if body.code != code:
             if body.code in table:
                 raise HTTPException(409, f"{tag} '{body.code}' already exists")
-            reason = IN_USE[path](code)
+            reason = None if path == "items" else IN_USE[path](code)   # the exe lets an item be re-coded (bills point at its ID)
             if reason:
                 raise HTTPException(409, f"Can't change the code of {tag} '{code}': {reason}")
         row = security.apply_field_rights(current_user, path, body.model_dump(), table[code])
@@ -345,7 +450,7 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
         if body.code != code:
             store.RENAMED[(store_name, body.code)] = store.RENAMED.get((store_name, code), code)
         if path == "items" and body.code != code:
-            store.rename_item_stock(code, body.code)
+            store.recode_item(code, body.code)
         store.touch(store_name, code)
         store.touch(store_name, body.code)
         return _shown(path, row, current_user)
@@ -356,6 +461,12 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
             raise HTTPException(403, "Cashiers are not permitted to delete items. Manager or Administrator approval required.")
         if code not in table:
             raise HTTPException(404, f"{tag} '{code}' not found")
+        if path == "holidays":
+            try:
+                if not _within_financial_year(date.fromisoformat(code)):
+                    raise HTTPException(422, "Holiday Date Should be with the financial year")
+            except ValueError:
+                pass
         reason = IN_USE[path](code)
         if reason:
             raise HTTPException(409, f"Can't delete {tag} '{code}': {reason}")
@@ -396,6 +507,9 @@ def update_company(body: Company, admin: dict = Depends(require_admin)):
                            if sqlstore.enabled() else {})
         except ValueError as e:
             raise HTTPException(422, str(e))
+    for key in ("name", "email", "address", "address1", "address2", "address3"):   # frmMstComp.btnSave_Click: an apostrophe becomes a back-quote
+        setattr(body, key, (getattr(body, key) or "").replace("'", "`"))
+    body.extras = {k: (v.replace("'", "`") if isinstance(v, str) else v) for k, v in (body.extras or {}).items()}
     earlier, changed = admin_audit.diff(store.COMPANY, {**store.COMPANY, **body.model_dump()})
     if changed:
         admin_audit.record("Company Master", "Edited", store.COMPANY.get("name") or "Company", earlier, changed)
@@ -752,6 +866,285 @@ def import_items(rows: list[Item], overwrite: bool = False, current_user: dict =
             _open_stock(r.code, r.qoh)
         added.append(r.code)
     return {"added": added, "duplicates": duplicates}
+
+
+# ─── Arrange Group Slno / Arrange Pkg Slno (frmUtlGrpOrderBy / frmUtlPkgOrderBy, Options of the Item Group and Package masters) ───
+
+_ORDERS = {   # path -> (table, id column, order column, code column, extra select)
+    "item-groups": ("MstItemGroup", "ItemGroupID", "GroupOrderBy", "ItemGroupCode", ""),
+    "packages": ("MstPkg", "PkgID", "PkgOrderBy", "PkgCode", ", LtrPerBot AS litres"),
+}
+
+
+class OrderSave(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=5000, description="The master IDs in their new order (Slno 1, 2, 3 ...)")
+
+
+def _order_rows(path: str, sort: str = "") -> list[dict]:
+    table, id_col, order_col, code_col, extra = _ORDERS[path]
+    by = {"asc": "LtrPerBot", "dsc": "LtrPerBot DESC"}.get(sort) if path == "packages" else None
+    if not db.is_db_available():
+        raise HTTPException(503, "This needs the shop's database")
+    rows = db.fetchall(f"SELECT {id_col} AS id, {order_col} AS slno, {code_col} AS code{extra} FROM {table} WHERE {id_col} > 0 ORDER BY {by or order_col}")
+    return [{"id": r["id"], "slno": i, "code": str(r["code"]).strip(), **({"litres": float(r["litres"] or 0)} if "litres" in r else {})} for i, r in enumerate(rows, 1)]
+
+
+@router.get("/{path}/order", tags=["Item Master"])
+def get_order(path: str, sort: str = "", current_user: dict = Depends(get_current_user)):
+    """The Slno grid: current order (sort empty), or a package list by litres ascending ("asc") / descending ("dsc")."""
+    if path not in _ORDERS:
+        raise HTTPException(404, "Not found")
+    return _order_rows(path, sort)
+
+
+@router.post("/{path}/order", tags=["Item Master"], dependencies=[Depends(require_right("edit", "Item Group Master", "Package Master"))])
+def save_order(path: str, body: OrderSave, current_user: dict = Depends(get_current_user)):
+    """Save: `Update <table> Set <order column> = Slno Where ID = ...` for every row of the grid, in one transaction (the exe updates one by one)."""
+    if path not in _ORDERS:
+        raise HTTPException(404, "Not found")
+    table, id_col, order_col, _code, _extra = _ORDERS[path]
+    known = {r["id"] for r in _order_rows(path)}
+    if set(body.ids) - known:
+        raise HTTPException(422, "The list contains an entry that is not in the master")
+    with db.direct_writes():
+        with db.transaction() as cur:
+            for slno, row_id in enumerate(body.ids, 1):
+                cur.execute(f"UPDATE {table} SET {order_col} = ? WHERE {id_col} = ?", (slno, row_id))
+    admin_audit.record("Item Group Master" if path == "item-groups" else "Package Master", "Edited", "Arrange Slno", "", f"{len(body.ids)} rows")
+    return {"saved": len(body.ids)}
+
+
+# ─── Item Master options and helpers (frmMstItem) ─────────────────────────────────────────────────────────────────────
+
+_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _rows_json(rows: list[dict]) -> list[dict]:
+    out = []
+    for r in rows:
+        out.append({k: (v.isoformat() if hasattr(v, "isoformat") else (float(v) if hasattr(v, "as_tuple") else v)) for k, v in r.items()})
+    return out
+
+
+@router.get("/items/invalid", tags=["Item Master"])
+def invalid_items(current_user: dict = Depends(get_current_user)):
+    """Options → Items-DataLink Problem (frmRPtInvalidItems): `select * from vwInvalidItems order by 1,2`, the database view of items whose
+    links (group, UOM, package, brand ...) point at nothing. Empty when there is no database or the view is not in it."""
+    if not db.is_db_available():
+        return {"columns": [], "rows": [], "note": "No database is connected."}
+    try:
+        rows = _rows_json(db.fetchall("SELECT * FROM vwInvalidItems ORDER BY 1, 2"))
+    except Exception:
+        return {"columns": [], "rows": [], "note": "This database has no vwInvalidItems view."}
+    return {"columns": list(rows[0].keys()) if rows else [], "rows": rows, "note": ""}
+
+
+@router.get("/{path}/similar", tags=["Item Master"])
+def similar_codes(path: str, code: str, exclude: str = "", current_user: dict = Depends(get_current_user)):
+    """The "Similar <code> already exists. Do you want to view them?" list of the exe's masters: rows whose <Code>Clean column (the code without
+    non-alphanumeric characters, dbo.RemoveNonAlphaCharacters) equals the typed code's, other than the record being edited. Without the
+    database, the same comparison on the loaded rows."""
+    store_name = security.TABLES.get(path)
+    if not store_name or store_name not in sqlstore.LEGACY_MASTERS:
+        raise HTTPException(404, "Not found")
+    clean = re.sub(r"[^A-Za-z0-9]", "", code or "").casefold()
+    if not clean:
+        return []
+    web_table, id_col, code_col, _values = sqlstore.LEGACY_MASTERS[store_name]
+    if db.is_db_available() and _IDENT.match(web_table) and _IDENT.match(code_col):
+        name_col = code_col[:-4] + "NAME" if code_col.upper().endswith("CODE") else code_col
+        for cols in (f"{code_col} AS code, {name_col} AS name", f"{code_col} AS code, {code_col} AS name"):
+            try:
+                rows = db.fetchall(f"SELECT {cols} FROM {web_table} WITH (NOLOCK) WHERE {code_col}Clean = dbo.RemoveNonAlphaCharacters(?) "
+                                   f"AND {code_col} <> ? AND {id_col} > 0", (code.strip(), exclude.strip()))
+                return [{"code": str(r["code"]).strip(), "name": str(r["name"] or "").strip()} for r in rows]
+            except Exception:   # no Clean column, or no name column: try the next form, then compare here
+                continue
+    table = getattr(store, store_name)
+    return [{"code": c, "name": r.get("name", "")} for c, r in table.items()
+            if c != exclude and re.sub(r"[^A-Za-z0-9]", "", str(c)).casefold() == clean]
+
+
+@router.get("/items/{code}/locks", tags=["Item Master"])
+def item_locks(code: str, current_user: dict = Depends(get_current_user)):
+    """Edit mode of the exe: the UOM box is disabled when the item is on any TrnDtl* table (CheckforItemUsedInTrn)."""
+    if code not in store.ITEMS:
+        raise HTTPException(404, f"Item '{code}' not found")
+    return {"uom_locked": _item_used_in_trn(code)}
+
+
+def _bulk_field_defs() -> list[dict]:
+    """Options → Update Item Master Fields, field list: `select Distinct FieldName, Datatype from UtlItemBulkupdate order by FieldName`."""
+    if not db.is_db_available():
+        return []
+    try:
+        rows = db.fetchall("SELECT DISTINCT FieldName, Datatype FROM UtlItemBulkupdate ORDER BY FieldName")
+    except Exception:
+        return []
+    return [{"code": str(r["FieldName"]).strip(), "datatype": str(r["Datatype"] or "").strip().upper()} for r in rows if str(r["FieldName"] or "").strip()]
+
+
+@router.get("/items/bulk-fields", tags=["Item Master"])
+def bulk_fields(current_user: dict = Depends(get_current_user)):
+    return _bulk_field_defs()
+
+
+class BulkFieldsLoad(BaseModel):
+    fields: list[str] = Field(min_length=1)
+    groups: list[str] = Field(default_factory=list)      # item group codes
+    items: list[str] = Field(default_factory=list)       # item codes
+    packages: list[str] = Field(default_factory=list)    # package codes
+
+
+def _id_master(col: str) -> tuple[str, str]:
+    """The exe's rule for a field whose name holds "ID": the master is MST + the name without "ID", its code column that + "Code"."""
+    stem = col.replace("ID", "")
+    if not _IDENT.match(stem):
+        raise HTTPException(422, f"Field {col} cannot be handled")
+    return f"Mst{stem}", f"{stem}Code"
+
+
+@router.post("/items/bulk-fields/load", tags=["Item Master"], dependencies=[Depends(require_right("edit", "Item Master"))])
+def bulk_fields_load(body: BulkFieldsLoad, current_user: dict = Depends(get_current_user)):
+    """Template / Load to grid (frmUtlImportAnyFld.btnTemplate_Click / btnLoadtoGrd_Click): ItemID, ItemCode, ItemName and the chosen fields for the
+    chosen items (a field ending in ID shows its master's code), ordered by ItemCode. 404 when nothing matches ("No Records Found!")."""
+    allowed = {f["code"]: f for f in _bulk_field_defs()}
+    for f in body.fields:
+        if f not in allowed:
+            raise HTTPException(422, f"'{f}' is not an updatable Item Master field")
+    if "PURRATE" in {f.upper() for f in body.fields} and not can_see_cost(current_user):
+        raise HTTPException(403, "You may not see the purchase rate (no cost access for your role)")
+    cols = []
+    for f in body.fields:
+        if "ID" in f:
+            tbl, code_col = _id_master(f)
+            cols.append(f"(SELECT {code_col} FROM {tbl} WHERE {f} = MstItem.{f}) AS {f}")
+        elif _IDENT.match(f):
+            cols.append(f"MstItem.{f} AS {f}")
+        else:
+            raise HTTPException(422, f"Field {f} cannot be handled")
+    sql, params = f"SELECT ItemID, ItemCode, ItemName, {', '.join(cols)} FROM MstItem WHERE ItemID <> 0", []
+    for names, column, table, code_col in ((body.groups, "ItemGroupID", "MstItemGroup", "ItemGroupCode"), (body.items, "ItemID", "MstItem", "ItemCode"),
+                                           (body.packages, "PKGID", "MstPKG", "PKGCode")):
+        if names:
+            sql += f" AND MstItem.{column} IN (SELECT {column} FROM {table} WHERE {code_col} IN ({', '.join('?' * len(names))}))"
+            params += names
+    rows = _rows_json(db.fetchall(sql + " ORDER BY ItemCode", tuple(params)))
+    if not rows:
+        raise HTTPException(404, "No Records Found!")
+    return {"columns": ["ItemID", "ItemCode", "ItemName", *body.fields], "rows": rows}
+
+
+class BulkFieldsImport(BaseModel):
+    rows: list[dict] = Field(min_length=1, max_length=20000, description="{ItemID, <field>: value, ...}")
+
+
+@router.post("/items/bulk-fields/import", tags=["Item Master"], dependencies=[Depends(require_right("edit", "Item Master"))])
+def bulk_fields_import(body: BulkFieldsImport, current_user: dict = Depends(get_current_user)):
+    """Import Data (frmUtlImportAnyFld.btnImportData_Click): for each row, update MstItem's chosen columns where ItemID matches: TEXT as typed,
+    INTEGER / NUMERIC as numbers (a field ending in ID is looked up by its master's code), DATE as a date. The exe runs the updates one by one
+    with no transaction (it is commented out); here they run in one, so a failure leaves nothing half changed."""
+    if not db.is_db_available():
+        raise HTTPException(503, "This needs the shop's database")
+    defs = {f["code"].upper(): f for f in _bulk_field_defs()}
+    updates = []
+    for n, row in enumerate(body.rows, 1):
+        try:
+            item_id = int(float(row.get("ItemID") or 0))
+        except (TypeError, ValueError):
+            item_id = 0
+        if item_id <= 0:
+            raise HTTPException(422, f"Row {n}: ItemID is missing")
+        sets, args = [], []
+        for col, value in row.items():
+            if col in ("ItemID", "ItemCode", "ItemName") or col.upper() not in defs:
+                continue
+            if not _IDENT.match(col):
+                raise HTTPException(422, f"Row {n}: {col} cannot be handled")
+            kind = defs[col.upper()]["datatype"]
+            if col.upper() == "PURRATE" and not can_see_cost(current_user):
+                raise HTTPException(403, "You may not change the purchase rate (no cost access for your role)")
+            text = "" if value is None else str(value).strip()
+            if kind == "TEXT":
+                sets.append(f"{col} = ?")
+                args.append(text)
+            elif kind in ("INTEGER", "NUMERIC"):
+                if "ID" in col.upper():
+                    if text == "":
+                        found = 0
+                    else:
+                        tbl, code_col = _id_master(col)
+                        r = db.fetchone(f"SELECT {col} AS v FROM {tbl} WHERE {code_col} = ?", (text,))
+                        if not r:
+                            raise HTTPException(422, f"Row {n}: '{text}' is not a {col.replace('ID', '')} code")
+                        found = r["v"]
+                    sets.append(f"{col} = ?")
+                    args.append(found)
+                else:
+                    try:
+                        num = float(text.replace(",", "") or 0)
+                    except ValueError:
+                        num = 0.0
+                    sets.append(f"{col} = ?")
+                    args.append(int(num) if kind == "INTEGER" else num)
+            elif kind == "DATE":
+                sets.append(f"{col} = ?")
+                args.append(text or None)
+        if sets:
+            updates.append((item_id, sets, args))
+    if not updates:
+        raise HTTPException(422, "There is nothing to import")
+    with db.direct_writes():
+        with db.transaction() as cur:
+            for item_id, sets, args in updates:
+                cur.execute(f"UPDATE MstItem SET {', '.join(sets)} WHERE ItemID = ?", (*args, item_id))
+    admin_audit.record("Update Item Master Fields", "Edited", f"{len(updates)} items", "", ", ".join(sorted({x.split(' =')[0] for _, ss, _a in updates for x in ss})))
+    db_store.load_items()
+    return {"updated": len(updates)}
+
+
+@router.post("/items/recalculate-rates", tags=["Item Master"], dependencies=[Depends(require_right("edit", "Item Master"))])
+def recalculate_rates(current_user: dict = Depends(get_current_user)):
+    """Options → Update Item Rates (frmMstItem.updateItemRates): every Item Master designer field that has a formula (UtlDocDsgrFlds.FldFormula) is
+    recalculated for all items, as `Update MstItem set <field> = <formula>`: '#' removed, SVTROUND2( ) / SVTROUND4( ) become ROUND( , 2 / 4 ).
+    The exe's own statement ends `where  and ItemID>0`, which SQL Server rejects, so it never ran; this does what it meant. Items whose UITCCGST /
+    UITCSGST are NULL get 0 first (the exe's ALTER TABLE for those columns is not done: the web app never changes the shop's table design)."""
+    if not db.is_db_available():
+        raise HTTPException(503, "This needs the shop's database")
+    doc_id = doc_engine.doc_id_of("Item Master")
+    if not doc_id:
+        raise HTTPException(422, "Invalid Item Master DocID!")
+    from .. import designer
+    have = {c["name"].upper() for c in schema_meta.columns("MstItem")}
+    todo = []
+    for f in designer.fields_for(doc_id):
+        formula = str(f.get("FldFormula") or "").strip()
+        col = str(f.get("FldCode") or "").strip()
+        if not formula or not col:
+            continue
+        if col.upper() not in have or not _IDENT.match(col):
+            raise HTTPException(422, f"The formula field {col} is not a column of MstItem")
+        formula = formula.replace("#", "")
+        head = formula[:9]
+        if head in ("SVTROUND2", "SVTROUND4"):
+            formula = formula.replace(head, "ROUND")
+            formula = formula[:-1] + f",{head[-1]})"
+        words = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", formula))
+        if not re.fullmatch(r"[\w\s.+\-*/(),]+", formula) or any(w.upper() not in have and w.upper() not in ("ROUND", "ISNULL", "ABS", "CEILING", "FLOOR") for w in words):
+            raise HTTPException(422, f"The formula of {col} cannot be run safely: {formula}")
+        todo.append((col, formula))
+    if not todo:
+        return {"fields": 0, "message": "No Item Master field has a formula."}
+    with db.direct_writes():
+        with db.transaction() as cur:
+            for col in ("UITCCGST", "UITCSGST"):
+                if col in have:
+                    cur.execute(f"UPDATE MstItem SET {col} = 0 WHERE {col} IS NULL")
+            for col, formula in todo:
+                cur.execute(f"UPDATE MstItem SET {col} = {formula} WHERE ItemID > 0")
+    admin_audit.record("Item Master", "Edited", "Update Item Rates", "", ", ".join(c for c, _ in todo))
+    db_store.load_items()
+    return {"fields": len(todo), "message": "Item Rates Updated/Recalculated!"}
 
 
 crud("items", store.ITEMS, Item, "Item Master", ("Item Master",), "ITEMS")

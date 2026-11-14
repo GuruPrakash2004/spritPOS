@@ -63,7 +63,7 @@ ROLES = {
         "Dashboard", "Item Master", "Price List Maintenance", "Item Group Master", "UOM Master", "Supplier Master",
         "SMS", "PDF Generator", "Customer Master", "Customer Vs Item Master", "Supplier Vs Item Master", "Ledger Master", "Ledger Group Master", "Sales Person Master", "Package Master", "Brand Master",
         "Supplier Group Master", "Customer Group Master", "State Master", "Currency Master", "Location Master", "Tax Master",
-        "Bank Master", "Holiday Master",
+        "Bank Master", "Holiday Master", "State City Country",
         "Purchase Bill", "Sales Invoice", "Expense Entry", "Stock Deduction", "Purchase Indent", "Sales Return",
         "Closing Stock Entry", "Physical Stock Entry", "Update Item Stock", "Item Vs Brand", "Shared Documents", "Cash Denomination",
         "Payment Voucher", "Receipt Voucher", "Credit Note", "Debit Note", "Contra Voucher", "Journal Voucher", "Quotation",
@@ -192,10 +192,20 @@ def find(table: dict, key: str) -> dict | None:
 NUMBER_SYNC = None   # set by sqlstore: callable(kind) that moves a series past the highest number in the database (other PCs write there too)
 
 
+# Documents numbered as the desktop does (svtModule.TrnNoAutoGen / getFmtDocNo): the year's two digits, the prefix (blank in most shops), then
+# a five-digit running number: "2600202". The shop's own bills and the web's share one series.
+STOCK_GEN = 0   # bumped by sqlstore.save(); reports that keep stock-list totals for a few seconds key them by it
+EXE_NUMBERED = frozenset({"purchase_bill", "purchase_indent", "sales_return", "stock_deduction", "closing_stock"})
+EXE_DEFAULT_PREFIX = {"closing_stock": "CSE"}   # the Drops database numbers its entries 26CSE00001
+
+
 def next_doc_no(kind: str, prefix: str) -> str:
-    """Next number in a document series, e.g. next_doc_no("sales_invoice", "c10") -> "26/c10-0000001"."""
+    """Next number in a document series, e.g. next_doc_no("sales_invoice", "c10") -> "26/c10-0000001"; for the exe-numbered documents
+    next_doc_no("purchase_bill", "") -> "2600202"."""
     if NUMBER_SYNC:
         NUMBER_SYNC(kind)
+    if kind in EXE_NUMBERED:
+        return f"{FY_PREFIX}{prefix}{next(_seq[kind]):05d}"
     return f"{FY_PREFIX}/{prefix}-{next(_seq[kind]):07d}"
 
 
@@ -223,6 +233,23 @@ def rename_item_stock(old: str, new: str | None) -> None:
             m = {**m, "item": new}
         kept.append(m)
     MOVEMENTS[APP_MOVEMENTS_FROM:] = kept
+
+
+def recode_item(old: str, new: str) -> None:
+    """An item was given a new code (the exe allows it, also after bills: they point at the item's ID). Move its base QOH, every stock
+    movement and every document line to the new code so the in-memory books stay joined to it."""
+    if old in BASE_QOH:
+        BASE_QOH[new] = BASE_QOH.pop(old)
+    for m in MOVEMENTS:
+        if m["item"] == old:
+            m["item"] = new
+    if old in LAST_PURCHASE:
+        LAST_PURCHASE[new] = LAST_PURCHASE.pop(old)
+    for docs in DOCS.values():
+        for d in docs.values():
+            for ln in d.get("lines", []):
+                if ln.get("item_code") == old:
+                    ln["item_code"] = new
 
 
 # Admin Master (Security), see app/security.py. SECURITY: {"login": Login Settings, "adnl_admin_hash": ...};

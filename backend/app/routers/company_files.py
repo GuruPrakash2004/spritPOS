@@ -94,6 +94,13 @@ def upload_file(body: FileIn, admin: dict = Depends(require_admin)):
     if len(content) > MAX_BYTES:
         raise HTTPException(413, f"File is larger than {MAX_BYTES // (1024 * 1024)} MB")
 
+    rows = _load()
+    if body.kind == "document":   # frmMstComp.ValidData
+        if not (body.group or "").strip():
+            raise HTTPException(422, "Group name cannot be empty!")
+        if any(r["kind"] == "document" and r["file_name"].casefold() == Path(body.file_name).name.casefold() for r in rows):
+            raise HTTPException(409, "Document already exists!")
+
     file_id = uuid.uuid4().hex
     STORE.mkdir(parents=True, exist_ok=True)
     (STORE / f"{file_id}{ext}").write_bytes(content)  # stored under a generated name, never the user's
@@ -106,7 +113,6 @@ def upload_file(body: FileIn, admin: dict = Depends(require_admin)):
         "show_on_pos": body.kind == "image",
         "uploaded_by": admin["user"], "uploaded_at": datetime.now().isoformat(timespec="seconds"),
     }
-    rows = _load()
     rows.append(row)
     _save(rows)
     return row

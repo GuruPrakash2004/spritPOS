@@ -36,7 +36,7 @@ async def test_a_sales_edit_that_needs_more_stock_than_there_is_changes_nothing(
     start = await qoh(client)
     doc = (await client.post("/transactions/sales-invoice", json=bill())).json()
     res = await client.put(f"/transactions/sales-invoice/{doc['doc_no']}", json=bill(lines=[{"item_code": ITEM, "bottles": int(start) + 500}]))
-    assert res.status_code == 422 and "Insufficient stock" in res.json()["detail"]
+    assert res.status_code == 422 and "Stock is Less... Cannot Proceed.." in res.json()["detail"]
     assert await qoh(client) == start - 2                      # unchanged: still the original bill
     kept = (await client.get(f"/transactions/sales-invoice/{doc['doc_no']}")).json()
     assert kept["lines"][0]["qty"] == 2 and not kept.get("revision")
@@ -167,6 +167,19 @@ async def test_editing_an_expense_in_memory(client):
     assert res.status_code == 200 and res.json()["total"] == 75 and res.json()["doc_no"] == doc["doc_no"]
 
 
+async def test_cancelling_an_expense_entry(client):
+    """deleteDoc (CANCELLED) of an expense entry: marked cancelled, not cancelled twice, not editable."""
+    led = next(iter(__import__("app.store", fromlist=["LEDGERS"]).LEDGERS))
+    body = {"date": date.today().isoformat(), "paid_from": "CASH", "lines": [{"ledger": led, "amount": 50}]}
+    no = (await client.post("/transactions/expense", json=body)).json()["doc_no"]
+    done = await client.post(f"/transactions/expense/{no}/cancel")
+    assert done.status_code == 200 and done.json()["status"] == "CANCELLED"
+    again = await client.post(f"/transactions/expense/{no}/cancel")
+    assert again.status_code == 409 and "Deletion not possible" in again.text
+    edit = await client.put(f"/transactions/expense/{no}", json=body)
+    assert edit.status_code == 409 and "Cannot edit" in edit.text
+
+
 async def test_editing_a_loyalty_bill_settles_the_points_again_from_the_start(client):
     """Points redeemed are given back and points earned taken back, then the changed bill redeems / earns its own; a failed edit leaves the points alone."""
     from app import gsettings, store
@@ -207,3 +220,80 @@ async def test_a_loyalty_bill_moved_to_another_customer_settles_both(client):
     assert res.status_code == 200, res.text
     assert store.CUSTOMERS[a]["points"] == 40.0                         # the first customer is back where they were
     assert store.CUSTOMERS[b]["points"] == round(5 + res.json()["totals"]["points_earned"], 2)
+
+
+async def test_cancelling_a_purchase_bill_takes_its_stock_off_and_it_cannot_be_edited(client):
+    """frmTrnPBM.deleteDoc (CANCELLED): the stock comes off, the bill is marked cancelled and can't be cancelled or edited again."""
+    from datetime import date
+    before = (await client.get("/masters/items/VIN-750")).json()["qoh"]
+    body = {"date": date.today().isoformat(), "supplier": "KSBCL", "supplier_inv_no": "X1", "supplier_inv_date": date.today().isoformat(),
+            "supplier_inv_value": 0, "lines": [{"item_code": "VIN-750", "bottles": 3, "rate": 100}]}
+    res = await client.post("/transactions/purchase-bill", json=body)
+    assert res.status_code == 201, res.text
+    no = res.json()["doc_no"]
+    assert (await client.get("/masters/items/VIN-750")).json()["qoh"] == before + 3
+
+    done = await client.post(f"/transactions/purchase-bill/{no}/cancel")
+    assert done.status_code == 200 and done.json()["status"] == "CANCELLED"
+    assert (await client.get("/masters/items/VIN-750")).json()["qoh"] == before
+    again = await client.post(f"/transactions/purchase-bill/{no}/cancel")
+    assert again.status_code == 409 and "cancelled" in again.text
+    edit = await client.put(f"/transactions/purchase-bill/{no}", json=body)
+    assert edit.status_code == 409 and "Cannot edit" in edit.text
+
+
+async def test_cancelling_a_stock_deduction_a_sales_return_and_an_indent(client):
+    """deleteDoc (CANCELLED) of the three stock documents: a deduction's stock goes back, a return's comes off, an indent moves none; none can be cancelled or edited again."""
+    from datetime import date
+    today = date.today().isoformat()
+    start = (await client.get("/masters/items/VIN-750")).json()["qoh"]
+
+    sd = (await client.post("/transactions/stock-deduction", json={"date": today, "lines": [{"item_code": "VIN-750", "bottles": 2}]})).json()["doc_no"]
+    assert (await client.get("/masters/items/VIN-750")).json()["qoh"] == start - 2
+    assert (await client.post(f"/transactions/stock-deduction/{sd}/cancel")).json()["status"] == "CANCELLED"
+    assert (await client.get("/masters/items/VIN-750")).json()["qoh"] == start
+    again = await client.post(f"/transactions/stock-deduction/{sd}/cancel")
+    assert again.status_code == 409 and "cancelled" in again.text
+
+    inv = (await client.post("/transactions/sales-invoice", json={"date": today, "counter": "counter10", "salesperson": "GURU", "lines": [{"item_code": "VIN-750", "bottles": 2}]})).json()
+    sr = (await client.post("/transactions/sales-return", json={"date": today, "against_invoice": inv["doc_no"], "lines": [{"item_code": "VIN-750", "bottles": 1}]})).json()["doc_no"]
+    after_return = (await client.get("/masters/items/VIN-750")).json()["qoh"]
+    assert (await client.post(f"/transactions/sales-return/{sr}/cancel")).json()["status"] == "CANCELLED"
+    assert (await client.get("/masters/items/VIN-750")).json()["qoh"] == after_return - 1
+
+    pi = (await client.post("/transactions/purchase-indent", json={"date": today, "supplier": "KSBCL", "lines": [{"item_code": "VIN-750", "bottles": 3, "rate": 100}]})).json()
+    here = (await client.get("/masters/items/VIN-750")).json()["qoh"]
+    done = await client.post(f"/transactions/purchase-indent/{pi['doc_no']}/cancel")
+    assert done.status_code == 200 and done.json()["status"] == "CANCELLED"
+    assert (await client.get("/masters/items/VIN-750")).json()["qoh"] == here
+    edit = await client.put(f"/transactions/purchase-indent/{pi['doc_no']}", json={"date": today, "supplier": "KSBCL", "lines": [{"item_code": "VIN-750", "bottles": 3, "rate": 100}]})
+    assert edit.status_code == 409 and "Cannot edit" in edit.text
+
+
+async def test_closing_stock_can_be_cancelled_until_its_invoice_is_generated(client):
+    """frmTrnCloseStk: delete is refused once the invoice is generated; otherwise the entry is cancelled and no invoice can come from it."""
+    from datetime import date
+    today = date.today().isoformat()
+    item = (await client.get("/masters/items/VIN-750")).json()
+    first = (await client.post("/transactions/closing-stock", json={"as_on": today, "lines": [{"item_code": "VIN-750", "closing_qty": item["qoh"] - 1}]})).json()["doc_no"]
+    done = await client.post(f"/transactions/closing-stock/{first}/cancel")
+    assert done.status_code == 200 and done.json()["status"] == "CANCELLED"
+    assert (await client.post(f"/transactions/closing-stock/{first}/generate-invoice", json={"counter": "counter10", "salesperson": "GURU"})).status_code == 409
+
+    item = (await client.get("/masters/items/VIN-750")).json()
+    second = (await client.post("/transactions/closing-stock", json={"as_on": today, "lines": [{"item_code": "VIN-750", "closing_qty": item["qoh"] - 1}]})).json()["doc_no"]
+    assert (await client.post(f"/transactions/closing-stock/{second}/generate-invoice", json={"counter": "counter10", "salesperson": "GURU"})).status_code == 201
+    blocked = await client.post(f"/transactions/closing-stock/{second}/cancel")
+    assert blocked.status_code == 409 and "Invoice Generated Cannot To Delete" in blocked.text
+
+
+async def test_closing_stock_can_be_edited_until_its_invoice_is_generated(client):
+    from datetime import date
+    today = date.today().isoformat()
+    qoh = (await client.get("/masters/items/VIN-750")).json()["qoh"]
+    no = (await client.post("/transactions/closing-stock", json={"as_on": today, "lines": [{"item_code": "VIN-750", "closing_qty": qoh - 1}]})).json()["doc_no"]
+    res = await client.put(f"/transactions/closing-stock/{no}", json={"as_on": today, "lines": [{"item_code": "VIN-750", "closing_qty": qoh - 3}]})
+    assert res.status_code == 200 and res.json()["doc_no"] == no and res.json()["lines"][0]["sales_qty"] == 3 and res.json()["revision"] == 1
+    assert (await client.post(f"/transactions/closing-stock/{no}/generate-invoice", json={"counter": "counter10", "salesperson": "GURU"})).status_code == 201
+    late = await client.put(f"/transactions/closing-stock/{no}", json={"as_on": today, "lines": [{"item_code": "VIN-750", "closing_qty": qoh - 5}]})
+    assert late.status_code == 409 and "Invoice Generated Cannot To Edit" in late.text

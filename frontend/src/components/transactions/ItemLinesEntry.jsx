@@ -20,6 +20,8 @@ import WithHistory from './DocHistoryPanel';
 import DocFieldsPanel from '../docs/DocFieldsPanel';
 import { useDocHeader } from '../docs/useDocHeader';
 import { useColumnTone } from '../../hooks/useColumnTone';
+import { useScreenFields } from '../../hooks/useScreenFields';
+import { downloadDocTemplate, readDocLines } from '../../lib/docExcel';
 import { GRID_OUTLINE, useResizableTable } from '../../hooks/useResizableTable';
 import { cn } from '../../lib/utils';
 
@@ -33,6 +35,7 @@ const OWN = { purchase_indent: ['date', 'supplier'], sales_return: ['date'], sto
 
  
 
+const SHORT_FORM = { purchase_indent: 'PI', sales_return: 'SR', stock_deduction: 'STKDED' };
 const blankLine = () => ({ item_code: '', cases: 0, bottles: 0, rate: 0 });
 
 // Shared cases + bottles grid for the stock transactions (Purchase Indent, Sales Return, Stock Deduction).
@@ -91,6 +94,31 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   const cols = DETAIL[kind] ?? {};
   const doc = useDocHeader(HEADER_TABLE[kind] ?? '', { skip: OWN[kind] ?? [], lines: docLines, itemOf: code => byCode.get(code), idPrefix: 'ile' });
   const total = filled.reduce((acc, l) => acc + qty(l) * l.rate, 0);
+
+  // Import from Excel / Excel Template: shown when the Doc Designer's Allow Import/Export is on for this document (frmTrnPBM.svtImport, svtTemplate).
+  const importOn = Boolean(useScreenFields(`table:${HEADER_TABLE[kind] ?? ''}`).screen?.flags?.allow_import_export);
+  const picker = useRef(null);
+  const importFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const rows = await readDocLines(file);
+      const next = [], skipped = [];
+      for (const r of rows) {
+        const it = byCode.get(r.code) ?? items.find(i => i.code.toUpperCase() === r.code);
+        if (!it) { skipped.push(`Item code '${r.code}' does not exist or is inactive!`); continue; }
+        if (!(r.qty > 0)) { skipped.push(`${r.code}: Please enter the qty greater then 0`); continue; }
+        next.push({ item_code: it.code, cases: 0, bottles: r.qty, rate: r.rate ?? it[rateField] ?? 0 });
+      }
+      setLines(next.length ? next : [blankLine()]);
+      setToast({ kind: skipped.length ? 'error' : 'ok', text: `${next.length} item(s) imported from Excel.${skipped.length ? ` Skipped: ${skipped.slice(0, 3).join('; ')}${skipped.length > 3 ? ` and ${skipped.length - 3} more` : ''}` : ''}` });
+    } catch (err) { setToast({ kind: 'error', text: errorText(err) }); }
+  };
+  const excelOptions = importOn ? [
+    { label: 'Import from Excel', onClick: () => picker.current?.click() },
+    { label: 'Excel Template', onClick: () => { void downloadDocTemplate(SHORT_FORM[kind] ?? 'DOC'); } },
+  ] : [];
 
   const update = (index, patch) => setLines(lines.map((l, i) => {
     if (i !== index) return l;
@@ -152,7 +180,8 @@ export default function ItemLinesEntry({ title, subtitle, endpoint, rateField, r
   });
 
   return (
-    <WithHistory kind={kind} title="documents" onNew={newDocument} onEdit={saved => void loadForEdit(saved)}>
+    <WithHistory kind={kind} title="documents" onNew={newDocument} onEdit={saved => void loadForEdit(saved)} options={excelOptions}>
+    <input ref={picker} type="file" hidden accept=".xlsx,.xls,.csv" onChange={e => void importFile(e)} />
     <div className="mx-auto flex max-w-6xl flex-col gap-4" onKeyDown={e => enterMovesNext(e, addRow)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {confirmDialog}

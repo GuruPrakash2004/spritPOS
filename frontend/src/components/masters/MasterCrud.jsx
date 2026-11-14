@@ -8,17 +8,19 @@
 
 import GroupBox from '../common/GroupBox';
 import { FIELD_RULES, cleanInput, fieldProblem } from '../../lib/validation';
-import { useEffect, useMemo, useRef, useState, } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, } from 'react';
 import ActionBar, { ScreenFrame } from '../common/ActionBar';
 import AliasGrid from './AliasGrid';
 import { cleanAlias } from '../../lib/aliases';
 import ListModal from '../common/ListModal';
-import { goHome } from '../../lib/nav';
+import { goHome, openModule } from '../../lib/nav';
 import LookupSelect from '../common/LookupSelect';
 import PartyRecords from './PartyRecords';
 import AttachmentsDialog from './AttachmentsDialog';
-import { getDesignerNextCode, getDesignerPickup } from '../../lib/api';
+import { getDesignerNextCode, getDesignerPickup, getItemLocks, getSimilarMasters } from '../../lib/api';
+import Modal from '../common/Modal';
 import { useScreenFields } from '../../hooks/useScreenFields';
+import { compute, isSupported } from '../../lib/formulas';
 import { applyDefinition, defaultFor, extraProblem, fieldsFromDefinition, pickupsAfter, ruleHolds, ruleValues, valueOf, withValue } from '../../lib/designerFields';
 import { useConfirm } from '../common/ConfirmDialog';
 import Toast from '../common/Toast';
@@ -103,6 +105,18 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
   const modeRef = useRef(mode);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   const [options, setOptions] = useState({});
+  // The exe's item and party forms share these behaviours: Copy From, the close prompt, F5, Ctrl+A; the party forms also fill
+  // Country and State from the chosen City (State City Country master) and copy the name into the alias.
+  const partyForm = path === 'customers' || path === 'suppliers';
+  const exeForm = path === 'items' || partyForm;
+  const [scc, setScc] = useState([]);   // State City Country rows: { code: city, name: state, country }
+  useEffect(() => { if (partyForm) listMaster('state-city-country').then(setScc).catch(() => undefined); }, [partyForm]);
+  // Item Master only (frmMstItem): the UOM box locks when the item is on a transaction; Copy From and the similar-code list are dialogs.
+  const [uomLocked, setUomLocked] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyFilter, setCopyFilter] = useState('');
+  const [similar, setSimilar] = useState(null);
+  const lastSimilar = useRef('');
   const [toast, setToast] = useState(null);
   const { confirm, dialog } = useConfirm();
 
@@ -127,32 +141,50 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
       .catch(e => { setLoaded(true); setToast({ kind: 'error', text: errorText(e) }); });
   }, [path, reloadKey, live.version]);
 
+  const [optionsKey, setOptionsKey] = useState(0);
   useEffect(() => {
     // From allFields (stable between renders), not `fields`: that is filtered anew on every render,
     // so depending on it re-ran this effect after each load and fetched the lists in an endless loop.
     allFields.filter(f => f.optionsFrom).forEach(f => {
       listMaster(f.optionsFrom ?? '')
-        .then(list => setOptions(o => ({ ...o, [f.key]: list.map(r => String(r.code)) })))
+        .then(list => setOptions(o => ({ ...o, [f.key]: list.filter(r => r.active !== false).map(r => String(r[f.optionKey ?? 'code'])) })))
         .catch(() => undefined);
     });
-  }, [allFields, reloadKey]);
+  }, [allFields, reloadKey, optionsKey]);
 
+  const withDefaults = useCallback((list) => {
+    const form0 = blank(list);
+    const extras = { ...form0.extras };
+    const typed = {};
+    for (const [k, v] of Object.entries(newDefaults ?? {})) {
+      const extraKey = Object.keys(extras).find(x => x.toLowerCase() === k.toLowerCase());
+      if (list.some(f => f.key === k && !f.extra)) typed[k] = v; else if (extraKey) extras[extraKey] = v; else typed[k] = v;
+    }
+    return { ...form0, ...typed, extras };
+  }, [newDefaults]);
   const startNewRecord = () => {
-    setForm({ ...blank(fields), ...newDefaults });
+    setForm(withDefaults(fields));
     setFormErrors({});
     setMode('New');
     setTimeout(() => { const first = fields[0]?.key; if (first) document.getElementById(`mc-${path}-${first}`)?.focus(); }, 50);
   };
-  const startEditRecord = () => { setFormErrors({}); setMode('Edit'); };
+  const startEditRecord = () => {
+    setFormErrors({});
+    setMode('Edit');
+    if (path === 'items' && selected) {   // Edit: the UOM box is disabled when the item is on any transaction (CheckforItemUsedInTrn)
+      setUomLocked(false);
+      getItemLocks(selected).then(r => setUomLocked(Boolean(r.uom_locked))).catch(() => undefined);
+    }
+  };
 
   const startedNew = useRef(false);
   useEffect(() => {
     // Opened to add a record (the Purchase Bill's New supplier button): start with a blank form once the list is here.
     if (!startNew || !loaded || startedNew.current || !fields.length) return;
     startedNew.current = true;
-    setForm({ ...blank(fields), ...newDefaults });
+    setForm(withDefaults(fields));
     setMode('New');
-  }, [startNew, loaded, fields, newDefaults]);
+  }, [startNew, loaded, fields, withDefaults]);
 
   const readOnly = mode === 'View';
   const isRemarks = f => f.extra && String(f.key).toLowerCase() === 'inactivermks';   // Not Active Remarks (a database column)
@@ -179,11 +211,28 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
     select(visible[to]);
   };
 
+  // The designer's formula fields (e.g. Item Selling Rate = (MRP - Comp.Cess) / (100 + CGST + SGST + Cess) * 100) are worked out again
+  // as soon as a field they use changes, as the desktop does while typing.
+  const withFormulas = (next) => {
+    const formulaFields = allFields.filter(f => f.formula && isSupported(f.formula));
+    if (!formulaFields.length) return next;
+    const codeOf = f => String(f.column ?? f.key);
+    const inputs = Object.fromEntries(allFields.filter(f => !f.formula).map(f => [codeOf(f), valueOf(next, f)]));
+    const worked = compute(formulaFields.map(f => ({ code: codeOf(f), formula: f.formula, decimals: f.decimals ?? 2, section: 'Header', type: 'number' })), inputs, [], {});
+    let out = next;
+    for (const f of formulaFields) {
+      const v = worked.values[codeOf(f).toLowerCase()] ?? worked.values[codeOf(f)];
+      if (typeof v === 'number' && Number.isFinite(v)) out = withValue(out, f, f.type === 'number' ? v : String(v));
+    }
+    return out;
+  };
+
   const handleFieldChange = (key, rawValue) => {
+    if (path === 'items' && typeof rawValue === 'string') rawValue = rawValue.replace(/'/g, '');   // the exe's boxes refuse an apostrophe
     const extraField = allFields.find(f => f.extra && f.key === key);
     const value = extraField ? rawValue : cleanInput(key, rawValue);   // phone / PIN / GSTIN ... keep only what is allowed
     let duplicateAlert = null;
-    setForm(prev => (extraField ? withValue(prev, extraField, value) : { ...prev, [key]: value }));
+    setForm(prev => withFormulas(extraField ? withValue(prev, extraField, value) : { ...prev, [key]: value }));
     // A master that generates its codes (MstAutoGenCode): choosing the series fills the next number and the code (series + 6 digits).
     if (live.screen?.flags?.auto_code && mode === 'New' && extraField && /series$/i.test(String(extraField.column ?? ''))) {
       const noField = allFields.find(f => f.extra && /no$/i.test(String(f.column ?? '')) && !/series$/i.test(String(f.column)));
@@ -226,6 +275,66 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
         return next;
       });
     }
+  };
+
+  // frmMstItem LostFocus / Validating: in Add mode leaving Item Code copies it into Item Name, leaving Item Name copies it into HotKey;
+  // leaving Item Code asks about similar codes (ItemCodeClean), unless codes are generated.
+  const handleBlur = async (f) => {
+    if (mode === 'View') return;
+    const colOf = x => String(x.column ?? x.key).toLowerCase();
+    if (exeForm && f.key === 'code' && mode === 'New') setForm(prev => ({ ...prev, name: String(prev.code ?? '') }));
+    if (path === 'items' && f.key === 'name' && mode === 'New') {
+      const hot = allFields.find(x => x.extra && colOf(x) === 'hotkey');
+      if (hot) setForm(prev => withValue(prev, hot, String(prev.name ?? '')));
+    }
+    if (partyForm && f.key === 'name') {   // frmMstParty.txtPartyName_Validated: the Tally alias follows the name
+      const alias = allFields.find(x => /alias(name)?$/.test(colOf(x)) && !x.designerHidden);
+      if (alias) setForm(prev => withValue(prev, alias, String(prev.name ?? '')));
+    }
+    if (partyForm && colOf(f) === 'city') {   // frmMstParty.cboCity_Validating: Country and State follow the city; an unknown city offers to add it
+      const city = String(valueOf(form, f) ?? '').trim();
+      if (city) {
+        const hit = scc.find(r => String(r.code).toLowerCase() === city.toLowerCase());
+        if (hit) {
+          const fill = (prev, col, v) => { const t = allFields.find(x => colOf(x) === col && !x.designerHidden); return t ? withValue(prev, t, v) : prev; };
+          setForm(prev => fill(fill(prev, 'country', String(hit.country ?? '')), 'state', String(hit.name ?? '')));
+        } else if (await confirm('City Not found! Do you want to add city ??')) {
+          setForm(prev => withValue(prev, f, ''));
+          openModule('State City Country');
+        }
+      }
+    }
+    if (f.key === 'code' && path !== 'holidays' && path !== 'state-city-country' && !live.screen?.flags?.auto_code) {
+      const code = String(form.code ?? '').trim();
+      if (!code || lastSimilar.current === code) return;
+      lastSimilar.current = code;
+      try {
+        const list = await getSimilarMasters(path, code, mode === 'Edit' ? selected ?? '' : '');
+        if (list.length && await confirm(`Similar ${path === 'items' ? 'ItemCode' : 'code'} already exists. Do you want to view them?`)) setSimilar({ code, list });
+      } catch { /* the check is a courtesy: never block typing */ }
+    }
+  };
+
+  // Copy From (Add mode): take every detail of another item except its code.
+  const copyFrom = (row) => {
+    setForm(prev => ({ ...row, code: prev.code, qoh: prev.qoh, authorised: undefined }));
+    setCopyOpen(false);
+    setCopyFilter('');
+  };
+
+  // frmMstParty.lblAddress_DoubleClick: the party's name and address lines, city, state and PIN on the clipboard.
+  const copyAddress = async () => {
+    const col = (c) => { const x = allFields.find(y => String(y.column ?? y.key).toLowerCase() === c && !y.designerHidden); return x ? String(valueOf(form, x) ?? '').trim() : ''; };
+    const lines = [form.name, col('badd1') || form.address, col('badd2'), col('badd3'), col('badd4'), col('city') || form.city, col('state') || form.state, col('pincode') || form.pin]
+      .map(x => String(x ?? '').trim()).filter(Boolean);
+    try { await navigator.clipboard.writeText(lines.join('\n')); setToast({ kind: 'ok', text: 'Address copied to clipboard.' }); }
+    catch { setToast({ kind: 'error', text: 'The browser would not copy to the clipboard.' }); }
+  };
+
+  // Closing while adding or editing asks first (the exe's FormClosing).
+  const closeScreen = async () => {
+    if (exeForm && mode !== 'View' && !(await confirm('Are you sure you want to exit the form without saving?!'))) return;
+    goHome();
   };
 
   const focusField = (key) => {
@@ -354,6 +463,11 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const modKey = isMac ? e.metaKey : e.ctrlKey;
 
+      // The item form's own keys (frmMstItem.KeyUp): F5 refills the group / UOM lists, Ctrl+A opens File Attachment (outside a text box).
+      if (exeForm && e.key === 'F5') { e.preventDefault(); setOptionsKey(k => k + 1); if (partyForm) listMaster('state-city-country').then(setScc).catch(() => undefined); return; }
+      if (exeForm && modKey && e.key.toLowerCase() === 'a' && mode !== 'New' && selected
+        && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) { e.preventDefault(); setAttachOpen(true); return; }
+
       // Enter to save when editing/adding in form
       if (e.key === 'Enter' && !readOnly) {
         const target = e.target ;
@@ -446,6 +560,8 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
 
   const barOptions = [
     ...(path === 'customers' || path === 'suppliers' ? [{ label: 'Contacts, addresses, alerts, notes', onClick: () => setPartyOpen(true), disabled: !selected }] : []),
+    ...(exeForm ? [{ label: 'Copy From', onClick: () => setCopyOpen(true), disabled: mode !== 'New' }] : []),
+    ...(partyForm ? [{ label: 'Copy Address', onClick: () => void copyAddress(), disabled: !selected && mode === 'View' }] : []),
     { label: 'File Attachment', onClick: () => setAttachOpen(true), disabled: !selected },
     ...extraOptions,
   ];
@@ -454,7 +570,7 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
   }));
   const bar = (
     <ActionBar
-      mode={mode} onNew={canAdd ? startNewRecord : undefined} onEdit={canEdit ? startEditRecord : undefined} onDelete={() => void remove()} onList={() => setListOpen(true)} onClose={goHome}
+      mode={mode} onNew={canAdd ? startNewRecord : undefined} onEdit={canEdit ? startEditRecord : undefined} onDelete={() => void remove()} onList={() => setListOpen(true)} onClose={() => void closeScreen()}
       onSave={() => void save()} onCancel={cancel}
       canNew={canAdd} canEdit={canEdit && !!selected} canDelete={canDelete && !!selected}
       noEditReason={!canEdit ? undefined : 'Select a record first'} noDeleteReason={!canDelete ? undefined : 'Select a record first'}
@@ -482,7 +598,9 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
         : String(value ?? '') === '' ? <span className="text-stone-400">—</span> : String(value);
     }
     if (f.type === 'bool') {
-      return <input id={id} type="checkbox" checked={Boolean(value)} onChange={e => handleFieldChange(f.key, e.target.checked)} className="h-4 w-4 accent-accent" />;
+      // The exe's check box is "Inactive" (chkInactive): shown ticked when the record is not active.
+      const flipped = f.key === 'active';
+      return <input id={id} type="checkbox" checked={flipped ? !value : Boolean(value)} onChange={e => handleFieldChange(f.key, flipped ? !e.target.checked : e.target.checked)} className="h-4 w-4 accent-accent" />;
     }
     const errorClass = hasError ? '!border-red-500 !ring-2 !ring-red-500/20 dark:!border-red-400 dark:!ring-red-400/20 animate-shake' : '';
     return (
@@ -494,11 +612,17 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
           <LookupSelect id={id} docId={f.lookup.docId} code={f.lookup.code} value={value} disabled={locked}
             onChange={v => handleFieldChange(f.key, v)} invalid={hasError} className={`${fieldCls} ${errorClass}`} />
         ) : f.type === 'select' || f.optionsFrom ? (
-          <select id={id} required={required} disabled={f.extra && locked} value={String(value ?? '')} onChange={e => handleFieldChange(f.key, e.target.value)}
+          <>
+          <select id={id} required={required} disabled={(f.extra || (path === 'items' && f.key === 'uom')) && locked} value={String(value ?? '')} onChange={e => handleFieldChange(f.key, e.target.value)}
             aria-invalid={hasError} aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined} className={`${fieldCls} ${errorClass}`}>
             <option value="">Select…</option>
             {opts.map(o => <option key={o}>{o}</option>)}
           </select>
+          {path === 'items' && (f.key === 'group' || f.key === 'uom') && (
+            <button type="button" onClick={() => openModule(f.key === 'group' ? 'Item Group Master' : 'UOM Master')} className="mt-1 text-[11px] font-medium text-accent hover:underline"
+              title={`Open ${f.key === 'group' ? 'Item Group' : 'UOM'} Master`}>Open {f.key === 'group' ? 'Item Group' : 'UOM'} Master</button>
+          )}
+          </>
         ) : f.extra && f.multiline ? (
           <textarea id={id} rows={compact ? 2 : 3} readOnly={locked} disabled={locked} maxLength={f.maxLength} value={String(value ?? '')}
             onChange={e => handleFieldChange(f.key, e.target.value)} aria-invalid={hasError} aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
@@ -515,12 +639,18 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
               inputMode={FIELD_RULES[f.key]?.digits ? 'numeric' : undefined}
               required={required}
               value={String(value ?? '')}
-              list={path === 'items' && f.key === 'code' ? 'mc-items-code-list' : path === 'items' && f.key === 'short_name' ? 'mc-items-shortname-list' : undefined}
+              list={path === 'items' && f.key === 'code' ? 'mc-items-code-list' : path === 'items' && f.key === 'short_name' ? 'mc-items-shortname-list' : partyForm && ['city', 'state', 'country'].includes(String(f.column ?? f.key).toLowerCase()) ? `mc-scc-${String(f.column ?? f.key).toLowerCase()}` : undefined}
               onChange={e => handleFieldChange(f.key, e.target.value)}
+              onBlur={() => void handleBlur(f)}
               aria-invalid={hasError}
               aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined}
               className={cn(fieldCls, f.type === 'number' ? 'text-right tabular-nums' : '', f.lockedAlways && 'text-blue-700 dark:text-blue-300', errorClass)}
             />
+            {partyForm && ['city', 'state', 'country'].includes(String(f.column ?? f.key).toLowerCase()) && (
+              <datalist id={`mc-scc-${String(f.column ?? f.key).toLowerCase()}`}>
+                {[...new Set(scc.map(r => String(String(f.column ?? f.key).toLowerCase() === 'city' ? r.code : String(f.column ?? f.key).toLowerCase() === 'state' ? r.name : r.country ?? '')))].filter(Boolean).map(v => <option key={v} value={v} />)}
+              </datalist>
+            )}
             {path === 'items' && f.key === 'code' && (
               <datalist id="mc-items-code-list">
                 {rows.map(r => <option key={String(r.code)} value={String(r.code)}>{String(r.name || '')}</option>)}
@@ -551,10 +681,11 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
         {sec.fields.map((f, fi) => {
           const values = ruleValues(form);
           if (f.hideWhen && ruleHolds(f.hideWhen, values)) return null;   // hidden by the designer's rule
-          if (isRemarks(f) && !inactiveNow) return null;   // the exe shows the Not Active Remarks box only while the record is inactive
+          // the exe shows the Not Active Remarks box only while the record is inactive, under the Inactive check box
+          if (isRemarks(f) && (!inactiveNow || (!readOnly && fields.some(x => x.key === 'active')))) return null;
           // Read-only by Field Level Rights: can be filled in for a new record, not changed afterwards.
           const locked = readOnly || f.lockedAlways || (f.readonlyWhen && ruleHolds(f.readonlyWhen, values))
-            || ((f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit') || (f.key === 'code' && !!live.screen?.flags?.auto_code);
+            || ((f.newOnly || fieldRight(path, f.key) === 'readonly') && mode === 'Edit') || (path === 'items' && f.key === 'uom' && mode === 'Edit' && uomLocked) || (f.key === 'code' && !!live.screen?.flags?.auto_code);
           const value = f.extra && f.type === 'date' ? String(valueOf(form, f) ?? '').slice(0, 10) : valueOf(form, f);
           const opts = f.options ?? options[f.key] ?? [];
           const id = `mc-${path}-${f.key}`;
@@ -603,10 +734,22 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
                   <div className={`min-h-5 text-sm text-stone-900 dark:text-stone-50 ${f.type === 'number' ? 'tabular-nums' : ''}`}>{renderFieldControl(f, ctx)}</div>
                 </>
               ) : f.type === 'bool' ? (
-                <label htmlFor={id} className="flex items-center gap-2 pt-1 text-xs font-medium text-stone-700 dark:text-stone-200">
-                  {renderFieldControl(f, ctx)}
-                  {f.label}
-                </label>
+                <>
+                  <label htmlFor={id} className="flex items-center gap-2 pt-1 text-xs font-medium text-stone-700 dark:text-stone-200">
+                    {renderFieldControl(f, ctx)}
+                    {f.key === 'active' ? 'Inactive' : f.label}
+                  </label>
+                  {f.key === 'active' && inactiveNow && fields.filter(isRemarks).map(rf => {
+                    const rid = `mc-${path}-${rf.key}`;
+                    const rErr = !!formErrors[rf.key];
+                    return (
+                      <div key={rf.key} className="mt-2">
+                        <label htmlFor={rid} className={cn(labelClass, 'break-words text-red-600')}>{rf.label}<span className="ml-0.5" aria-hidden="true">*</span></label>
+                        {renderFieldControl(rf, { id: rid, value: valueOf(form, rf), locked: false, hasError: rErr, required: true, opts: [], compact: false })}
+                      </div>
+                    );
+                  })}
+                </>
               ) : (
                 <>
                   <label htmlFor={id} title={f.tooltip} className={cn(labelClass, 'break-words', tone)}>{f.label}{required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
@@ -630,6 +773,23 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
       )}
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {dialog}
+      {copyOpen && (
+        <Modal title="Select the item to copy" onClose={() => setCopyOpen(false)} wide>
+          <input autoFocus value={copyFilter} onChange={e => setCopyFilter(e.target.value)} placeholder="Type to filter by code or name" className={`${field} mb-2`} />
+          <div className="max-h-[50vh] overflow-auto">
+            {rows.filter(r => !copyFilter || `${r.code} ${r.name}`.toLowerCase().includes(copyFilter.toLowerCase())).slice(0, 200).map(r => (
+              <button key={String(r.code)} type="button" onClick={() => copyFrom(r)} className="flex w-full justify-between gap-3 border-b border-line-soft px-2 py-1.5 text-left hover:bg-accent/10">
+                <span className="font-mono">{String(r.code)}</span><span className="truncate">{String(r.name ?? '')}</span>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
+      {similar && (
+        <Modal title={`ItemCode '${similar.code}' is similar to below Item:`} onClose={() => setSimilar(null)}>
+          {similar.list.map(r => <div key={r.code} className="flex justify-between gap-3 border-b border-line-soft py-1.5"><span className="font-mono">{r.code}</span><span>{r.name}</span></div>)}
+        </Modal>
+      )}
       {attachOpen && selected && <AttachmentsDialog master={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setAttachOpen(false)} />}
       {partyOpen && selected && <PartyRecords party={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setPartyOpen(false)} />}
       <section id={`mc-${path}-details`} aria-label="Record details" className={`${legacySkin ? '-mx-4 rounded-none border-0 bg-[#F3EEE6] dark:bg-[#141414] sm:-mx-6' : panel} scroll-mt-20 self-start`}>

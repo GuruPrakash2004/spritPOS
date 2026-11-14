@@ -9,21 +9,26 @@ export const ITEM_GROUP_FIELDS = [
   { key: 'name', label: 'Item Group Name', required: true },
   { key: 'liquor', label: 'Liquor Item Group', type: 'bool' },
   { key: 'consider_for_loyalty', label: 'Consider for Loyalty', type: 'bool' },
+  { key: 'active', label: 'Active', type: 'bool', default: true },
 ];
 
 export const UOM_FIELDS = [
   { key: 'code', label: 'UOM Code', required: true },
   { key: 'name', label: 'UOM Name', required: true },
+  { key: 'decimals', label: 'Decimals', type: 'number', default: 0 },   // MstUOM.Decimals: whole numbers
+  { key: 'active', label: 'Active', type: 'bool', default: true },
 ];
 
 export const PACKAGE_FIELDS = [
   { key: 'code', label: 'Package Code', required: true },
   { key: 'litres_per_bottle', label: 'Litres per Bottle (used in litre reports)', type: 'number', required: true },
+  { key: 'active', label: 'Active', type: 'bool', default: true },
 ];
 
 export const BRAND_FIELDS = [
   { key: 'code', label: 'Brand Code', required: true },
   { key: 'name', label: 'Brand Name', required: true },
+  { key: 'active', label: 'Active', type: 'bool', default: true },
 ];
 
 export const CUSTOMER_FIELDS = [
@@ -68,7 +73,7 @@ export const ITEM_FIELDS = [
   { key: 'liqtype', label: 'Liquor Category', type: 'select', options: ['IML', 'Beer', 'Wine', 'Others'], required: true, showInList: false, default: 'IML', section: 'Classification' },
   { key: 'uom', label: 'UOM', optionsFrom: 'uoms', required: true, showInList: false, default: 'BTL', section: 'Classification' },
   { key: 'package', label: 'Package', optionsFrom: 'packages', required: true, showInList: false, section: 'Classification' },
-  { key: 'bottles_per_case', label: 'Bottles per Case (≥ 1)', type: 'number', showInList: false, default: 12, section: 'Classification' },
+  { key: 'bottles_per_case', label: 'Bottles per Case', type: 'number', showInList: false, default: 12, section: 'Classification' },
   { key: 'mrp', label: 'MRP', type: 'number', required: true, section: 'Rates & Taxes' },
   { key: 'purchase_rate', label: 'Purchase Rate', type: 'number', costField: true, section: 'Rates & Taxes' },
   { key: 'cgst_per', label: 'CGST % (non-liquor only)', type: 'number', showInList: false, section: 'Rates & Taxes' },

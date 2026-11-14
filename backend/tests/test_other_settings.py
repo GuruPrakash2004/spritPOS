@@ -52,14 +52,14 @@ async def test_purchase_bill_copy_from_and_rate_update(client):
 async def test_document_number_prefix_and_reset(client):
     await client.put("/utilities/numbering/stock_deduction", json={"prefix": "BRK"})
     doc = (await client.post("/transactions/stock-deduction", json={"date": TODAY, "lines": [{"item_code": "VIN-750", "bottles": 1}]})).json()
-    assert doc["doc_no"].startswith(f"{store.FY_PREFIX}/BRK-")
-    used = int(doc["doc_no"].rsplit("-", 1)[1])
+    assert doc["doc_no"].startswith(f"{store.FY_PREFIX}BRK") and len(doc["doc_no"]) == 2 + 3 + 5   # the exe's shape: year + prefix + 5 digits
+    used = int(doc["doc_no"][-5:])
     res = await client.put("/utilities/numbering/stock_deduction", json={"next_number": used})
     assert res.status_code == 409 and "already used" in res.json()["detail"]
     res = await client.put("/utilities/numbering/stock_deduction", json={"next_number": used + 100})
     assert res.status_code == 200 and res.json()["next_number"] == used + 100
     doc = (await client.post("/transactions/stock-deduction", json={"date": TODAY, "lines": [{"item_code": "VIN-750", "bottles": 1}]})).json()
-    assert doc["doc_no"].endswith(f"{used + 100:07d}")
+    assert doc["doc_no"].endswith(f"{used + 100:05d}")
     assert (await client.put("/utilities/numbering/sales_invoice", json={"prefix": "X"})).status_code == 409
     assert (await client.put("/utilities/numbering/stock_deduction", json={"prefix": "BR-K"})).status_code == 422
 

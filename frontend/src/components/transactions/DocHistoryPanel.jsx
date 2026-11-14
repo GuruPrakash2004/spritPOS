@@ -20,11 +20,15 @@ import ListModal from '../common/ListModal';
 import DocViewDialog from './DocViewDialog';
 import { goHome } from '../../lib/nav';
 import { badge, iconButton, money, panel } from '../../lib/styles';
-import { DOCS_CHANGED, canDo, errorText, listDocuments } from '../../lib/api';
+import { DOCS_CHANGED, canDo, cancelSavedDocument, errorText, listDocuments } from '../../lib/api';
+import { useConfirm } from '../common/ConfirmDialog';
+import { toastStore } from '../common/toastStore';
 import { getPurchaseDays, setPurchaseDays } from '../../lib/localPrefs';
 import { toast } from '../common/toastStore';
 import { CancelInvoiceDialog } from './SalesInvoiceDialogs';
 import { useShortcuts } from '../../lib/keys';
+import { useScreenFields } from '../../hooks/useScreenFields';
+import AttachmentsDialog from '../masters/AttachmentsDialog';
 import Kbd from '../common/Kbd';
 
 const KEY = 'vlqms_history_open';
@@ -49,6 +53,10 @@ const LIST_COLUMNS = [
 const listRow = (d) => ({ doc_no: d.doc_no, date: d.date ?? '', time: d.time ? String(d.time).slice(0, 5) : '', party: d.customer || d.supplier || d.reason || d.paid_from || '',
   status: d.status ?? '', qty: d.totals?.qty ?? '', amount: d.total ?? d.totals?.net ?? d.totals?.basic ?? '', added_by: d.added_by ?? '' });
 
+// The bar's Delete button, in the exe's CANCELLED sense, named for what it cancels.
+const CANCEL_LABELS = { purchase_bill: 'Cancel Bill', purchase_indent: 'Cancel Indent', sales_return: 'Cancel Return', stock_deduction: 'Cancel Deduction', expense: 'Cancel Entry', closing_stock: 'Cancel Entry' };
+// A document's header table, to read its Doc Designer flags (File Attachment, ...).
+const HEADER_TABLES = { sales_invoice: 'TrnHdrSINV', purchase_bill: 'TrnHdrPB', purchase_indent: 'TrnHdrPI', sales_return: 'TrnHdrSR', stock_deduction: 'TrnHdrSTKDED', expense: 'TrnHdrEXP', closing_stock: 'TrnHdrCSE' };
 const TITLES = { sales_invoice: 'Previous bills', purchase_bill: 'Previous purchase bills', purchase_indent: 'Previous indents',
   sales_return: 'Previous returns', stock_deduction: 'Previous deductions', expense: 'Previous expenses', closing_stock: 'Previous entries' };
 
@@ -82,7 +90,10 @@ export default function WithHistory({ kind, title, children, onNew, options = []
   const [printNo, setPrintNo] = useState('');
   const [cancelNo, setCancelNo] = useState(null);   // Sales Invoice: the bill whose "reason" window is open (null = closed, '' = no bill picked yet)
   const [listOpen, setListOpen] = useState(false);   // the action bar's List window
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const [viewNo, setViewNo] = useState('');
+  const [attachOpen, setAttachOpen] = useState(false);
+  const attachOn = Boolean(useScreenFields(`table:${HEADER_TABLES[kind] ?? ''}`).screen?.flags?.file_attach);   // UtlTransactions.FileAttachReq = 'Y'
   const [full, setFull] = useState(null);   // the whole document behind viewNo, when `fetchDoc` is given   // the document shown read-only (List → Open Selected, First / Previous / Next / Last)
 
   const toggle = useCallback(() => setOpen(o => {
@@ -129,20 +140,31 @@ export default function WithHistory({ kind, title, children, onNew, options = []
   const viewDoc = found && full?.doc_no === viewNo ? { ...found, ...full } : found;
   // Sales Invoice has no action bar: its saved bills are found, re-printed, edited and cancelled in its Re-print / Edit window (SalesInvoiceDialogs.jsx).
   const sales = kind === 'sales_invoice';
+  // Purchase Bill, Purchase Indent, Sales Return, Stock Deduction: the exe's Delete button with its CANCELLED choice (deleteDoc): the opened
+  // document's stock effect is taken back and it is marked cancelled.
+  const cancelable = ['closing_stock', 'expense', 'purchase_bill', 'purchase_indent', 'sales_return', 'stock_deduction'].includes(kind);
+  const cancelDocument = async () => {
+    if (!viewNo) { toast.error('Open a saved document from the List first.'); return; }
+    if (!(await confirm('Are you sure to CANCEL this Document ?'))) return;
+    if (!(await toastStore.defer('delete', `${title ?? 'Document'} ${viewNo} will be cancelled when this closes.`, 'Not cancelled. Nothing was changed.'))) return;
+    cancelSavedDocument(kind, viewNo).then(() => toast.ok(`Cancelled ${title ?? 'document'} ${viewNo} Successfully!`)).catch(e => toast.error(errorText(e)));
+  };
   const bar = sales ? null : (
     <ActionBar
       onNew={sales ? undefined : onNew} canNew={canDo(moduleName, 'add')}
       listLabel={sales ? 'Edit' : 'List'}
       onEdit={!sales && onEdit && canDo(moduleName, 'edit') ? () => viewDoc && onEdit(viewDoc) : undefined} canEdit={!!viewDoc && !['CANCELLED', 'DELETED', 'HOLD'].includes(viewDoc.status)}
       noEditReason="Open a saved one from the List first (a cancelled one can't be edited)"
-      onDelete={kind === 'sales_invoice' ? () => setCancelNo(viewNo || '') : undefined} deleteLabel="Cancel Bill" canDelete={canDo(moduleName, 'delete')}
+      onDelete={kind === 'sales_invoice' ? () => setCancelNo(viewNo || '') : cancelable ? () => void cancelDocument() : undefined} deleteLabel={CANCEL_LABELS[kind] ?? 'Cancel Bill'} canDelete={canDo(moduleName, 'delete')}
       onList={() => setListOpen(true)} onClose={goHome}
-      options={[...options, { label: open ? 'Hide history' : 'Show history', onClick: toggle }]}
+      options={[...options, ...(attachOn ? [{ label: 'File Attachment', onClick: () => setAttachOpen(true), disabled: !viewNo }] : []), { label: open ? 'Hide history' : 'Show history', onClick: toggle }]}
     />
   );
 
   return (
     <ScreenFrame bar={bar}>
+    {confirmDialog}
+    {attachOpen && viewNo && <AttachmentsDialog master={kind} code={viewNo} name={viewNo} canEdit={canDo(moduleName, 'edit')} onClose={() => setAttachOpen(false)} />}
     <div className="flex items-start gap-4">
       <div className="min-w-0 flex-1">{children}</div>
 

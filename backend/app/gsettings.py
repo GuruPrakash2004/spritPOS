@@ -224,6 +224,18 @@ def number(code: str, default: float = 0.0) -> float:
         return default
 
 
+def rewrite_in_progress() -> bool:
+    """UtlMisc.ReWriteINPROGRESS = 'Y': the desktop's Re Write Stock is running ("re-Writing Stocks.. Try after few mins.")."""
+    from . import db
+    if not db.is_db_available():
+        return False
+    try:
+        rows = db.fetchall("SELECT TOP 1 ReWriteINPROGRESS AS r FROM UtlMisc WITH (NOLOCK)")
+    except Exception:   # a client without the column
+        return False
+    return bool(rows) and str(rows[0]["r"] or "").strip().upper() == "Y"
+
+
 def freeze_date() -> date | None:
     v = value("FreezeDate").strip()
     try:

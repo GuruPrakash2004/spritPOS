@@ -20,7 +20,7 @@ export const REPORTS = {
   },
   'Stock Ageing': {
     title: 'Stock Ageing', subtitle: 'Stock on hand by months since the item was last received.',
-    endpoint: '/reports/stock-ageing', filters: ['on', 'months'],
+    endpoint: '/reports/stock-ageing', filters: ['on', 'months', 'ageing'],
     columns: [
       { key: 'item_code', label: 'Code' }, { key: 'item_name', label: 'Item' }, { key: 'last_purchase', label: 'Last Received' },
       { key: 'age_days', label: 'Age (days)', kind: 'number' }, { key: 'bucket', label: 'Bucket' },
@@ -147,11 +147,20 @@ export const REPORTS = {
     ],
   },
   'Brand-wise Sales': {
-    title: 'Brand-wise Sales', subtitle: 'Sales by brand, highest first.',
-    endpoint: '/reports/sales/brand-wise', filters: ['range'],
+    // frmRptBrandWise: Purchase / Sale / Purchase Vs Sale per item with brand totals; the older /sales/brand-wise summary stays on the server.
+    title: 'Brand Wise Report', subtitle: 'Purchase and sales per brand and item, with brand totals.',
+    endpoint: '/reports/brand-wise', filters: ['range', 'brandwise'],
     columns: [
-      { key: 'brand', label: 'Brand' }, { key: 'qty', label: 'Qty', kind: 'number', total: true },
-      { key: 'litres', label: 'Litres', kind: 'number', total: true }, { key: 'amount', label: 'Amount (₹)', kind: 'money', total: true },
+      { key: 'brand', label: 'Brand' }, { key: 'group', label: 'ItemGroup' }, { key: 'item_code', label: 'ItemCode' },
+      { key: 'item_name', label: 'ItemName' }, { key: 'uom', label: 'Uom' },
+      { key: 'pur_qty', label: 'Purchase Qty', kind: 'number', side: 'pur' },
+      { key: 'pur_rate', label: 'Purchase Rate', kind: 'money', side: 'pur', valued: true },
+      { key: 'pur_amt', label: 'Purchase Value', kind: 'money', side: 'pur', valued: true },
+      { key: 'sal_qty', label: 'Sales Qty', kind: 'number', side: 'sal' },
+      { key: 'sal_rate', label: 'Sales Rate', kind: 'money', side: 'sal', valued: true },
+      { key: 'sal_amt', label: 'Sales Value', kind: 'money', side: 'sal', valued: true },
+      { key: 'cases', label: 'No of Case', kind: 'number', cases: true },
+      { key: 'bottles', label: 'No of Bottles', kind: 'number', cases: true },
     ],
   },
   'Day-wise Litres': {
@@ -172,12 +181,13 @@ export const REPORTS = {
       { key: 'cl_litres', label: 'Litres', kind: 'number', total: true },
     ],
   },
+  // frmRptStkLevel: Below Min Level / Below Re-Order Level / Above Max Level, from the stock list as on the date (the view is chosen with the 'level' filter).
   'Stock Level / Reorder': {
-    title: 'Stock Level / Reorder', subtitle: 'Items at or below their reorder level, with the suggested reorder quantity.',
-    endpoint: '/reports/reorder', filters: [],
+    title: 'Stock Level', subtitle: 'Items below their Min Level or Re-Order Level, or above their Max Level, as on the date.',
+    endpoint: '/reports/stock-level', filters: ['on', 'level', 'stocklevel'],
     columns: [
-      { key: 'item_code', label: 'Code' }, { key: 'item_name', label: 'Item' },
-      { key: 'qoh', label: 'QOH', kind: 'number' }, { key: 'rol', label: 'ROL', kind: 'number' }, { key: 'roq', label: 'Suggested ROQ', kind: 'number', total: true },
+      { key: 'group', label: 'Item Group Name' }, { key: 'item_name', label: 'Item Name' }, { key: 'level', label: 'Level', kind: 'number' },
+      { key: 'closing_qty', label: 'Closing Quantity', kind: 'number', total: true, ltr: false }, { key: 'closing_ltr', label: 'Closing Quantity-Ltr', kind: 'number', total: true, ltr: true },
     ],
   },
 };

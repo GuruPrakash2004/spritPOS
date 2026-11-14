@@ -16,7 +16,6 @@ export const MENU_CAPTIONS = {
   'Drops Consolidated': 'Drops Reports',
   'Reports Dashboard': 'Customised Reports...',
   'Global Settings': 'Global Settings...',
-  'Web Sync': 'Data Port To Cloud (203)',
 };
 
 /** The module names (lower case) to leave out of the sidebar, from the menu rows [{caption, show}]. A caption several rows share is

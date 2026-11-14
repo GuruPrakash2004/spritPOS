@@ -253,6 +253,18 @@ export const getSuppliers = () => listMaster('suppliers');
 export const getSalesCounters = () => listMaster('sales-counters');
 export const getLedgers = () => listMaster('ledgers');
 export const getSalesPersons = () => request('/sales-persons');
+// Item Master options (frmMstItem): the UOM lock of an item in Edit, items with a similar code, the Items-DataLink Problem list,
+// Update Item Master Fields (field list, load rows, import) and Update Item Rates.
+export const getItemLocks = (code) => request(`/masters/items/${encodeURIComponent(code)}/locks`);   // -> { uom_locked }
+export const getSimilarMasters = (path, code, exclude = '') => request(`/masters/${path}/similar${qs({ code, exclude })}`);   // -> [{ code, name }]
+export const getInvalidItems = () => request('/masters/items/invalid');   // -> { columns, rows, note }
+export const getBulkFieldDefs = () => request('/masters/items/bulk-fields');   // -> [{ code, datatype }]
+export const loadBulkFields = (body) => request('/masters/items/bulk-fields/load', { method: 'POST', body });   // -> { columns, rows }
+export const importBulkFields = (rows) => request('/masters/items/bulk-fields/import', { method: 'POST', body: { rows } });   // -> { updated }
+export const recalculateItemRates = () => request('/masters/items/recalculate-rates', { method: 'POST' });   // -> { fields, message }
+// Arrange Group Slno / Arrange Pkg Slno: [{ id, slno, code, litres? }] and the new order (the IDs in order).
+export const getMasterOrder = (path, sort = '') => request(`/masters/${path}/order${qs({ sort })}`);
+export const saveMasterOrder = (path, ids) => request(`/masters/${path}/order`, { method: 'POST', body: { ids } });
 export const importItems = (body) => request('/masters/items/import', { method: 'POST', body });
 export const bulkUpdateItems = (body) =>
   request('/masters/items/bulk-update', { method: 'POST', body });
@@ -272,6 +284,9 @@ export const updateDashboardLink = (link) => request('/masters/company/dashboard
 /** A customer's or supplier's contact persons / addresses / alert messages / notes (`kind`: contacts, addresses, alerts, activities). */
 export const getPartyRecords = (party, code, kind) => request(`/masters/${party}/${encodeURIComponent(code)}/${kind}`);
 export const savePartyRecords = (party, code, kind, rows) => request(`/masters/${party}/${encodeURIComponent(code)}/${kind}`, { method: 'PUT', body: { rows } });
+/** Customer / Supplier Vs Item: the exe's item pick list (active, authorised items, one line per unit) and the items attached per party code. */
+export const searchPartyItems = (party, q) => request(`/masters/party-item-search/${party}${qs({ q })}`);
+export const getPartyItemCounts = (party) => request(`/masters/party-item-counts/${party}`);
 export const addPartyNote = (party, code, note) => request(`/masters/${party}/${encodeURIComponent(code)}/activities`, { method: 'POST', body: { rows: [{ Notes: note }] } });
 export const getNextFinYear = () => request('/masters/company/fin-years/next');
 export const createFinYear = (body) => request('/masters/company/fin-years', { method: 'POST', body });
@@ -330,6 +345,11 @@ export const saveSalesInvoice = (body, idempotencyKey) =>
 export const reprintSalesInvoice = (docNo) => request(`${salesInvoicePath(docNo)}/reprint`);
 export const cancelSalesInvoice = (docNo, remarks) =>
   request(`${salesInvoicePath(docNo)}/cancel`, { method: 'POST', body: { remarks } }).then(billsChanged);
+/** Cancel a saved purchase bill, indent, sales return or stock deduction (the exe's deleteDoc, CANCELLED): its stock effect is taken back and it is marked cancelled. */
+const CANCEL_PATHS = { closing_stock: 'closing-stock', expense: 'expense', purchase_bill: 'purchase-bill', purchase_indent: 'purchase-indent', sales_return: 'sales-return', stock_deduction: 'stock-deduction' };
+export const cancelSavedDocument = (kind, docNo) => request(`/transactions/${CANCEL_PATHS[kind]}/${docNo}/cancel`, { method: 'POST' }).then(billsChanged);
+export const deleteSavedSalesInvoice = (docNo) =>
+  request(`${salesInvoicePath(docNo)}/delete`, { method: 'POST' }).then(billsChanged);
 /** Remove a held bill (recalling it deletes the hold). */
 export const deleteSalesInvoice = (docNo) => request(salesInvoicePath(docNo), { method: 'DELETE' });
 
@@ -351,6 +371,7 @@ export const updateDocument = (path, body) => request(path, { method: 'PUT', bod
 
 export const loadClosingStock = (asOn) => request(`/transactions/closing-stock/load${qs({ as_on: asOn })}`);
 export const saveClosingStock = (body) => request('/transactions/closing-stock', { method: 'POST', body });
+export const updateClosingStock = (docNo, body) => request(`/transactions/closing-stock/${docNo}`, { method: 'PUT', body }).then(billsChanged);
 export const generateClosingStockInvoice = (docNo, body) =>
   request(`/transactions/closing-stock/${docNo}/generate-invoice`, { method: 'POST', body });
 
@@ -398,6 +419,8 @@ export const getDsr = (on = todayIso()) => request(`/reports/dsr${qs({ on })}`);
 export const getDailySales = (fromDate, toDate) => request(`/reports/sales/daily${qs({ from_date: fromDate, to_date: toDate })}`);
 export const getStockMovement = (on = todayIso()) => request(`/reports/stock-movement${qs({ on })}`);
 export const getRestock = (days, limit) => request(`/reports/restock${qs({ days, limit })}`);
+/** The exe's Stock Balance views (closing / detailed / package / group): { columns: [{key, label, kind, total}], rows, brand_required }. */
+export const getStockBalanceView = (params) => request(`/reports/stock-balance/view${qs(params)}`);
 export const getStockBalance = (date) => request(`/reports/stock-balance${qs({ from_date: date, to_date: date })}`);
 /** Any table report: `endpoint` and its filters come from components/reports/reportDefs.js. */
 export const getReport = (endpoint, params = {}) => request(`${endpoint}${qs(params)}`);
@@ -408,6 +431,10 @@ export const getCustomReportRights = () => request('/reports/custom/allowed');
 export const renderCustomReportPrint = (body, printer = '') =>
   requestRaw('/print/custom-report', { method: 'POST', body: { ...body, printer } });
 /** `query` is the already-built query string of the filters (without the '?'). */
+/** The filter fields a Customised Report offers (its definition's FilterReq fields) and whether it takes a period. */
+export const getCustomReportFilters = (name) => request(`/reports/custom/filters${qs({ name })}`);
+/** The values to pick from for one of those fields. */
+export const getCustomReportFilterValues = (name, field) => request(`/reports/custom/filter-values${qs({ name, field })}`);
 export const runCustomReport = (query) => request(`/reports/custom?${query}`);
 export const emailCustomReport = (body) => request('/reports/custom/email', { method: 'POST', body });
 
@@ -532,12 +559,6 @@ export async function streamDesignerEvents(onState, signal) {
     }
   }
 }
-/** Administrator: every designer screen with what the server builds from it and what looks wrong. */
-export const getScreenPreview = () => request('/designer/preview');
-
-export const getWebSync = () => request('/utilities/web-sync');
-export const runWebSync = (body) => request('/utilities/web-sync', { method: 'POST', body });
-
 export const getAuditLog = (params) =>
   request(`/utilities/audit${qs(params)}`);
 export const getAuditScreens = () => request('/utilities/audit/screens');

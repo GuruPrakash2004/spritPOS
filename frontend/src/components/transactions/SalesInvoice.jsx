@@ -256,7 +256,7 @@ export default function SalesInvoice({ setup, onClose }) {
 
   // Customers come from Customer Master so loyalty points are current; salespeople from the backend.
   useEffect(() => {
-    getCustomers().then(setCustomers).catch(e => toastStore.add('error', errorText(e)));
+    getCustomers().then(list => setCustomers(list.filter(c => c.active !== false))).catch(e => toastStore.add('error', errorText(e)));
     // The Global Settings are read again from the database when the window gets the focus back, so a change made in the Windows vLQMS applies.
     const loadSettings = () => getSettingValues().then(v => { if (v && typeof v === 'object') setGsettings(v); }).catch(() => undefined);
     loadSettings();

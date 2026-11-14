@@ -47,14 +47,12 @@ WRITE_METHODS = {"POST", "PUT", "DELETE"}
 IDEMPOTENT_KEEP = 500   # replies remembered for Idempotency-Key replays
 # POSTs that change no app data and may be slow (SMTP, SQL Server reconnect): they must not hold up bills.
 # The Database setup endpoints save nothing into the store (they only connect and load).
-# Web Sync only sends a summary to the central site (it can wait on the network for a while).
 # Connection switches (Utilities → About → Disconnect / Reconnect database): run one at a time like writes, but
 # never refused for a database that is offline (they are how it is reconnected) and nothing is saved after them.
 CONTROL_PATHS = {"/utilities/database/disconnect", "/utilities/database/reconnect"}
 # Features that write straight into the shop's own tables (db.direct_writes) and never use the generic save (no Web_ tables).
-DIRECT_WRITE_PATHS = ("/accounting/", "/transactions/quotation", "/transactions/expense", "/quick-selection", "/item-templates", "/sms/", "/admin/desktop-rights")
+DIRECT_WRITE_PATHS = ("/accounting/", "/transactions/quotation", "/transactions/expense", "/quick-selection", "/item-templates", "/sms/", "/admin/desktop-rights", "/masters/items/bulk-fields/import", "/masters/items/recalculate-rates", "/masters/item-groups/order", "/masters/packages/order")
 NOT_WRITES = {"/auth/login", "/print/bulk-pdf", "/print/render", "/print/pages", "/setup/scan", "/utilities/backup", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/email", "/designer/refresh", "/designer/reload", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/rpt-folder", "/setup/smtp", "/setup/smtp/test", "/setup/print-printer", "/setup/print-printer/add",
-              "/utilities/web-sync",
               # AI suggestions: generating may take a while (the forecast) and rejecting changes only the ai.* tables.
               "/ai/suggestions/generate"}
 
@@ -169,8 +167,8 @@ class FrontendAndHeaders:
     serves the built frontend on a page load, and adds the browser hardening headers to every response (no
     sniffing, no framing). Outermost layer, so every reply gets the headers."""
 
-    def __init__(self, inner):
-        self.inner = inner
+    def __init__(self, app):   # Starlette builds middleware as cls(app=...), so the name must be `app`
+        self.inner = app
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":

@@ -167,7 +167,7 @@ static class Program
     // keeps its report open too. A kept report is brought back to how the file was saved before each job: the shop-label texts that
     // FillLabels added are put back, the selection formula is replaced (or cleared) and the parameters are set again, and the data
     // is read again. RPT_BRIDGE_CACHE=0 turns this off (every job loads the file, as before).
-    class Kept { public ReportDocument Doc; public DateTime Stamp; public long Used; public List<KeyValuePair<TextObject, string>> Texts = new List<KeyValuePair<TextObject, string>>(); }
+    class Kept { public string LogonSig = ""; public ReportDocument Doc; public DateTime Stamp; public long Used; public List<KeyValuePair<TextObject, string>> Texts = new List<KeyValuePair<TextObject, string>>(); }
     static readonly Dictionary<string, Kept> Reports = new Dictionary<string, Kept>(StringComparer.OrdinalIgnoreCase);
     static long Tick;
     const int KeepReports = 12;
@@ -251,13 +251,25 @@ static class Program
     }
 
     // Logon, selection formula, parameters and the shop's label texts for this job (a freshly loaded report or a kept one).
+    static string LogonSig(Dictionary<string, object> job)
+    {
+        var logon = (Dictionary<string, object>)job["logon"];
+        return string.Join("|", new[] { Str(logon, "server"), Str(logon, "database"), Str(logon, "user"), Str(logon, "password"), Str(logon, "integrated"), Str(job, "table_prefix"), Str(job, "stored_proc") });
+    }
+
     static void Configure(ReportDocument rpt, Dictionary<string, object> job, Kept keep)
     {
         var logon = (Dictionary<string, object>)job["logon"];
         string prefix = Str(job, "table_prefix");
         string sp = Str(job, "stored_proc");
-        Apply(rpt, logon, prefix, sp, Str(logon, "database"));
-        foreach (ReportDocument sub in rpt.Subreports) Apply(sub, logon, prefix, sp, Str(logon, "database"));
+        // A kept report already has this logon on every table (and subreport): applying it again on each job costs ~50 ms for nothing.
+        string sig = LogonSig(job);
+        if (keep == null || keep.LogonSig != sig)
+        {
+            Apply(rpt, logon, prefix, sp, Str(logon, "database"));
+            foreach (ReportDocument sub in rpt.Subreports) Apply(sub, logon, prefix, sp, Str(logon, "database"));
+            if (keep != null) keep.LogonSig = sig;
+        }
 
         // Crystal asks the printer driver for text metrics while it lays pages out, and it contacts that printer again about every 60 s.
         // When the Windows default is a network (WSD) printer, that contact costs ~8.5 s on the next preview/export. The backend sends

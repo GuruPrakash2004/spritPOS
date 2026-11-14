@@ -64,7 +64,7 @@ def load(groups: str | None = None, packages: str | None = None, items: str | No
     """Active items with their system stock. At least one of groups / packages / items is needed (as on the desktop)."""
     g, p, i = _csv(groups), _csv(packages), _csv(items)
     if not (g or p or i):
-        raise HTTPException(422, "Please select at least one Item / Item Group / Package")
+        raise HTTPException(422, "Please Select Alteast One Item / ItemGroup / Package..")   # frmTrnPSE.btnView_Click 337
     show_cost = can_see_cost(current_user)
     rows = []
     for it in store.ITEMS.values():
@@ -74,7 +74,10 @@ def load(groups: str | None = None, packages: str | None = None, items: str | No
         rows.append({"item_code": it["code"], "item_name": it["name"], "group": it["group"], "package": it["package"],
                      "litres_per_bottle": pkg.get("litres_per_bottle", 0), "bottles_per_case": it.get("bottles_per_case") or 0,
                      "pur_rate": it["purchase_rate"] if show_cost else None, "mrp": it["mrp"], "system_qty": it["qoh"]})
-    rows.sort(key=lambda r: (r["group"], r["package"], -(r["pur_rate"] or 0)))
+    # frmTrnPSE.fillData 412: Order by GroupOrderBy, ItemGroupName, (PkgItem,) PkgOrderBy, PurRate desc: the shelf order set in Arrange Slno.
+    # The purchase rate is the item's own even when this role cannot see it, so the order is the same for everyone.
+    rate = {i["code"]: i["purchase_rate"] for i in store.ITEMS.values()}
+    rows.sort(key=lambda r: (store.ITEM_GROUPS.get(r["group"], {}).get("_order", 0), r["group"], store.PACKAGES.get(r["package"], {}).get("_order", 0), r["package"], -(rate.get(r["item_code"]) or 0)))
     return rows
 
 

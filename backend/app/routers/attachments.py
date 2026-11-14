@@ -34,6 +34,9 @@ MODULES = {
     "items": "Item Master", "item-groups": "Item Group Master", "uoms": "UOM Master", "packages": "Package Master", "brands": "Brand Master",
     "suppliers": "Supplier Master", "customers": "Customer Master", "ledger-groups": "Ledger Group Master", "ledgers": "Ledger Master",
     "sales-counters": "Sales Counter Master", "sales-persons": "Sales Person Master", **{s["path"]: s["title"] for s in SPECS},
+    # documents (UtlTransactions.FileAttachReq = 'Y'): the code is the document number
+    "purchase_bill": "Purchase Bill", "purchase_indent": "Purchase Indent", "sales_return": "Sales Return", "stock_deduction": "Stock Deduction",
+    "expense": "Expense Entry", "closing_stock": "Closing Stock Entry", "sales_invoice": "Sales Invoice",
 }
 
 

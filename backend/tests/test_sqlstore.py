@@ -84,6 +84,7 @@ async def _sell(client, qty=2):
 def test_prefix_of_a_document_number():
     assert sqlstore._prefix("26/c10-0083718") == "c10"
     assert sqlstore._prefix("26/PB-0000001") == "PB"
+    assert sqlstore._prefix("2600202") == "" and sqlstore._prefix("26CSE00001") == "CSE" and sqlstore._print_no("2600202") == "26//00202" and sqlstore._print_no("26/c10-0000001") == "26/c10-0000001"
     assert sqlstore._prefix("2600025") == ""
 
 
@@ -197,3 +198,15 @@ def test_a_master_that_old_bills_use_cannot_be_deleted(monkeypatch):
     unused = _Cur(found=True)
     sqlstore._write_master(unused, "ITEMS", "VIN-750", None, "ADMIN")
     assert any(s.startswith("DELETE FROM dbo.[MstITEM]") for s, _ in unused.log)
+
+
+def test_the_printed_number_follows_the_documents_own_number_format(monkeypatch):
+    """UtlDocNoFmt F1..: 5 = the year the financial year ends in (2 digits), 1 = prefix, 6 = last five digits; "/" only after something."""
+    monkeypatch.setattr(store, "UTL_DOCS", {1284: {"DocID": 1284, "HdrTblName": "TrnHdrCSE"}, 1276: {"DocID": 1276, "HdrTblName": "TrnHdrPB"}})
+    monkeypatch.setattr(store, "UTL_NUMFMT", [{"DocID": 1284, "F1": "5", "F2": "/", "F3": "1", "F4": "/", "F5": "6"},
+                                              {"DocID": 1276, "F1": "4", "F2": "/", "F3": "1", "F4": "/", "F5": "6"}])
+    monkeypatch.setitem(store.COMPANY, "fy_start", "2026-04-01")
+    monkeypatch.setitem(store.COMPANY, "fy_end", "2027-03-31")
+    assert sqlstore._print_no("26CSE00001", "TrnHdrCSE") == "27/CSE/00001"
+    assert sqlstore._print_no("2600201", "TrnHdrPB") == "26//00201"
+    assert sqlstore._prefix("26CSE00001") == "CSE" and sqlstore._prefix("2600201") == ""

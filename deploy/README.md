@@ -3,7 +3,8 @@
 1. **Make the package** (development PC): double-click `Make-Package.cmd`. It builds the frontend with no API address if needed, refuses a build with development URLs in it, and writes `deploy\out\vLQMS-<date>.zip` (no `.env`, `.venv`, `data\`, keys).
 2. **Copy** the zip to the server and **extract** it to a *local* disk, for example `C:\vLQMS` (not a network or mapped drive).
 3. **Run** `C:\vLQMS\deploy\Install-vLQMS.cmd`, accept the Windows prompt, choose **1 Install / Repair**. It installs what is missing (Python 3.12 for all users, NSSM, ODBC driver), builds the venv, writes `backend\.env`, creates the `vLQMS` service and firewall rule, starts it and checks it.
-4. **Open** one of the addresses it prints. On the first visit finish **Database setup** on the sign-in page (back the shop database up first).
+4. **Check the PC**: double-click `backend\tools\preflight.cmd`. It only reads: it checks the database and its indexes, the Crystal Reports runtime and bridge, the `.rpt` files the print options name, and lays out the latest sales invoice and purchase bill with timings (about 0.15-0.4 s each when healthy). Fix every FAIL line before going live; a WARN with `CREATE INDEX` advice is run once in SQL Server (back up first).
+5. **Open** one of the addresses it prints. On the first visit finish **Database setup** on the sign-in page (back the shop database up first).
 
 Update later: extract the new zip over the same folder (never overwrites `.env` or `data\`), run the installer, choose **2 Update**.
 Also: **3 Status**, **4 Uninstall** (keeps files, `.env`, logs). Re-running Install repairs a broken service, venv, firewall rule or port.

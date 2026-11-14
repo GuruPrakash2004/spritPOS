@@ -57,8 +57,8 @@ const FREE_TEXT = new Set(['phone', 'mobile', 'excise_phone']);
 
 const TYPED = [
   { key: 'name', label: 'Company name (licence holder)', required: true },
-  { key: 'email', label: 'Email address', required: true },
-  { key: 'address1', label: 'Address', required: true },
+  { key: 'email', label: 'Email address' },   // frmMstComp: only the company name is mandatory; an e-mail is checked when typed
+  { key: 'address1', label: 'Address' },
   { key: 'address2', label: 'Address line 2' },
   { key: 'address3', label: 'Address line 3' },
   ...EXTRA_FIELDS.map(f => ({ ...f, required: false })),
@@ -194,11 +194,11 @@ const CompanyMaster = ({ canEditFiles }) => {
   const handleSave = async () => {
     if (!canEditFiles || !companyProfile) return;
     const errs = {};
-    if (!def('name').designerHidden && !companyName.trim()) errs['co-name'] = `Enter the ${def('name').label}`;
-    if (!def('address1').designerHidden && !addr[0].trim()) errs['co-address'] = `Enter the ${def('address1').label}`;
+    if (!def('name').designerHidden && !companyName.trim()) errs['co-name'] = 'Company Name Should not be blank!!!';
+    if (def('address1').required && !def('address1').designerHidden && !addr[0].trim()) errs['co-address'] = `Enter the ${def('address1').label}`;
     if (!def('email').designerHidden) {
-      if (!email.trim()) errs['co-email'] = `Enter the ${def('email').label}`;
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs['co-email'] = 'Enter a valid email address';
+      if (def('email').required && !email.trim()) errs['co-email'] = `Enter the ${def('email').label}`;
+      else if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs['co-email'] = 'EmailID is not valid!!';
     }
     // Tel / mobile / excise phone: exactly 10 digits; GSTIN and PAN in their patterns (lib/validation.js, same as the server).
     for (const f of extraFieldList) {
@@ -298,6 +298,7 @@ const CompanyMaster = ({ canEditFiles }) => {
                 label={def('name').label}
                 value={companyName}
                 required={def('name').required}
+                maxLength={250}
                 designerReadOnly={def('name').lockedAlways}
                 readOnly={!canEditFiles || !companyProfile || def('name').lockedAlways}
                 hasError={!!errors['co-name']}
@@ -313,6 +314,7 @@ const CompanyMaster = ({ canEditFiles }) => {
                 type="email"
                 value={email}
                 required={def('email').required}
+                maxLength={100}
                 designerReadOnly={def('email').lockedAlways}
                 readOnly={!canEditFiles || !companyProfile || def('email').lockedAlways}
                 hasError={!!errors['co-email']}
@@ -329,6 +331,7 @@ const CompanyMaster = ({ canEditFiles }) => {
                     <input
                       id={i === 0 ? 'co-address' : `co-address${i + 1}`}
                       value={addr[i]}
+                      maxLength={100}
                       readOnly={!canEditFiles || !companyProfile || def(k).lockedAlways}
                       onChange={e => {
                         setAddr(prev => prev.map((x, j) => (j === i ? e.target.value : x)));

@@ -8,13 +8,11 @@ import { lazy } from 'react';
 export const SCREEN_LOADERS = {
   'Admin Master': () => import('../components/admin/AdminMaster'),
   'SQL Query Execution': () => import('../components/tools/SqlQueryExecution'),
-  'Screen Preview': () => import('../components/tools/ScreenPreview'),
   'Re Write Stock': () => import('../components/tools/ReWriteStock'),
   'Global Settings': () => import('../components/utilities/GlobalSettings'),
   'ADMIN Audit Log': () => import('../components/utilities/AdminAuditLog'),
   'About': () => import('../components/utilities/About'),
   'Remove Duplicate Invoice': () => import('../components/utilities/RemoveDuplicateInvoice'),
-  'Web Sync': () => import('../components/utilities/WebSync'),
   'Bulk Master Update': () => import('../components/utilities/BulkMasterUpdate'),
   'Label Printing': () => import('../components/utilities/LabelPrinting'),
   'Merge Items': () => import('../components/utilities/MergeItems'),

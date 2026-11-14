@@ -23,6 +23,12 @@ def _tag(user: dict) -> str:
 
 def _rows(from_date: date, to_date: date, group: str | None, user: dict) -> list[dict]:
     out = []
+    by_type = reports.stock_list_by_doc_type(from_date, to_date)   # the stock list: the desktop's documents count too, not only the web's movements
+    sales_value: dict[str, float] = {}
+    if by_type is not None:
+        for inv in reports._saved_invoices(from_date, to_date):
+            for l in inv["lines"]:
+                sales_value[l["item_code"]] = sales_value.get(l["item_code"], 0.0) + l["amount"]
     for r in reports.stock_balance(from_date, to_date, group, user):
         it = store.ITEMS.get(r["item_code"]) or {}
         item_id = str(it.get("_itemid") or "")
@@ -30,17 +36,22 @@ def _rows(from_date: date, to_date: date, group: str | None, user: dict) -> list
             continue
         rate = float(it.get("purchase_rate") or 0)
         pb = sr = inv = sd = inv_value = 0.0
-        for m in reports._moves(from_date, to_date, r["item_code"]):
-            q = m["qty"]
-            if m["kind"] in ("purchase", "opening"):
-                pb += q
-            elif m["kind"] == "sales-return":
-                sr += q
-            elif m["kind"] in ("sale", "sale-cancel"):
-                inv -= q
-                inv_value -= q * m["rate"]
-            elif m["kind"] == "deduction":
-                sd -= q
+        if by_type is not None:
+            t = by_type.get(item_id, {})
+            pb, sr, inv, sd = t.get("PB", 0.0), t.get("SR", 0.0), t.get("INV", 0.0), t.get("STKDED", 0.0)
+            inv_value = sales_value.get(r["item_code"], 0.0)
+        else:
+            for m in reports._moves(from_date, to_date, r["item_code"]):
+                q = m["qty"]
+                if m["kind"] in ("purchase", "opening"):
+                    pb += q
+                elif m["kind"] == "sales-return":
+                    sr += q
+                elif m["kind"] in ("sale", "sale-cancel"):
+                    inv -= q
+                    inv_value -= q * m["rate"]
+                elif m["kind"] == "deduction":
+                    sd -= q
         op, cl = float(r["op_qty"]), float(r["cl_qty"])
         if not (op or cl or pb or sr or inv or sd):
             continue
@@ -81,8 +92,7 @@ def render(from_date: date, to_date: date, group: str | None, user: dict, rpt: s
         try:
             with db.transaction() as cur:
                 _clear(cur, tag)
-                for r in rows:
-                    cur.execute(sql, (tag, header, *r.values()))
+                cur.executemany(sql, [(tag, header, *r.values()) for r in rows])
             if job["printer"]:
                 rpt_bridge.print_direct(job)
                 return None

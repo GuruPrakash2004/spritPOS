@@ -53,6 +53,7 @@ export function toFieldConfig(f, docId = 0) {
     multiline: !!f.multiline || f.width > 120,
     wide: f.width > 60 || !!f.multiline,
     lockedAlways: !!f.readonly && !(f.formula && !isSupported(f.formula)),
+    formula: f.formula || undefined,   // worked out again whenever a field it uses changes (MasterCrud.withFormulas)
     min: f.min ?? undefined,
     max: f.max ?? undefined,
     allowNegative: f.allow_negative,
@@ -183,6 +184,7 @@ function typedConfig(f, w, colToKey) {
     tooltip: f.tooltip || undefined,
     multiline: !!f.multiline,
     lockedAlways: !keep && !FK(f) && !!f.readonly && !(f.formula && !isSupported(f.formula)),
+    formula: f.formula || undefined,
     designerHidden: !keep && !FK(f) && !w.required && !!f.hidden,   // a field the record can't be saved without stays on screen
     hideWhen: rekey(f.hide_when, colToKey) || undefined,
     mandatoryWhen: rekey(f.mandatory_when, colToKey) || undefined,
