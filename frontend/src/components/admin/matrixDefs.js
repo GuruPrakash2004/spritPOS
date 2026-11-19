@@ -96,7 +96,9 @@ export const MATRIX_SCREENS = [
   { id: 'Customer Vs Item Master', name: 'Customer Vs Item Master', group: 'MASTERS', sub: "Each customer's own item rates", hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: false },
   { id: 'Supplier Vs Item Master', name: 'Supplier Vs Item Master', group: 'MASTERS', sub: "Each supplier's own item rates", hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: false },
   { id: 'SMS', name: 'SMS', group: 'UTILITIES', sub: 'Send messages and see the SMS history', hasOpen: true, hasAdd: true, hasEdit: false, hasDelete: false },
+  { id: 'Import Item Data From Excel', name: 'Import Item Data From Excel', group: 'UTILITIES', sub: 'Add many items from an Excel sheet', hasOpen: true, hasAdd: true, hasEdit: false, hasDelete: false },
   { id: 'Item Vs Brand', name: 'Item Vs Brand', group: 'UTILITIES', sub: 'Link items to brands', hasOpen: true, hasAdd: false, hasEdit: true, hasDelete: false },
+  { id: 'Import Item Master Fields', name: 'Import Item Master Fields', group: 'UTILITIES', sub: 'Change item fields in bulk, including UOM', hasOpen: true, hasAdd: false, hasEdit: true, hasDelete: false },
   { id: 'Update Item Stock', name: 'Update Item Stock', group: 'UTILITIES', sub: 'Import opening stock from a sheet', hasOpen: true, hasAdd: true, hasEdit: false, hasDelete: false },
   { id: 'Compare Stock', name: 'Compare Stock', group: 'UTILITIES', sub: 'Compare two stock sheets item by item', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },
 

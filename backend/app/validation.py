@@ -41,6 +41,8 @@ def problems(data: dict, skip: frozenset | set = frozenset()) -> dict[str, str]:
         text = str(value).strip()
         if _upper:
             text = text.upper()
+        if key == "hsn_code" and text in ("0", "-"):   # optional: the desktop stores "no HSN code" as 0
+            continue
         if text and not pattern.fullmatch(text):
             found[key] = f"{label} {wrong}."
     for key, label in PERCENT_FIELDS.items():

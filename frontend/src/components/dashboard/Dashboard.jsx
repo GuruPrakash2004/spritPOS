@@ -17,7 +17,9 @@ import { companyFileUrl, fieldRight, getDailySales, getDsr, getItems, getPurchas
 import { money, panel } from '../../lib/styles';
 import { IMAGES } from '../../constants/images';
 import RestockCarousel from './RestockCarousel';
+import CountUp from './CountUp';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
+import SoftventMarquee from './SoftventMarquee';
 import { useShopHours } from '../../hooks/useShopHours';
 
 // The pie chart pulls in the whole charts library (the biggest piece of the app): it loads after the rest of the Dashboard has painted.
@@ -191,17 +193,15 @@ export const Dashboard = () => {
         <div className="relative z-10 flex flex-col justify-between gap-6 p-7 sm:p-10 lg:min-h-[260px] lg:flex-row lg:items-center lg:p-12">
           <div className="max-w-lg">
             <p className="text-[10px] font-bold tracking-[0.35em] text-[#D3BB89] uppercase">
-              Business Overview
+              Retail Outlet{company?.licence_type ? ` · ${company.licence_type}` : ' · Company Master'}
             </p>
             <h2 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white leading-tight"
                 style={{ fontFamily: 'var(--font-display)' }}>
-              Fast Billing. Accurate Stock.{' '}
-              Better Control.
+              {company?.name || 'Company profile unavailable'}
             </h2>
             <p className="mt-3 text-sm text-white/70 max-w-md leading-relaxed">
-              Monitor inventory, sales, procurement and compliance across your entire operation.
+              {company?.address || 'Company address unavailable'}
             </p>
-
           </div>
           <div className="hidden lg:flex flex-col items-end">
             <div className="rounded-xl border border-white/25 bg-[#1A100B]/80 dark:bg-black/80 backdrop-blur-md px-4 py-3 shadow-[0_8px_30px_rgba(0,0,0,0.35)] text-right">
@@ -209,9 +209,6 @@ export const Dashboard = () => {
                 <span className="h-1.5 w-1.5 rounded-full bg-[#E8C36A] animate-pulse" />
                 {today}
               </div >
-              <div className="mt-1 text-xs font-semibold text-white/95 tracking-wide">
-                {company?.address || 'Company address unavailable'}
-              </div>
               <div className="mt-0.5 text-[11px] font-medium text-amber-200/90 dark:text-amber-300/90 tracking-wide">
                 Excise licence {company?.licence_type || 'not configured'}
               </div>
@@ -235,7 +232,7 @@ export const Dashboard = () => {
                 <s.icon size={15} className="text-[#64283A] dark:text-[#D4A847]" aria-hidden="true" />
               </span>
             </div>
-            <div className="mt-3 truncate text-lg font-extrabold tracking-tight sm:text-2xl tabular-nums text-[#29231F] dark:text-stone-50">{s.value}</div>
+            <div className="mt-3 truncate text-lg font-extrabold tracking-tight sm:text-2xl tabular-nums text-[#29231F] dark:text-stone-50"><CountUp text={s.value} /></div>
             <div className="mt-1 truncate text-xs font-medium text-[#55745A] dark:text-[#D4A847]" title={s.sub}>{s.sub}</div>
           </div>
         ))}
@@ -262,16 +259,7 @@ export const Dashboard = () => {
           <div className="absolute top-6 right-6 animate-float opacity-30" aria-hidden="true">
             <Wine size={36} className="text-[#D3BB89]" />
           </div>
-          <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-            <div>
-              <h3 className="mt-1 text-2xl sm:text-3xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>
-                {company?.name || 'Company profile'}
-              </h3>
-              <p className="mt-2 text-xs sm:text-sm text-stone-300/80">
-                {[company?.address, company?.licence_type && `Excise Licence ${company.licence_type}`, company?.gstin && `GSTIN ${company.gstin}`].filter(Boolean).join(' · ') || 'Fill in the company details in Company Master.'}
-              </p>
-            </div>
-          </div>
+          <SoftventMarquee />
         </div>
       </section>
       )}
@@ -300,12 +288,12 @@ export const Dashboard = () => {
           <div className="flex h-48 items-end gap-3 border-b border-line pb-px sm:gap-5" role="img" aria-label={weekData.length ? `Sales per day: ${weekData.map(day => `${day.day ?? day.date} ₹${day.amtK}k`).join(', ')}` : 'Sales data unavailable'}>
             {weekData.map((day, i) => (
               <div key={day.date} className="group flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-                <span className="text-[11px] tabular-nums text-[#70675F] opacity-100 transition-opacity dark:text-stone-400 lg:opacity-0 lg:group-hover:opacity-100">₹{day.amtK}k</span>
+                <span className={`bar-label text-[11px] font-semibold tabular-nums text-[#70675F] dark:text-stone-400 ${day.amount > 0 ? '' : 'invisible'}`} style={{ '--i': i }}>₹{day.amtK}k</span>
                 <div
-                  className={`bar-grow w-full max-w-10 rounded-t-md transition-colors ${
+                  className={`bar-rise w-full max-w-10 rounded-t-lg transition duration-200 group-hover:-translate-y-0.5 group-hover:brightness-110 ${
                     i === weekData.length - 1
-                      ? 'bg-[#64283A] dark:bg-gradient-to-t dark:from-[#C8952E] dark:to-[#D4A847]'
-                      : 'bg-[#D4C8BA] group-hover:bg-[#B08A45]/50 dark:bg-stone-700 dark:group-hover:bg-[#D4A847]/50'
+                      ? 'bg-gradient-to-t from-[#4A1B2A] to-[#8A3A52] shadow-[0_6px_18px_rgba(100,40,58,0.35)] dark:from-[#C8952E] dark:to-[#F5D88A] dark:shadow-[0_0_20px_rgba(212,168,71,0.35)]'
+                      : 'bg-gradient-to-t from-[#C9B8A3] to-[#E6DAC9] group-hover:from-[#B08A45] group-hover:to-[#E3C58A] dark:from-stone-700 dark:to-stone-500 dark:group-hover:from-[#C8952E] dark:group-hover:to-[#D4A847]'
                   }`}
                   style={{ height: `${day.amount > 0 ? Math.max(4, (day.amtK / max) * 82) : 0}%`, '--i': i }}
                   title={`${day.date}: ₹ ${money(day.amount)} (${day.bills} bills)`}
@@ -397,13 +385,13 @@ export const Dashboard = () => {
           <div className="absolute bottom-0 left-0 right-0 p-4 pt-3 sm:p-10 flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4">
             <div>
               <p className="mt-2 sm:mt-0 text-[10px] font-bold tracking-[0.25em] text-[#D3BB89] uppercase">
-                Retail Outlet{company?.licence_type ? ` · ${company.licence_type}` : ' · Company Master'}
+                Business Overview
               </p>
               <h3 className="mt-1 text-2xl sm:text-3xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>
-                {company?.name || 'Company profile unavailable'}
+                Fast Billing. Accurate Stock. Better Control.
               </h3>
               <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-stone-300/85 max-w-lg">
-                {company?.address || 'Company address unavailable'}
+                Monitor inventory, sales, procurement and compliance across your entire operation.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2.5 text-xs text-white/90">

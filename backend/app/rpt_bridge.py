@@ -49,7 +49,27 @@ def _env(key: str, default: str = "") -> str:
 
 EXE = Path(__file__).resolve().parents[1] / "tools" / "rptbridge" / "bin" / "RptBridge.exe"
 DEFAULT_URL = "http://127.0.0.1:8765"
-_AUTO_KEY = secrets.token_urlsafe(32)   # made up at every start; the launcher gives it to the bridge it starts
+def _auto_key() -> str:
+    """The key the launcher gives the bridge it starts. Kept in backend/data/bridge.key so a bridge that is still running when the backend
+    restarts (a --reload, a service restart) is recognised and reused instead of being replaced: a new bridge pays Windows' slow first
+    printer call (up to a minute) again. In memory only under VLQMS_KEYS_IN_MEMORY (the tests) or when the file can't be written."""
+    fresh = secrets.token_urlsafe(32)
+    if os.environ.get("VLQMS_KEYS_IN_MEMORY"):
+        return fresh
+    path = Path(__file__).resolve().parents[1] / "data" / "bridge.key"
+    try:
+        if path.exists():
+            saved = path.read_text(encoding="ascii").strip()
+            if len(saved) >= 20:
+                return saved
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(fresh, encoding="ascii")
+    except OSError:
+        pass
+    return fresh
+
+
+_AUTO_KEY = _auto_key()
 
 
 def local_bridge() -> bool:
@@ -211,6 +231,8 @@ def _call(path: str, job: dict | None, method: str = "POST") -> httpx.Response:
     if not url():
         raise _no_bridge()
     if job is not None and path in ("/render", "/print"):
+        from . import bridge_launcher   # imported here: bridge_launcher imports this module
+        bridge_launcher.wait_ready(200)   # a bridge that has just started is still getting past Windows' slow first printer call; returns at once when ready or not ours
         if _reports_since_start >= RECYCLE_AFTER:
             _restart_bridge(f"recycled after {_reports_since_start} reports")
         _reports_since_start += 1
@@ -233,7 +255,14 @@ def _call_once(path: str, job: dict | None, method: str = "POST") -> httpx.Respo
                 "layout_printer": layout_printer() if path == "/render" else ""}
     started = time.perf_counter()
     try:
-        r = _client().request(method, base + path, json=body, headers={"X-Bridge-Key": key()}, timeout=TIMEOUT)
+        try:
+            r = _client().request(method, base + path, json=body, headers={"X-Bridge-Key": key()}, timeout=TIMEOUT)
+        except httpx.ConnectError:
+            # The bridge is down for a moment (it restarts itself after a hung report): wait for the one this backend runs, then go again.
+            from . import bridge_launcher   # imported here: bridge_launcher imports this module
+            if not bridge_launcher.wait_ready(60):
+                raise
+            r = _client().request(method, base + path, json=body, headers={"X-Bridge-Key": key()}, timeout=TIMEOUT)
     except httpx.HTTPError as e:
         logger.warning("Crystal bridge %s %s failed after %.1fs: %s", path, (job or {}).get("rpt", ""), time.perf_counter() - started, e.__class__.__name__)
         raise HTTPException(503, f"The Crystal Reports bridge can't be reached ({e.__class__.__name__}). Is it running?")
@@ -352,6 +381,34 @@ def preview_pdf(pdf: bytes) -> tuple[bytes, str]:
         if x1 - x0 <= THERMAL_PREVIEW_PT + 2 * pad:   # a receipt report: show it on the 3-inch (80 mm) roll, not a wide page
             x0 = max(0, min(b.x0 for b in found) - 4)
             x1 = x0 + THERMAL_PREVIEW_PT
+        if x1 - x0 <= THERMAL_PREVIEW_PT + 2 * pad and len(doc) > 1:
+            # A long receipt (many items) is laid out by Crystal on several Letter pages, but a 3-inch roll is one
+            # continuous strip: stack the drawn part of every page into a single tall page so nothing is split.
+            width = min(x1, doc[0].rect.x1) - x0
+            slices = [(page, pymupdf.Rect(x0, max(0, b.y0 - 2), min(x1, page.rect.x1), min(page.rect.y1, b.y1 + 2)))
+                      for page, b in zip(doc, boxes) if b is not None]
+            # Crystal's Page Header (Bill No, Supplier, column heads) repeats on every page; on the strip it belongs only once.
+            # On pages after the first, start just under the column-head rule (the line below the "Slno" row).
+            if slices and any(str(w[4]).strip().lower() == "slno" for w in slices[0][0].get_text("words")):
+                trimmed = [slices[0]]
+                for page, clip in slices[1:]:
+                    heads = [pymupdf.Rect(w[:4]) for w in page.get_text("words") if str(w[4]).strip().lower() == "slno"]
+                    if heads:
+                        bottom = heads[0].y1
+                        rules = [d["rect"].y1 for d in page.get_drawings()
+                                 if d["rect"].height < 3 and d["rect"].width > 50 and bottom - 2 <= d["rect"].y0 <= bottom + 12]
+                        clip = pymupdf.Rect(clip.x0, max([bottom] + rules) + 1, clip.x1, clip.y1)
+                    if not clip.is_empty:
+                        trimmed.append((page, clip))
+                slices = trimmed
+            if slices:
+                out = pymupdf.open()
+                sheet = out.new_page(width=width, height=sum(c.height for _, c in slices) + 2 * pad)
+                top = float(pad)
+                for page, clip in slices:
+                    sheet.show_pdf_page(pymupdf.Rect(0, top, width, top + clip.height), doc, page.number, clip=clip)
+                    top += clip.height
+                return out.tobytes(), f"{width:.0f},{sheet.rect.height:.0f}"
         for page, box in zip(doc, boxes):
             full = page.rect
             y0, y1 = (max(0, box.y0 - pad), box.y1 + pad) if len(doc) == 1 and box is not None else (full.y0, full.y1)

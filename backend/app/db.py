@@ -234,8 +234,14 @@ def init_db() -> bool:
     args = (DB_HOST, DB_PORT, DB_NAME, DB_USER, password, DB_AUTH)
     result = _connect_with_driver(*args)
     if result:
+        previous = _conn
         _conn, _driver_used = result
         _db_available = True
+        if previous is not None and previous is not _conn:   # a connection replaced by the watchdog or a reload: don't leave the old one open
+            try:
+                previous.close()
+            except Exception:   # noqa: BLE001 - it was already dead
+                pass
         logger.info("Connected to SQL Server database '%s' via %s", DB_NAME, _driver_used)
         return True
 
@@ -615,6 +621,54 @@ def disconnect() -> None:
         except Exception:
             pass
     logger.warning("Disconnected from SQL Server on purpose (About → Reconnect brings it back)")
+
+
+# Called (in the watchdog's thread) after the connection came back following a failed start-up, so the data gets loaded (set by main.py).
+ON_RECONNECT = None
+_watch_started = False
+
+
+def watch_once() -> bool:
+    """One look at the connection: set up, wanted (not disconnected on purpose) but down -> try to connect again. True when it came back.
+    Without this a dropped connection (a LAN blip, SQL Server restarted) stayed down until the backend was restarted: screens that read the
+    desktop's tables answered 503 while the data already in memory kept the others looking fine."""
+    if not configured() or MANUAL_OFFLINE or _password_unreadable:
+        return False
+    if _db_available:
+        # Up: a cheap look at the shared connection, so one that died while idle (a firewall or SQL Server closing it) is replaced here, in the
+        # background, instead of in the middle of someone's request. fetchall() reconnects by itself on a lost connection.
+        try:
+            fetchall("SELECT 1 AS ok")
+        except Exception:   # noqa: BLE001 - a real query error is not the watchdog's business
+            logger.warning("Database check failed", exc_info=True)
+        return False
+    if not init_db():
+        return False
+    logger.info("The database connection is back")
+    if ON_RECONNECT is not None:
+        try:
+            ON_RECONNECT()
+        except Exception:   # noqa: BLE001 - the connection is back either way
+            logger.warning("Loading after the reconnect failed", exc_info=True)
+    return True
+
+
+def start_watchdog(interval: float = 15.0) -> None:
+    """Retry a down connection every `interval` seconds in a daemon thread (once per process)."""
+    global _watch_started
+    if _watch_started:
+        return
+    _watch_started = True
+
+    def run() -> None:
+        while True:
+            time.sleep(interval)
+            try:
+                watch_once()
+            except Exception:   # noqa: BLE001 - never let the thread die
+                logger.warning("Database watchdog error", exc_info=True)
+
+    threading.Thread(target=run, daemon=True, name="db-watchdog").start()
 
 
 def reconnect() -> bool:

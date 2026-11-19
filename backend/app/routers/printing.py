@@ -24,7 +24,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from .. import db, designer, gsettings, mailer, rpt_bridge, rpt_custom, rpt_dsr, rpt_print, rpt_stock, sqlstore, store
+from .. import db, designer, gsettings, mailer, rpt_barcode, rpt_bridge, rpt_custom, rpt_dsr, rpt_print, rpt_stock, sqlstore, store
 from .auth import get_current_user, has_right, require_admin, require_module
 
 # The documents whose screens in the desktop check the Print right (frmTrnPBM, frmTrnPartyDoc, frmTrnCloseStk): print kind -> module. The sales
@@ -167,6 +167,37 @@ async def print_stock_balance(body: StockPrintIn, user: dict = Depends(get_curre
     return Response(pdf, media_type="application/pdf", headers={
         "Content-Disposition": f'inline; filename="StockBalance_{body.from_date.isoformat()}_{body.to_date.isoformat()}.pdf"',
         "X-Page-Size": size})
+
+
+class BarcodeItemIn(BaseModel):
+    code: str
+    copies: int = 1         # "No of Labels"
+    qty: float = 1
+    mrp: float = 0
+    barcode: str = ""       # blank: the item code, as the desktop loads it
+
+
+class BarcodePrintIn(BaseModel):
+    items: list[BarcodeItemIn]
+    rpt: str = ""           # one of /print/barcode-formats; empty = the first
+    printer: str = ""
+    copies: int = 1
+
+
+@router.get("/print/barcode-formats")
+def barcode_formats(user: dict = Depends(get_current_user)):
+    """The label formats (every RPTBC*.rpt) that are in the report folder."""
+    return {"formats": rpt_barcode.formats(), "bridge_configured": rpt_bridge.configured()}
+
+
+@router.post("/print/barcode")
+async def print_barcode(body: BarcodePrintIn, user: dict = Depends(get_current_user)):
+    """Barcode labels through the desktop's RPTBC*.rpt: a PDF to preview, or (with `printer`) printed directly and JSON back."""
+    pdf = await run_in_threadpool(rpt_barcode.render, [i.model_dump() for i in body.items], user, body.rpt, body.printer, body.copies)
+    if pdf is None:
+        return {"printed": True, "printer": body.printer, "copies": body.copies, "rpt": body.rpt}
+    pdf, size = await run_in_threadpool(rpt_bridge.preview_pdf, pdf)
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": 'inline; filename="labels.pdf"', "X-Page-Size": size})
 
 
 class CustomPrintIn(BaseModel):

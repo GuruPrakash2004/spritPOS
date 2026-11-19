@@ -2,11 +2,11 @@
 // each is laid out by the desktop's own Crystal print format (the same as Print) and they come as one ZIP of PDFs. At most 100 at a time. A
 // document that cannot be drawn is listed in errors.txt inside the zip.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Download, FileDown } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { downloadBulkPdf, errorText, listPurchaseBills, listSalesInvoices, getPurchaseIndents, todayIso } from '../../lib/api';
+import { downloadBulkPdf, errorText, getPrintOptions, listPurchaseBills, listSalesInvoices, getPurchaseIndents, todayIso } from '../../lib/api';
 import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
 const KINDS = [
@@ -25,6 +25,20 @@ export default function PdfGenerator() {
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
   const [find, setFind] = useState('');
+  const [printTypes, setPrintTypes] = useState([]);   // the document's print options (UtlOption), as the desktop's Print Type list
+  const [printType, setPrintType] = useState('');
+
+  // The desktop lists the document's print options and needs one chosen: the default is pre-selected.
+  useEffect(() => {
+    let live = true;
+    getPrintOptions(kind).then(o => {
+      if (!live) return;
+      const usable = (o.options ?? []).filter(x => x.available !== false);
+      setPrintTypes(usable);
+      setPrintType((usable.find(x => x.default) ?? usable[0])?.name ?? '');
+    }).catch(() => { if (live) { setPrintTypes([]); setPrintType(''); } });
+    return () => { live = false; };
+  }, [kind]);
 
   const load = async () => {
     setProblem(''); setDocs(null);
@@ -40,13 +54,14 @@ export default function PdfGenerator() {
   const toggle = (no) => setTicked(cur => { const n = new Set(cur); if (n.has(no)) n.delete(no); else n.add(no); return n; });
 
   const generate = async () => {
+    if (printTypes.length && !printType) return setProblem('Please select Print Type');
     if (!ticked.size) return setProblem('Please select at least one document.');
     if (ticked.size > MAX) return setProblem(`At most ${MAX} documents at a time.`);
     setProblem('');
     if (!(await toastStore.defer('ok', `${ticked.size} PDF${ticked.size === 1 ? '' : 's'} will be generated when this closes.`, 'Cancelled. Nothing was generated.'))) return;
     setBusy(true);
     try {
-      const blob = await downloadBulkPdf(kind, [...ticked]);
+      const blob = await downloadBulkPdf(kind, [...ticked], printType);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = `${kind}_${from}_${to}.zip`; a.click();
@@ -66,6 +81,13 @@ export default function PdfGenerator() {
           <label htmlFor="pg-kind" className={label}>Document</label>
           <select id="pg-kind" value={kind} onChange={e => { setKind(e.target.value); setDocs(null); }} className={field}>
             {KINDS.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="pg-type" className={label}>Print Type</label>
+          <select id="pg-type" value={printType} onChange={e => setPrintType(e.target.value)} className={field}>
+            {!printTypes.length && <option value="">Default format</option>}
+            {printTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
           </select>
         </div>
         <div><label htmlFor="pg-from" className={label}>From</label><input id="pg-from" type="date" value={from} max={to} onChange={e => e.target.value && setFrom(e.target.value)} className={field} /></div>

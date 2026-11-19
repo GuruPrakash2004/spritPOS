@@ -1,6 +1,6 @@
 // Customised Reports (module key "Reports Dashboard"): the list of legacy report names, with
 // Generate & View, Export XLS, Email and Print. Data comes from GET /reports/custom
-// (backend/app/routers/custom_reports.py); Email asks the backend to build and send the .xls
+// (backend/app/routers/custom_reports.py); Email asks the backend to build and send the .xlsx
 // (ReportEmailDialog). Period mistakes show inline under the dates; server results as popups.
 
 import { useEffect, useState } from 'react';

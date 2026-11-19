@@ -63,8 +63,8 @@ export default function ReportPrintModal({ title, formats, render, onClose }) {
     >
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="sm:w-48 sm:shrink-0">
-          <p className={labelClass}>Report format</p>
-          <div role="radiogroup" aria-label="Report format" className="space-y-1">
+          {formats.length > 1 && <p className={labelClass}>Report format</p>}
+          <div role="radiogroup" aria-label="Report format" className={formats.length > 1 ? 'space-y-1' : 'hidden'}>
             {formats.map(f => (
               <label key={f} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 ${f === chosen
                 ? 'border-[#64283A] bg-[#64283A]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#E3D9CD] dark:border-[#2A2A2A]'}`}>

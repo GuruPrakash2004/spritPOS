@@ -38,7 +38,8 @@ async def test_old_bills_cannot_be_cancelled_after_edit_days(client):
 
 
 async def test_purchase_bill_copy_from_and_rate_update(client):
-    await _set(client, "purchase_bill", allow_copy_from=False, update_rate_from_pb=True)
+    await _set(client, "purchase_bill", allow_copy_from=False)
+    store.UTL_MISC["RateFld"] = "Y"   # Invoice Settings → Update Rate From PB to Item Master
     sup = next(iter(store.SUPPLIERS))
     body = {"date": TODAY, "supplier": sup, "supplier_inv_no": "X1", "supplier_inv_date": TODAY, "supplier_inv_value": 0,
             "lines": [{"item_code": "VIN-750", "bottles": 1, "rate": 777}]}

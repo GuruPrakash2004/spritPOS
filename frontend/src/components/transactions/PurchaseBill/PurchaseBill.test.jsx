@@ -1,13 +1,16 @@
 // Tests for the Purchase Bill's layout from the Doc Designer: the line grid and the header boxes take the designer's captions,
 // hidden and mandatory flags (rows of TrnHdrPB), and without a definition the screen is as the web app coded it.
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PurchaseBill from './index'
 import { STOCK_ITEMS } from '../../../data/stockData'
 import { toastStore } from '../../common/toastStore'
+import * as api from '../../../lib/api'
 import { setAuthRights } from '../../../lib/api'
+import { setOpeningDraft } from '../../../lib/billDraft'
 
+const bar = () => within(screen.getByRole('toolbar', { name: 'Actions' }))   // the action bar (the supplier's own New button is not it)
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
@@ -23,7 +26,10 @@ beforeEach(() => {
       return json(screenDef ? [{ doc_id: 7, name: 'Purchase Bill', type: 'Transaction', short_form: 'PB', header_table: 'TrnHdrPB', detail_table: 'TrnDtlPB', master_path: '' }] : [])
     }
     if (url.startsWith('/api/designer/screen/7')) return json({ doc_id: 7, name: 'Purchase Bill', type: 'Transaction', header_table: 'TrnHdrPB', fields: screenDef })
+    if (url.includes('kind=opening_purchase_bill')) return json({ doc_no: '26OP00001' })
     if (url.startsWith('/api/transactions/next-number')) return json({ doc_no: '26/PB-0000001' })
+    if (url.startsWith('/api/masters/items')) return json([{ code: 'WH1', name: 'Whisky', package: '750ML', active: true, qoh: 5, purchase_rate: 80, mrp: 120, cgst_per: 9, sgst_per: 9, bottles_per_case: 12, liqtype: 'IML' },
+      { code: 'GN0', name: 'Empty Gin', package: '750ML', active: true, qoh: 0, purchase_rate: 90, mrp: 140, cgst_per: 9, sgst_per: 9, bottles_per_case: 12, liqtype: 'IML' }])
     if (url.startsWith('/api/settings/values')) return json({})
     return json([])
   }))
@@ -89,3 +95,94 @@ describe('PurchaseBill edit', () => {
   })
 })
 
+
+
+describe('PurchaseBill opening-stock draft (from Update Item Stock)', () => {
+  it("loads the stock sheet items as a GST-free bill with the OP number, and saves nothing by itself", async () => {
+    setOpeningDraft({ supplier: 'KSBCL', remarks: 'Opening stock (Update Item Stock)', lines: [{ item_code: 'WH1', qty: 5, rate: 80 }] })
+    render(<PurchaseBill />)
+    expect(await screen.findByText(/Opening stock from Update Item Stock: nothing is saved yet/)).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('26OP00001')).toBeInTheDocument()           // the OP-series number
+    expect(screen.getByPlaceholderText('Select or type supplier')).toHaveValue('KSBCL')
+    expect(await screen.findByDisplayValue('Whisky 750ML')).toBeInTheDocument()       // the item is on the grid
+    // As in the exe, the lines already on the bill can be changed before the invoice value is typed (only ADDING an item needs it)
+    const qty = await screen.findByLabelText('PB Qty row 1')
+    expect(qty).toBeEnabled()
+    await userEvent.clear(qty)
+    await userEvent.type(qty, '9')
+    expect(await screen.findByText(/1 items · 9 bottles/)).toBeInTheDocument()
+    const saved = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'POST')
+    expect(saved).toHaveLength(0)                                                      // nothing saved before the user enters the invoice value
+  })
+})
+
+
+describe('PurchaseBill Add item', () => {
+  it('opens the two-pane Add Line Item from the button and keeps the older lookup for F4', async () => {
+    const user = userEvent.setup()
+    render(<PurchaseBill />)
+    await screen.findByRole('toolbar', { name: 'Actions' })
+    await user.click(bar().getByRole('button', { name: /^New/ }))   // the screen opens in View mode; New starts a bill
+    await user.type(await screen.findByPlaceholderText('Select or type supplier'), 'KSBCL')
+    await user.type(screen.getByLabelText(/Supplier invoice no/), 'INV-1')
+    await user.type(screen.getByLabelText(/Invoice value/), '1000')
+    await user.click(screen.getByRole('button', { name: /^Add item/ }))
+    expect(await screen.findByRole('dialog', { name: 'Add Line Item' })).toBeInTheDocument()
+    expect(screen.getByText('Whisky 750ML')).toBeInTheDocument()            // an item with stock is listed
+    expect(screen.getByText('Empty Gin 750ML')).toBeInTheDocument()         // so is an item with 0 stock (an arriving item has none yet)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add Line Item' })).not.toBeInTheDocument())
+    await user.keyboard('{F4}')
+    expect(await screen.findByRole('dialog', { name: 'Add Item Into Purchase Bill' })).toBeInTheDocument()
+  })
+})
+
+
+describe('PurchaseBill modes', () => {
+  it('opens in View mode (read-only, the bar has New), New leaves only Save and Cancel, and Cancel goes back to View mode', async () => {
+    const user = userEvent.setup()
+    render(<PurchaseBill />)
+    expect(await screen.findByText(/View mode\. Press New to enter a purchase bill/)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Select or type supplier')).toBeDisabled()           // nothing can be typed in View mode
+    expect(screen.queryByRole('button', { name: /^Save/ })).not.toBeInTheDocument()
+    expect(bar().getByRole('button', { name: /^Edit/ })).toBeDisabled()                     // no saved bill is on screen yet
+
+    await user.click(bar().getByRole('button', { name: /^New/ }))
+    expect(screen.getByPlaceholderText('Select or type supplier')).toBeEnabled()
+    expect(screen.getAllByRole('button', { name: /^Save/ }).length).toBeGreaterThan(0)       // Save and Cancel on the bar
+    expect(bar().queryByRole('button', { name: /^New/ })).not.toBeInTheDocument()           // New, Edit, List are gone while entering
+    expect(bar().queryByRole('button', { name: /^List/ })).not.toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: /^Cancel/ }).at(-1))
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByText(/View mode\. Press New/)).toBeInTheDocument()            // back in View mode
+    expect(screen.getByPlaceholderText('Select or type supplier')).toBeDisabled()
+    expect(bar().getByRole('button', { name: /^New/ })).toBeInTheDocument()
+  })
+})
+
+
+describe('PurchaseBill Edit', () => {
+  it('shows a saved bill in View mode; Edit opens that bill with only Save and Cancel; Cancel goes back to the bill in View mode', async () => {
+    setAuthRights(['*'])
+    const bill = { doc_no: '26PB00005', date: new Date().toLocaleDateString('en-CA'), time: '10:00:00', supplier: 'KSBCL', supplier_inv_no: 'INV-5', supplier_inv_date: '2026-11-19',
+      supplier_inv_value: 400, purchase_type: 'Purchase', status: 'SAVED', totals: { basic: 400, net: 400, tcs: 0, qty: 5 }, lines: [{ item_code: 'WH1', qty: 5, rate: 80 }] }
+    vi.spyOn(api, 'listDocuments').mockResolvedValue([bill])
+    const user = userEvent.setup()
+    render(<PurchaseBill />)
+    await screen.findByRole('toolbar', { name: 'Actions' })
+    await user.click(await screen.findByRole('button', { name: 'Last record' }))
+    expect(await screen.findByDisplayValue('INV-5')).toBeDisabled()                          // the saved bill, read-only
+    await user.click(bar().getByRole('button', { name: /^Edit/ }))
+    expect(await screen.findByText(/Editing purchase bill 26PB00005/)).toBeInTheDocument()
+    expect(screen.getByDisplayValue('INV-5')).toBeEnabled()                                  // now it can be changed
+    expect(bar().getByRole('button', { name: /^Save(?! &)/ })).toBeInTheDocument()           // Save (and Save & print) and Cancel, as in New
+    expect(bar().getByRole('button', { name: /^Save & print/ })).toBeInTheDocument()
+    expect(bar().getByRole('button', { name: /^Cancel/ })).toBeInTheDocument()
+    expect(bar().queryByRole('button', { name: /^Edit/ })).not.toBeInTheDocument()
+    await user.click(bar().getByRole('button', { name: /^Cancel/ }))
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByDisplayValue('INV-5')).toBeDisabled()                          // back to the bill in View mode
+    expect(bar().getByRole('button', { name: /^Edit/ })).toBeEnabled()
+  })
+})

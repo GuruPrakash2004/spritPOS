@@ -93,3 +93,46 @@ async def test_shared_documents_are_read_from_the_database(client, monkeypatch):
     monkeypatch.setattr(db, "fetchall", lambda sql, params=(): [{"DocID": 1, "GroupName": " Forms ", "DocFileName": "a.pdf", "Remarks": None}])
     res = await client.get("/utilities/shared-documents")
     assert res.status_code == 200 and res.json() == [{"id": 1, "group": "Forms", "file": "a.pdf", "remarks": ""}]
+
+
+async def test_update_item_stock_marks_the_wrong_cells(client):
+    (it,) = await _items(client, 1)
+    rows = [{"item_code": it["code"], "stock": "4"}, {"item_code": "NOPE", "stock": "1"}, {"item_code": it["code"], "stock": "-2"}]
+    check = (await client.post("/utilities/update-item-stock", json={"rows": rows, "dry_run": True})).json()
+    assert [r["fields"] for r in check["rows"]] == [[], ["code"], ["stock"]]
+
+
+async def test_update_item_stock_bills_use_their_own_op_number_series_without_gst(client):
+    """frmUpdateItemStock posts the opening stock as a purchase bill with prefix OP (26OP00001, 26OP00002 ...): its own series, no GST."""
+    import re
+    (it,) = await _items(client, 1)
+    first = (await client.post("/utilities/update-item-stock", json={"rows": [{"item_code": it["code"], "stock": "3"}], "dry_run": False})).json()
+    second = (await client.post("/utilities/update-item-stock", json={"rows": [{"item_code": it["code"], "stock": "2"}], "dry_run": False})).json()
+    assert re.fullmatch(r"\d{2}OP00001", first["doc_no"]), first
+    assert re.fullmatch(r"\d{2}OP00002", second["doc_no"]), second
+    bill = (await client.get(f"/transactions/purchase-bill/{first['doc_no']}")).json()
+    assert bill["totals"]["cgst"] == 0 and bill["totals"]["sgst"] == 0
+    assert bill["totals"]["net"] == bill["totals"]["basic"]
+    ordinary = await client.post("/transactions/purchase-bill", json={"date": "2026-11-19", "supplier": "KSBCL", "supplier_inv_no": "X1", "supplier_inv_date": "2026-11-19",
+                                                                         "lines": [{"item_code": it["code"], "bottles": 1}]})
+    assert ordinary.status_code == 201, ordinary.text
+    assert "OP" not in ordinary.json()["doc_no"]            # the ordinary series is not touched
+
+
+async def test_an_opening_purchase_bill_is_numbered_in_the_op_series_when_the_user_saves_it(client):
+    """Update Item Stock hands its lines to the Purchase Bill screen: nothing is saved until the bill is saved there with opening=true."""
+    import re
+    (it,) = await _items(client, 1)
+    preview = (await client.get("/transactions/next-number", params={"kind": "opening_purchase_bill"})).json()
+    assert re.fullmatch(r"\d{2}OP\d{5}", preview["doc_no"]), preview
+    body = {"date": "2026-11-19", "supplier": "KSBCL", "supplier_inv_no": "INV-9", "supplier_inv_date": "2026-11-19", "opening": True,
+            "lines": [{"item_code": it["code"], "bottles": 3, "rate": 100}]}
+    res = await client.post("/transactions/purchase-bill", json=body)
+    assert res.status_code == 201, res.text
+    bill = res.json()
+    assert bill["doc_no"] == preview["doc_no"]
+    assert bill["totals"]["cgst"] == 0 and bill["totals"]["net"] == bill["totals"]["basic"] == 300
+    assert "opening" not in bill
+    assert (await client.get("/transactions/next-number", params={"kind": "opening_purchase_bill"})).json()["doc_no"] != preview["doc_no"]
+    edited = await client.put(f"/transactions/purchase-bill/{bill['doc_no']}", json=body | {"lines": [{"item_code": it["code"], "bottles": 4, "rate": 100}]})
+    assert edited.status_code == 200 and edited.json()["totals"]["cgst"] == 0   # still GST-free when edited

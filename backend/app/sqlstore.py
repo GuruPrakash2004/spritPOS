@@ -75,6 +75,19 @@ class SaveFailed(Exception):
     """SQL Server refused or lost the request's changes (the caller answers 503)."""
 
 
+def db_usable() -> bool:
+    """The shop's database is set up and connected. The screens that only read and write the desktop's own tables (Invoice Settings, Delete Linkage,
+    the invoice number) need just this, not the web's start-up load (`enabled()`)."""
+    return db.configured() and db.is_db_available()
+
+
+def db_problem() -> str:
+    """Why the database can't be used, for a 503."""
+    if not db.configured():
+        return "No database is set up: use Database setup on the sign-in page."
+    return "The database is not connected right now: check the connection (Utilities → About). The app tries to connect again every 15 seconds."
+
+
 def enabled() -> bool:
     """The shop's data is loaded from SQL Server and the database is in use (in read-only mode nothing is ever saved to it)."""
     return _active and db.is_db_available()
@@ -185,7 +198,7 @@ def _item_values(cur, r: dict) -> dict:
         "ITEMGroupID": _lookup(cur, "MstITEMGROUP", "ITEMGROUPID", r.get("group"), "ITEMGROUPCODE", "ITEMGROUPNAME"),
         "LiqType": r.get("liqtype") or "",
         "UOMID": _lookup(cur, "MstUOM", "UOMID", r.get("uom"), "UOMCODE", "UOMNAME"),
-        "PKGID": _lookup(cur, "MstPKG", "PKGID", r.get("package"), "PKGCODE", "PKGNAME") or None,
+        "PKGID": _lookup(cur, "MstPKG", "PKGID", r.get("package"), "PKGCODE", "PKGNAME"),   # no package: 0, the "-" row, as the desktop
         "BrandID": _lookup(cur, "MstBrand", "BRANDID", r.get("brand"), "BRANDCODE", "BRANDNAME"),
         "BotPerCases": int(_num(r.get("bottles_per_case", 12))), "MRP": _num(r.get("mrp")), "PURRATE": _num(r.get("purchase_rate")),
         "CGSTPER": _num(r.get("cgst_per")), "SGSTPER": _num(r.get("sgst_per")), "ROL": _num(r.get("rol")), "ROQ": _num(r.get("roq")),
@@ -226,6 +239,24 @@ def _supplier_values(cur, r: dict) -> dict:
                      "InActive": ("active", lambda v: _yn(v is False))})
 
 
+def user_row_exists(cur, code: str) -> bool:
+    return _one(cur, "SELECT TOP 1 UserID FROM dbo.MstUser WHERE UserCode = ?", (code,)) is not None
+
+
+def create_user_row(cur, code: str, values: dict) -> int:
+    """INSERT a MstUser row (UserID = max + 1) with the columns this database has; returns the new UserID."""
+    new_id = int(_one(cur, "SELECT ISNULL(MAX(UserID), 0) + 1 FROM dbo.MstUser WITH (UPDLOCK, HOLDLOCK)", ()))
+    _insert(cur, "MstUser", {"UserID": new_id, "UserCode": code, **values})
+    return new_id
+
+
+def _role_id(cur, name: str):
+    """MstROLE.RoleID of the role whose code or name is `name` (any case), or None for a role only the web knows."""
+    if not name:
+        return None
+    return _one(cur, "SELECT TOP 1 ROLEID FROM dbo.MstROLE WHERE UPPER(LTRIM(RTRIM(ROLECODE))) = ? OR UPPER(LTRIM(RTRIM(ROLENAME))) = ?", (name.strip().upper(), name.strip().upper()))
+
+
 def _user_values(cur, r: dict) -> dict:
     # The desktop's LoginPwd is never touched: the desktop app still signs this user in with it. The web keeps
     # its own password only as a hash (Web_AppRow).
@@ -234,6 +265,10 @@ def _user_values(cur, r: dict) -> dict:
                   "Inactive": ("active", lambda x: _yn(not x)), "PwdResetDt": ("password_reset_on", lambda x: x or None)})
     if "dob" in r:
         v.update(DOB=r["dob"] or None, ChkDOB=_yn(r["dob"]))
+    if r.get("role_set_in_web"):   # a role chosen in Admin Master reaches the desktop's user too, when MstROLE has that role (frmMstUser: RoleId)
+        rid = _role_id(cur, str(r.get("role") or ""))
+        if rid is not None:
+            v["RoleID"] = rid
     return v
 
 # table: (desktop table, ID column, code column, values(cur, row))
@@ -292,6 +327,9 @@ for _sp in _SPECS:
     IN_USE_BY[_sp["store"]] = list(_sp["used_by"])
 
 
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9_ ]{1,128}$")
+
+
 def _check_unused(cur, table: str, id_col: str, web_table: str, code_col: str, key: str) -> None:
     """Refuse to delete a desktop master row that old bills or stock still point at (the in-memory IN_USE check only
     sees the latest bills). Zero balances in TrnQOH don't count."""
@@ -308,12 +346,14 @@ def _check_unused(cur, table: str, id_col: str, web_table: str, code_col: str, k
         ref_table, ref_col = str(rule["TblName"]).strip(), str(rule["FldName"]).strip()
         if not ref_table or not ref_col or ref_table.lower() == web_table.lower():
             continue
+        if not (_SAFE_NAME.match(ref_table) and _SAFE_NAME.match(ref_col)):   # the names go into SQL as identifiers
+            continue
         try:
             found = _one(cur, f"SELECT TOP 1 1 FROM dbo.[{ref_table}] WHERE [{ref_col}] = ?", (row_id,))
         except Exception:   # a report table or column this database doesn't have
             continue
         if found:
-            raise ValueError(f"Cannot delete {key}: data of {web_table} exists in {str(rule['TblCaption']).strip() or ref_table}")
+            raise ValueError(f"Cannot Delete!!! " + chr(10) + f"Data : {key} of {web_table} exists in {str(rule['TblCaption']).strip() or ref_table}")
     for ref_table, ref_col in IN_USE_BY.get(table, []):
         extra = " AND ISNULL([CLBal], 0) <> 0" if ref_table == "TrnQOH" else ""
         if _one(cur, f"SELECT TOP 1 1 FROM dbo.[{ref_table}] WHERE [{ref_col}] = ?{extra}", (row_id,)):
@@ -405,6 +445,11 @@ def reload_extras() -> None:
                     db_store.load_company()
                 except Exception as e:   # noqa: BLE001 - the company keeps what it had
                     logger.warning("Company not read again: %s", e)
+    try:   # after the extras are in: the Item Selling Rate follows MRP / GST / Cess even when those were changed in the database
+        from . import item_rates
+        item_rates.sync()
+    except Exception as e:   # noqa: BLE001 - the rates stay as read
+        logger.warning("Item Selling Rate not checked: %s", e)
 
 
 def _write_company(cur, user: str | None) -> None:
@@ -568,12 +613,15 @@ def _doc_extras(doc: dict) -> dict:
     return dict(doc.get("extras") or {})
 
 
-def _finyear_and_running_no(doc_no: str) -> dict:
+def _finyear_and_running_no(doc_no: str, inv_cno: int | None = None) -> dict:
     """frmTrnInv header insert (3290-3317): FINYEAR = the last two digits of the financial year's start year (gSettings.gCompFinYear) and InvCNo =
     the running number the invoice number was built from (getInvNo: max(InvCNo) + 1 for the FinYear). The number's last digits are that running number."""
     out = {}
     if store.FY_PREFIX.isdigit():
         out["FINYEAR"] = int(store.FY_PREFIX)
+    if inv_cno:   # the running number the number was made from (Invoice Settings formats need not end with it)
+        out["InvCNo"] = int(inv_cno)
+        return out
     m = re.search(r"(\d+)$", doc_no or "")
     if m:
         out["InvCNo"] = int(m.group(1))
@@ -595,7 +643,7 @@ def _sales_header_values(cur, doc: dict, user: str | None) -> dict:
         "GRNDTOT": _num(tot.get("net")), "INVVALUE": _num(tot.get("net")), "TOT": _num(tot.get("basic")),
         "CASHAMT": _num(pay.get("cash")), "CARDAMT": _num(pay.get("card")), "OTHPAYAMT": _num(pay.get("upi")) + _num(pay.get("credit")),
         "RCVDAMT": _num(tot.get("collected")), "PAYBACKAMT": _num(tot.get("payback")), "BILLSYSTEM": "WEB",
-        **_finyear_and_running_no(doc["doc_no"]),
+        **_finyear_and_running_no(doc["doc_no"], doc.get("inv_cno")),
         "SALTYP": doc.get("payment_type") or "", "Authorised": "Y",
         "WRITEOFFAMT": 0, "TOTCESS": 0, "TOTCOMPCESS": 0,   # the desktop writes 0.00, not NULL
     }
@@ -644,7 +692,7 @@ def _rewrite_sales_invoice(cur, doc: dict, user: str | None) -> None:
     sinv_id = _one(cur, "SELECT SINVID FROM dbo.TrnHdrSINV WHERE SINVNO = CAST(? AS VARCHAR(30))", (doc["doc_no"],))
     if sinv_id is None:
         return _write_sales_invoice(cur, doc, user)
-    head = {k: v for k, v in _sales_header_values(cur, doc, user).items() if k not in ("SINVNO", "Prefix", "PrintSINVNO", "AddedBy", "AddedOn")}
+    head = {k: v for k, v in _sales_header_values(cur, doc, user).items() if k not in ("SINVNO", "Prefix", "PrintSINVNO", "AddedBy", "AddedOn", "InvCNo", "FINYEAR")}
     _update(cur, "TrnHdrSINV", {**head, "Cancelled": "N", "ChangedBy": user or "", "ChangedOn": datetime.now()}, "SINVID = ?", (sinv_id,))
     cur.execute("DELETE FROM dbo.TrnDtlSINV WHERE SINVID = ?", (sinv_id,))
     if _meta("TrnPoints"):
@@ -688,7 +736,7 @@ def _purchase_header_values(cur, doc: dict, user: str | None, calc: dict) -> dic
     supp = store.find(store.SUPPLIERS, doc.get("supplier") or "") or {}
     no = doc["doc_no"]
     return _with(calc["header"], {
-        **_doc_extras(doc), "PBNO": _short_no(no), "Prefix": _prefix(no), "PrintPBNO": _print_no(no, "TrnHdrPB"), "PBDate": doc["date"],
+        **_doc_extras(doc), "PBNO": _short_no(no), "Prefix": _prefix(no), "PrintPBNO": no if _prefix(no).upper() == OPENING_PREFIX else _print_no(no, "TrnHdrPB"), "PBDate": doc["date"],
         "SUPPID": _lookup(cur, "MstSUPP", "SUPPID", supp.get("code") or doc.get("supplier"), "SUPPCODE", "SUPPNAME"),
         "PartyName": supp.get("name") or doc.get("supplier") or "", "LOCID": LOCID, "AddedBy": user or "", "AddedOn": datetime.now(),
         "SUPPINVNO": doc.get("supplier_inv_no") or "", "SUPPINVDATE": doc.get("supplier_inv_date") or None,
@@ -711,6 +759,41 @@ def _write_purchase_lines(cur, doc: dict, pb_id: int, calc: dict) -> None:
         }))
 
 
+def rate_from_pb_on() -> bool:
+    """Invoice Settings → "Update Rate From PB to Item Master" (UtlMisc.RateFld = 'Y', gstrChkRateFld)."""
+    return str(store.UTL_MISC.get("RateFld") or "").strip().upper() == "Y"
+
+
+def _rate_from_pb(cur, pb_id: int, doc: dict) -> None:
+    """frmTrnPBM (the save, after the lines): with the switch on and a bill prefix other than "OP", every item on the bill takes the bill's rate:
+    PurRate = PBRate, AROEDPER = AROEDPERBOT, MRP = the line's MRP and ItemSell from it (liquor: MRP less AROEDPERBOT; Others: the MRP without
+    tax, which also takes Cessper / Compcess off when the item table has them). PMPurRate follows too in the VLQMSCLH database.
+    One guard the exe does not have: a line whose MRP or AROEDPERBOT is NULL keeps the item's own value instead of blanking it."""
+    if not rate_from_pb_on() or _prefix(doc["doc_no"]).strip().upper() == "OP":
+        return
+    cols = {c.lower() for c in _meta("MstITEM")}
+    dcols = {c.lower() for c in _meta("TrnDtlPB")}
+    if not {"purrate", "mrp", "itemsell"} <= cols or not {"pbrate", "mrp"} <= dcols:
+        return
+    aroed = "aroedper" in cols and "aroedperbot" in dcols
+    mrp = "ISNULL(d.MRP, MstITEM.MRP)"
+    off = "ISNULL(d.AROEDPERBOT, 0)" if "aroedperbot" in dcols else "0"
+    if "cessper" in cols:
+        tax = "(100 + MstITEM.CGSTPER + MstITEM.SGSTPER + MstITEM.Cessper)"
+        net = f"({mrp} - MstITEM.Compcess)" if "compcess" in cols else f"({mrp})"
+    else:
+        tax, net = "(100 + MstITEM.CGSTPER + MstITEM.SGSTPER)", f"({mrp})"
+    sets = []
+    if "pmpurrate" in cols and str(db.settings().get("database") or "").upper() == "VLQMSCLH":
+        sets.append("PMPurRate = d.PBRate")
+    sets.append("PurRate = d.PBRate")
+    if aroed:
+        sets.append("AROEDPER = ISNULL(d.AROEDPERBOT, MstITEM.AROEDPER)")
+    sets.append(f"ItemSell = (Case When MstITEM.LiqType = 'Others' Then CAST(({net} / {tax} * 100) As Numeric(12,2)) Else {mrp} - {off} End)")
+    sets.append(f"MRP = {mrp}")
+    cur.execute(f"UPDATE dbo.MstITEM SET {', '.join(sets)} FROM dbo.TrnDtlPB d WHERE d.PBID = ? AND d.ITEMID = MstITEM.ITEMID", (pb_id,))
+
+
 def _write_purchase_bill(cur, doc: dict, user: str | None) -> None:
     no = doc["doc_no"]
     calc = _calc("purchase_bill", doc)
@@ -721,6 +804,7 @@ def _write_purchase_bill(cur, doc: dict, user: str | None) -> None:
         return   # otherwise purchase bills are not changed after saving (an edit goes through _rewrite_purchase_bill)
     pb_id = _insert(cur, "TrnHdrPB", _purchase_header_values(cur, doc, user, calc), identity_out="PBID")
     _write_purchase_lines(cur, doc, pb_id, calc)
+    _rate_from_pb(cur, pb_id, doc)
 
 
 def _rewrite_purchase_bill(cur, doc: dict, user: str | None) -> None:
@@ -734,6 +818,7 @@ def _rewrite_purchase_bill(cur, doc: dict, user: str | None) -> None:
     _update(cur, "TrnHdrPB", {**head, "ChangedBy": user or "", "ChangedOn": datetime.now()}, "PBID = ?", (pb_id,))
     cur.execute("DELETE FROM dbo.TrnDtlPB WHERE PBID = ?", (pb_id,))
     _write_purchase_lines(cur, doc, pb_id, calc)
+    _rate_from_pb(cur, pb_id, doc)
 
 
 def _closing_header(cur, doc: dict, user: str | None) -> dict:
@@ -1337,6 +1422,29 @@ def _exe_series_max(kind: str) -> int | None:
     return int(row["n"]) if row and row["n"] else None
 
 
+OPENING_PREFIX = "OP"   # Update Item Stock's bills (frmUpdateItemStock.SAveStock: TrnNoAutoGen("TrnHdrPB", "PBNO", "OP", ...)): a number series of their own
+
+
+def next_opening_bill_no() -> str:
+    """The number of the next opening-stock purchase bill: the year's two digits, "OP" and a five-digit running number ("26OP00001"). As the
+    exe's TrnNoAutoGen with a prefix, the count is the highest number this year among purchase bills whose Prefix is OP, plus one, so these
+    bills never use up the ordinary purchase-bill numbers (and the ordinary series never counts them)."""
+    start = f"{store.FY_PREFIX}{OPENING_PREFIX}"
+    top = 0
+    for no in store.DOCS.get("purchase_bill", {}):   # the web's own bills (and, in the database-less tests, all there are)
+        if str(no).startswith(start) and str(no)[len(start):].isdigit():
+            top = max(top, int(str(no)[len(start):]))
+    if enabled() and not db.use_web_tables():
+        try:
+            row = db.fetchone("SELECT MAX(TRY_CAST(RIGHT(PBNO, 5) AS INT)) AS n FROM dbo.TrnHdrPB WITH (NOLOCK) "
+                              "WHERE LEFT(PBNO, ?) = CAST(? AS VARCHAR(20)) AND ISNULL(Prefix, '') = ?", (len(start), start, OPENING_PREFIX))
+            if row and row["n"]:
+                top = max(top, int(row["n"]))
+        except Exception as e:   # noqa: BLE001 - the numbers the app knows stand
+            logger.warning("Highest opening bill number not read: %s", e)
+    return f"{start}{top + 1:05d}"
+
+
 def _seed_numbers() -> None:
     """Direct mode: a document made here takes the next number after the highest one already in its desktop table (the web numbers look like
     26/PB-0000007), so a restart never reuses a number. Sales invoices go on after the highest SINVNO of the year."""
@@ -1432,6 +1540,8 @@ def reload() -> None:
             db_store.load_masters()
         load()
         if ready:
+            from . import designer
+            designer.load()   # _restore_defaults emptied the Doc Designer's tables: without them the screens lose their fields and the Item Selling Rate formula
             threading.Thread(target=lambda: (reload_extras(), db_store.load_transactions()), daemon=True).start()
 
 
@@ -1551,13 +1661,13 @@ def audit_rows(screen: str | None, from_at: str, to_at: str, limit: int = 5000) 
     if screen:
         sql += " AND ScreenName = ?"
         args.append(screen)
-    heads = db.fetchall(sql + " ORDER BY DocID DESC", tuple(args))
+    heads = db.fetchall(sql + " ORDER BY ScreenName, MainFld, DocDateTime", tuple(args))
     items: dict[int, list[dict]] = {}
     ids = [h["DocID"] for h in heads]
     for i in range(0, len(ids), 500):
         chunk = ids[i:i + 500]
         for r in db.fetchall(f"SELECT DocID, ItemCode, Itemname, ActionStatus, ItemDetails FROM dbo.UtlAdmAuditItem "
-                             f"WHERE DocID IN ({','.join('?' * len(chunk))})", tuple(chunk)):
+                             f"WHERE DocID IN ({','.join('?' * len(chunk))}) ORDER BY DocID", tuple(chunk)):
             items.setdefault(r["DocID"], []).append({"code": r["ItemCode"], "name": r["Itemname"], "status": r["ActionStatus"],
                                                      "details": r["ItemDetails"]})
     return [{"id": h["DocID"], "at": h["DocDateTime"].isoformat(timespec="seconds") if h["DocDateTime"] else "",

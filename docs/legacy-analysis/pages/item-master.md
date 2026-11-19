@@ -15,7 +15,7 @@ Status: **Done** (changed to match the exe, tested), **Match**, **By design**, *
 | Item may be re-coded after bills (no check) | allowed; `store.recode_item` moves stock, movements, last purchase and bill lines to the new code |
 | Group list = active **and authorised** (440); UOM list excludes '-' (441) | refused with the exe's texts; `db_store` reads `Authorised` / `InActive` of groups |
 | Inactive item needs remarks always (562) | 422 "Please enter remarks for why the item is inactive!"; cleared when active |
-| Edit: UOM box disabled when on any `TrnDtl*` (1507-1515) | `GET /items/{code}/locks`; UOM select disabled in Edit; server still refuses a change (409) |
+| Edit: UOM box disabled when on any `TrnDtl*` (1507-1515) | Superseded 2026-11-18 (see "Owner's changes" below): the UOM box is never editable in Edit and the server refuses any UOM change on a normal save; `GET /items/{code}/locks` was removed |
 | Add: leaving Item Code copies it to Item Name; leaving Item Name copies it to HotKey (1856, 2185) | `MasterCrud.handleBlur` (item form) |
 | "Similar ItemCode already exists. Do you want to view them?" (1973-1999, `ItemCodeClean`) | `GET /items/similar` (database function, or the same comparison in memory) + list dialog |
 | Copy From in Add mode (1626-1646) | Options → Copy From (Add mode only) |
@@ -28,6 +28,15 @@ Status: **Done** (changed to match the exe, tested), **Match**, **By design**, *
 | Items-DataLink Problem: `select * from vwInvalidItems order by 1,2`, export (`frmRPtInvalidItems`) | `GET /items/invalid` + dialog with Export to Excel; says so when the view is missing |
 | Update Item Master Fields (`frmUtlImportAnyFld`): fields from `UtlItemBulkupdate`, filters (groups / packing / items), Template, Load to Grid, pick file ("Please Select a valid Template!" check), edit grid, Import Data, Export | `GET /items/bulk-fields`, `POST /items/bulk-fields/load`, `POST /items/bulk-fields/import`, `UpdateItemFieldsDialog`. Differences: one transaction (the exe's is commented out); a code in an ID column that doesn't exist is refused instead of storing 0; cost needs cost access |
 | Update Item Rates: recompute every Item Master formula field (2440-2506). The exe's SQL ends `where  and ItemID>0` (2499) and fails, so it never worked | `POST /items/recalculate-rates` does the intended update; `ALTER TABLE` for UITCCGST / UITCSGST is not done (web never changes table design), NULLs are set to 0 |
+
+## Owner's changes (2026-11-18), deliberately different from the exe
+| Exe | Web now |
+|---|---|
+| Edit: the UOM box is disabled only once the item is on a `TrnDtl*` table (`frmMstItem.vb` 1507-1515); an unused item can change UOM in the form | **Edit: the UOM box is never editable** (a hint says where to change it) and the server refuses any UOM change on a normal save (409). UOM is changed with Options > Update Item Master Fields |
+| `frmUtlImportAnyFld` lists only the fields in `UtlItemBulkupdate` (this shop: 15, no UOM) | UOMID is **always offered** (shown as the UOM code, saved as UOMID by the exe's own "ID" rule), without touching the shop's table |
+| Bulk update writes any change, no check | A UOM change is **refused for an item used in bills, indents, returns or stock** (`_check_uom_change`: "the UOM of '...' can't be changed: it is used in bills or stock"); the same UOM, or an unused item, passes; blank and '-' are refused |
+| The screen: three tick boxes (Select Item Group / Packing / Item) opening "Select [Multiple] ..." windows (Sel, Select All, Paste), a fields table, Generate Excel Template, Load to Grid, Select Excel File "...", grid, Import Data | Same layout as **its own page** (`utilities/ImportItemMasterFields.jsx`, module "Import Item Master Fields" under Utilities, opened by Item Master > Options > Update Item Master Fields; the grid has the page's full width) with the three pickers as small popups on the shared `common/MultiSelectDialog.jsx` (also used by Label Printing): active groups by code, active packing by litres per bottle (PKGCode + LTRPERBOT), active items by name (picked by code, names repeat) |
+| (List windows) | The List window of every master and document screen now has an X in its top-right corner (Close stays in the footer; Esc and a click outside still do not close it) |
 
 ## Already matching (checked in source)
 Required code, name, group, type, UOM; type list Wine / Beer / IML / Others (designer line 605); group / UOM must exist; duplicate code; duplicate name allowed; margin rule `PurSellVarPer` (not for OTHERS); aliases delete-and-reinsert in the save transaction; MRP / PURRATE change writes `MstItemAudit`; one transaction with rollback; delete uses the desktop's `UtlDeletion` rules (`sqlstore._check_unused`, same "Cannot Delete" meaning) and removes the `TrnQOH` rows; File Attachment; First / Previous / Next / Last.

@@ -198,9 +198,15 @@ async def test_master_code_cannot_be_renamed_onto_another(client):
     assert store.UOMS["BTL"]["name"] == "Bottle"
 
 
-@pytest.mark.parametrize("code", ["", "   ", "A/B", "50%", "X?Y"])
-async def test_bad_master_codes_are_refused(client, code):
+@pytest.mark.parametrize("code", ["", "   "])
+async def test_blank_master_codes_are_refused(client, code):
     assert (await client.post("/masters/brands", json={"code": code, "name": "Test"})).status_code == 422
+
+
+@pytest.mark.parametrize("code", ["A/B", "50%", "X?Y", "P#1", "back\\slash"])
+async def test_master_codes_may_hold_any_character(client, code):
+    """The owner's rule: no validation on a code or name beyond required (the desktop's own codes hold %, / ...)."""
+    assert (await client.post("/masters/brands", json={"code": code, "name": "Test"})).status_code == 201
 
 
 @pytest.mark.parametrize(("path", "code"), [

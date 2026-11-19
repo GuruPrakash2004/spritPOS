@@ -141,6 +141,11 @@ export function Pattern({
               paddingAngle={3}
               stroke="#FFFFFF"
               strokeWidth={2}
+              startAngle={90}
+              endAngle={-270}
+              animationBegin={150}
+              animationDuration={1300}
+              animationEasing="ease-out"
             >
               {activeData.map((entry, index) => {
                 const rawKey = String(entry[nameKey] ?? "");

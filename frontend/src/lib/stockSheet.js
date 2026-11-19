@@ -4,7 +4,7 @@
 // write). Real .xlsx files are zip archives and are not read: save them as CSV first.
 // guessColumns() finds the header row and the Item Code / Item Name / Closing Qty / Value columns; the screen
 // lets the user change them. compareSheets() gives one row per item with each side's qty and value, the
-// differences and the desktop's statuses: Item Not found, Qty Mismatch, Value Mismatch (or OK).
+// differences and the desktop's statuses: Item Not found, Qty Mismatch and / or Value Mismatch (both, space-joined, when both differ), or OK.
 import { parseCsv } from './csv';
 
  
@@ -98,7 +98,7 @@ export function compareSheets(oldItems, newItems) {
     const qtyDiff = round((n?.qty ?? 0) - (o?.qty ?? 0));
     const valueDiff = round((n?.value ?? 0) - (o?.value ?? 0), 2);
     const status = !o ? 'Item Not found (Old)' : !n ? 'Item Not found (New)'
-      : qtyDiff !== 0 ? 'Qty Mismatch' : valueDiff !== 0 ? 'Value Mismatch' : 'OK';
+      : (`${qtyDiff !== 0 ? 'Qty Mismatch' : ''} ${valueDiff !== 0 ? 'Value Mismatch' : ''}`.trim() || 'OK');   // the exe lists every mismatch, space-joined (frmUtlCompareStk)
     return {
       key, code: o?.code || n?.code || '', name: o?.name || n?.name || '',
       oldQty: o ? round(o.qty) : null, newQty: n ? round(n.qty) : null,

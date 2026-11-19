@@ -117,6 +117,7 @@ export function applyDefinition(typed, screen, { hideUnlisted = false } = {}) {
     return {
       ...f,
       label: d.caption || f.label,
+      column: d.code,   // the database column this box holds (MRP, CGSTPER ...): the designer's formulas name it (MasterCrud.withFormulas)
       required: f.required || !!d.mandatory,
       section: d.sub_section || f.section,
       tooltip: d.tooltip || f.tooltip,
@@ -168,7 +169,16 @@ const FK = (f) => f.fk === true;
 
 /** The typed field of a master, drawn the way the designer describes the column it is stored in. `w` is the master's
  *  request-model field (kind of value, required, options, hints) the server sends with the definition. */
+// Bottles per Case starts EMPTY on a new item (the exe leaves it blank; a blank saves 0): neither the model's default of 12 nor a designer default fills it.
+// Liquor Category (LIQTYPE) and UOM also start with nothing chosen: the user picks them (both are required; a hidden default of BTL
+// let the form pass its own check while the box still read "Select...").
+const STARTS_EMPTY = new Set(['bottles_per_case', 'liqtype', 'uom']);
+// The Item Master's stock is shown as QOH, a small read-only box: it is the item's current stock (changed only by transactions), not an entry field.
+const QOH_LOOK = { label: 'QOH', lockedAlways: true, small: true, newOnly: undefined };
+const lookOf = (w) => (w.key === 'qoh' ? QOH_LOOK : {});
+
 function typedConfig(f, w, colToKey) {
+  const empty = STARTS_EMPTY.has(w.key);
   const options = w.options?.length ? w.options : (f.options?.length ? f.options : undefined);
   const master = f.combo?.master;
   const keep = KEEP.has(w.key);
@@ -189,9 +199,9 @@ function typedConfig(f, w, colToKey) {
     hideWhen: rekey(f.hide_when, colToKey) || undefined,
     mandatoryWhen: rekey(f.mandatory_when, colToKey) || undefined,
     readonlyWhen: rekey(f.readonly_when, colToKey) || undefined,
-    default: w.default ?? (f.use_default ? (f.default || undefined) : undefined),
-    useDefault: !!f.use_default,
-    defaultConditions: f.default_conditions?.length ? f.default_conditions : undefined,
+    default: empty ? '' : (w.default ?? (f.use_default ? (f.default || undefined) : undefined)),
+    useDefault: empty ? false : !!f.use_default,
+    defaultConditions: !empty && f.default_conditions?.length ? f.default_conditions : undefined,
     pickup: f.pickup || undefined,
     pickupAfter: f.pickup_after || undefined,
     unique: !!f.unique,
@@ -200,6 +210,7 @@ function typedConfig(f, w, colToKey) {
     newOnly: w.new_only || undefined,
     tab: f.sub_section || '',
     order: f.order,
+    ...lookOf(w),
   };
 }
 
@@ -207,8 +218,9 @@ function typedConfig(f, w, colToKey) {
 function webOnlyConfig(w) {
   return {
     key: w.key, label: w.caption || humanize(w.key), type: w.kind === 'bool' ? 'bool' : w.kind === 'number' ? 'number' : w.kind === 'lines' ? 'lines' : (w.options?.length ? 'select' : 'text'),
-    options: w.options?.length ? w.options : undefined, required: !!w.required, default: w.default ?? undefined,
+    options: w.options?.length ? w.options : undefined, required: !!w.required, default: STARTS_EMPTY.has(w.key) ? '' : (w.default ?? undefined),
     costField: w.cost || undefined, newOnly: w.new_only || undefined, order: w.key === 'code' ? -10000 : 10000,
+    ...lookOf(w),
   };
 }
 

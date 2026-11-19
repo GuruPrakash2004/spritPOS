@@ -303,6 +303,7 @@ class PurchaseBillIn(BaseModel):
     supplier_inv_value: float = Field(0, ge=0)
     purchase_type: Literal["Purchase", "Purchase Return", "Stock Transfer In", "Stock Transfer", "Stock Addition"] = "Purchase"
     copy_from_indent: str | None = Field(None, description="Indent doc no; its lines are used when `lines` is empty")
+    opening: bool = Field(False, description="An opening-stock bill from Update Item Stock: numbered in the OP series (26OP00001), no GST on its lines")
     lines: list[Line] = Field([], max_length=MAX_LINES)
     tcs: float = Field(0, ge=0)
     cess: float = Field(0, ge=0)

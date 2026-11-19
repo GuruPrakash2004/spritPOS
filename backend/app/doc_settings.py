@@ -35,8 +35,114 @@ DEFAULTS = {"after_save": "none", "default_format": "", "allow_duplicate_items":
 PREFIX_RE = re.compile(r"^[A-Za-z0-9]{1,6}$")
 
 
+def desktop_row(kind: str) -> dict | None:
+    """The document's UtlTransactions row (matched on DocName, any case), or None without a database or when the shop has no such row."""
+    want = KINDS[kind][0].strip().lower()
+    return next((d for d in store.UTL_DOCS.values() if str(d.get("DocName") or "").strip().lower() == want), None)
+
+
+def _flag(row: dict, col: str) -> bool | None:
+    """A Y/N column as a bool, or None when this database has no such column."""
+    if col not in row:
+        return None
+    return str(row[col] or "").strip().upper() == "Y"
+
+
+def from_desktop(row: dict) -> dict:
+    """The settings the web acts on, as the desktop's Transaction Settings window (FrmUtlTrnSettings) holds them in UtlTransactions."""
+    out = {}
+    for key, col in (("allow_duplicate_items", "BlnAllowDuplicateItems"), ("allow_edit_date", "AllowEditDocDate"), ("allow_copy_from", "AllowCopyFrom")):
+        v = _flag(row, col)
+        if v is not None:
+            out[key] = v
+    if "blnFreezeDoc" in row or "AllowEditDeleteForDays" in row:   # the days count only while the freeze flag is on
+        out["edit_days"] = int(float(row.get("AllowEditDeleteForDays") or 0)) if _flag(row, "blnFreezeDoc") else 0
+    if "RateFldMstItem" in row:
+        out["update_rate_from_pb"] = bool(str(row.get("RateFldMstItem") or "").strip())
+    return out
+
+
 def settings(kind: str) -> dict:
-    return {**DEFAULTS, **store.DOC_SETTINGS.get(kind, {})}
+    row = desktop_row(kind) if kind in KINDS else None
+    return {**DEFAULTS, **store.DOC_SETTINGS.get(kind, {}), **(from_desktop(row) if row else {})}
+
+
+# Every other UtlTransactions setting of the desktop's Transaction Settings window: (column, caption, kind). The web does not act on these;
+# they are shown and saved so the desktop and the web read the same row. kind: flag (Y/N), text, number.
+DESKTOP_FIELDS = [
+    ("AffectsStock", "Affects stock (Add / Reduce)", "text"),
+    ("LinkedPendingParty", "Linked pending: by party", "flag"), ("LinkedPendingSingleDoc", "Linked pending: single document", "flag"),
+    ("LinkedPendingDocNo", "Linked pending: by document number", "flag"), ("ShowGraceQty", "Show grace quantity", "flag"),
+    ("AuthReq", "Authorisation required", "flag"), ("NoOfAuth", "Number of authorisations", "number"),
+    ("NoOfAuthQueryCond", "Authorisation query condition", "text"),
+    ("AllowLoadFromBOM", "Allow load from BOM", "flag"), ("AmmReq", "Amendment required", "flag"), ("MultiDocGen", "Multi document generation", "flag"),
+    ("AllowTenderChange", "Allow tender change", "flag"), ("TenderChangeFld", "Tender change field", "text"),
+    ("OffLineCalc", "Offline calculation", "flag"), ("AllowImpExp", "Allow import / export", "flag"), ("blnEnvPrint", "Envelope print", "flag"),
+    ("FileAttachReq", "File attachment required", "flag"), ("PDFPreview", "PDF preview", "flag"),
+    ("PartyFilterCond", "Party filter condition", "text"), ("FldBlnEnforcePartyItemLink", "Enforce party-item link", "flag"),
+    ("RateFldPartyItem", "Rate field (party item)", "text"), ("RateFldMstItem", "Rate field (item master)", "text"),
+    ("ItemFilterCond", "Item filter condition", "text"),
+    ("PendingQryFlds", "Pending query: fields", "text"), ("PendingQryTbls", "Pending query: tables", "text"), ("PendingQryCond", "Pending query: condition", "text"),
+    ("PickFldsFromSrc", "Pick fields from source", "text"), ("PickFldsFromSrcDocQry", "Pick fields from source document query", "text"),
+    ("AccTrn", "Accounts transaction", "flag"), ("AccMstType", "Accounts master type", "text"), ("AcLedFld", "Ledger field", "text"),
+    ("AccValueFld", "Voucher value field", "text"),
+    ("BalanceColReq", "Balance column required", "flag"), ("BillWiseFeatureReq", "Bill-wise feature", "flag"), ("ChqPrintReq", "Cheque printing", "flag"),
+    ("DefFirstRowAmtType", "Default first row amount type", "text"),
+]
+# What the desktop clears when its switch is off (FrmUtlTrnSettings.btnSave_Click).
+_RESETS = {"AuthReq": {"NoOfAuth": 0, "NoOfAuthQueryCond": ""}, "AllowTenderChange": {"TenderChangeFld": ""},
+           "FldBlnEnforcePartyItemLink": {"RateFldPartyItem": ""}, "AccTrn": {"AccMstType": "", "AcLedFld": "", "AccValueFld": ""}}
+_MAX_TEXT = 2000
+
+
+def desktop_list() -> dict:
+    """Every Transaction / Voucher document with its columns, for the desktop-settings panel."""
+    docs = []
+    for d in sorted(store.UTL_DOCS.values(), key=lambda d: str(d.get("DocName") or "").lower()):
+        if str(d.get("DocType") or "") not in ("Transaction", "Voucher"):
+            continue
+        values = {}
+        for col, _cap, kind in DESKTOP_FIELDS:
+            if col in d:
+                values[col] = (str(d[col] or "").strip().upper() == "Y") if kind == "flag" else (int(float(d[col] or 0)) if kind == "number" else str(d[col] or ""))
+        docs.append({"doc_id": int(d["DocID"]), "name": str(d.get("DocName") or ""), "type": str(d.get("DocType") or ""),
+                     "kind": next((k for k in KINDS if KINDS[k][0].strip().lower() == str(d.get("DocName") or "").strip().lower()), None),
+                     "values": values})
+    return {"docs": docs, "fields": [{"column": c, "caption": cap, "kind": k} for c, cap, k in DESKTOP_FIELDS]}
+
+
+def desktop_updates(doc_id: int, values: dict) -> dict:
+    """Validate `values` (column -> value) for one document and return the columns to write, with the desktop's dependent resets."""
+    row = store.UTL_DOCS.get(doc_id)
+    if row is None:
+        raise HTTPException(404, "Selected Document Not Found in Transaction List!")
+    spec = {c: k for c, _cap, k in DESKTOP_FIELDS}
+    out: dict = {}
+    for col, v in values.items():
+        if col not in spec:
+            raise HTTPException(422, f"'{col}' is not a Transaction Settings field")
+        if col not in row:
+            continue   # this database has no such column: nothing to save
+        kind = spec[col]
+        if kind == "flag":
+            out[col] = "Y" if v in (True, "Y", "y") else "N"
+        elif kind == "number":
+            try:
+                n = int(float(v or 0))
+            except (TypeError, ValueError):
+                raise HTTPException(422, f"{col}: a whole number is needed")
+            if not 0 <= n <= 99:
+                raise HTTPException(422, f"{col}: from 0 to 99")
+            out[col] = n
+        else:
+            text = str(v or "").strip()
+            if len(text) > _MAX_TEXT:
+                raise HTTPException(422, f"{col}: {_MAX_TEXT} characters at most")
+            out[col] = text
+    for switch, cleared in _RESETS.items():
+        if out.get(switch) == "N":
+            out.update({c: z for c, z in cleared.items() if c in row})
+    return out
 
 
 def all_settings() -> dict:
@@ -110,3 +216,31 @@ def set_series(kind: str, new_prefix: str | None, next_number: int | None) -> di
             raise HTTPException(409, f"Number {next_number} is already used (highest is {used}); start from {used + 1} or later")
         store._seq.setdefault(kind, store.Seq(next_number)).value = next_number
     return next(r for r in numbering() if r["kind"] == kind)
+
+
+def web_columns(kind: str, new: dict, row: dict) -> dict:
+    """The UtlTransactions columns that hold the settings the web acts on (only those this database has)."""
+    cols = {"BlnAllowDuplicateItems": "Y" if new["allow_duplicate_items"] else "N", "AllowEditDocDate": "Y" if new["allow_edit_date"] else "N"}
+    if kind == "purchase_bill":
+        cols["AllowCopyFrom"] = "Y" if new["allow_copy_from"] else "N"
+        current = str(row.get("RateFldMstItem") or "").strip()
+        cols["RateFldMstItem"] = (current or "PURRATE") if new["update_rate_from_pb"] else ""
+    if kind == "sales_invoice":
+        days = int(new["edit_days"] or 0)
+        cols["blnFreezeDoc"] = "Y" if days else "N"   # the desktop keeps the days only while this is on
+        cols["AllowEditDeleteForDays"] = days
+    return {c: v for c, v in cols.items() if c in row}
+
+
+def write_desktop(doc_id: int, columns: dict) -> None:
+    """UPDATE the document's UtlTransactions row (column names come from the fixed lists above, never from the caller) and re-read the designer."""
+    if not columns:
+        return
+    from . import db, designer
+    names = {c for c, _cap, _k in DESKTOP_FIELDS} | {"BlnAllowDuplicateItems", "AllowEditDocDate", "AllowCopyFrom", "blnFreezeDoc", "AllowEditDeleteForDays"}
+    bad = [c for c in columns if c not in names]
+    if bad:
+        raise HTTPException(422, f"'{bad[0]}' is not a Transaction Settings field")
+    with db.transaction() as cur:
+        cur.execute(f"UPDATE dbo.UtlTransactions SET {', '.join(f'[{c}] = ?' for c in columns)} WHERE DocID = ?", (*columns.values(), doc_id))
+    designer.load()

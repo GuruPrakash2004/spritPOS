@@ -6,16 +6,19 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { getDesignerLookup } from '../../lib/api';
 import { getDesignerSnapshot, subscribeDesigner } from '../../lib/designerStore';
+import { sortOptions } from '../../lib/optionOrder';
+import { useDataVersion } from '../../lib/dataVersion';
 
-export default function LookupSelect({ id, docId, code, value, onChange, disabled, className = '', invalid, ...rest }) {
+export default function LookupSelect({ id, docId, code, value, onChange, disabled, className = '', invalid, order, ...rest }) {   // order: 'name' | 'numeric' | undefined (the server's order)
   const { changes } = useSyncExternalStore(subscribeDesigner, getDesignerSnapshot);
   const [choices, setChoices] = useState(null);
+  const dataVersion = useDataVersion();   // master data changed outside the app: read the choices again
 
   useEffect(() => {
     let live = true;
     getDesignerLookup(docId, code).then(rows => { if (live) setChoices(rows); }).catch(() => { if (live) setChoices([]); });
     return () => { live = false; };
-  }, [docId, code, changes]);
+  }, [docId, code, changes, dataVersion]);
 
   const current = value === null || value === undefined ? '' : String(value);
   const known = (choices ?? []).some(c => String(c.value) === current);
@@ -24,7 +27,7 @@ export default function LookupSelect({ id, docId, code, value, onChange, disable
       aria-invalid={invalid || undefined} className={className} {...rest}>
       <option value="" />
       {current !== '' && !known && <option value={current}>{current}</option>}
-      {(choices ?? []).map(c => <option key={String(c.value)} value={String(c.value)}>{c.label}</option>)}
+      {sortOptions(choices ?? [], order, c => String(c.label)).map(c => <option key={String(c.value)} value={String(c.value)}>{c.label}</option>)}
     </select>
   );
 }

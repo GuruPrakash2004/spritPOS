@@ -54,7 +54,7 @@ async def test_without_smtp_settings_it_says_so(client, monkeypatch):
     assert "SMTP" in res.json()["detail"]
 
 
-async def test_sends_the_report_as_xls(client, smtp):
+async def test_sends_the_report_as_xlsx(client, smtp):
     res = await client.post("/reports/custom/email", json={**BODY, "message": "Weekly figures"})
 
     assert res.status_code == 200, res.text
@@ -67,9 +67,10 @@ async def test_sends_the_report_as_xls(client, smtp):
     assert msg["From"] == f'{company["name"]} <{company["email"]}>'   # the Company Master email
     assert msg["Reply-To"] == company["email"]
     (att,) = list(msg.iter_attachments())
-    assert att.get_filename().endswith(".xls")
-    xml = att.get_content()
-    assert b"<Workbook" in xml and b"Sales - Day Wise Report" in xml
+    assert att.get_filename().endswith(".xlsx")
+    import io, zipfile
+    z = zipfile.ZipFile(io.BytesIO(att.get_content()))
+    assert "xl/worksheets/sheet1.xml" in z.namelist() and b"Sales - Day Wise Report" in z.read("xl/worksheets/sheet1.xml")
     assert "Weekly figures" in msg.get_body().get_content()
 
 

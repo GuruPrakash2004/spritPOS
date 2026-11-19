@@ -87,3 +87,129 @@ describe('Item Master record navigation', () => {
     await counter('3 / 4')
   })
 })
+
+describe('Item Master New mode', () => {
+  it('starts with Bottles per Case empty (the exe starts blank)', async () => {
+    const user = userEvent.setup()
+    setAuthRights(['Item Master'], { 'Item Master': { add: true, edit: true, delete: true } })
+    renderItems()
+    await user.click(await screen.findByRole('button', { name: /new/i }))
+    expect(await screen.findByLabelText(/Bottles per Case/i)).toHaveValue(null)
+  })
+})
+
+describe('Yes / No fields in view mode', () => {
+  const ITEMS = [
+    { code: 'A1', name: 'ITEM A1', group: 'G', mrp: 10, qoh: 0, active: true, non_stockable: false },
+    { code: 'B2', name: 'ITEM B2', group: 'G', mrp: 10, qoh: 0, active: false, non_stockable: true },
+  ]
+
+  it('shows a ticked or empty check box instead of the words Yes / No', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn(async (url) => json(String(url).endsWith('/masters/items') ? ITEMS : [])))
+    setAuthRights(['Item Master'])
+    renderItems()
+    const inactive = await screen.findByRole('checkbox', { name: 'Inactive' })
+    expect(inactive).not.toBeChecked()   // an active record: Inactive is empty
+    expect(inactive).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: 'Non Stockable' })).not.toBeChecked()
+    expect(screen.queryByText('Yes')).not.toBeInTheDocument()
+    expect(screen.queryByText('No')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /next record/i }))
+    expect(await screen.findByRole('checkbox', { name: 'Non Stockable' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Inactive' })).toBeChecked()   // an inactive record: Inactive is ticked
+  })
+})
+
+describe('Not Active Remarks in view mode', () => {
+  const ROW = { code: 'A1', name: 'ITEM A1', group: 'G', mrp: 10, qoh: 0, active: false, extras: { InactiveRmks: 'discontinued by supplier' } }
+
+  it('shows the remark under the Inactive box of an inactive record, and not at all for an active one', async () => {
+    const user = userEvent.setup()
+    const rows = [ROW, { ...ROW, code: 'B2', name: 'ITEM B2', active: true, extras: { InactiveRmks: '' } }]
+    vi.stubGlobal('fetch', vi.fn(async (url) => json(String(url).endsWith('/masters/items') ? rows : [])))
+    setAuthRights(['Item Master'])
+    render(<MasterCrud title="Item Master" subtitle="Items" path="items" fields={[...ITEM_FIELDS, { key: 'InactiveRmks', label: 'Not Active Remarks', extra: true, type: 'text' }]} />)
+    expect(await screen.findByText('discontinued by supplier')).toBeInTheDocument()
+    expect(screen.getByText('Not Active Remarks')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /next record/i }))
+    expect(await screen.findByRole('checkbox', { name: 'Inactive' })).not.toBeChecked()
+    expect(screen.queryByText('Not Active Remarks')).not.toBeInTheDocument()
+  })
+})
+
+describe('hideExtras (UOM Master)', () => {
+  const FIELDS = [
+    { key: 'code', label: 'UOM Code', required: true },
+    { key: 'name', label: 'UOM Name' },
+    { key: 'Gram', label: 'Weight in grams', extra: true, type: 'number', section: 'Other details' },
+  ]
+  const ROW = { code: 'BTL', name: 'Bottle', active: true, extras: { Gram: 750 } }
+
+  it('draws the database columns beyond the typed fields, unless hideExtras is set', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => json(String(url).endsWith('/masters/uoms') ? [ROW] : [])))
+    setAuthRights(['UOM Master'])
+    const { unmount } = render(<MasterCrud title="UOM Master" subtitle="Units" path="uoms" fields={FIELDS} />)
+    expect(await screen.findByText('Weight in grams')).toBeInTheDocument()
+    unmount()
+    render(<MasterCrud title="UOM Master" subtitle="Units" path="uoms" fields={FIELDS} hideExtras />)
+    expect(await screen.findByText('UOM Code')).toBeInTheDocument()
+    expect(screen.queryByText('Weight in grams')).not.toBeInTheDocument()
+    expect(screen.queryByText('Other details')).not.toBeInTheDocument()
+  })
+})
+
+describe('hideKeys (UOM Master: no Decimals box)', () => {
+  it('does not draw a hidden typed field', async () => {
+    const { UOM_FIELDS } = await import('./masterConfigs')
+    vi.stubGlobal('fetch', vi.fn(async () => json([])))
+    setAuthRights(['UOM Master'])
+    render(<MasterCrud title="UOM Master" subtitle="Units" path="uoms" fields={UOM_FIELDS} hideKeys={['decimals']} />)
+    expect(await screen.findByText('UOM Code')).toBeInTheDocument()
+    expect(screen.queryByText('Decimals')).not.toBeInTheDocument()
+  })
+})
+
+describe('Package Master layout', () => {
+  it('shows Code first and Litres per Bottle inside an "Other details" section below it', async () => {
+    const { PACKAGE_FIELDS } = await import('./masterConfigs')
+    const { arrangePackageFields } = await import('../../lib/packageLayout')
+    vi.stubGlobal('fetch', vi.fn(async (url) => json(String(url).endsWith('/masters/packages') ? [{ code: '750ML', litres_per_bottle: 0.75, active: true }] : [])))
+    setAuthRights(['Package Master'])
+    render(<MasterCrud title="Package Master" subtitle="Packages" path="packages" fields={PACKAGE_FIELDS} arrange={arrangePackageFields} />)
+    const code = await screen.findByText('Package Code')
+    const heading = (await screen.findAllByText('Other details'))[0]
+    const litres = await screen.findByText(/Litres per Bottle/)
+    const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(follows(code, heading)).toBe(true)
+    expect(follows(heading, litres)).toBe(true)
+  })
+})
+
+describe('File Attachment button', () => {
+  it('is a wide button under the fields, "File Attachment (0)", and needs a saved record', async () => {
+    setAuthRights(['Item Master'])
+    renderItems()
+
+    const btn = await screen.findByRole('button', { name: /file attachment \(0\)/i })
+    expect(btn).toBeDisabled()
+  })
+})
+
+describe('Item Master Edit mode', () => {
+  it('never lets the UOM be changed in Edit (it is changed from Options > Update Item Master Fields)', async () => {
+    const ITEMS = [{ code: 'A1', name: 'ITEM A1', group: 'G', uom: 'BTL', mrp: 10, qoh: 0, active: true }]
+    vi.stubGlobal('fetch', vi.fn(async (url) => json(String(url).includes('/masters/uoms') ? [{ code: 'BTL', name: 'Bottle' }, { code: 'CASE', name: 'Case' }]
+      : String(url).endsWith('/masters/items') ? ITEMS : [])))
+    setAuthRights(['Item Master'], { 'Item Master': { add: true, edit: true, delete: true } })
+    const user = userEvent.setup()
+    renderItems()
+    await waitFor(() => expect(screen.getByText(/^1 \/ 1$/)).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: /^edit$/i }))
+    const uom = await screen.findByLabelText(/^UOM/)
+    expect(uom).toBeDisabled()                                    // Edit mode: not editable, even for an item with no bills
+    expect(screen.getByText(/UOM can't be changed here/i)).toBeInTheDocument()
+    expect(await screen.findByLabelText(/^Item Name/i)).not.toBeDisabled()   // the other boxes are
+  })
+})

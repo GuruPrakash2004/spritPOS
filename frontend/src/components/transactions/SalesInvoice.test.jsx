@@ -258,4 +258,42 @@ describe('SalesInvoice', () => {
     expect(puts[0][1]).toMatchObject({ date: saved.date, counter: 'C1', hold: false, lines: [{ item_code: 'BLND-750', bottles: 2 }] })
     expect(posts()).toHaveLength(0)   // an edit never creates a second bill
   })
+
+  describe('F12 keys (Invoice Settings → Invoice Print Settings)', () => {
+    const withKeys = (keys) => fetchMock.mockImplementation(async (url, init) => {
+      if (init?.method === 'POST') return json({ ...JSON.parse(String(init.body)), doc_no: '26/c10-0083718', status: 'SAVED', totals: { net: 1235, qty: 1 }, lines: [] }, 201)
+      if (url.startsWith('/api/transactions/invoice-keys')) return json(keys)
+      if (url.includes('/print/options')) return json({ designed: false, options: [], files: [], preferred: '', default: '', doc_name: 'Sales Invoice' })
+      if (url.startsWith('/api/masters/items')) return json([ITEM])
+      if (url.startsWith('/api/masters/customers')) return json([CASH])
+      return json([])
+    })
+
+    it('F12 set to Save and Preview saves the bill and opens the preview', async () => {
+      const user = userEvent.setup()
+      withKeys({ f12: 'SPP', ctrl_f12: 'S', alt_f12: 'SP' })
+      render(<SalesInvoice setup={setup} onClose={() => {}} />)
+      await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+      await scan(user, 'BLND-750')
+
+      await user.keyboard('{F12}')
+
+      await waitFor(() => expect(posts()).toHaveLength(1))
+      expect(await screen.findByText(/Print .*26\/c10-0083718/)).toBeInTheDocument()
+    })
+
+    it('Ctrl+F12 set to Save saves the bill and prints nothing', async () => {
+      const user = userEvent.setup()
+      withKeys({ f12: 'SPP', ctrl_f12: 'S', alt_f12: 'SP' })
+      render(<SalesInvoice setup={setup} onClose={() => {}} />)
+      await waitFor(() => expect(STOCK_ITEMS).toHaveLength(1))
+      await scan(user, 'BLND-750')
+
+      await user.keyboard('{Control>}{F12}{/Control}')
+
+      await waitFor(() => expect(posts()).toHaveLength(1))
+      await new Promise(r => setTimeout(r, 150))
+      expect(screen.queryByText(/Print .*26\/c10-0083718/)).toBeNull()
+    })
+  })
 })

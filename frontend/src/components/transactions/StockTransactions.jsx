@@ -61,7 +61,9 @@ export function SalesReturn() {
   const [remarks, setRemarks] = useState('');
 
   useEffect(() => {
-    listSalesInvoices('SAVED').then(setInvoices).catch(() => undefined);
+    // The invoices of the last year, not every bill ever made.
+    const from = new Date(Date.now() - 365 * 86400000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    listSalesInvoices('SAVED', from, todayIso()).then(setInvoices).catch(() => undefined);
   }, []);
 
   const invoice = invoices.find(i => i.doc_no === against);

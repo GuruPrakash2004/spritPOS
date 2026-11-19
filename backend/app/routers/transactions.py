@@ -9,13 +9,14 @@ quantity per item across all lines, so stock can't go below zero.
 Documents are saved to SQL Server's Web_ tables when the request succeeds (app/sqlstore.py); sales invoices
 and purchase bills also in the desktop's format. Held bills are saved whole but not posted until released."""
 from collections import defaultdict
+import json
 import threading
 import time
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
-from .. import admin_audit, sms, db, db_store, doc_engine, expense_db, doc_meta, doc_settings, gsettings, schema_meta, security, sqlstore, store
+from .. import admin_audit, sms, db, db_store, doc_engine, expense_db, doc_meta, doc_settings, gsettings, invoice_numbers, schema_meta, security, sqlstore, store
 from ..schemas import (
     CancelIn, ClosingStockIn, DenominationIn, ExpenseIn, ExpenseOpeningIn, GenerateInvoiceIn, Line, PurchaseBillIn, PurchaseIndentIn, SalesInvoiceIn,
     SalesReturnIn, StockDeductionIn,
@@ -32,6 +33,8 @@ WALK_IN = {"code": "CASH", "name": "CASH", "points": 0.0}
 def next_number(kind: str, counter: str = "", current_user: dict = Depends(get_current_user)):
     """The number the next document of a kind will most likely get (a sales invoice: on that counter). Only a
     preview, nothing is taken: the number is given when the document is saved, and another counter may save first."""
+    if kind == "opening_purchase_bill":   # Update Item Stock's bill: the next number of the OP series
+        return {"doc_no": sqlstore.next_opening_bill_no(), "fy_prefix": store.FY_PREFIX, "prefix": sqlstore.OPENING_PREFIX, "number": None}
     if kind not in store.DOCS:
         raise HTTPException(404, f"Unknown document kind '{kind}'")
     if kind == "sales_invoice":
@@ -41,12 +44,22 @@ def next_number(kind: str, counter: str = "", current_user: dict = Depends(get_c
         prefix = row["prefix"]
     else:
         prefix = doc_settings.prefix(kind)
+    if kind == "sales_invoice":   # a changed format or reset in Invoice Settings: the number the exe's rules would give
+        shown, number = invoice_numbers.preview(row, date.today())
+        if shown:
+            return {"doc_no": shown, "fy_prefix": store.FY_PREFIX, "prefix": prefix, "number": number}
     if store.NUMBER_SYNC:
         store.NUMBER_SYNC(kind)   # other PCs may have saved since start-up
     seq = store._seq.setdefault(kind, store.Seq(1))
     shown = f"{store.FY_PREFIX}{prefix}{seq.value:05d}" if kind in store.EXE_NUMBERED else f"{store.FY_PREFIX}/{prefix}-{seq.value:07d}"
     return {"doc_no": shown, "fy_prefix": store.FY_PREFIX, "prefix": prefix,
             "number": seq.value}
+
+@router.get("/invoice-keys", tags=["Sales Invoice"])
+def invoice_keys(current_user: dict = Depends(get_current_user)):
+    """Invoice Settings → Invoice Print Settings: what F12, Ctrl+F12 and Alt+F12 do after a bill is saved (S save, SP save and print, SPP save and preview)."""
+    return invoice_numbers.print_keys()
+
 
 SALES = Depends(require_right("add", "Sales Invoice"))
 SALES_CANCEL = Depends(require_right("delete", "Sales Invoice"))
@@ -151,9 +164,11 @@ def _listing(kind: str, tag: str):
                   current_user: dict = Depends(get_current_user)):
         if kind == "sales_invoice":
             db_store.refresh_recent_sales()   # bills made on other PCs since start-up
-        return [_shown(kind, d, current_user) for d in store.DOCS[kind].values()
+        docs = [_shown(kind, d, current_user) for d in store.DOCS[kind].values()
                 if (not from_date or d["date"] >= from_date.isoformat()) and (not to_date or d["date"] <= to_date.isoformat())
                 and (not status or d.get("status") == status)]
+        # The documents are plain dicts already: FastAPI's jsonable_encoder walking every value took ~90% of the time on a few hundred bills.
+        return Response(json.dumps(docs, default=str, allow_nan=False), media_type="application/json")
 
     @router.get(f"/{kind.replace('_', '-')}/{{doc_no:path}}", tags=[tag], name=f"Get {tag}")
     def get_doc(doc_no: str, current_user: dict = Depends(get_current_user)):
@@ -227,11 +242,15 @@ def _doc_extras(table: str, body, hold: bool = False) -> None:
 
 @router.post("/purchase-bill", status_code=201, tags=["Purchase Bill"], dependencies=[Depends(require_right("add", "Purchase Bill"))])
 def create_purchase_bill(body: PurchaseBillIn):
+    if body.opening:   # Update Item Stock's bill: its own OP number series (26OP00001), no GST; saved when the user has entered the invoice value
+        return _build_purchase_bill(body, doc_no=sqlstore.next_opening_bill_no(), opening=True)
     return _build_purchase_bill(body)
 
 
-def _build_purchase_bill(body: PurchaseBillIn, doc_no: str | None = None, base: dict | None = None) -> dict:
-    """Check, price and post a purchase bill. With `doc_no` / `base` it is an edit of that saved bill: same number, same place in the list."""
+def _build_purchase_bill(body: PurchaseBillIn, doc_no: str | None = None, base: dict | None = None, opening: bool = False) -> dict:
+    """Check, price and post a purchase bill. With `doc_no` / `base` it is an edit of that saved bill: same number, same place in the list.
+    `opening` is Update Item Stock's bill (the exe writes it straight into the tables): no GST on the lines, the same item twice is allowed,
+    and the item's purchase rate and MRP are left alone."""
     gsettings.check_not_frozen(body.date, "This purchase bill")
     _doc_extras("TrnHdrPB", body)
     if body.copy_from_indent and not doc_settings.settings("purchase_bill")["allow_copy_from"]:
@@ -247,8 +266,9 @@ def _build_purchase_bill(body: PurchaseBillIn, doc_no: str | None = None, base: 
         raise HTTPException(422, f"Unknown supplier '{body.supplier}'")
     security.check_authorised("suppliers", sup["code"], "Supplier")
     body.supplier = sup["code"]
-    doc_settings.check_lines("purchase_bill", src, body.date)
-    lines, tot = _price_lines(src, "purchase_rate", with_gst=True, kind="purchase_bill")
+    if not opening:
+        doc_settings.check_lines("purchase_bill", src, body.date)
+    lines, tot = _price_lines(src, "purchase_rate", with_gst=not opening, kind="purchase_bill")
     tot["tcs"], tot["cess"] = body.tcs, body.cess
     tot["net"] = round(tot["net"] + body.tcs + body.cess, 2)
     tot["balance_vs_supplier_value"] = round(body.supplier_inv_value - tot["net"], 2)
@@ -258,10 +278,11 @@ def _build_purchase_bill(body: PurchaseBillIn, doc_no: str | None = None, base: 
         _check_stock(lines)
     for l in lines:
         store.move_stock(l["item_code"], sign * l["qty"], "purchase", doc_no, body.date, l["rate"])
-    doc = body.model_dump(mode="json", exclude={"lines"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
+    doc = body.model_dump(mode="json", exclude={"lines", "opening"}) | {"doc_no": doc_no, "lines": lines, "totals": tot}
     store.DOCS["purchase_bill"][doc_no] = doc
-    if doc_settings.settings("purchase_bill")["update_rate_from_pb"] and sign > 0:
-        # Invoice Settings "Update Rate From PB to Item Master": the item's purchase rate follows this bill.
+    if sqlstore.rate_from_pb_on() and not opening and doc_settings.prefix("purchase_bill").strip().upper() != "OP":
+        # Invoice Settings "Update Rate From PB to Item Master" (UtlMisc.RateFld; the database row is updated in the save, sqlstore._rate_from_pb):
+        # the item's purchase rate follows this bill, as in the exe, whatever kind of purchase bill it is.
         for l in lines:
             item = store.ITEMS[l["item_code"]]
             if l["rate"] and item.get("purchase_rate") != l["rate"]:
@@ -310,7 +331,7 @@ def edit_purchase_bill(doc_no: str, body: PurchaseBillIn):
         store.move_stock(l["item_code"], -old_sign * l["qty"], "purchase", doc_no, date.fromisoformat(old["date"]), l["rate"])
         store.MOVEMENTS[-1]["reverses"] = True
     try:
-        doc = _build_purchase_bill(body, doc_no=doc_no, base=old)
+        doc = _build_purchase_bill(body, doc_no=doc_no, base=old, opening=sqlstore._prefix(doc_no).upper() == sqlstore.OPENING_PREFIX)   # an opening bill stays GST-free when edited
         short = [c for c in codes if c in store.ITEMS and store.ITEMS[c]["qoh"] < 0]
         if short:
             raise HTTPException(409, f"This change would leave {', '.join(sorted(short)[:3])} below zero stock (the stock the old bill added was sold since)")
@@ -504,9 +525,14 @@ def _build_sales_invoice(body: SalesInvoiceIn, current_user: dict, doc_no: str |
         payment = {"cash": 0, "card": 0, "upi": 0, "credit": 0}
         payment[{"CASH": "cash", "CARD": "card", "UPI": "upi", "CREDIT": "credit", "SPLIT": "cash"}[body.payment_type]] = tot["net"]
     tot["points_earned"] = 0.0
-    doc_no = doc_no or (f"HOLD-{next(store._seq['hold']):04d}" if body.hold else store.next_doc_no("sales_invoice", counter["prefix"]))
+    inv_cno = int((base or {}).get("inv_cno") or 0)   # the running number the bill number was made from (Invoice Settings; TrnHdrSINV.InvCNo)
+    if not doc_no:
+        if body.hold:
+            doc_no = f"HOLD-{next(store._seq['hold']):04d}"
+        else:
+            doc_no, inv_cno = invoice_numbers.next_number(counter, body.date)
     doc = body.model_dump(mode="json", exclude={"lines", "payment"}) | {
-        "doc_no": doc_no, "status": "HOLD" if body.hold else "SAVED", "lines": lines, "totals": tot, "payment": payment,
+        "doc_no": doc_no, "inv_cno": inv_cno, "status": "HOLD" if body.hold else "SAVED", "lines": lines, "totals": tot, "payment": payment,
         "time": (base or {}).get("time") or datetime.now().strftime("%H:%M:%S"), "added_by": (base or {}).get("added_by") or current_user["user"],
     }
     if not body.hold:
@@ -568,9 +594,9 @@ def release_held_bill(doc_no: str):
     if doc["totals"]["points_redeemed"] > cust["points"]:
         raise HTTPException(422, f"Customer has only {cust['points']} points")
     # Releasing turns the parked bill into a real invoice with the next number in its counter's series.
-    new_no = store.next_doc_no("sales_invoice", counter["prefix"])
+    new_no, inv_cno = invoice_numbers.next_number(counter, date.fromisoformat(doc["date"]))
     del store.DOCS["sales_invoice"][doc_no]
-    doc.update(doc_no=new_no, status="SAVED")
+    doc.update(doc_no=new_no, status="SAVED", inv_cno=inv_cno)
     admin_audit.record("Sales Invoice", "Released", new_no, f"held bill {doc_no}", f"net {doc['totals']['net']}",
                        admin_audit.doc_items(doc, "Added"))
     _post_sale(doc, cust)
@@ -613,6 +639,7 @@ def cancel_invoice(doc_no: str, body: CancelIn):
     doc["cancel_remarks"] = body.remarks
     admin_audit.record("Sales Invoice", "Cancelled", doc_no, "status: SAVED", f"status: CANCELLED; reason: {body.remarks}",
                        admin_audit.doc_items(doc, "Removed"))
+    sms.invoice_event("cancel", doc_no)   # Utilities → SMS → Invoice SMS: message the shop's own numbers, as the exe does
     return doc
 
 
@@ -643,6 +670,7 @@ def delete_invoice(doc_no: str):
     doc["status"] = "DELETED"
     doc["deleted_at"] = datetime.now().isoformat(timespec="seconds")
     admin_audit.record("Sales Invoice", "Deleted", doc_no, "status: SAVED", "status: DELETED", admin_audit.doc_items(doc, "Removed"))
+    sms.invoice_event("delete", doc_no)
     return doc
 
 

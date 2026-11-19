@@ -40,7 +40,10 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
   const ref = useRef(null);
   const searchRef = useRef(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  useDialogKeys(ref, () => { if (!pickerOpen) onClose(); });   // Esc closes the column window first
+  // Only the Close button in the footer and the X in the header's top-right corner close the list: not Esc, not a click outside (so a stray
+  // key or click never throws away the search and sort in progress). useDialogKeys still moves focus in, keeps Tab inside and gives focus
+  // back; the Select Columns window above it has its own Esc.
+  useDialogKeys(ref, () => {});
   const known = useMemo(() => new Map(columns.map(c => [c.key, c])), [columns]);
   const base = useMemo(() => (defaultKeys?.length ? defaultKeys : columns.map(c => c.key)).filter(k => known.has(k)), [defaultKeys, columns, known]);
 
@@ -55,6 +58,21 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
   const [frozen, setFrozen] = useState(() => read(`${storageKey}_frozen`, false));
   const [flip, setFlip] = useState(false);
   const [detail, setDetail] = useState(false);
+  // Column widths in px, set by dragging the right edge of a header (double-click an edge to reset all); remembered per list.
+  const [widths, setWidths] = useState(() => read(`${storageKey}_widths`, {}));
+  const sized = Object.keys(widths).length > 0;
+  const startResize = (e, key) => {
+    e.preventDefault(); e.stopPropagation();
+    const snap = {};
+    e.currentTarget.closest('tr').querySelectorAll('th[data-col]').forEach(th => { snap[th.dataset.col] = th.offsetWidth; });
+    const startX = e.clientX, startW = snap[key];
+    let latest = snap;
+    const move = (ev) => { latest = { ...snap, [key]: Math.max(40, startW + ev.clientX - startX) }; setWidths(latest); };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); write(`${storageKey}_widths`, latest); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const resetWidths = () => { setWidths({}); write(`${storageKey}_widths`, {}); };
 
   const cols = useMemo(() => {
     const ordered = [...order.filter(k => known.has(k)), ...columns.map(c => c.key).filter(k => !order.includes(k))];
@@ -114,26 +132,27 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
     else if (e.key === 'Enter' && current && e.target.tagName !== 'BUTTON') { e.preventDefault(); open(); }
   };
 
-  const footerButton = 'inline-flex items-center gap-2 rounded-full border border-[#E3D9CD] bg-white px-4 py-2 text-xs font-semibold text-[#29231F] transition hover:bg-[#F3EEE6] aria-pressed:border-[#64283A] aria-pressed:bg-[#64283A]/8 dark:border-[#2A2A2A] dark:bg-transparent dark:text-stone-100 dark:hover:bg-[#1C1C1C] dark:aria-pressed:border-[#D4A847] dark:aria-pressed:bg-[#D4A847]/10';
+  const footerButton = 'inline-flex items-center gap-2 rounded-full border border-[#E3D9CD] bg-white px-3 py-1 text-xs font-semibold text-[#29231F] transition hover:bg-[#F3EEE6] aria-pressed:border-[#64283A] aria-pressed:bg-[#64283A]/8 dark:border-[#2A2A2A] dark:bg-transparent dark:text-stone-100 dark:hover:bg-[#1C1C1C] dark:aria-pressed:border-[#D4A847] dark:aria-pressed:bg-[#D4A847]/10';
 
   return createPortal(
-    <div className="modal-backdrop fixed inset-0 z-[900] flex items-center justify-center bg-black/65 p-3 dark:bg-black/80" onClick={onClose}>
+    <div className="modal-backdrop fixed inset-0 z-[900] flex items-center justify-center bg-black/65 p-3 dark:bg-black/80" >
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={e => e.stopPropagation()} onKeyDown={onKeyDown}
-        className="animate-slideUp flex h-[min(88vh,820px)] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-[#E3D9CD] bg-white text-[#29231F] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100">
-        <header className="relative bg-[#64283A] px-12 py-4 text-center text-white dark:bg-[#0F0F0F] dark:text-[#F5D88A]">
-          <h3 id={titleId} className="text-lg font-bold uppercase tracking-wide">{title}</h3>
+        className="animate-slideUp flex h-[min(92vh,860px)] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-[#E3D9CD] bg-white text-[#29231F] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100">
+        <header className="relative bg-[#64283A] px-12 py-2 text-center text-white dark:bg-[#0F0F0F] dark:text-[#F5D88A]">
+          <h3 id={titleId} className="text-base font-bold uppercase tracking-wide">{title}</h3>
           <p className="text-xs opacity-80">{subtitle || `Listing of ${title}`}</p>
-          <button type="button" onClick={onClose} tabIndex={-1} aria-label="Close" title="Close (Esc)" className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/80 transition hover:bg-white/10 hover:text-white"><X size={18} /></button>
+          <button type="button" onClick={onClose} tabIndex={-1} aria-label="Close list" title="Close"
+            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/80 transition hover:bg-white/15 hover:text-white active:scale-[0.96] dark:text-[#F5D88A]/80 dark:hover:bg-white/10 dark:hover:text-[#F5D88A]"><X size={18} /></button>
         </header>
 
-        <div className="flex flex-wrap items-center gap-3 border-b border-[#EFE9DF] px-4 py-3 dark:border-[#2A2A2A]">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[#EFE9DF] px-4 py-2 dark:border-[#2A2A2A]">
           <div className="relative min-w-60 max-w-[640px] flex-1">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
             <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} placeholder="Global search across all columns…" aria-label="Global search across all columns"
-              className="w-full rounded-xl border border-[#64283A]/70 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-stone-400 focus:ring-[3px] focus:ring-[#64283A]/10 dark:border-[#D4A847]/50 dark:bg-transparent dark:focus:ring-[#D4A847]/10" />
+              className="w-full rounded-xl border border-[#64283A]/70 bg-white py-1.5 pl-9 pr-3 text-xs outline-none transition placeholder:text-stone-400 focus:ring-[3px] focus:ring-[#64283A]/10 dark:border-[#D4A847]/50 dark:bg-transparent dark:focus:ring-[#D4A847]/10" />
           </div>
           {toolbar}
-          {onRefresh && <button type="button" onClick={onRefresh} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E3D9CD] transition hover:bg-[#F3EEE6] dark:border-[#2A2A2A] dark:hover:bg-[#1C1C1C]" aria-label="Refresh" title="Refresh"><RefreshCw size={15} className={loading ? 'animate-spin' : ''} /></button>}
+          {onRefresh && <button type="button" onClick={onRefresh} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#E3D9CD] transition hover:bg-[#F3EEE6] dark:border-[#2A2A2A] dark:hover:bg-[#1C1C1C]" aria-label="Refresh" title="Refresh"><RefreshCw size={15} className={loading ? 'animate-spin' : ''} /></button>}
           <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-stone-500"><MousePointerClick size={13} />Double-click row to load</span>
         </div>
 
@@ -148,27 +167,31 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
               )}
             </div>
           ) : (
-            <table className="text-sm" style={{ minWidth: '60%' }}>
+            <table className="text-xs" style={sized ? { tableLayout: 'fixed', width: cols.reduce((s, c) => s + (widths[c.key] ?? 150), 0) } : { minWidth: '60%' }}>
+              {sized && <colgroup>{cols.map(c => <col key={c.key} style={{ width: widths[c.key] ?? 150 }} />)}</colgroup>}
               <thead className="sticky top-0 z-[2] bg-[#F7F4EC] dark:bg-[#181818]">
                 <tr>
                   {cols.map((c, i) => {
                     const on = sort.key === c.key;
                     return (
-                      <th key={c.key} scope="col" aria-sort={on ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
-                        className={`border-b border-r border-[#E3DBCB] px-3 pt-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-[#64283A] dark:border-[#2A2A2A] dark:text-[#D4A847] ${NUMERIC.has(c.kind) ? 'text-right' : ''} ${frozen && i === 0 ? 'sticky left-0 z-[3] bg-[#F7F4EC] dark:bg-[#181818]' : ''}`}>
+                      <th key={c.key} data-col={c.key} scope="col" aria-sort={on ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
+                        className={`${frozen && i === 0 ? '' : 'relative '}overflow-hidden border-b border-r border-[#E3DBCB] px-2.5 pt-1.5 text-left text-[10px] font-bold uppercase tracking-wide text-[#64283A] dark:border-[#2A2A2A] dark:text-[#D4A847] ${NUMERIC.has(c.kind) ? 'text-right' : ''} ${frozen && i === 0 ? 'sticky left-0 z-[3] bg-[#F7F4EC] dark:bg-[#181818]' : ''}`}>
                         <button type="button" onClick={() => sortBy(c.key)} className="flex w-full items-center justify-between gap-3 uppercase" title={`Sort by ${c.label}`} aria-label={`Sort by ${c.label}`}>
                           <span>{c.label}</span>
                           {on ? (sort.dir === 1 ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={12} className="text-stone-400" />}
                         </button>
+                        <span role="separator" aria-orientation="vertical" aria-label={`Resize ${c.label} column`} title="Drag to resize (double-click to reset all)"
+                          onPointerDown={e => startResize(e, c.key)} onDoubleClick={resetWidths}
+                          className="absolute right-0 top-0 z-[4] h-full w-2 cursor-col-resize touch-none hover:bg-[#64283A]/30 dark:hover:bg-[#D4A847]/40" />
                       </th>
                     );
                   })}
                 </tr>
                 <tr>
                   {cols.map((c, i) => (
-                    <th key={c.key} className={`border-b border-r border-[#E3DBCB] px-2 pb-2 pt-1.5 dark:border-[#2A2A2A] ${frozen && i === 0 ? 'sticky left-0 z-[3] bg-[#F7F4EC] dark:bg-[#181818]' : ''}`}>
+                    <th key={c.key} className={`border-b border-r border-[#E3DBCB] px-2 pb-1.5 pt-1 dark:border-[#2A2A2A] ${frozen && i === 0 ? 'sticky left-0 z-[3] bg-[#F7F4EC] dark:bg-[#181818]' : ''}`}>
                       <input value={filters[c.key] ?? ''} onChange={e => setFilters(f => ({ ...f, [c.key]: e.target.value }))} placeholder="Filter…" aria-label={`Filter ${c.label}`}
-                        className="w-full min-w-24 rounded-md border border-[#E3D9CD] bg-white px-2 py-1.5 text-xs font-normal normal-case outline-none focus:border-[#64283A] dark:border-[#2A2A2A] dark:bg-transparent dark:focus:border-[#D4A847]" />
+                        className={`w-full ${sized ? 'min-w-0' : 'min-w-24'} rounded-md border border-[#E3D9CD] bg-white px-2 py-1 text-[11px] font-normal normal-case outline-none focus:border-[#64283A] dark:border-[#2A2A2A] dark:bg-transparent dark:focus:border-[#D4A847]`} />
                     </th>
                   ))}
                 </tr>
@@ -179,9 +202,9 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
                   const on = k === selected;
                   return (
                     <tr key={k} role="row" aria-selected={on} onClick={() => setSelected(k)} onDoubleClick={() => open(r)}
-                      className={`cursor-pointer border-b border-[#EFE9DF] transition-colors dark:border-[#1F1F1F] ${on ? 'bg-[#64283A]/10 dark:bg-[#D4A847]/15' : n % 2 ? 'bg-[#FBF8F2] hover:bg-[#F5EFE2] dark:bg-[#171717] dark:hover:bg-[#1C1C1C]' : 'hover:bg-[#F5EFE2] dark:hover:bg-[#1C1C1C]'}`}>
+                      className={`cursor-pointer border-b border-[#EFE9DF] transition-colors dark:border-[#1F1F1F] ${on ? 'bg-[#EBC9D3] font-semibold text-[#3A1622] dark:bg-[#D4A847]/30 dark:text-white' : n % 2 ? 'bg-[#FBF8F2] hover:bg-[#F5EFE2] dark:bg-[#171717] dark:hover:bg-[#1C1C1C]' : 'hover:bg-[#F5EFE2] dark:hover:bg-[#1C1C1C]'}`}>
                       {cols.map((c, i) => (
-                        <td key={c.key} className={`whitespace-nowrap px-3 py-2.5 ${NUMERIC.has(c.kind) ? 'text-right tabular-nums' : ''} ${frozen && i === 0 ? `sticky left-0 ${on ? 'bg-[#EFE9DF] dark:bg-[#2A2415]' : 'bg-white dark:bg-[#141414]'}` : ''}`}>
+                        <td key={c.key} className={`whitespace-nowrap ${sized ? 'overflow-hidden text-ellipsis' : ''} px-2.5 py-1 leading-tight${NUMERIC.has(c.kind) ? 'text-right tabular-nums' : ''} ${on && i === 0 ? 'shadow-[inset_4px_0_0_#64283A] dark:shadow-[inset_4px_0_0_#D4A847]' : ''} ${frozen && i === 0 ? `sticky left-0 ${on ? 'bg-[#EBC9D3] dark:bg-[#4A3D18]' : 'bg-white dark:bg-[#141414]'}` : ''}`}>
                           {c.kind === 'bool' ? <span className={badge(raw(c, r) ? 'success' : 'neutral')}>{text(c, r)}</span> : text(c, r)}
                         </td>
                       ))}
@@ -200,8 +223,8 @@ export default function ListModal({ title, subtitle, columns, defaultKeys, rows,
           )}
         </div>
 
-        <footer className="flex flex-wrap items-center gap-3 border-t border-[#EFE9DF] px-4 py-3 dark:border-[#2A2A2A]">
-          <span className="rounded-xl border border-[#E3D9CD] px-3 py-2 text-sm font-bold dark:border-[#2A2A2A]" aria-live="polite">Total Records: {shown.length} / {rows.length}</span>
+        <footer className="flex flex-wrap items-center gap-2 border-t border-[#EFE9DF] px-4 py-2 dark:border-[#2A2A2A]">
+          <span className="rounded-xl border border-[#E3D9CD] px-3 py-1 text-xs font-bold dark:border-[#2A2A2A]" aria-live="polite">Total Records: {shown.length} / {rows.length}</span>
           <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
             <input type="checkbox" checked={keepOpen} onChange={e => toggleKeep(e.target.checked)} className="h-4 w-4 accent-[#64283A]" />Do NOT hide after loading the record.
           </label>

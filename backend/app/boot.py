@@ -71,7 +71,8 @@ def forget_old_database() -> None:
     column lists, the hashes of what SQL Server holds (a row that looks unchanged would otherwise never be written to the new
     database), pending audit lines, replayed requests, the AI forecasts and the designer's change marker. The store's own tables are
     emptied by sqlstore.reload() right after."""
-    from . import admin_audit, schema_meta
+    from . import admin_audit, master_watch, schema_meta
+    master_watch.forget()   # the next check takes a new baseline
     from .ai import service as ai_service
     from .routers import designer as designer_router
     schema_meta.invalidate()

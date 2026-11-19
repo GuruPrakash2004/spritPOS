@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyDefinition } from './designerFields';
+import { applyDefinition, fieldsFromDefinition } from './designerFields';
 
 const typed = [
   { key: 'code', label: 'Code', required: true },
@@ -33,5 +33,51 @@ describe('applyDefinition', () => {
   it('reorders matched fields among their own places', () => {
     const out = applyDefinition(typed, def([{ web_key: 'mrp', order: 9 }, { web_key: 'hsn_code', order: 2 }]));
     expect(out.map(f => f.key)).toEqual(['code', 'name', 'hsn_code', 'mrp']);
+  });
+});
+
+describe('Bottles per Case on a new item', () => {
+  const screen = (extra = {}) => ({
+    doc_id: 1,
+    fields: [{ web_key: 'bottles_per_case', code: 'BotPerCases', caption: 'BotPerCases', section: 'Header', order: 1, use_default: true, default: '12', ...extra }],
+    web_fields: [{ key: 'bottles_per_case', kind: 'number', default: 12, caption: 'Bottles per Case' }],
+  });
+
+  it('starts empty: not the model default of 12, not a designer default', () => {
+    const [f] = fieldsFromDefinition(screen());
+    expect(f.key).toBe('bottles_per_case');
+    expect(f.default).toBe('');
+    expect(f.useDefault).toBe(false);
+  });
+
+  it('starts empty even when the designer has no row for it', () => {
+    const out = fieldsFromDefinition({ doc_id: 1, fields: [{ code: 'X', caption: 'X', section: 'Header', order: 1 }], web_fields: [{ key: 'bottles_per_case', kind: 'number', default: 12 }] });
+    expect(out.find(f => f.key === 'bottles_per_case').default).toBe('');
+  });
+});
+
+describe('Item Master: Liquor Category and QOH', () => {
+  const def = {
+    doc_id: 1,
+    fields: [{ web_key: 'liqtype', code: 'LIQTYPE', caption: 'LIQTYPE', section: 'Header', order: 1, mandatory: true, use_default: true, default: 'IML' }],
+    web_fields: [
+      { key: 'liqtype', kind: 'text', default: 'IML', options: ['IML', 'Beer', 'Wine', 'Others'], required: true },
+      { key: 'qoh', kind: 'number', default: 0, caption: 'Opening stock (new items only)', new_only: true },
+    ],
+  };
+
+  it('Liquor Category starts with nothing chosen', () => {
+    const f = fieldsFromDefinition(def).find(x => x.key === 'liqtype');
+    expect(f.default).toBe('');
+    expect(f.useDefault).toBe(false);
+    expect(f.required).toBe(true);
+  });
+
+  it('the opening stock is a small read-only QOH box', () => {
+    const f = fieldsFromDefinition(def).find(x => x.key === 'qoh');
+    expect(f.label).toBe('QOH');
+    expect(f.lockedAlways).toBe(true);
+    expect(f.small).toBe(true);
+    expect(f.newOnly).toBeUndefined();
   });
 });

@@ -323,7 +323,7 @@ def report_filter_values(name: str, field: str, current_user: dict = Depends(get
 
 @router.post("/email")
 async def email_report(body: ReportEmailIn, current_user: dict = Depends(get_current_user)):
-    """Build the report on the server (same data as Generate) and email it as an .xls attachment.
+    """Build the report on the server (same data as Generate) and email it as an .xlsx attachment.
     The attachment is never taken from the browser, so this can't be used to send arbitrary files."""
     if not mailer.configured():
         raise HTTPException(503, "Email isn't set up: add the SMTP settings to backend/.env (see .env.example). "
@@ -336,8 +336,8 @@ async def email_report(body: ReportEmailIn, current_user: dict = Depends(get_cur
         raise HTTPException(422, "Nothing to email for this period")
     company = store.COMPANY.get("name") or "Company"
     period = f"{body.from_date:%d/%m/%Y} to {body.to_date:%d/%m/%Y}"
-    file_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in f"{body.name} {body.from_date} to {body.to_date}") + ".xls"
-    attachment = mailer.xls(f"{company} - {body.name}", f"Period: {period}", report["columns"], report["rows"])
+    file_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in f"{body.name} {body.from_date} to {body.to_date}") + ".xlsx"
+    attachment = mailer.xlsx(f"{company} - {body.name}", f"Period: {period}", report["columns"], report["rows"])
     text = (body.message.strip() + "\n\n" if body.message.strip() else "") + \
         f"{body.name} for {period} is attached.\n\nSent by {current_user['user']} from vLQMS."
     try:

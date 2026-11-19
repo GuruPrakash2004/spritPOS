@@ -51,7 +51,7 @@ describe('ReWriteStock', () => {
 
     await waitFor(() => expect(posts()).toHaveLength(1))
     expect(toastStore.defer).toHaveBeenCalledWith('refresh', 'Stock will be re-written when this closes.', expect.any(String))
-    expect(await screen.findByText('Re-Write not Required')).toBeInTheDocument()
+    expect((await screen.findAllByText('Re-Write not Required')).length).toBeGreaterThan(0)
   })
 
   it('changes nothing when the waiting popup is cancelled', async () => {

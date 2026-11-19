@@ -18,6 +18,7 @@ Designer, and at every start. Without a database every dict stays empty and the 
 in the Rpts folder, as the desktop's invoice screen does.
 """
 import logging
+import time
 
 from . import db, store
 
@@ -94,8 +95,25 @@ def refresh() -> dict:
             "UtlMisc": 1 if store.UTL_MISC else 0}
 
 
+_last_try = 0.0
+
+
+def ensure_loaded() -> None:
+    """The designer's rows are read at start-up. If that read never happened (the database was down then) and the database is
+    reachable now, read them here, at most once every 10 seconds, so printing and Print Settings don't stay empty until a restart."""
+    global _last_try
+    if store.UTL_OPTIONS or store.UTL_DOCS:
+        return
+    now = time.monotonic()
+    if now - _last_try < 10 or not db.is_db_available():
+        return
+    _last_try = now
+    load()
+
+
 def doc_for(short_form: str) -> dict | None:
     """The UtlTransactions row whose DocShForm is `short_form` (case-insensitive), or None."""
+    ensure_loaded()
     want = short_form.strip().upper()
     for d in store.UTL_DOCS.values():
         if str(d.get("DocShForm") or "").strip().upper() == want:
@@ -105,6 +123,7 @@ def doc_for(short_form: str) -> dict | None:
 
 def options_for(doc_id: int) -> list[dict]:
     """The document's print options in the designer's order, without inactive ones."""
+    ensure_loaded()
     return [o for o in store.UTL_OPTIONS
             if int(o.get("DocID") or 0) == int(doc_id) and str(o.get("InActive") or "N").upper() != "Y"]
 

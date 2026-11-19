@@ -28,7 +28,7 @@ describe('CompareStock', () => {
     fireEvent.change(screen.getByLabelText('Import New stock sheet'), { target: { files: [csv('new.csv', 'Item Code,Item Name,Closing Qty,Value\nA,Alpha,5,50\nB,Beta,3,30\nC,Gamma,1,1\n')] } })
     await screen.findByText('new.csv')
     await user.click(screen.getByRole('button', { name: /compare stocks/i }))
-    expect(await screen.findByText('Qty Mismatch')).toBeInTheDocument()
+    expect(await screen.findByText('Qty Mismatch Value Mismatch')).toBeInTheDocument()
     expect(screen.getByText('Item Not found (Old)')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText('Alpha')).not.toBeInTheDocument())   // matching items hidden
   })

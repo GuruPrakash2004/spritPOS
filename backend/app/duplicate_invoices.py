@@ -56,11 +56,16 @@ def _minutes(t: str) -> float | None:
 
 
 def listing(from_date: date, to_date: date, invoice_no: str | None = None, only_duplicates: bool = False) -> list[dict]:
-    docs = [d for d in store.DOCS["sales_invoice"].values()
-            if d.get("status") == "SAVED" and from_date.isoformat() <= d["date"] <= to_date.isoformat()]
-    if invoice_no:
+    saved = [d for d in store.DOCS["sales_invoice"].values() if d.get("status") == "SAVED"]
+    if invoice_no and invoice_no.strip():
+        # As the desktop (frmUtlDelDupInvoice): an invoice number is matched exactly and the dates are ignored;
+        # a number that isn't a saved invoice is "Invalid Invoice...".
         q = invoice_no.strip().lower()
-        docs = [d for d in docs if q in d["doc_no"].lower()]
+        docs = [d for d in saved if d["doc_no"].lower() == q]
+        if not docs:
+            raise HTTPException(422, "Invalid Invoice...")
+    else:
+        docs = [d for d in saved if from_date.isoformat() <= d["date"] <= to_date.isoformat()]
     rows = {d["doc_no"]: _row(d) for d in docs}
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for d in sorted(docs, key=lambda d: (d["date"], d.get("time", ""), d["doc_no"])):

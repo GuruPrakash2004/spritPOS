@@ -19,6 +19,7 @@ import DropdownMenu, { menuItem } from '../common/DropdownMenu';
 import { toastStore } from '../common/toastStore';
 import { errorText, executeSql, getSqlDefinition, getSqlObjects, getSqlScript, getSqlStatus, getSqlTop, } from '../../lib/api';
 import { downloadXls } from '../../lib/xlsExport';
+import { useShortcuts } from '../../lib/keys';
 import { exportButton, field, ghostButton, iconButton, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
 const HISTORY_KEY = 'vlqms_sql_history';
@@ -39,20 +40,62 @@ const writeVerb = (sql) => {
   return /^(insert|update|delete)\b/i.exec(head)?.[1].toUpperCase() ?? null;
 };
 
-// Result grid shared by the main result and the View Top 200 window.
+// Result grid shared by the main result and the View Top 200 window. As the desktop's grid (C1FlexGrid AllowFiltering /
+// AutoClipboard): click a heading to sort, type under it to filter, Ctrl/⌘+C copies the shown rows with their headings.
 function ResultGrid({ result, startAt = 1 }) {
+  const [sort, setSort] = useState({ col: -1, dir: 1 });
+  const [filters, setFilters] = useState({});
+  const shown = useMemo(() => {
+    let list = result.rows.map((row, i) => ({ row, i }));
+    Object.entries(filters).forEach(([c, text]) => {
+      const t = text.trim().toLowerCase();
+      if (t) list = list.filter(({ row }) => cellText(row[c]).toLowerCase().includes(t));
+    });
+    if (sort.col >= 0) {
+      list = [...list].sort((a, b) => {
+        const x = a.row[sort.col], y = b.row[sort.col];
+        if (x === y) return 0;
+        if (x === null || x === undefined) return -sort.dir;
+        if (y === null || y === undefined) return sort.dir;
+        return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true })) * sort.dir;
+      });
+    }
+    return list;
+  }, [result.rows, filters, sort]);
+  const copy = (e) => {
+    if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') || window.getSelection()?.toString()) return;
+    e.preventDefault();
+    const text = [result.columns, ...shown.map(({ row }) => row.map(v => (v === null ? '' : String(v))))].map(r => r.join('\t')).join('\n');
+    navigator.clipboard?.writeText(text).then(() => toastStore.add('ok', `${shown.length} row(s) copied with headings.`)).catch(() => {});
+  };
   if (!result.columns.length) return <p className="p-4 text-xs text-stone-500">The query returned no result set.</p>;
   if (!result.rows.length) return <p className="p-4 text-xs text-stone-500">No rows found.</p>;
   return (
-    <table className="min-w-full text-xs">
+    <table className="min-w-full text-xs" tabIndex={0} onKeyDown={copy} aria-label="Query result">
       <thead>
         <tr>
           <th className={`${tableHead} px-2 py-2 text-right`}>#</th>
-          {result.columns.map((c, i) => <th key={i} className={`${tableHead} px-3 py-2`}>{c}</th>)}
+          {result.columns.map((c, i) => (
+            <th key={i} className={`${tableHead} px-3 py-2`} aria-sort={sort.col === i ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+              <button type="button" className="font-semibold" title="Sort"
+                onClick={() => setSort(s => (s.col === i ? (s.dir === 1 ? { col: i, dir: -1 } : { col: -1, dir: 1 }) : { col: i, dir: 1 }))}>
+                {c}{sort.col === i ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+              </button>
+            </th>
+          ))}
+        </tr>
+        <tr>
+          <th />
+          {result.columns.map((c, i) => (
+            <th key={i} className="px-1 pb-1">
+              <input value={filters[i] ?? ''} onChange={e => setFilters(f => ({ ...f, [i]: e.target.value }))} aria-label={`Filter ${c}`}
+                placeholder="filter" className="w-full min-w-[4rem] rounded border border-[#E3D9CD] bg-transparent px-1.5 py-0.5 text-[11px] font-normal dark:border-line" />
+            </th>
+          ))}
         </tr>
       </thead>
       <tbody className={tableBody}>
-        {result.rows.map((row, r) => (
+        {shown.map(({ row, i: r }) => (
           <tr key={r} className="hover:bg-[#FAF6EF] dark:hover:bg-subtle/70">
             <td className="px-2 py-1 text-right font-mono text-[11px] text-stone-400">{startAt + r}</td>
             {row.map((v, c) => (
@@ -86,6 +129,7 @@ export default function SqlQueryExecution() {
   const editor = useRef(null);
   const menuAnchor = useRef(null);
   const historyRef = useRef(null);
+  const searchBox = useRef(null);
   const serverUp = status?.db_connected === true;
   const connected = status !== null && serverUp;
 
@@ -103,6 +147,8 @@ export default function SqlQueryExecution() {
     }, 250);
     return () => window.clearTimeout(t);
   }, [connected, search, target]);
+
+  useEffect(() => { if (connected) searchBox.current?.focus(); }, [connected]);   // legacy focuses the search box on open
 
   const grouped = useMemo(() => Object.fromEntries(KINDS.map(k => [k, objects.filter(o => o.kind === k)])) , [objects]);
 
@@ -185,6 +231,29 @@ export default function SqlQueryExecution() {
     toastStore.add('ok', `${result.row_count} rows exported to ${what}.`);
   };
 
+  // Double-click / Enter on an object (legacy: a table runs "Select top 1000 <columns>", a view or procedure shows its definition).
+  const openObject = (o) => scriptInto(o, o.kind === 'Tables' ? 'select' : 'definition', o.kind === 'Tables');
+
+  // Explorer keys, as the desktop's: ↓ from the search box to the list, ↑↓ between objects, Enter opens, Esc clears the search.
+  const rows = () => Array.from(document.querySelectorAll('[data-object-row]'));
+  const onSearchKey = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); rows()[0]?.focus(); }
+    else if (e.key === 'Escape' && search) { e.preventDefault(); setSearch(''); }
+  };
+  const onObjectKey = (e, o) => {
+    if (e.target !== e.currentTarget) return;
+    const list = rows();
+    const at = list.indexOf(e.currentTarget);
+    if (e.key === 'ArrowDown') { e.preventDefault(); list[at + 1]?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (at > 0 ? list[at - 1] : searchBox.current)?.focus(); }
+    else if (e.key === 'Enter') { e.preventDefault(); openObject(o); }
+    else if (e.key === 'Escape') { e.preventDefault(); setSearch(''); searchBox.current?.focus(); }
+    else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); openMenu(o, e.currentTarget); }
+  };
+
+  // Alt+E exports the result (legacy btnExport hot key).
+  useShortcuts({ 'Alt+E': () => { if (result?.rows.length) exportResult(); } });
+
   const openMenu = (obj, el) => {
     menuAnchor.current = el;
     setMenuFor(obj);
@@ -222,7 +291,7 @@ export default function SqlQueryExecution() {
             <div className="flex items-center gap-2 border-b border-[#E3D9CD] p-3 dark:border-line">
               <div className="relative flex-1">
                 <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Find table, view, procedure" aria-label="Find database object"
+                <input ref={searchBox} value={search} onChange={e => setSearch(e.target.value)} onKeyDown={onSearchKey} placeholder="Find table, view, procedure" aria-label="Find database object"
                   className={`${field} pl-7`} disabled={!connected} />
               </div>
               <button className={iconButton} onClick={() => setExplorerShown(false)} title="Hide object list" aria-label="Hide object list"><PanelLeftClose size={16} /></button>
@@ -238,8 +307,9 @@ export default function SqlQueryExecution() {
                   {open[kind] && grouped[kind]?.map(o => (
                     <div key={`${o.schema}.${o.name}`}
                       onContextMenu={e => { e.preventDefault(); openMenu(o, e.currentTarget); }}
-                      onDoubleClick={() => scriptInto(o, o.kind === 'Tables' ? 'select' : 'definition')}
-                      className="group flex items-center rounded-md py-0.5 pl-6 pr-1 hover:bg-[#EFE9DF] dark:hover:bg-subtle">
+                      onDoubleClick={() => openObject(o)}
+                      onKeyDown={e => onObjectKey(e, o)} tabIndex={0} data-object-row
+                      className="group flex items-center rounded-md py-0.5 pl-6 pr-1 hover:bg-[#EFE9DF] focus:bg-[#EFE9DF] focus:outline-none dark:hover:bg-subtle dark:focus:bg-subtle">
                       <span className="flex-1 truncate font-mono text-[11px]" title={`${o.schema}.${o.name}`}>{o.schema !== 'dbo' && o.schema !== 'main' && `${o.schema}.`}{o.name}</span>
                       <button onClick={e => openMenu(o, e.currentTarget)} aria-label={`Options for ${o.name}`}
                         className="rounded p-0.5 text-stone-400 opacity-0 hover:text-stone-700 focus:opacity-100 group-hover:opacity-100 dark:hover:text-stone-100">
@@ -291,7 +361,7 @@ export default function SqlQueryExecution() {
             <div className="min-h-0 flex-1 overflow-auto">
               {result?.kind === 'write'
                 ? <p className="p-4 text-xs text-emerald-700 dark:text-emerald-400">{result.rows_affected} row(s) affected. The change is saved.</p>
-                : result ? <ResultGrid result={result} /> : <p className="p-4 text-xs text-stone-500">Results appear here.</p>}
+                : result ? <ResultGrid key={`${result.elapsed_ms}|${result.row_count}|${result.columns.join(',')}`} result={result} /> : <p className="p-4 text-xs text-stone-500">Results appear here.</p>}
             </div>
           </div>
         </section>

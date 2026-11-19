@@ -12,7 +12,7 @@
 //
 // Keyboard first (the counter rarely uses a mouse; the full list is in the Shortcuts sheet, `?`):
 //   F2 item search · F3 quick pick · Alt+T load template · F4 customer · F6 or Alt+P next payment type · F7 hold / new · F8 held bills
-//   F9 cash tendered · F10 save & print · ⌘/Ctrl+S save only
+//   F9 cash tendered · F10 save & print · ⌘/Ctrl+S save only · F12 / Ctrl+F12 / Alt+F12 save and print, preview or nothing (Invoice Settings)
 //   Alt+R re-print · Alt+C cancel a saved invoice
 //   In the empty item search: ↑/↓ choose a line, + / − change its qty, Delete removes it, Enter edits its qty,
 //   and "3*" sets the qty for the next item. In a line: ↑/↓ move between lines, Enter or Esc back to the search.
@@ -38,7 +38,7 @@ import { toastStore } from '../common/toastStore';
 import BillExtras from './BillExtras';
 import CustomerPicker from './CustomerPicker';
 import { useBillExtras } from './useBillExtras';
-import { deleteSalesInvoice, errorText, getCustomers, getNextNumber, getPartyRecords, getSalesPersons, getSettingValues, listSalesInvoices, newIdempotencyKey, saveSalesInvoice, todayIso, updateSalesInvoice, } from '../../lib/api';
+import { deleteSalesInvoice, errorText, getCustomers, getInvoiceKeys, getNextNumber, getPartyRecords, getSalesPersons, getSettingValues, listSalesInvoices, newIdempotencyKey, saveSalesInvoice, todayIso, updateSalesInvoice, } from '../../lib/api';
 import { CancelInvoiceDialog, HeldBillsDialog, ReprintDialog } from './SalesInvoiceDialogs';
 import { STOCK_ITEMS, lineName, litresPerBottle, loadStockItems, stockIndex, useStockItems } from '../../data/stockData';
 import { PAYMENT_TYPES, } from '../../data/salesCounters';
@@ -69,6 +69,9 @@ const cgstAmt = (l) => l.fCgst ?? round2(round2(gross(l)) * (l.cgstPct ?? 0) / 1
 const sgstAmt = (l) => l.fSgst ?? round2(round2(gross(l)) * (l.sgstPct ?? 0) / 100);
 const itemAmt = (l) => gross(l) - discAmt(l) + cgstAmt(l) + sgstAmt(l);
 // Splits "26/c10-0001234" into "26/c10-" + 1234 so later bills keep the same prefix and zero padding.
+// Invoice Settings → Invoice Print Settings: what F12 / Ctrl+F12 / Alt+F12 do after the save. 'S' saves only (nothing is printed), 'SP' saves and prints
+// (as F10 does), 'SPP' saves and opens the preview.
+const KEY_MODE = { S: 'none', SP: true, SPP: 'preview' };
 const parseInvoiceNo = (invoiceNo) => {
   const match = invoiceNo.match(/^(.*?)(\d+)$/);
   return match ? { head: match[1], seq: Number(match[2]), width: match[2].length } : { head: `${invoiceNo}-`, seq: 1, width: 1 };
@@ -110,6 +113,8 @@ export default function SalesInvoice({ setup, onClose }) {
   const [numbering, setNumbering] = useState(() => (setup.invoiceNo ? parseInvoiceNo(setup.invoiceNo) : null));
   const [now, setNow] = useState(() => new Date());
   const [seq, setSeq] = useState(numbering?.seq ?? 1);
+  const [invoiceKeys, setInvoiceKeys] = useState({ f12: 'S', ctrl_f12: 'S', alt_f12: 'S' });   // Invoice Settings → Invoice Print Settings
+  useEffect(() => { getInvoiceKeys().then(setInvoiceKeys).catch(() => undefined); }, []);
   const [prevBill, setPrevBill] = useState(null);
   // The previous bill comes from the database: the latest saved bill of this counter in the last week (any counter's when this one has none), so
   // a bill made on another PC or in the Windows vLQMS shows too. A bill saved on this screen replaces it (below).
@@ -654,8 +659,10 @@ export default function SalesInvoice({ setup, onClose }) {
     resetBill();
   };
 
+  // andPrint: false follows the shop's print settings, true prints, 'preview' opens the preview, 'none' prints nothing.
   const saveBill = async (andPrint = false) => {
     if (locked()) return;
+    const wantsPrint = andPrint === true || andPrint === 'preview';
     if (!lines.length) return setToast({ kind: 'error', text: 'Add at least one item before saving the bill.' });
     if (lines.some(l => !l.qty || !l.rate)) return setToast({ kind: 'error', text: 'Every item needs a quantity and a rate.' });
     if (totals.card + totals.other > totals.invoice) return setToast({ kind: 'error', text: 'Card + other payment exceeds the invoice value.' });
@@ -679,7 +686,7 @@ export default function SalesInvoice({ setup, onClose }) {
         getCustomers().then(setCustomers).catch(() => undefined);
         loadStockItems().catch(() => undefined);
         setToast({ kind: 'ok', text: `Bill ${doc.doc_no} updated — ₹ ${money(doc.totals.net)}.` });
-        if (andPrint) setPrintDocNo(doc.doc_no);
+        if (wantsPrint) setPrintDocNo(doc.doc_no);
         resetBill();
       }).catch(e => setToast({ kind: 'error', text: errorText(e) })).finally(() => { sending.current = false; setBusy(false); });
       return;
@@ -696,7 +703,8 @@ export default function SalesInvoice({ setup, onClose }) {
       // Print the bill exactly as the server saved it (number, totals, points).
       // What printing follows a save comes from the Doc Designer's default print option (Global Settings is the fallback).
       const fallback = gsettings.InvPreview?.toUpperCase() === 'Y' ? 'preview' : docSettings.after_save;
-      afterSavePlan('sales_invoice', fallback, andPrint).then(({ plan, option }) => {
+      const planned = andPrint === 'none' ? Promise.resolve({ plan: 'none' }) : andPrint === 'preview' ? Promise.resolve({ plan: 'dialog' }) : afterSavePlan('sales_invoice', fallback, andPrint);
+      planned.then(({ plan, option }) => {
         if (plan === 'dialog') setPrintDocNo(doc.doc_no);
         else if (plan === 'ask') confirm('Do you want to print the invoice..?').then(ok => { if (ok) setPrintDocNo(doc.doc_no); else setTimeout(focusSearch, 60); });
         else if (plan === 'direct' && option) {
@@ -709,6 +717,8 @@ export default function SalesInvoice({ setup, onClose }) {
       const given = parseInvoiceNo(doc.doc_no);   // the next preview follows the number the server gave
       setNumbering(given);
       setSeq(given.seq + 1);
+      // Invoice Settings can make the next number follow its own rules (a month's prefix, a counter's own series): ask the server for it.
+      getNextNumber('sales_invoice', counter.code).then(n => { const p = parseInvoiceNo(n.doc_no); setNumbering(p); setSeq(p.seq); }).catch(() => undefined);
       resetBill();
     }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
   };
@@ -725,6 +735,9 @@ export default function SalesInvoice({ setup, onClose }) {
     F8: () => setDialog('held'),
     F9: () => focusField('si-collected'),
     F10: () => { void saveBill(true); },
+    F12: () => { void saveBill(KEY_MODE[invoiceKeys.f12]); },
+    'Mod+F12': () => { void saveBill(KEY_MODE[invoiceKeys.ctrl_f12]); },
+    'Alt+F12': () => { void saveBill(KEY_MODE[invoiceKeys.alt_f12]); },
     'Mod+S': () => { void saveBill(false); },
     'Alt+R': () => setDialog('reprint'),
     'Alt+C': () => setDialog('cancel'),

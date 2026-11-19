@@ -110,4 +110,30 @@ describe('SqlQueryExecution', () => {
     expect(screen.getByRole('button', { name: /execute query/i })).toBeDisabled()
     expect(screen.queryByRole('radio')).toBeNull()   // no second (local) database any more
   })
+
+  it('filters the result grid by column', async () => {
+    const user = userEvent.setup()
+    render(<SqlQueryExecution />)
+    await screen.findByText('vLQMSLHOUSE')
+
+    await user.type(screen.getByLabelText('SQL query'), 'SELECT ItemCode, MRP FROM MstItem')
+    await user.click(screen.getByRole('button', { name: /execute query/i }))
+    await screen.findByText('VIN-750')
+
+    await user.type(screen.getByLabelText('Filter ItemCode'), 'RC')
+    expect(screen.queryByText('VIN-750')).toBeNull()
+    expect(screen.getByText('RC-750')).toBeInTheDocument()
+  })
+
+  it('moves from the search box into the object list with the arrow key', async () => {
+    const user = userEvent.setup()
+    render(<SqlQueryExecution />)
+    await screen.findByText('MstItem')
+    const search = screen.getByLabelText('Find database object')
+    await waitFor(() => expect(search).toHaveFocus())
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByText('MstItem').closest('[data-object-row]')).toHaveFocus()
+    await user.keyboard('{ArrowUp}')
+    expect(search).toHaveFocus()
+  })
 })

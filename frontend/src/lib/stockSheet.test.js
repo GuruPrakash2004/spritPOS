@@ -31,7 +31,7 @@ describe('stock sheets', () => {
     const rows = compareSheets([it('A', 5, 50), it('B', 2, 20), it('C', 1, 10), it('D', 1, 10)], [it('A', 5, 50), it('B', 3, 30), it('C', 1, 12), it('E', 1, 1)])
     const by = Object.fromEntries(rows.map(r => [r.code, r]))
     expect(by.A.status).toBe('OK')
-    expect(by.B).toMatchObject({ status: 'Qty Mismatch', qtyDiff: 1, valueDiff: 10 })
+    expect(by.B).toMatchObject({ status: 'Qty Mismatch Value Mismatch', qtyDiff: 1, valueDiff: 10 })
     expect(by.C.status).toBe('Value Mismatch')
     expect(by.D.status).toBe('Item Not found (New)')
     expect(by.E.status).toBe('Item Not found (Old)')

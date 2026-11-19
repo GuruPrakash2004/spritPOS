@@ -37,7 +37,7 @@ export const MODULE_GROUPS = [
   { group: 'Tools', modules: ['SQL Query Execution', 'Re Write Stock'] },
   // The desktop app's UTILITIES menu (MstMenu type 7), with its captions; screens are added as they are built.
   // Its Security item is Admin Master, shown as "Admin Master (Security)" under Administration.
-  { group: 'Utilities', modules: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Bulk Master Update', 'Update Item Stock', 'Item Vs Brand', 'Shared Documents', 'Delete Non-Liquor Items', 'Label Printing', 'SMS', 'PDF Generator'] },
+  { group: 'Utilities', modules: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Bulk Master Update', 'Update Item Stock', 'Import Item Master Fields', 'Import Item Data From Excel', 'Item Vs Brand', 'Shared Documents', 'Delete Non-Liquor Items', 'Label Printing', 'SMS', 'PDF Generator', 'Key Generation'] },
 ];
 
 // The sidebar's tree, laid out like the desktop's menu (INVENTORY > MASTERS > ITEM RELATED > Item Master, TRANSACTIONS, REPORTS,
@@ -53,37 +53,45 @@ export const NAV_TREE = [
         label: 'Masters',
         children: [
           { label: 'Company Details', children: ['Company Master'] },
-          { label: 'Item Related', children: ['Item Master', 'Item Group Master', 'UOM Master', 'Price List Maintenance', 'Package Master', 'Brand Master'] },
+          { label: 'Item Related', children: ['Item Master', 'Item Group Master', 'UOM Master', 'Price List Maintenance'] },
           { label: 'Customer Related', children: ['Customer Master', 'Customer Group Master', 'Customer Vs Item Master'] },
           { label: 'Supplier Related', children: ['Supplier Master', 'Supplier Group Master', 'Supplier Vs Item Master'] },
           {
+            // The desktop's order (its Role Master is Admin Master's Roles tab); Holiday Master is the web's own.
             label: 'Others',
-            children: ['Ledger Master', 'Ledger Group Master', 'Sales Counter Master', 'Sales Person Master', 'State Master', 'State City Country', 'Currency Master',
-              'Location Master', 'Tax Master', 'Bank Master', 'Holiday Master'],
+            children: ['State Master', 'Currency Master', 'Sales Person Master', 'Location Master', 'Ledger Master', 'Ledger Group Master', 'State City Country',
+              'Tax Master', 'Bank Master', 'Sales Counter Master', 'Package Master', 'Brand Master', 'Holiday Master'],
           },
         ],
       },
       {
+        // The desktop's order first; the web's own screens (closing stock, cash count, vouchers) follow.
         label: 'Transactions',
-        children: ['Sales Invoice', 'Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Physical Stock Entry', 'Cash Denomination',
-          'Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher', 'Quotation'],
+        children: ['Sales Invoice', 'Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Quotation', 'Physical Stock Entry',
+          'Closing Stock Entry', 'Cash Denomination', 'Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher'],
       },
       {
+        // The desktop's order and captions first; the web's other reports follow.
         label: 'Reports',
-        children: ['Daily Summary Report', 'Stock Balance Report', 'Stock Ledger', 'Stock Ageing', 'Profit Margin', 'Hourly Sales', 'Daily Sales', 'Brand-wise Sales',
-          'Day-wise Litres', 'Stock in Litres', 'Stock Level / Reorder', 'Package-wise Sales', 'Package-wise Purchase', 'Loyalty Report', 'Excise Stock', 'Loyalty Detail', 'Item Rate History', 'Audit Trail',
-          'Drops Sales Summary', 'Drops Purchase', 'Drops Petty Cash', 'Drops Consolidated', 'General Ledger', 'Party wise OutStanding', 'Bill wise OutStanding', 'Bill wise Ageing',
-          { name: 'Reports Dashboard', label: 'Customised Reports' }],
+        children: [{ name: 'Reports Dashboard', label: 'Customised Reports...' }, 'Stock Balance Report', { name: 'Stock Ledger', label: 'Stock Ledger Report' },
+          { name: 'Stock Ageing', label: 'Stock Ageing Report' }, { name: 'Stock Level / Reorder', label: 'Stock Level Report' }, 'Daily Summary Report',
+          { name: 'Brand-wise Sales', label: 'Brand Wise Report' }, { name: 'Profit Margin', label: 'Profit Margin Report' },
+          'Hourly Sales', 'Daily Sales', 'Day-wise Litres', 'Stock in Litres', 'Package-wise Sales', 'Package-wise Purchase', 'Loyalty Report', 'Excise Stock', 'Loyalty Detail',
+          'Item Rate History', 'Audit Trail', 'Drops Sales Summary', 'Drops Purchase', 'Drops Petty Cash', 'Drops Consolidated', 'General Ledger', 'Party wise OutStanding',
+          'Bill wise OutStanding', 'Bill wise Ageing'],
       },
     ],
   },
   { label: 'Tools', children: ['SQL Query Execution', 'Re Write Stock'] },
   {
+    // The desktop's order (Security is Admin Master); its Database Connectivity, Data Port To Cloud and Database Archive are not built.
+    // The web's own screens follow Bulk Master Update.
     label: 'Utilities',
-    children: ['Global Settings', 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items', 'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Web Sync',
-      'Bulk Master Update', 'Update Item Stock', 'Item Vs Brand', 'Shared Documents', 'Delete Non-Liquor Items', 'Label Printing', 'SMS', 'PDF Generator'],
+    children: [{ name: 'Admin Master', label: 'Security' }, { name: 'Global Settings', label: 'Global Settings...' }, 'Remove Duplicate Invoice', 'Replace and Remove Duplicate items',
+      'Merge Items', 'Compare Stock', 'ADMIN Audit Log', 'Bulk Master Update', 'Update Item Stock', 'Import Item Master Fields', 'Import Item Data From Excel', 'Item Vs Brand', 'Shared Documents', 'Delete Non-Liquor Items',
+      'Label Printing', 'SMS', 'PDF Generator'],
   },
-  { name: 'Admin Master', label: 'Admin Master (Security)' },
+  'Key Generation',   // the exe shows it only on the vendor's own machines; here only where the server has the key file
   'About',
 ];
 
@@ -91,7 +99,7 @@ export const ADMIN_MASTER = 'Admin Master';
 export const ADMIN_PATH = '/adminMaster';
 export const ADMIN_ROLE = 'Administrator';
 // Screens only an Administrator may open, whatever the role's module list says (the server checks too).
-export const ADMIN_ONLY = new Set([ADMIN_MASTER, 'SQL Query Execution', 'Global Settings', 'ADMIN Audit Log', 'Audit Trail', 'Delete Non-Liquor Items']);
+export const ADMIN_ONLY = new Set([ADMIN_MASTER, 'SQL Query Execution', 'Global Settings', 'ADMIN Audit Log', 'Audit Trail', 'Delete Non-Liquor Items', 'Key Generation']);
 
 // Screens every signed-in user may open, whatever their role.
 export const ALWAYS_OPEN = new Set(['About']);
@@ -178,9 +186,12 @@ export const MODULE_KEYWORDS = {
   'PDF Generator': 'pdf generator bulk documents zip print invoices',
   'SMS': 'sms text message send history mobile',
   'Item Vs Brand': 'item vs brand link unlinked items brand assign',
+  'Import Item Data From Excel': 'import item data excel xls xlsx csv template bulk add items upload',
+  'Import Item Master Fields': 'import item master fields update bulk change uom brand hsn mrp rate excel template grid',
   'Update Item Stock': 'update item stock import opening stock excel purchase bill ksbcl',
   'Compare Stock': '714 compare stock sheet excel difference mismatch closing utilities',
   'Global Settings': '702 ctrl+g global settings setting configuration freeze date salesperson loyalty points utilities print settings printer preview direct email prompt after save other settings transaction settings doc prefix document number menu sequence shortcut',
+  'Key Generation': 'key generation generator reg no registration licence vendor',
   'ADMIN Audit Log': 'admin audit log history changes who changed edited deleted trail utilities',
   'About': 'about version softvent help',
 };

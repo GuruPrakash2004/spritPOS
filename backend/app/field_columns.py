@@ -57,7 +57,7 @@ WEB_HINTS: dict[str, dict[str, dict]] = {
               # the designer hides these key columns (the desktop draws its own drop-downs); the web's choices are the masters' codes
               "group": {"caption": "Item Group", "options_from": "item-groups", "required": True},
               "uom": {"caption": "UOM", "options_from": "uoms", "required": True},
-              "brand": {"caption": "Brand", "options_from": "brands"}, "package": {"options_from": "packages", "required": True},
+              "brand": {"caption": "Brand", "options_from": "brands"}, "package": {"options_from": "packages"},
               "liqtype": {"options": ["IML", "Beer", "Wine", "Others"], "required": True}},
     "customers": {"points": {"caption": "Loyalty Points"}, "gstin": {"required": True}, "currency": {"options_from": "currencies", "required": True}},
     "suppliers": {"gstin": {"required": True}},

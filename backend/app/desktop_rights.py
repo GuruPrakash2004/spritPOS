@@ -98,7 +98,9 @@ def load() -> None:
             continue
         user_id, role_id = ids[code]
         mine = owned.get(user_id if by_user else role_id, {})
-        if not any("1" in f for f in mine.values()):   # no rights set for this user / role at all: keep the web role rather than lock them out
+        # No rows at all for this user / role: the shop doesn't use these tables for them, so the web role stays rather than locking them out.
+        # Rows that exist but are all zero are a decision made on the desktop (every screen greyed out): that is honoured, as the exe does.
+        if not mine:
             u.pop("desktop", None)
             logger.warning("%s has no rights rows (%s): the web role %s applies", code, "by user" if by_user else "by role", u.get("role"))
             continue

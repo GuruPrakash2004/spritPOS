@@ -84,14 +84,76 @@ async def test_editing_an_item_keeps_its_own_names(client):
     assert res.status_code == 200 and store.ITEMS["NEW-9"]["name"] == "Renamed"
 
 
-async def test_uom_is_locked_once_the_item_is_on_a_transaction(client):
+async def test_uom_is_never_changed_from_the_item_form(client):
     other = next(c for c in store.UOMS if c != store.ITEMS["VIN-750"]["uom"])
-    used = dict(store.ITEMS["VIN-750"], uom=other)
-    res = await client.put("/masters/items/VIN-750", json=used)
+    res = await client.put("/masters/items/VIN-750", json=dict(store.ITEMS["VIN-750"], uom=other))   # on bills
+    assert res.status_code == 409 and "Update Item Master Fields" in res.json()["detail"]
+    assert (await _post(client)).status_code == 201
+    res = await client.put("/masters/items/NEW-9", json=_new(uom=other))                              # not on any bill: still refused
     assert res.status_code == 409 and "UOM can't be changed" in res.json()["detail"]
-    assert (await _post(client)).status_code == 201                      # an unused item can still change it
-    res = await client.put("/masters/items/NEW-9", json=_new(uom=other))
-    assert res.status_code == 200 and store.ITEMS["NEW-9"]["uom"] == other
+    assert (await client.put("/masters/items/NEW-9", json=_new(name="Renamed"))).status_code == 200     # the same UOM saves as before
+
+
+def test_update_item_master_fields_always_offers_uomid(monkeypatch):
+    monkeypatch.setattr(masters.db, "is_db_available", lambda: True)
+    monkeypatch.setattr(masters.db, "fetchall", lambda sql, params=(): [{"FieldName": "MRP", "Datatype": "NUMERIC"}, {"FieldName": "BotPerCases", "Datatype": "INTEGER"}])
+    assert [f["code"] for f in masters._bulk_field_defs()] == ["BotPerCases", "MRP", "UOMID"]   # sorted by name, UOMID added
+    monkeypatch.setattr(masters.db, "fetchall", lambda sql, params=(): [{"FieldName": "UOMID", "Datatype": "Numeric"}])
+    assert [f["code"] for f in masters._bulk_field_defs()] == ["UOMID"]                           # the shop's own row is kept, not doubled
+
+
+def test_uom_written_by_the_bulk_screen_is_checked(monkeypatch):
+    monkeypatch.setattr(masters.db, "fetchone", lambda sql, params=(): {"v": 7})           # the item's UOMID now
+    monkeypatch.setattr(masters, "_item_in_use", lambda code: code == "VIN-750")                    # bills / stock the app knows of
+    monkeypatch.setattr(masters, "_item_id_on_trn_tables", lambda item_id, strict=False: item_id == 777)   # the shop's TrnDtl* tables
+    other_code = next(c for c in store.ITEMS if c != "VIN-750")
+    monkeypatch.setitem(store.ITEMS["VIN-750"], "_itemid", 501)
+    monkeypatch.setitem(store.ITEMS[other_code], "_itemid", 502)
+    item_id = 501
+    masters._check_uom_change(1, item_id, "BTL", 7)                                         # unchanged: passes even for a used item
+    for blank in ("", "-"):
+        with pytest.raises(masters.HTTPException) as e:
+            masters._check_uom_change(1, item_id, blank, 0)
+        assert e.value.status_code == 422
+    with pytest.raises(masters.HTTPException) as e:                                          # changed, on bills: refused
+        masters._check_uom_change(2, item_id, "CASE", 9)
+    assert e.value.status_code == 409 and "used in bills or stock" in e.value.detail
+    masters._check_uom_change(3, 502, "CASE", 9)                                            # changed, unused: passes
+
+
+def test_uom_guard_also_checks_the_database_when_the_item_is_not_in_memory(monkeypatch):
+    monkeypatch.setattr(masters.db, "fetchone", lambda sql, params=(): {"v": 7})
+    monkeypatch.setattr(masters, "_item_id_on_trn_tables", lambda item_id, strict=False: item_id == 777)
+    with pytest.raises(masters.HTTPException) as e:                  # ItemID 777 is in no in-memory item, but it is on the shop's bills
+        masters._check_uom_change(1, 777, "CASE", 9)
+    assert e.value.status_code == 409 and "ItemID 777" in e.value.detail
+    masters._check_uom_change(2, 778, "CASE", 9)                    # another unknown ItemID with no bills: allowed
+
+
+def test_uom_guard_does_not_guess_when_the_database_cannot_answer(monkeypatch):
+    monkeypatch.setattr(masters.db, "is_db_available", lambda: True)
+    def broken(*a, **k):
+        raise RuntimeError("down")
+    monkeypatch.setattr(masters.db, "fetchall", broken)
+    assert masters._item_id_on_trn_tables(5) is False               # the item form's old rule: don't block on a guess
+    with pytest.raises(masters.HTTPException) as e:
+        masters._item_id_on_trn_tables(5, strict=True)              # a UOM change: refuse
+    assert e.value.status_code == 503
+
+
+def test_uomid_is_always_an_integer_id_field(monkeypatch):
+    monkeypatch.setattr(masters.db, "is_db_available", lambda: True)
+    monkeypatch.setattr(masters.db, "fetchall", lambda sql, params=(): [{"FieldName": "UOMID", "Datatype": "TEXT"}])
+    assert masters._bulk_field_defs() == [{"code": "UOMID", "datatype": "INTEGER"}]               # a TEXT row in the shop's table can't skip the guard
+
+
+async def test_import_from_excel_cannot_change_the_uom_of_an_existing_item(client):
+    other = next(c for c in store.UOMS if c != store.ITEMS["VIN-750"]["uom"])
+    res = await client.post("/masters/items/import", params={"overwrite": "true"}, json=[dict(store.ITEMS["VIN-750"], uom=other)])
+    assert res.status_code == 422 and "UOM of an existing item" in res.json()["detail"]
+    assert store.ITEMS["VIN-750"]["uom"] != other
+    ok = await client.post("/masters/items/import", params={"overwrite": "true"}, json=[dict(store.ITEMS["VIN-750"], name="Renamed by import")])
+    assert ok.status_code == 200                                                                   # the same UOM still imports
 
 
 async def test_purchase_sale_variation_is_not_checked_for_the_others_type(client):
@@ -149,11 +211,6 @@ async def test_similar_codes_are_found_ignoring_punctuation_and_case(client):
     assert (await client.get("/masters/items/similar", params={"code": "vin 750", "exclude": "VIN-750"})).json() == []
 
 
-async def test_uom_lock_is_reported_for_an_item_on_bills(client):
-    assert (await client.get("/masters/items/VIN-750/locks")).json() == {"uom_locked": True}
-    assert (await client.get("/masters/items/NOPE/locks")).status_code == 404
-
-
 async def test_options_that_need_the_database_say_so_without_one(client):
     invalid = (await client.get("/masters/items/invalid")).json()
     assert invalid["rows"] == [] and "database" in invalid["note"].lower()
@@ -167,3 +224,100 @@ async def test_item_find_looks_in_short_name_and_aliases(client):
     assert (await _post(client, code="FIND-1", short_name="zzshort", aliases=["zzalias"])).status_code == 201
     for q in ("zzshort", "ZZALIAS", "find-1"):
         assert [r["code"] for r in (await client.get("/masters/items", params={"q": q})).json()] == ["FIND-1"]
+
+
+async def test_an_items_aliases_come_back_in_the_item_list_the_bills_search(client):
+    """The Sales Invoice finds an item by its alias from /masters/items: a saved item must list its aliases at once."""
+    res = await _post(client, code="ALIAS-22", aliases=["0000023", "0000024"])
+    assert res.status_code == 201
+    listed = {i["code"]: i for i in (await client.get("/masters/items")).json()}
+    assert listed["ALIAS-22"]["aliases"] == ["0000023", "0000024"]
+    res = await client.put("/masters/items/ALIAS-22", json=_new(code="ALIAS-22", aliases=["0000025"]))
+    assert res.status_code == 200
+    listed = {i["code"]: i for i in (await client.get("/masters/items")).json()}
+    assert listed["ALIAS-22"]["aliases"] == ["0000025"]
+
+
+async def test_a_new_item_needs_an_mrp_but_not_a_package_or_hsn_code(client):
+    """MRP must be above 0 (2026-11-19). The Package box is the designer's Pkg Item column (mandatory there); the typed package and HSN stay optional."""
+    res = await client.post("/masters/items", json=_new("NOPKG-1", package="", hsn_code=""))
+    assert res.status_code == 201, res.text
+    res = await client.post("/masters/items", json=_new("NOMRP-1", mrp=0))
+    assert res.status_code == 422 and "MRP" in res.text
+    res = await client.post("/masters/items", json=_new("NOHSN-1", package="-", hsn_code=""))
+    assert res.status_code == 201, res.text
+
+
+def test_the_item_masters_header_formulas_are_worked_out_on_save(monkeypatch):
+    """Item Selling Rate (read-only, formula of the Doc Designer) is always recalculated; an editable formula field keeps what the user typed."""
+    from app import designer, doc_engine
+    from app import schema_meta
+    sell = "SVTROUND2((#MRP#-#COMPCESS#)/(100+#CGSTPER#+#SGSTPER#+#CESSPER#)*100)"
+    fields = [{"FldCode": "ITEMSELL", "FldFormula": sell, "FldBlnReadOnly": "Y", "FldNumDecimals": 2},
+              {"FldCode": "MAXLEVEL", "FldFormula": "#ROL#*2", "FldBlnReadOnly": "N", "FldNumDecimals": 2}]
+    monkeypatch.setattr(doc_engine, "doc_id_of", lambda name: 1114)
+    monkeypatch.setattr(designer, "fields_for", lambda doc_id: fields)
+    monkeypatch.setattr(schema_meta, "columns", lambda table: [{"name": n} for n in ("ITEMSELL", "MAXLEVEL", "MRP", "ROL")])
+    row = {"mrp": 395.0, "cgst_per": 9, "sgst_per": 9, "rol": 5, "extras": {"CESSPER": "10", "COMPCESS": "100", "ITEMSELL": "395"}}
+    masters._apply_item_formulas(row)
+    assert row["extras"]["ITEMSELL"] == 230.47          # (395 - 100) / (100 + 9 + 9 + 10) * 100, whatever was there
+    assert row["extras"]["MAXLEVEL"] == 10               # empty: calculated
+    typed = {"mrp": 100.0, "cgst_per": 0, "sgst_per": 0, "rol": 5, "extras": {"MAXLEVEL": "7"}}
+    masters._apply_item_formulas(typed)
+    assert typed["extras"]["MAXLEVEL"] == "7"            # editable and filled: kept
+    assert typed["extras"]["ITEMSELL"] == 100.0
+    monkeypatch.setattr(designer, "fields_for", lambda doc_id: [])
+    plain = {"mrp": 100.0, "extras": {}}
+    masters._apply_item_formulas(plain)
+    assert plain["extras"] == {}                         # no formulas in the database: nothing added
+
+
+async def test_an_item_with_the_dash_package_or_brand_can_be_saved_again(client):
+    """The desktop's "-" row (ID 0) means none: an item loaded with it is saved back as it is."""
+    res = await client.post("/masters/items", json=_new("DASH-1", package="-", brand="-"))
+    assert res.status_code == 201, res.text
+    res = await client.put("/masters/items/DASH-1", json=_new("DASH-1", package="-", brand="-"))
+    assert res.status_code == 200, res.text
+
+
+async def test_hsn_code_is_optional_and_zero_means_none(client):
+    for code, hsn in (("HSN-A", ""), ("HSN-B", "0"), ("HSN-C", "22083011")):
+        assert (await client.post("/masters/items", json=_new(code, hsn_code=hsn))).status_code == 201
+    assert (await client.post("/masters/items", json=_new("HSN-D", hsn_code="22"))).status_code == 422
+
+
+async def test_import_dry_run_reports_each_bad_cell_in_the_exes_words_and_adds_nothing(client):
+    """Import Item Data From Excel checks the sheet with dry_run=true: one {"error", "fields"} per row (the exe's checks and wording), nothing is imported."""
+    await client.post("/masters/items", json=_new("DRY-OLD"))
+    rows = [_new("DRY-OK"), _new("DRY-BAD", group="NO SUCH GROUP", brand="NO BRAND", liqtype="Spirits", mrp=0), _new("DRY-OK"), _new("DRY-OLD")]
+    res = await client.post("/masters/items/import?dry_run=true", json=rows)
+    assert res.status_code == 200, res.text
+    out = res.json()["rows"]
+    assert out[0] == {"error": "", "fields": []}
+    assert out[1]["fields"] == ["brand", "group", "liqtype", "mrp"]
+    assert "Invalid Group" in out[1]["error"] and "Invalid Brand" in out[1]["error"] and "Invalid Liq.Type" in out[1]["error"] and "Invalid MRP" in out[1]["error"]
+    assert out[2] == {"error": "Duplicate Data", "fields": ["code"]}
+    assert out[3] == {"error": "Item Already Present", "fields": ["code"]}
+    assert "DRY-OK" not in store.ITEMS and "DRY-BAD" not in store.ITEMS
+
+
+async def test_import_applies_only_the_exes_checks_not_the_item_forms_other_rules(client):
+    """A row the desktop import accepts is accepted: a short name another item already holds, a blank package / brand ("-"), a blank liquor type."""
+    other = store.ITEMS["VIN-750"]
+    row = _new("IMP-222", short_name=other.get("short_name") or "SHARED", package="", brand="", liqtype="", purchase_rate=500.0, mrp=200.0)
+    res = await client.post("/masters/items/import?dry_run=true", json=[row])
+    assert res.status_code == 200, res.text
+    assert res.json()["rows"][0] == {"error": "", "fields": []}
+    res = await client.post("/masters/items/import", json=[row])
+    assert res.status_code == 200, res.text
+    assert store.ITEMS["IMP-222"]["package"] == "-" and store.ITEMS["IMP-222"]["brand"] == "-"
+
+
+async def test_import_works_out_the_item_selling_rate(client, monkeypatch):
+    """The exe's import stores ItemSell with the item; the web does it with the designer's formula (MRP less Comp.Cess over the taxes)."""
+    fields = [{"FldCode": "ITEMSELL", "FldFormula": "SVTROUND2((#MRP#-#COMPCESS#)/(100+#CGSTPER#+#SGSTPER#+#CESSPER#)*100)", "FldBlnReadOnly": "Y", "FldNumDecimals": 2}]
+    monkeypatch.setattr(masters, "_item_formula_context", lambda: (fields, {"ITEMSELL": "ITEMSELL", "MRP": "MRP"}))
+    row = _new("SELL-1", mrp=395.0, cgst_per=6.0, sgst_per=6.0)   # the test database has no cess columns: MRP over the two GST rates, as the exe works it out
+    res = await client.post("/masters/items/import", json=[row])
+    assert res.status_code == 200, res.text
+    assert store.ITEMS["SELL-1"]["extras"]["ITEMSELL"] == 352.68   # 395 / (100 + 6 + 6) * 100

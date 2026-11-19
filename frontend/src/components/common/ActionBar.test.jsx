@@ -68,3 +68,24 @@ describe('ActionBar', () => {
     expect(onList).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ActionBar File Attachment', () => {
+  it('is a button on the bar, not an Options item, and is greyed until a record is chosen', async () => {
+    const user = userEvent.setup()
+    const onAttach = vi.fn()
+    const { rerender } = render(<ActionBar onNew={vi.fn()} onAttach={onAttach} canAttach={false} options={[{ label: 'Copy From', onClick: vi.fn() }]} />)
+    expect(screen.getByRole('button', { name: /file attachment/i })).toBeDisabled()
+    rerender(<ActionBar onNew={vi.fn()} onAttach={onAttach} canAttach options={[{ label: 'Copy From', onClick: vi.fn() }]} />)
+    await user.click(screen.getByRole('button', { name: /file attachment/i }))
+    expect(onAttach).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', { name: /options/i }))
+    expect(screen.queryByRole('menuitem', { name: /file attachment/i })).not.toBeInTheDocument()
+  })
+
+  it('is not drawn while a record is being added or edited, or when the screen has no attachments', () => {
+    const { rerender } = render(<ActionBar mode="New" onAttach={vi.fn()} onSave={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /file attachment/i })).not.toBeInTheDocument()
+    rerender(<ActionBar onNew={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /file attachment/i })).not.toBeInTheDocument()
+  })
+})

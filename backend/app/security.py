@@ -151,7 +151,7 @@ def password_problem(password: str, user: str) -> str | None:
         return "Password must have a number"
     if s["require_special"] and all(c.isalnum() for c in password):
         return "Password must have a symbol such as # or @"
-    return None
+    return desktop_rules_problem(password)   # on top of the web's own rules: the desktop's Login Settings (UtlMisc) when its policy is on
 
 
 def password_expired(user: dict, today: date | None = None) -> bool:
@@ -164,7 +164,7 @@ def password_expired(user: dict, today: date | None = None) -> bool:
     if reset and date.fromisoformat(reset) <= today and (set_day is None or set_day < date.fromisoformat(reset)):
         return True
     days = int(login_settings()["password_expiry_days"] or 0)
-    return bool(days and set_day and set_day + timedelta(days=days) <= today)
+    return bool(days and set_day and set_day + timedelta(days=days) <= today) or desktop_expired(user, today)
 
 
 def adnl_admin_set() -> bool:
@@ -256,3 +256,95 @@ def check_authorised(path: str, code: str, what: str) -> None:
 def can_run_report(user: dict, name: str) -> bool:
     allowed = store.REPORT_RIGHTS.get(name)
     return user.get("role") == store.ADMIN_ROLE or not allowed or user.get("user") in allowed
+
+
+# ─── The desktop's Login Settings (frmUtlLoginSettings, UtlMisc): password policy, rules and expiry ───────────────
+
+def desktop_login() -> dict | None:
+    """UtlMisc's password policy as the exe holds it, or None when this database has none (no UtlMisc password columns)."""
+    m = store.UTL_MISC
+    if "PwdPolicy" not in m:
+        return None
+
+    def flag(col: str) -> bool:
+        return str(m.get(col) or "").strip().upper() == "Y"
+
+    def num(col: str) -> int:
+        try:
+            return int(float(m.get(col) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    return {"policy": flag("PwdPolicy"), "rules": flag("PwdRules"), "never_expires": flag("NeverExpires"), "expiry_days": num("PwdExpiryDays"),
+            "min_special": num("PwdMinSplChrs"), "min_numeric": num("PwdMinNumeric"), "min_alpha": num("PwdMinAlpha"), "min_length": num("PwdMinLen"),
+            "min_lower": num("PwdMinLCase"), "min_upper": num("PwdMinUCase"),
+            "login_required": flag("LoginReq"), "user_based": flag("UserBased")}
+
+
+def desktop_rules_problem(password: str) -> str | None:
+    """frmMstUser.ValidPwdRules: only when the policy and the rules are on. Digits, lower case and upper case are counted; every other character is
+    special; letters are lower + upper. 'Password doesn't match the Rules!' with what is missing."""
+    d = desktop_login()
+    if not d or not (d["policy"] and d["rules"]):
+        return None
+    digits = sum(c.isdigit() and c.isascii() for c in password)
+    lower = sum("a" <= c <= "z" for c in password)
+    upper = sum("A" <= c <= "Z" for c in password)
+    special = len(password) - digits - lower - upper
+    need = []
+    if len(password) < d["min_length"]:
+        need.append(f"at least {d['min_length']} characters")
+    if special < d["min_special"]:
+        need.append(f"{d['min_special']} special character(s)")
+    if digits < d["min_numeric"]:
+        need.append(f"{d['min_numeric']} number(s)")
+    if lower + upper < d["min_alpha"]:
+        need.append(f"{d['min_alpha']} letter(s)")
+    if upper < d["min_upper"]:
+        need.append(f"{d['min_upper']} capital letter(s)")
+    if lower < d["min_lower"]:
+        need.append(f"{d['min_lower']} small letter(s)")
+    return ("Password doesn't match the Rules! It needs " + ", ".join(need)) if need else None
+
+
+def desktop_login_check(body: dict) -> dict:
+    """frmUtlLoginSettings.ValidFields, with its messages; returns the values to save."""
+    policy, rules = bool(body.get("policy")), bool(body.get("rules"))
+    never = bool(body.get("never_expires"))
+    values = {k: int(body.get(k) or 0) for k in ("expiry_days", "min_special", "min_numeric", "min_alpha", "min_length", "min_lower", "min_upper")}
+    if any(v < 0 or v > 99 for k, v in values.items() if k != "expiry_days") or not 0 <= values["expiry_days"] <= 3650:
+        raise HTTPException(422, "The numbers must be from 0 to 99 (expiry days up to 3650)")
+    if policy and not never and values["expiry_days"] <= 0:
+        raise HTTPException(422, "Please enter the Password Expiry Days!!")
+    if policy and rules:
+        if values["min_special"] + values["min_numeric"] + values["min_alpha"] > values["min_length"]:
+            raise HTTPException(422, "Min. no of Special Character + Alphabets + Numeric should not be less than the Password length!!")
+        if values["min_alpha"] != values["min_lower"] + values["min_upper"]:
+            raise HTTPException(422, "Mni. No of LowerCase + UpperCase should be equal to Alphabets Length!!")
+    if not policy:   # the exe clears everything when the policy is off
+        return {"policy": False, "rules": False, "never_expires": False, **{k: 0 for k in values}}
+    if never:
+        values["expiry_days"] = 0
+    if not rules:
+        values.update(min_special=0, min_numeric=0, min_alpha=0, min_length=0, min_lower=0, min_upper=0)
+    return {"policy": True, "rules": rules, "never_expires": never, **values}
+
+
+def desktop_expired(user: dict, today: date | None = None) -> bool:
+    """The exe's expiry: with the policy on and the password not set to never expire, PwdResetDt + PwdExpiryDays has passed. ADMIN is exempt."""
+    d = desktop_login()
+    if not d or not d["policy"] or d["never_expires"] or d["expiry_days"] <= 0 or str(user.get("user", "")).upper() == "ADMIN":
+        return False
+    since = user.get("password_set_on") or user.get("password_reset_on")
+    if not since:
+        return False
+    return date.fromisoformat(str(since)[:10]) + timedelta(days=d["expiry_days"]) <= (today or date.today())
+
+
+def desktop_days_left(user: dict, today: date | None = None) -> int | None:
+    """"Your Password Expires In N days" (the exe's sign-in notice), or None when nothing expires."""
+    d = desktop_login()
+    since = user.get("password_set_on") or user.get("password_reset_on")
+    if not d or not d["policy"] or d["never_expires"] or d["expiry_days"] <= 0 or not since or str(user.get("user", "")).upper() == "ADMIN":
+        return None
+    return (date.fromisoformat(str(since)[:10]) + timedelta(days=d["expiry_days"]) - (today or date.today())).days

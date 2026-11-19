@@ -31,6 +31,8 @@ describe('fieldProblem', () => {
     expect(fieldProblem('pan', 'ABCDE12345')).toMatch(/10 characters/);
     expect(fieldProblem('hsn_code', '2208')).toBe('');
     expect(fieldProblem('hsn_code', '22')).toMatch(/4 to 8 digits/);
+    expect(fieldProblem('hsn_code', '')).toBe('');
+    expect(fieldProblem('hsn_code', '0')).toBe('');   // the desktop stores "no HSN code" as 0
     expect(fieldProblem('email', 'a@b')).toMatch(/e-mail/);
   });
   it('keeps tax percentages between 0 and 100', () => {

@@ -1,7 +1,7 @@
 // Shows one saved document read-only (what the action bar's List → Open Selected and the First / Previous / Next / Last buttons load):
 // its header, its lines and totals, with Print and, for sales bills, Cancel bill. Money the role may not see (purchase cost) shows as —.
 
-import { Ban, Pencil, Printer } from 'lucide-react';
+import { Ban, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pencil, Printer } from 'lucide-react';
 import Modal from '../common/Modal';
 import { badge, money, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
@@ -12,7 +12,8 @@ const COLS = [['item_code', 'Item Code'], ['item_name', 'Item'], ['ledger', 'Led
 const NUM = new Set(['cases', 'bottles', 'qty', 'system_qty', 'physical_qty', 'diff_qty', 'rate', 'pur_rate', 'mrp', 'amount']);
 const MONEY = new Set(['rate', 'pur_rate', 'mrp', 'amount']);
 
-export default function DocViewDialog({ doc, kind, title, position, onClose, onPrint, onCancelBill, onEdit }) {
+// `nav` (the same object the action bar takes) adds First / Previous / Next / Last buttons, so the viewer keeps walking through the documents.
+export default function DocViewDialog({ doc, kind, title, position, nav, onClose, onPrint, onCancelBill, onEdit }) {
   const cancelled = ['CANCELLED', 'DELETED'].includes(doc.status);
   const lines = doc.lines ?? [];
   const shownCols = COLS.filter(([k]) => lines.some(l => l[k] !== undefined && l[k] !== null && l[k] !== ''));
@@ -21,6 +22,14 @@ export default function DocViewDialog({ doc, kind, title, position, onClose, onP
   return (
     <Modal title={`${title} ${doc.doc_no}${position ? ` · ${position}` : ''}`} onClose={onClose} wide
       footer={<>
+        {nav && (
+          <span role="group" aria-label="Move between records" className="mr-auto flex items-center gap-1">
+            <button type="button" onClick={nav.onFirst} disabled={nav.atStart} className={secondaryButton} aria-label="First record" title="First record"><ChevronsLeft size={14} /></button>
+            <button type="button" onClick={nav.onPrev} disabled={nav.atStart} className={secondaryButton} aria-label="Previous record" title="Previous record"><ChevronLeft size={14} /></button>
+            <button type="button" onClick={nav.onNext} disabled={nav.atEnd} className={secondaryButton} aria-label="Next record" title="Next record"><ChevronRight size={14} /></button>
+            <button type="button" onClick={nav.onLast} disabled={nav.atEnd} className={secondaryButton} aria-label="Last record" title="Last record"><ChevronsRight size={14} /></button>
+          </span>
+        )}
         {onEdit && !cancelled && doc.status !== 'HOLD' && <button type="button" onClick={onEdit} className={secondaryButton}><Pencil size={14} />Edit</button>}
         {kind === 'sales_invoice' && !cancelled && onCancelBill && <button type="button" onClick={onCancelBill} className={secondaryButton}><Ban size={14} />Cancel bill</button>}
         {onPrint && <button type="button" onClick={onPrint} className={secondaryButton}><Printer size={14} />Print / preview</button>}

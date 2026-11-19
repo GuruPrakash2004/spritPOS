@@ -2,7 +2,7 @@
 // SWVersion), API version, company, database connection, which data the screens show (live SQL Server or the Test
 // data switch's sample data) and the "Designed & developed by" credit. An Administrator can Disconnect the database
 
-// No licence key or registration (Key Generation is not part of the web app).
+// No licence key or registration check (Key Generation is the vendor's separate Administrator-only screen, only where its key file exists).
 
 import { useEffect, useState } from 'react';
 import { Database, Eye, EyeOff, Info, RefreshCw } from 'lucide-react';

@@ -65,7 +65,7 @@ ROLES = {
         "Supplier Group Master", "Customer Group Master", "State Master", "Currency Master", "Location Master", "Tax Master",
         "Bank Master", "Holiday Master", "State City Country",
         "Purchase Bill", "Sales Invoice", "Expense Entry", "Stock Deduction", "Purchase Indent", "Sales Return",
-        "Closing Stock Entry", "Physical Stock Entry", "Update Item Stock", "Item Vs Brand", "Shared Documents", "Cash Denomination",
+        "Closing Stock Entry", "Physical Stock Entry", "Update Item Stock", "Import Item Master Fields", "Import Item Data From Excel", "Item Vs Brand", "Shared Documents", "Cash Denomination",
         "Payment Voucher", "Receipt Voucher", "Credit Note", "Debit Note", "Contra Voucher", "Journal Voucher", "Quotation",
         "General Ledger", "Bill wise Ageing", "Bill wise OutStanding", "Party wise OutStanding", "Daily Summary Report", "Stock Balance Report", "Stock Ledger",
         "Stock Ageing", "Profit Margin", "Hourly Sales", "Daily Sales", "Brand-wise Sales", "Day-wise Litres",

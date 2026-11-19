@@ -1,5 +1,5 @@
 // Customised Reports → Email: asks who gets the report, then POSTs /reports/custom/email. The backend
-// builds the .xls itself from the same report and filters and sends it through the SMTP server in
+// builds the .xlsx itself from the same report and filters and sends it through the SMTP server in
 // backend/.env; without one it answers that email isn't set up. Mistakes show inline; the server's
 // answer shows as a popup.
 
@@ -72,7 +72,7 @@ export default function ReportEmailDialog({ request, defaultTo, onClose }
           hasError={!!errors.message} errorMessage={errors.message}
           onChange={e => { setMessage(e.target.value); setErrors(p => ({ ...p, message: undefined })); }} />
         <p className="text-xs text-stone-500 dark:text-stone-400">
-          The report is attached as an Excel (.xls) file, built from the same period and filters as Generate.
+          The report is attached as an Excel (.xlsx) file, built from the same period and filters as Generate.
         </p>
       </form>
     </Modal>

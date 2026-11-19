@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from .. import admin_audit, db, doc_engine, db_store, gsettings, schema_meta, security, sqlstore, store, validation
+from .. import codeseg
 from ..master_specs import SPECS
 from ..schemas import SIMPLE_MODELS
 from ..schemas import (
@@ -27,7 +28,6 @@ from .auth import can_see_cost, get_current_user, hides_cost, require_admin, req
 
 router = APIRouter(prefix="/masters")
 
-BAD_CODE = re.compile(r"[/?#%\\]")
 
 
 def _docs_lines():
@@ -70,10 +70,7 @@ def _check_code(code: str) -> str:
     code = code.strip()
     if not code:
         raise HTTPException(422, "Code cannot be blank")
-    if len(code) > 40:
-        raise HTTPException(422, "Code must be 40 characters or fewer")
-    if BAD_CODE.search(code):
-        raise HTTPException(422, "Code cannot contain / ? # % or \\")
+    # No other rule on a code: any character is fine (the desktop's codes hold spaces, %, / ...). The database column's own width still applies.
     return code
 
 
@@ -88,21 +85,25 @@ def _extra(extras: dict | None, column: str) -> str:
     return ""
 
 
-def _item_used_in_trn(code: str) -> bool:
-    """frmMstItem.CheckforItemUsedInTrn: the item is on any TrnDtl* table (bills, indents, returns ...) or has stock movements."""
-    if _item_in_use(code):
-        return True
-    item_id = (store.ITEMS.get(code) or {}).get("_itemid")
-    from .. import db
+def _item_id_on_trn_tables(item_id, strict: bool = False) -> bool:
+    """The item is on any TrnDtl* table (bills, indents, returns, stock entries ...), looked up by ItemID in the shop's database.
+    A database that can't say: not used (strict=False), or a 503 (strict=True, for a change that must not go ahead on a guess)."""
     if not item_id or not db.is_db_available():
         return False
     try:
         for t in db.fetchall("SELECT TABLE_NAME AS t FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME = 'ItemID' AND TABLE_NAME LIKE 'TrnDtl%'"):
             if db.fetchone(f"SELECT TOP 1 1 AS x FROM [{t['t']}] WITH (NOLOCK) WHERE ItemID = ?", (item_id,)):
                 return True
-    except Exception:   # a database that can't say: don't block the edit on a guess
+    except Exception:
+        if strict:
+            raise HTTPException(503, "Could not check whether this item is used in bills or stock, so its UOM was not changed. Try again.")
         return False
     return False
+
+
+def _item_used_in_trn(code: str) -> bool:
+    """frmMstItem.CheckforItemUsedInTrn: the item is on any TrnDtl* table (bills, indents, returns ...) or has stock movements."""
+    return _item_in_use(code) or _item_id_on_trn_tables((store.ITEMS.get(code) or {}).get("_itemid"))
 
 
 def _check_item_names(body: Item, original: str | None) -> None:
@@ -158,13 +159,17 @@ def _check_item(body: Item, original: str | None = None) -> None:
         raise HTTPException(422, "Selected UOMCode not found in the master !")
     if store.UOMS[body.uom].get("active") is False:
         raise HTTPException(422, f"UOM '{body.uom}' is inactive")
-    if body.package and body.package not in store.PACKAGES:
+    if body.mrp <= 0:
+        raise HTTPException(422, "Please enter the MRP")
+    if body.package and body.package.strip() != "-" and body.package not in store.PACKAGES:   # "-" is the desktop's "no package" row (PKGID 0)
         raise HTTPException(422, f"Unknown package '{body.package}'")
-    if body.brand and body.brand not in store.BRANDS:
+    if body.brand and body.brand.strip() != "-" and body.brand not in store.BRANDS:
         raise HTTPException(422, f"Unknown brand '{body.brand}'")
     _check_item_names(body, original)
-    if original and body.uom != (store.ITEMS.get(original) or {}).get("uom", body.uom) and _item_used_in_trn(original):
-        raise HTTPException(409, "The UOM can't be changed: this item is used in transactions")
+    # Owner's rule (the exe only disables the box once the item is used): UOM is never changed from the item form; it is changed with
+    # Options > Update Item Master Fields, which refuses items that are used (see bulk_fields_import).
+    if original and body.uom != (store.ITEMS.get(original) or {}).get("uom", body.uom):
+        raise HTTPException(409, "The UOM can't be changed here. Use Options > Update Item Master Fields.")
 
 
 def _check_margin(row: dict) -> None:
@@ -181,6 +186,60 @@ def _check_margin(row: dict) -> None:
     if pct > 0 and rate and sell < round(rate * (1 + pct / 100), 2):
         raise HTTPException(422, f"Purchase and Sales Variation ({round(sell / rate * 100 - 100, 2):g}%) of {row.get('code')} must be at least "
                                  f"{pct:g}% (selling rate ₹ {rate * (1 + pct / 100):.2f} or more; Global Settings → PurSellVarPer)")
+
+
+def _apply_item_formulas(row: dict) -> None:
+    """The Item Master's header formulas, worked out on save as the exe's AddnlMSTFldCalTotal does: every Doc Designer field of the Item Master with a
+    formula (Item Selling Rate: SVTROUND2((#MRP#-#COMPCESS#)/(100+#CGSTPER#+#SGSTPER#+#CESSPER#)*100)). A read-only formula field is always
+    recalculated; an editable one only while it is empty or 0 (a value the user typed stays). Numbers are rounded to the field's decimals."""
+    context = _item_formula_context()
+    if context:
+        _apply_item_formulas_with(row, *context)
+
+
+def _item_formula_context():
+    """(formula fields of the Item Master, its table's columns) or None when there is no database or no designer formula."""
+    from .. import designer
+    try:
+        doc_id = doc_engine.doc_id_of("Item Master")
+        fields = [f for f in designer.fields_for(doc_id) if str(f.get("FldFormula") or "").strip()] if doc_id else []
+        have = {c["name"].upper(): c["name"] for c in schema_meta.columns("MstItem")}
+    except Exception:   # no database, or no designer rows
+        return None
+    return (fields, have) if fields and have else None
+
+
+def _apply_item_formulas_with(row: dict, fields: list, have: dict) -> None:
+    from .. import formulas
+    extras = dict(row.get("extras") or {})
+    typed = {col.lower(): key for key, col in _RATE_TYPED.items()}
+    values = {col.lower(): row.get(key) for key, col in _RATE_TYPED.items()}
+    values.update({k.lower(): v for k, v in extras.items()})
+    values = {k: (v if v not in (None, "") else 0) for k, v in values.items()}
+    defs = [{"code": str(f["FldCode"]).strip(), "formula": str(f["FldFormula"]).strip(), "decimals": int(f.get("FldNumDecimals") or 2),
+             "type": "number", "section": "Header"} for f in fields]
+    try:
+        worked = formulas.compute(defs, values, [], {})["values"]
+    except Exception:
+        return
+    for f in fields:
+        code = str(f["FldCode"]).strip()
+        if code.upper() not in have or code.lower() not in {k.lower() for k in worked}:
+            continue
+        key = typed.get(code.lower())
+        now = row.get(key) if key else next((v for k, v in extras.items() if k.lower() == code.lower()), None)
+        try:
+            entered = float(now or 0) != 0
+        except (TypeError, ValueError):
+            entered = str(now or "").strip() != ""
+        if str(f.get("FldBlnReadOnly") or "N").strip().upper() != "Y" and entered:
+            continue
+        value = float(worked[next(k for k in worked if k.lower() == code.lower())])
+        if key:
+            row[key] = value
+        else:
+            extras[next((k for k in extras if k.lower() == code.lower()), code.upper())] = value
+    row["extras"] = extras
 
 
 def _check_inactive_remarks(path: str, body: BaseModel) -> None:
@@ -384,6 +443,7 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
 
     @router.get(f"/{path}/{{code}}", response_model=model, tags=[tag], name=f"Get {tag}")
     def get_one(code: str, current_user: dict = Depends(get_current_user)):
+        code = codeseg.dec(code)   # codes with "/" or "~" travel escaped (app/codeseg.py)
         if code not in table:
             raise HTTPException(404, f"{tag} '{code}' not found")
         return _shown(path, table[code], current_user)
@@ -398,6 +458,7 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
         row = security.apply_field_rights(current_user, path, body.model_dump(), None)
         if path == "items":
             _check_margin(row)
+            _apply_item_formulas(row)
         row.pop("authorised", None)
         security.mark_approval(current_user, path, row)
         row["changed_by"] = current_user["user"]
@@ -412,6 +473,7 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
 
     @router.put(f"/{path}/{{code}}", response_model=model, tags=[tag], name=f"Update {tag}", dependencies=can_edit)
     def update(code: str, body: model, current_user: dict = Depends(get_current_user)):
+        code = codeseg.dec(code)   # codes with "/" or "~" travel escaped (app/codeseg.py)
         if code not in table:
             raise HTTPException(404, f"{tag} '{code}' not found")
         if path == "brands" and _master_used_elsewhere(code, path):   # frmMstGeneral: Edit is refused for a brand that is in use
@@ -439,6 +501,7 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
             if row["purchase_rate"] is None or not can_see_cost(current_user):
                 row["purchase_rate"] = table[code]["purchase_rate"]   # can't be changed by someone who can't see it
             _check_margin(row)
+            _apply_item_formulas(row)
         security.mark_approval(current_user, path, row)
         row["changed_by"] = current_user["user"]
         earlier, changed = admin_audit.diff({k: v for k, v in table[code].items() if k != "changed_by"},
@@ -457,6 +520,7 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
 
     @router.delete(f"/{path}/{{code}}", status_code=204, tags=[tag], name=f"Delete {tag}", dependencies=can_delete)
     def delete(code: str, current_user: dict = Depends(get_current_user)):
+        code = codeseg.dec(code)   # codes with "/" or "~" travel escaped (app/codeseg.py)
         if path == "items" and current_user.get("role") == "Cashier":
             raise HTTPException(403, "Cashiers are not permitted to delete items. Manager or Administrator approval required.")
         if code not in table:
@@ -801,9 +865,9 @@ def assign_item_brands(body: ItemBrandIn, current_user: dict = Depends(get_curre
     done = 0
     for code, brand in changes.items():
         item = store.ITEMS[code]
-        if (item.get("brand") or "") == brand:
+        old = "" if (item.get("brand") or "").strip() == "-" else (item.get("brand") or "")   # "-" is the desktop's "no brand" row
+        if old == brand:
             continue
-        old = item.get("brand") or ""
         item["brand"] = brand
         security.mark_approval(current_user, "items", item)
         item["changed_by"] = current_user["user"]
@@ -813,29 +877,80 @@ def assign_item_brands(body: ItemBrandIn, current_user: dict = Depends(get_curre
     return {"changed": done}
 
 
+# The Windows import (frmImportItemXLData.ValidateItemEntry) has exactly these checks; the Item Master form's other rules (short-name / alias
+# repeats, purchase-selling variation, HSN and tax patterns ...) are not applied to a sheet, so a row the desktop accepts is accepted here.
+IMPORT_LIQ_TYPES = {"BEER": "Beer", "WINE": "Wine", "IML": "IML", "OTHERS": "Others"}
+
+
+def _master_has(table: dict, value: str, *name_keys: str) -> bool:
+    """The master holds this code (or name): the "-" row (ID 0, no group / package / brand) is always there."""
+    v = value.strip()
+    return v == "-" or v in table or any(str(r.get(k, "")).strip().casefold() == v.casefold() for r in table.values() for k in name_keys)
+
+
+def _import_problems(r: Item, existing: dict | None, overwrite: bool, seen: set[str]) -> list[tuple[str, str]]:
+    """[(field, message)] for one sheet row, the exe's checks in its order and words; also tidies the row as the exe does
+    (an apostrophe becomes a backquote, an empty group / package / brand becomes "-", the liquor type gets its usual spelling)."""
+    _backquote("items", r)
+    out: list[tuple[str, str]] = []
+    r.code = r.code.strip()
+    r.name = r.name.strip()
+    if not r.code:
+        out.append(("code", "Code cannot be blank"))
+    if not r.name:
+        out.append(("name", "Name cannot be blank"))
+    if existing and not overwrite:
+        out.append(("code", "Item Already Present"))
+    r.group = r.group.strip() or "-"
+    if not _master_has(store.ITEM_GROUPS, r.group, "name"):
+        out.append(("group", "Invalid Group"))
+    if not r.uom.strip() or r.uom.strip() == "-" or not _master_has(store.UOMS, r.uom, "name"):
+        out.append(("uom", "Invalid UOM"))
+    elif overwrite and existing and r.uom != existing.get("uom", r.uom):
+        out.append(("uom", "The UOM of an existing item can't be changed by an import (use Options > Update Item Master Fields)"))
+    r.package = (r.package or "").strip() or "-"
+    if not _master_has(store.PACKAGES, r.package, "name"):
+        out.append(("package", "Invalid Package Type"))
+    r.brand = (r.brand or "").strip() or "-"
+    if not _master_has(store.BRANDS, r.brand, "name"):
+        out.append(("brand", "Invalid Brand"))
+    liq = (r.liqtype or "").strip().upper()
+    if liq and liq not in IMPORT_LIQ_TYPES:
+        out.append(("liqtype", "Invalid Liq.Type"))
+    elif liq:
+        r.liqtype = IMPORT_LIQ_TYPES[liq]
+    if not r.mrp or r.mrp <= 0:
+        out.append(("mrp", "Invalid MRP"))
+    if r.code and r.code in seen:
+        out.append(("code", "Duplicate Data"))
+    if r.code:
+        seen.add(r.code)
+    if r.extras and not out:   # the database's other item columns (Pkg.ItemName, Cess ...): kept only where the table has them, as the exe's insert
+        try:
+            r.extras = schema_meta.clean_extras(sqlstore.LEGACY_MASTERS["ITEMS"][0], r.extras, sqlstore._mapped("ITEMS"), exclude=(sqlstore.LEGACY_MASTERS["ITEMS"][2], None))
+        except ValueError as e:
+            out.append(("extras", str(e)))
+    return out
+
+
 @router.post("/items/import", tags=["Item Master"], dependencies=[Depends(require_right("add", "Item Master"))])
-def import_items(rows: list[Item], overwrite: bool = False, current_user: dict = Depends(get_current_user)):
-    """Import Item from Excel: existing codes are skipped (reported as duplicates) unless overwrite=true.
-    Every row is checked first; nothing is imported if any row is invalid. Overwriting keeps the item's stock."""
+def import_items(rows: list[Item], overwrite: bool = False, dry_run: bool = False, current_user: dict = Depends(get_current_user)):
+    """Import Item Data From Excel: existing codes are skipped (reported as duplicates) unless overwrite=true. The checks are the Windows
+    import's (see `_import_problems`); nothing is imported if any row is wrong. Overwriting keeps the item's stock.
+    dry_run=true only checks: the answer is {"rows": [{"error": "" or the reasons, "fields": [the wrong cells]}, ...]}, one per row sent (the
+    Import Item Data From Excel screen marks those cells and allows the import only when none is left)."""
     if len(rows) > 5000:
         raise HTTPException(413, "Import at most 5000 items at a time")
     problems = []
+    checked: list[list[tuple[str, str]]] = []
     seen: set[str] = set()
     for n, r in enumerate(rows, start=1):
-        try:
-            _clean("items", r, store.ITEMS)
-        except HTTPException as e:
-            problems.append(f"Row {n} ({r.code or 'no code'}): {e.detail}")
-            continue
-        existing = store.ITEMS.get(r.code)
-        try:
-            rate = r.purchase_rate if r.purchase_rate is not None and can_see_cost(current_user) else (existing or {}).get("purchase_rate")
-            _check_margin({**r.model_dump(), "purchase_rate": rate})
-        except HTTPException as e:
-            problems.append(f"Row {n} ({r.code}): {e.detail}")
-        if r.code in seen:
-            problems.append(f"Row {n} ({r.code}): the same code appears twice in the file")
-        seen.add(r.code)
+        found = _import_problems(r, store.ITEMS.get(r.code.strip()), overwrite, seen)
+        checked.append(found)
+        if found:
+            problems.append(f"Row {n} ({r.code or 'no code'}): " + ", ".join(m for _, m in found))
+    if dry_run:
+        return {"rows": [{"error": "; ".join(dict.fromkeys(m for _, m in f)), "fields": sorted({k for k, _ in f})} for f in checked]}
     if problems:
         raise HTTPException(422, "; ".join(problems[:10]) + (f" … and {len(problems) - 10} more" if len(problems) > 10 else ""))
 
@@ -846,6 +961,7 @@ def import_items(rows: list[Item], overwrite: bool = False, current_user: dict =
             duplicates.append(r.code)
             continue
         row = security.apply_field_rights(current_user, "items", r.model_dump(), existing)
+        _apply_item_formulas(row)   # the Item Selling Rate (the exe's import works it out too: MRP without the GST)
         allowed = store.IMPORT_FIELDS.get("fields") or []
         if existing and allowed:   # Global Settings → Bulk Item Import Fields: only these change on existing items
             row = {**existing, **{f: row[f] for f in allowed if f in row}}
@@ -965,14 +1081,6 @@ def similar_codes(path: str, code: str, exclude: str = "", current_user: dict = 
             if c != exclude and re.sub(r"[^A-Za-z0-9]", "", str(c)).casefold() == clean]
 
 
-@router.get("/items/{code}/locks", tags=["Item Master"])
-def item_locks(code: str, current_user: dict = Depends(get_current_user)):
-    """Edit mode of the exe: the UOM box is disabled when the item is on any TrnDtl* table (CheckforItemUsedInTrn)."""
-    if code not in store.ITEMS:
-        raise HTTPException(404, f"Item '{code}' not found")
-    return {"uom_locked": _item_used_in_trn(code)}
-
-
 def _bulk_field_defs() -> list[dict]:
     """Options → Update Item Master Fields, field list: `select Distinct FieldName, Datatype from UtlItemBulkupdate order by FieldName`."""
     if not db.is_db_available():
@@ -981,7 +1089,16 @@ def _bulk_field_defs() -> list[dict]:
         rows = db.fetchall("SELECT DISTINCT FieldName, Datatype FROM UtlItemBulkupdate ORDER BY FieldName")
     except Exception:
         return []
-    return [{"code": str(r["FieldName"]).strip(), "datatype": str(r["Datatype"] or "").strip().upper()} for r in rows if str(r["FieldName"] or "").strip()]
+    fields = [{"code": str(r["FieldName"]).strip(), "datatype": str(r["Datatype"] or "").strip().upper()} for r in rows if str(r["FieldName"] or "").strip()]
+    for f in fields:
+        if f["code"].upper() == "UOMID":
+            f["datatype"] = "INTEGER"   # always handled as an ID (code lookup + the used-item guard), whatever the shop's row says
+    if "UOMID" not in {f["code"].upper() for f in fields}:
+        # The exe's list is whatever the shop put in UtlItemBulkupdate, and UOM is not in it. The item form no longer lets UOM be changed, so this screen
+        # always offers it (shown as the UOM code, saved as UOMID: the ID rule below), without touching the shop's table.
+        fields.append({"code": "UOMID", "datatype": "INTEGER"})
+        fields.sort(key=lambda f: f["code"].upper())
+    return fields
 
 
 @router.get("/items/bulk-fields", tags=["Item Master"])
@@ -1035,6 +1152,21 @@ def bulk_fields_load(body: BulkFieldsLoad, current_user: dict = Depends(get_curr
     return {"columns": ["ItemID", "ItemCode", "ItemName", *body.fields], "rows": rows}
 
 
+def _check_uom_change(n: int, item_id: int, code: str, new_id) -> None:
+    """A UOM written by Update Item Master Fields: a real UOM (not blank, not the '-' placeholder), and only for an item that has no bills,
+    indents, returns or stock movements (changing the unit under existing quantities would corrupt them). The same UOM as now passes."""
+    if not code or code.strip() == "-":
+        raise HTTPException(422, f"Row {n}: UOM is required (choose a UOM code)")
+    now = db.fetchone("SELECT UOMID AS v FROM MstItem WHERE ItemID = ?", (item_id,))
+    if now and now["v"] == new_id:
+        return
+    item = next(((c, i) for c, i in store.ITEMS.items() if str(i.get("_itemid")) == str(item_id)), None)
+    # In-memory stock movements and bills when the item is known there, and always the shop's TrnDtl* tables by ItemID (strict: no guess).
+    if (item and _item_in_use(item[0])) or _item_id_on_trn_tables(item_id, strict=True):
+        name = (item[1].get("name") if item else None) or f"ItemID {item_id}"
+        raise HTTPException(409, f"Row {n}: the UOM of '{name}' can't be changed: it is used in bills or stock")
+
+
 class BulkFieldsImport(BaseModel):
     rows: list[dict] = Field(min_length=1, max_length=20000, description="{ItemID, <field>: value, ...}")
 
@@ -1078,6 +1210,8 @@ def bulk_fields_import(body: BulkFieldsImport, current_user: dict = Depends(get_
                         if not r:
                             raise HTTPException(422, f"Row {n}: '{text}' is not a {col.replace('ID', '')} code")
                         found = r["v"]
+                    if col.upper() == "UOMID":
+                        _check_uom_change(n, item_id, text, found)
                     sets.append(f"{col} = ?")
                     args.append(found)
                 else:
@@ -1099,7 +1233,7 @@ def bulk_fields_import(body: BulkFieldsImport, current_user: dict = Depends(get_
             for item_id, sets, args in updates:
                 cur.execute(f"UPDATE MstItem SET {', '.join(sets)} WHERE ItemID = ?", (*args, item_id))
     admin_audit.record("Update Item Master Fields", "Edited", f"{len(updates)} items", "", ", ".join(sorted({x.split(' =')[0] for _, ss, _a in updates for x in ss})))
-    db_store.load_items()
+    db_store.reload_items()
     return {"updated": len(updates)}
 
 
@@ -1132,6 +1266,8 @@ def recalculate_rates(current_user: dict = Depends(get_current_user)):
         words = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", formula))
         if not re.fullmatch(r"[\w\s.+\-*/(),]+", formula) or any(w.upper() not in have and w.upper() not in ("ROUND", "ISNULL", "ABS", "CEILING", "FLOOR") for w in words):
             raise HTTPException(422, f"The formula of {col} cannot be run safely: {formula}")
+        # An empty (NULL) Cess or Comp.Cess made the whole rate NULL: every column in the formula counts as 0 when empty.
+        formula = re.sub(r"[A-Za-z_][A-Za-z0-9_]*", lambda m: f"ISNULL({m.group(0)},0)" if m.group(0).upper() in have else m.group(0), formula)
         todo.append((col, formula))
     if not todo:
         return {"fields": 0, "message": "No Item Master field has a formula."}
@@ -1143,7 +1279,7 @@ def recalculate_rates(current_user: dict = Depends(get_current_user)):
             for col, formula in todo:
                 cur.execute(f"UPDATE MstItem SET {col} = {formula} WHERE ItemID > 0")
     admin_audit.record("Item Master", "Edited", "Update Item Rates", "", ", ".join(c for c, _ in todo))
-    db_store.load_items()
+    db_store.reload_items()
     return {"fields": len(todo), "message": "Item Rates Updated/Recalculated!"}
 
 

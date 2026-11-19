@@ -21,7 +21,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from .. import admin_audit, db, db_backup, delete_nonliquor, doc_settings, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store
+from .. import admin_audit, bulk_import_fields, db, db_backup, delete_linkage, delete_nonliquor, doc_settings, invoice_settings, licence_keys, print_settings, duplicate_invoices, gsettings, item_merge, rpt_bridge, security, sqlstore, store
 from .auth import get_current_user, hides_cost, require_admin, require_module
 
 router = APIRouter(prefix="/utilities", tags=["Utilities"])
@@ -138,7 +138,7 @@ def audit_screens(admin: dict = Depends(require_admin)):
 def audit_log(from_date: date = Query(default_factory=lambda: date.today() - timedelta(days=7)),
               to_date: date = Query(default_factory=date.today),
               screen: str | None = None, admin: dict = Depends(require_admin)):
-    """Entries between the dates (inclusive), newest first, with item rows. Tools runs are included."""
+    """Entries between the dates (inclusive), by Screen, Doc No, then date, with item rows. Tools runs are included."""
     if to_date < from_date:
         raise HTTPException(422, "To date is before From date")
     lo, hi = f"{from_date.isoformat()}T00:00:00", f"{to_date.isoformat()}T23:59:59"
@@ -150,7 +150,8 @@ def audit_log(from_date: date = Query(default_factory=lambda: date.today() - tim
                              "action": "Run" if t["ok"] else "Refused / failed", "main_fld": "",
                              "user_code": t["user_code"], "earlier": "",
                              "changed": t["detail"] + (f"  [{t['message']}]" if t["message"] else ""), "items": []})
-    rows.sort(key=lambda r: r["at"], reverse=True)
+    # As the desktop's grid ("order by 1,2,3": Screen, Doc No, Date) so one document's entries sit together.
+    rows.sort(key=lambda r: (r["screen"] or "", r["main_fld"] or "", r["at"]))
     return rows
 
 
@@ -199,6 +200,23 @@ def client_system_name(request: Request) -> str:
             _CLIENT_NAMES.clear()
         hit = _CLIENT_NAMES[host] = (name, now)
     return hit[0] or mine
+
+
+@router.get("/key-generator")
+def key_generator(reg_no: str = Query("", max_length=20), admin: dict = Depends(require_admin)):
+    """Utilities -> Key Generation (frmKeyReg, the vendor's tool): the Key for a Reg. No., or "-" when there is none. Administrator only, and only on a
+    server that has the vendor's key file (licence_keys.py); otherwise 404 like a screen that is not there. Digits only, as the exe's box allows."""
+    if not licence_keys.available():
+        raise HTTPException(404, "The Key Generator is not set up on this server")
+    reg_no = reg_no.strip()
+    if reg_no and not reg_no.isdigit():
+        raise HTTPException(422, "Reg. No. is numbers only")
+    return {"reg_no": reg_no, "key": licence_keys.get_key(reg_no) if reg_no else ""}
+
+
+@router.get("/key-generator/available")
+def key_generator_available(admin: dict = Depends(require_admin)):
+    return {"available": licence_keys.available()}
 
 
 @router.get("/about")
@@ -312,6 +330,146 @@ def delete_non_liquor(body: DeleteNonLiquorIn, user: dict = Depends(require_admi
     return delete_nonliquor.delete(body.group.strip(), body.confirm, user)
 
 
+
+
+class CarryOverIn(BaseModel):
+    groups: list[str] = Field(default_factory=list, max_length=200)
+    confirm: str = Field(max_length=40, description="CARRY OVER typed again")
+    admin_password: str | None = Field(None, max_length=1000, description='Encrypted for "admin" (see RemoveInvoicesIn)')
+
+
+@router.get("/delete-non-liquor/carry-groups")
+def carry_over_groups(user: dict = Depends(require_admin)):
+    """Active item groups the Carry Over tab can pick from."""
+    return delete_nonliquor.carry_groups()
+
+
+@router.get("/delete-non-liquor/carry-preview")
+def carry_over_preview(groups: str = Query(""), user: dict = Depends(require_admin)):
+    """What carrying over the (comma separated) groups would delete and carry forward, with anything that blocks it."""
+    return delete_nonliquor.carry_preview([g for g in groups.split(",") if g.strip()])
+
+
+@router.post("/delete-non-liquor/carry-over")
+def carry_over(body: CarryOverIn, user: dict = Depends(require_admin)):
+    """Delete the groups' transactions and carry their closing stock forward as one purchase bill. Back the database up first."""
+    security.check_admin_password(user, body.admin_password)
+    return delete_nonliquor.carry_over(body.groups, body.confirm, user)
+
+
+# ─── Invoice Settings (frmUtlInvNumberFmt, Global Settings → Other Settings) ─────────────────
+
+class InvoiceSmsIn(BaseModel):
+    on_sales: bool = False
+    on_cancel: bool = False
+    on_delete: bool = False
+    sales_value: float = Field(0, ge=0, le=1e12)
+    sales_msg: str = Field("", max_length=1000)
+    cancel_msg: str = Field("", max_length=1000)
+    delete_msg: str = Field("", max_length=1000)
+
+
+class InvoiceSettingsIn(BaseModel):
+    prefix: str = Field("", max_length=1, description="'' none, 'M' month wise, 'D' day wise")
+    counter_reset: bool = False
+    months: list[str] = Field(default_factory=list, max_length=12)
+    format: list[str] = Field(default_factory=list, max_length=15, description="the 15 cells of the document number strip")
+    f12: str = Field("", max_length=20)
+    ctrl_f12: str = Field("", max_length=20)
+    alt_f12: str = Field("", max_length=20)
+    sms: InvoiceSmsIn = Field(default_factory=InvoiceSmsIn)
+    update_rate: bool = False
+
+
+@router.get("/invoice-settings")
+def invoice_settings_get(user: dict = Depends(require_admin)):
+    return invoice_settings.get()
+
+
+@router.put("/invoice-settings")
+def invoice_settings_save(body: InvoiceSettingsIn, user: dict = Depends(require_admin)):
+    return invoice_settings.save(body.model_dump(), user)
+
+
+# ─── Bulk Item Import Fields (frmUtlBulkImpFlds, Global Settings → Other Settings) ─────────────────────────────
+
+class BulkFieldRow(BaseModel):
+    name: str = Field("", max_length=100)
+    datatype: str = Field("", max_length=50)
+
+
+class BulkFieldsIn(BaseModel):
+    fields: list[BulkFieldRow] = Field(default_factory=list, max_length=200)
+
+
+@router.get("/bulk-import-fields")
+def bulk_import_fields_get(user: dict = Depends(require_admin)):
+    return bulk_import_fields.get()
+
+
+@router.put("/bulk-import-fields")
+def bulk_import_fields_save(body: BulkFieldsIn, user: dict = Depends(require_admin)):
+    return bulk_import_fields.save([f.model_dump() for f in body.fields], user)
+
+
+# ─── Delete Linkage Updation (FrmUtlDeleteLinkageUpdation, Global Settings → Other Settings) ─────────────────
+
+class LinkageRow(BaseModel):
+    table: str = Field("", max_length=128)
+    column: str = Field("", max_length=128)
+    display: str = Field("", max_length=128)
+    caption: str = Field("", max_length=200)
+
+
+class LinkageIn(BaseModel):
+    doc_name: str = Field("", max_length=200)
+    doc_field: str = Field("", max_length=128)
+    rows: list[LinkageRow] = Field(default_factory=list, max_length=200)
+
+
+class LinkageSearchIn(BaseModel):
+    table: str = Field("", max_length=128)
+    field: str = Field("", max_length=128)
+
+
+@router.get("/delete-linkage/tables")
+def linkage_tables(user: dict = Depends(require_admin)):
+    return delete_linkage.tables()
+
+
+@router.get("/delete-linkage/columns")
+def linkage_columns(table: str, user: dict = Depends(require_admin)):
+    return delete_linkage.columns(table)
+
+
+@router.get("/delete-linkage/groups")
+def linkage_groups(user: dict = Depends(require_admin)):
+    """The guarded tables (the right-hand list)."""
+    return delete_linkage.groups()
+
+
+@router.post("/delete-linkage/search")
+def linkage_search(body: LinkageSearchIn, user: dict = Depends(require_admin)):
+    """The magnifier: the other tables holding a column with the checked field's name."""
+    return delete_linkage.search(body.table, body.field)
+
+
+@router.get("/delete-linkage/group")
+def linkage_group(table: str, user: dict = Depends(require_admin)):
+    return delete_linkage.group(table)
+
+
+@router.put("/delete-linkage/group")
+def linkage_save(table: str, body: LinkageIn, user: dict = Depends(require_admin)):
+    """Add / Edit: the table's rules are rewritten in one transaction."""
+    return delete_linkage.save(table, body.doc_name, body.doc_field, [r.model_dump() for r in body.rows], user)
+
+
+@router.delete("/delete-linkage/group")
+def linkage_delete(table: str, user: dict = Depends(require_admin)):
+    return delete_linkage.delete(table, user)
+
+
 # ─── Merge Items (713) / Replace and Remove Duplicate items (712) ─────────────
 
 class MergeIn(BaseModel):
@@ -414,11 +572,43 @@ def save_doc_settings(kind: str, body: DocSettingsIn, admin: dict = Depends(requ
         new.update(allow_copy_from=True, update_rate_from_pb=False)
     if kind != "sales_invoice":
         new["edit_days"] = 0
-    store.DOC_SETTINGS[kind] = new
+    row = doc_settings.desktop_row(kind) if sqlstore.enabled() else None
+    if row is not None:
+        # The desktop's own row holds these (UtlTransactions, as FrmUtlTrnSettings): write it, so the desktop reads the same settings.
+        doc_settings.write_desktop(int(row["DocID"]), doc_settings.web_columns(kind, new, row))
+        store.DOC_SETTINGS[kind] = {k: new[k] for k in ("after_save", "default_format")}   # the web-only parts stay with the web
+    elif sqlstore.enabled():
+        raise HTTPException(409, f"This database has no '{doc_settings.KINDS[kind][0]}' row in UtlTransactions, so these settings can't be saved.")
+    else:
+        store.DOC_SETTINGS[kind] = new
     earlier, changed = admin_audit.diff(before, new)
     if changed:
         admin_audit.record("Global Settings", "Transaction Settings", doc_settings.KINDS[kind][0], earlier, changed)
     return doc_settings.all_settings()[kind]
+
+
+class TrnSettingsIn(BaseModel):
+    values: dict[str, bool | int | str | None]
+
+
+@router.get("/trn-settings")
+def get_trn_settings(admin: dict = Depends(require_admin)):
+    """Every Transaction / Voucher document's other desktop settings (UtlTransactions), for the desktop-settings panel."""
+    return doc_settings.desktop_list()
+
+
+@router.put("/trn-settings/{doc_id}")
+def save_trn_settings(doc_id: int, body: TrnSettingsIn, admin: dict = Depends(require_admin)):
+    if not sqlstore.enabled():
+        raise HTTPException(409, "Not available while the database is offline.")
+    columns = doc_settings.desktop_updates(doc_id, body.values)
+    row = store.UTL_DOCS[doc_id]
+    before = {c: row.get(c) for c in columns}
+    doc_settings.write_desktop(doc_id, columns)
+    earlier, changed = admin_audit.diff({k: str(v) for k, v in before.items()}, {k: str(v) for k, v in columns.items()})
+    if changed:
+        admin_audit.record("Global Settings", "Transaction Settings", str(row.get("DocName") or doc_id), earlier, changed)
+    return next(d for d in doc_settings.desktop_list()["docs"] if d["doc_id"] == doc_id)
 
 
 @router.get("/numbering")
@@ -494,6 +684,42 @@ class PrintOptionUpdate(BaseModel):
     ctrl_alt_click: str | None = Field(None, max_length=1)
     after_save: str | None = Field(None, max_length=3)
     printer: str | None = Field(None, max_length=50)
+    rpt: str | None = Field(None, max_length=100)
+    selection: str | None = Field(None, max_length=2000)
+    email_routing: str | None = Field(None, max_length=1)
+    attach_copy: bool | None = None
+    email_subject: str | None = Field(None, max_length=500)
+    email_body: str | None = Field(None, max_length=4000)
+    email_footer: str | None = Field(None, max_length=2000)
+    email_cond: str | None = Field(None, max_length=1000)
+    allow_date_range: bool | None = None
+    allow_docno_range: bool | None = None
+    track_printed: bool | None = None
+    multi_query: str | None = Field(None, max_length=4000)
+    emails: list[dict] | None = None   # recipient rows: {fixed, type (T/C/B), email, field, cond}
+
+
+class PrintOrderIn(BaseModel):
+    names: list[str] = Field(min_length=1)
+
+
+@router.post("/print-settings/{doc_id}")
+def print_settings_add(doc_id: int, body: PrintOptionUpdate, admin: dict = Depends(require_admin)):
+    """Add a print option to a document (the desktop's Add)."""
+    return print_settings.create(doc_id, body.model_dump(exclude_unset=True), admin["user"])
+
+
+@router.delete("/print-settings/{doc_id}/{order}")
+def print_settings_delete(doc_id: int, order: int, admin: dict = Depends(require_admin)):
+    print_settings.delete(doc_id, order, admin["user"])
+    return {"message": "Deleted Successfully!"}
+
+
+@router.put("/print-settings/{doc_id}")
+def print_settings_order(doc_id: int, body: PrintOrderIn, admin: dict = Depends(require_admin)):
+    """Alter Order: the option names in their new order."""
+    print_settings.reorder(doc_id, body.names, admin["user"])
+    return {"message": "Saved Successfully!"}
 
 
 @router.get("/print-settings", dependencies=[Depends(require_admin)])

@@ -11,10 +11,12 @@ import { dangerButton, secondaryButton } from '../../lib/styles';
 // Drop-in for window.confirm: `if (!(await confirm('Delete X?'))) return;`. Render `dialog` once in the screen.
 export function useConfirm() {
   const [message, setMessage] = useState(null);
+  const [heading, setHeading] = useState('Please confirm');
   const resolver = useRef(undefined);
 
-  const confirm = useCallback((text) => new Promise(resolve => {
+  const confirm = useCallback((text, title) => new Promise(resolve => {
     resolver.current = resolve;
+    setHeading(title || 'Please confirm');
     setMessage(text);
   }), []);
 
@@ -25,7 +27,7 @@ export function useConfirm() {
 
   const dialog = message === null ? null : (
     <Modal
-      title="Please confirm"
+      title={heading}
       onClose={() => close(false)}
       footer={<>
         <button className={secondaryButton} onClick={() => close(false)}>Cancel</button>

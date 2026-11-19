@@ -22,7 +22,7 @@ from .. import admin_audit, gsettings, security, sqlstore, store
 from ..schemas import Line, PurchaseBillIn, SalesInvoiceIn, StockDeductionIn
 from .auth import can_see_cost, get_current_user, has_right, require_right
 from .masters import _check_margin
-from .transactions import create_purchase_bill, create_sales_invoice, create_stock_deduction
+from .transactions import _build_purchase_bill, create_purchase_bill, create_sales_invoice, create_stock_deduction
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/transactions/physical-stock", tags=["Physical Stock Entry"])
@@ -190,8 +190,9 @@ def save(body: PseIn, current_user: dict = Depends(get_current_user)):
 # ─── Update Item Stock (legacy frmUpdateItemStock): opening stock from a sheet ───────────────────────────────────────
 # The desktop reads StockImport_Template.xlsx (ItemCode, ItemName, UOM, Stock, Rate), marks erroneous rows (item not
 # found, negative stock), refuses to import until all rows are right, then posts the stock as one purchase bill from
-# KSBCL with prefix OP. "Include Rate" uses the sheet's rate, else the item's purchase rate. The web does the same through
-# the Purchase Bill, so stock moves with store.move_stock.
+# KSBCL with prefix OP: its own number series (26OP00001, sqlstore.next_opening_bill_no), dated today, no GST on the lines, the same
+# item allowed twice. "Include Rate" uses the sheet's rate, else the item's purchase rate. The web does the same through the Purchase
+# Bill (it shows in the Purchase Bill list under that OP number), so stock moves with store.move_stock.
 stock_router = APIRouter(prefix="/utilities/update-item-stock", tags=["Update Item Stock"])
 STOCK_MODULE = "Update Item Stock"
 
@@ -228,9 +229,10 @@ def update_item_stock(body: StockImportIn, current_user: dict = Depends(get_curr
         qty, rate = _number(r.stock), _number(r.rate)
         if qty is None or qty < 0 or qty != int(qty):
             errors.append("Invalid Stock")
-        if rate is None or rate < 0:
+        if body.include_rate and (rate is None or rate < 0):   # as the desktop, the sheet's rate is ignored (not checked) unless Include Rate is on
             errors.append("Invalid Rate")
-        results.append({"row": n, "item_code": code, "error": "; ".join(errors)})
+        wrong = (["code"] if not item else []) + (["stock"] if qty is None or qty < 0 or qty != int(qty) else []) + (["rate"] if body.include_rate and (rate is None or rate < 0) else [])
+        results.append({"row": n, "item_code": code, "error": "; ".join(errors), "fields": wrong})   # `fields`: the cells to mark in the sheet
         if not errors and qty > 0:
             lines.append(Line(item_code=item["code"], bottles=int(qty), rate=rate if body.include_rate and rate else None))
     ok = not any(r["error"] for r in results)
@@ -243,7 +245,8 @@ def update_item_stock(body: StockImportIn, current_user: dict = Depends(get_curr
     if not store.find(store.SUPPLIERS, SUPPLIER):
         raise HTTPException(422, f"Supplier '{SUPPLIER}' is needed for the opening stock bill but is not in Supplier Master")
     today = date.today()
-    pb = create_purchase_bill(PurchaseBillIn(date=today, supplier=SUPPLIER, supplier_inv_no="OP", supplier_inv_date=today,
-                                             remarks="Opening stock (Update Item Stock)", lines=lines))
+    pb = _build_purchase_bill(PurchaseBillIn(date=today, supplier=SUPPLIER, supplier_inv_no="", supplier_inv_date=today,
+                                             remarks="Opening stock (Update Item Stock)", lines=lines),
+                              doc_no=sqlstore.next_opening_bill_no(), opening=True)
     admin_audit.record(STOCK_MODULE, "Imported", pb["doc_no"], "", f"{len(lines)} item(s)")
     return {"ok": True, "doc_no": pb["doc_no"], "imported": len(lines), "skipped_zero": len(results) - len(lines)}

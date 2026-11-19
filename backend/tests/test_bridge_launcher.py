@@ -40,6 +40,7 @@ def test_designer_files_then_dsr_and_stock_balance_formats(monkeypatch, tmp_path
 def test_engine_is_warmed_first_without_a_logon_then_the_reports_with_one(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path, ["RptDSR.rpt", "RptStkBal.rpt", "FMTSINV.rpt"], [{"CrptFileName": "FMTSINV"}])
     monkeypatch.setattr(bl, "_key_accepted", lambda base: True)
+    monkeypatch.setattr(bl, "_ready", lambda base: True)
     posts = []
 
     class Reply:
@@ -50,10 +51,12 @@ def test_engine_is_warmed_first_without_a_logon_then_the_reports_with_one(monkey
 
     bl._warm_up(8765)
 
-    assert [u for u, _ in posts] == ["http://127.0.0.1:8765/warm"] * 2
-    engine, reports = posts[0][1], posts[1][1]
+    # the engine start-up, then ONE report per call (a single slow call would pass the bridge's 55 s watchdog and kill it)
+    assert [u for u, _ in posts] == ["http://127.0.0.1:8765/warm"] * 4
+    engine, reports = posts[0][1], [p[1] for p in posts[1:]]
     assert "logon" not in engine and len(engine["files"]) == 1   # the engine start-up needs no database
-    assert reports["logon"]["database"] == "d" and reports["files"][0] == "FMTSINV.rpt"
+    assert all(r["logon"]["database"] == "d" and len(r["files"]) == 1 for r in reports)
+    assert reports[0]["files"][0] == "FMTSINV.rpt"
 
 
 def test_layout_printer_is_a_local_driver_unless_turned_off(monkeypatch):

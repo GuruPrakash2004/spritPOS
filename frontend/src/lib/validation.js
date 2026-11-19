@@ -40,7 +40,8 @@ export function cleanInput(key, value) {
 export function fieldProblem(key, value) {
   const text = String(value ?? '').trim();
   const rule = FIELD_RULES[key];
-  if (rule && text && !(key === 'gstin' && text === '-')) {   // '-' is the desktop's own "none" in a customer's GSTNO
+  // '-' is the desktop's own "none" in a customer's GSTNO; an item's HSN code is optional and the desktop stores "none" as 0 (3,000+ items hold it)
+  if (rule && text && !(key === 'gstin' && text === '-') && !(key === 'hsn_code' && ['0', '-'].includes(text))) {
     const kept = rule.upper ? text.toUpperCase() : text;
     if (!rule.pattern.test(kept)) return `${rule.label} ${rule.wrong}.`;
   }

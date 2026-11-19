@@ -12,6 +12,8 @@
 
 
 
+import { noteDataVersion } from './dataVersion';
+
 export class ApiError extends Error {}
 
 // The logged-in user and JWT token.
@@ -122,11 +124,13 @@ async function send(path, init) {
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...(init.idempotencyKey ? { 'Idempotency-Key': init.idempotencyKey } : {}),
     };
-    return await fetch(`${base}${path}`, {
+    const res = await fetch(`${base}${path}`, {
       method: init.method ?? 'GET',
       headers,
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
+    noteDataVersion(res.headers?.get?.('X-Data-Version'));   // the master data changed outside the app: open screens read again
+    return res;
   } catch {
     throw unreachable(base);
   }
@@ -225,6 +229,9 @@ export const addSharedPrinter = (share) => request('/setup/print-printer/add', {
 export const getSmtp = () => request('/setup/smtp');
 export const saveSmtp = (body) => request('/setup/smtp', { method: 'POST', body });
 export const testSmtp = (body) => request('/setup/smtp/test', { method: 'POST', body });
+// A master's code inside a URL path. Any character may be in a code: "/" can't travel in a path (the server reads %2F as a slash before routing),
+// so "~" becomes "~7E" and "/" becomes "~2F" first (backend app/codeseg.py gives it back); the rest is ordinary URL-encoding.
+export const seg = (code) => encodeURIComponent(String(code).replace(/~/g, '~7E').replace(/[/]/g, '~2F'));
 /** Every SQL Server instance found (any version). `host` limits it to one server. */
 export const getSetupInstances = (host = '') => request(`/setup/instances${host ? `?host=${encodeURIComponent(host)}` : ''}`);
 /** Try the login on every instance of one server and list each one's databases. */
@@ -242,8 +249,8 @@ export const createAdmin = (body) =>
 export const listMaster = (path) => request(`/masters/${path}`);
 export const createMaster = (path, body) => request(`/masters/${path}`, { method: 'POST', body });
 export const updateMaster = (path, code, body) =>
-  request(`/masters/${path}/${encodeURIComponent(code)}`, { method: 'PUT', body });
-export const deleteMaster = (path, code) => request(`/masters/${path}/${encodeURIComponent(code)}`, { method: 'DELETE' });
+  request(`/masters/${path}/${seg(code)}`, { method: 'PUT', body });
+export const deleteMaster = (path, code) => request(`/masters/${path}/${seg(code)}`, { method: 'DELETE' });
 
 export const getItems = () => listMaster('items');
 export const getBrands = () => listMaster('brands');
@@ -253,9 +260,8 @@ export const getSuppliers = () => listMaster('suppliers');
 export const getSalesCounters = () => listMaster('sales-counters');
 export const getLedgers = () => listMaster('ledgers');
 export const getSalesPersons = () => request('/sales-persons');
-// Item Master options (frmMstItem): the UOM lock of an item in Edit, items with a similar code, the Items-DataLink Problem list,
+// Item Master options (frmMstItem): items with a similar code, the Items-DataLink Problem list,
 // Update Item Master Fields (field list, load rows, import) and Update Item Rates.
-export const getItemLocks = (code) => request(`/masters/items/${encodeURIComponent(code)}/locks`);   // -> { uom_locked }
 export const getSimilarMasters = (path, code, exclude = '') => request(`/masters/${path}/similar${qs({ code, exclude })}`);   // -> [{ code, name }]
 export const getInvalidItems = () => request('/masters/items/invalid');   // -> { columns, rows, note }
 export const getBulkFieldDefs = () => request('/masters/items/bulk-fields');   // -> [{ code, datatype }]
@@ -265,7 +271,10 @@ export const recalculateItemRates = () => request('/masters/items/recalculate-ra
 // Arrange Group Slno / Arrange Pkg Slno: [{ id, slno, code, litres? }] and the new order (the IDs in order).
 export const getMasterOrder = (path, sort = '') => request(`/masters/${path}/order${qs({ sort })}`);
 export const saveMasterOrder = (path, ids) => request(`/masters/${path}/order`, { method: 'POST', body: { ids } });
-export const importItems = (body) => request('/masters/items/import', { method: 'POST', body });
+// Import Item Data From Excel: POST the sheet's rows. { dryRun: true } only checks them -> { rows: [{ error }] } (one per row); otherwise
+// -> { added, duplicates }. `key` makes a repeated send of the same sheet a no-op.
+export const importItems = (body, { dryRun = false, overwrite = false, key } = {}) =>
+  request(`/masters/items/import${qs({ dry_run: dryRun ? 'true' : '', overwrite: overwrite ? 'true' : '' })}`, { method: 'POST', body, idempotencyKey: key });
 export const bulkUpdateItems = (body) =>
   request('/masters/items/bulk-update', { method: 'POST', body });
 export const updatePriceList = (body) => request('/masters/items/price-list', { method: 'POST', body });
@@ -282,12 +291,12 @@ export const startBackup = () => request('/utilities/backup', { method: 'POST', 
 export const getBackupStatus = () => request('/utilities/backup');
 export const updateDashboardLink = (link) => request('/masters/company/dashboard-link', { method: 'PUT', body: { link } });
 /** A customer's or supplier's contact persons / addresses / alert messages / notes (`kind`: contacts, addresses, alerts, activities). */
-export const getPartyRecords = (party, code, kind) => request(`/masters/${party}/${encodeURIComponent(code)}/${kind}`);
-export const savePartyRecords = (party, code, kind, rows) => request(`/masters/${party}/${encodeURIComponent(code)}/${kind}`, { method: 'PUT', body: { rows } });
+export const getPartyRecords = (party, code, kind) => request(`/masters/${party}/${seg(code)}/${kind}`);
+export const savePartyRecords = (party, code, kind, rows) => request(`/masters/${party}/${seg(code)}/${kind}`, { method: 'PUT', body: { rows } });
 /** Customer / Supplier Vs Item: the exe's item pick list (active, authorised items, one line per unit) and the items attached per party code. */
 export const searchPartyItems = (party, q) => request(`/masters/party-item-search/${party}${qs({ q })}`);
 export const getPartyItemCounts = (party) => request(`/masters/party-item-counts/${party}`);
-export const addPartyNote = (party, code, note) => request(`/masters/${party}/${encodeURIComponent(code)}/activities`, { method: 'POST', body: { rows: [{ Notes: note }] } });
+export const addPartyNote = (party, code, note) => request(`/masters/${party}/${seg(code)}/activities`, { method: 'POST', body: { rows: [{ Notes: note }] } });
 export const getNextFinYear = () => request('/masters/company/fin-years/next');
 export const createFinYear = (body) => request('/masters/company/fin-years', { method: 'POST', body });
 export const activateFinYear = (start) => request(`/masters/company/fin-years/${start}/activate`, { method: 'PUT' });   // makes that year the active one; returns the company profile
@@ -330,7 +339,34 @@ export const fetchAttachment = async (master, id, download = false) => (await re
 // SMS (UtlMsgSettings / TrnSMS): providers + whether the shop has SMS on, sent history, and sending.
 export const getSmsProviders = () => request('/sms/providers');
 export const getSmsHistory = (from, to) => request(`/sms/history${qs({ from, to })}`);
+// Admin Master → Login Settings, the desktop's own settings (UtlMisc): { available, policy, rules, never_expires, expiry_days, min_*, login_required, user_based }.
+export const getDesktopLoginSettings = () => request('/admin/desktop-login-settings');
+export const saveDesktopLoginSettings = (body) => request('/admin/desktop-login-settings', { method: 'PUT', body });
+// Utilities → Key Generation (the vendor's tool): { available } and { reg_no, key } ("-" when the Reg. No. has no key). Administrator only.
+export const getKeyGeneratorAvailable = () => request('/utilities/key-generator/available');
+export const getLicenceKey = (regNo) => request(`/utilities/key-generator${qs({ reg_no: regNo })}`);
+// Global Settings → Other Settings → Invoice Settings (frmUtlInvNumberFmt; UtlGSettings 'Invoice' rows and UtlMisc), Administrator only:
+// { prefix: ''|'M'|'D', counter_reset, months: [12 letters], format: [15 cells], f12, ctrl_f12, alt_f12 (Save | Save and Print | Save and Preview | ''),
+//   sms: { on_sales, on_cancel, on_delete, sales_value, sales_msg, cancel_msg, delete_msg }, update_rate, sms_available, sample: { prefix, counter, ... } }
+export const getInvoiceKeys = () => request('/transactions/invoice-keys');   // { f12, ctrl_f12, alt_f12 }: 'S' save, 'SP' save and print, 'SPP' save and preview
+export const getInvoiceSettings = () => request('/utilities/invoice-settings');
+export const saveInvoiceSettings = (body) => request('/utilities/invoice-settings', { method: 'PUT', body });
+// Global Settings → Other Settings → Delete Linkage Updation (UtlDeletion, Administrator only). A rule row: { table, column, display, caption }.
+export const getLinkageTables = () => request('/utilities/delete-linkage/tables');
+export const getLinkageColumns = (table) => request(`/utilities/delete-linkage/columns${qs({ table })}`);
+export const getLinkageGroups = () => request('/utilities/delete-linkage/groups');   // [{ table, name }]
+export const getLinkageGroup = (table) => request(`/utilities/delete-linkage/group${qs({ table })}`);   // { table, doc_name, doc_field, rows }
+export const searchLinkage = (table, field) => request('/utilities/delete-linkage/search', { method: 'POST', body: { table, field } });
+export const saveLinkageGroup = (table, body) => request(`/utilities/delete-linkage/group${qs({ table })}`, { method: 'PUT', body });   // body: { doc_name, doc_field, rows }
+export const deleteLinkageGroup = (table) => request(`/utilities/delete-linkage/group${qs({ table })}`, { method: 'DELETE' });
 export const sendSms = (body) => request('/sms/send', { method: 'POST', body });
+// SMS settings (Administrator): the providers with their URLs and the invoice SMS settings (UtlMsgSettings / UtlMisc).
+export const getSmsProviderRows = () => request('/sms/settings/providers');
+export const saveSmsProvider = (id, body) => (id ? request(`/sms/settings/providers/${id}`, { method: 'PUT', body }) : request('/sms/settings/providers', { method: 'POST', body }));
+export const deleteSmsProvider = (id) => request(`/sms/settings/providers/${id}`, { method: 'DELETE' });
+export const testSmsProvider = (id, mobile) => request(`/sms/settings/providers/${id}/test`, { method: 'POST', body: { mobile } });
+export const getSmsInvoiceSettings = () => request('/sms/settings/invoice');
+export const saveSmsInvoiceSettings = (body) => request('/sms/settings/invoice', { method: 'PUT', body });
 // The note and coin values of the cash count (UtlDenom): { values: ['500', …] }.
 export const getDenominationConfig = () => request('/transactions/denominations/config');
 // Item templates (MstItemTemp, the desktop's F6 Load Template): the same shape as the quick selections.
@@ -458,6 +494,10 @@ export const getStockBalanceFormats = () => request('/print/stock-balance-format
 /** The Stock Balance report of a period as a PDF laid out by the desktop's RptStkBal*.rpt (with a printer: printed there, JSON back). */
 export const renderStockBalancePrint = (from_date, to_date, group, rpt, printer = '') =>
   requestRaw('/print/stock-balance', { method: 'POST', body: { from_date, to_date, group: group || null, rpt, printer } });
+/** The barcode label formats (every RPTBC*.rpt) that are in the report folder. */
+export const getBarcodeFormats = () => request('/print/barcode-formats');
+/** Labels [{code, copies, qty, mrp, barcode}] laid out by the desktop's RPTBC*.rpt (with a printer: printed there, JSON back). */
+export const renderBarcodePrint = (items, rpt, printer = '') => requestRaw('/print/barcode', { method: 'POST', body: { items, rpt, printer } });
 /** Is the Crystal Reports bridge set up and answering, and the printers of the PC it runs on. */
 export const getPrintBridge = () => request('/print/bridge');
 export const emailPrint = (body, to) => request('/print/email', { method: 'POST', body: { ...body, to } });
@@ -490,6 +530,10 @@ export const saveMenuAdmin = (body) => request('/utilities/menu', { method: 'PUT
 export const getPrintSettings = () => request('/utilities/print-settings');
 export const savePrintOption = (docId, order, body) =>
   request(`/utilities/print-settings/${docId}/${order}`, { method: 'PUT', body });
+// Add / Delete / Alter Order of a document's print options (the desktop's Print Settings buttons).
+export const addPrintOption = (docId, body) => request(`/utilities/print-settings/${docId}`, { method: 'POST', body });
+export const deletePrintOption = (docId, order) => request(`/utilities/print-settings/${docId}/${order}`, { method: 'DELETE' });
+export const orderPrintOptions = (docId, names) => request(`/utilities/print-settings/${docId}`, { method: 'PUT', body: { names } });
 
 // ─── Admin Master (routers/auth.py: /admin/*) ──────────────────────────────────────────────────────
 
@@ -512,7 +556,7 @@ export const saveFieldRights = (role, body) => request(`/admin/field-rights/${en
 export const getMasterApprovals = () => request('/admin/master-approval');
 export const saveMasterApprovals = (body) => request('/admin/master-approval', { method: 'PUT', body });
 export const approveMasterRow = (master, code) =>
-  request(`/admin/master-approval/${encodeURIComponent(master)}/${encodeURIComponent(code)}`, { method: 'POST' });
+  request(`/admin/master-approval/${encodeURIComponent(master)}/${seg(code)}`, { method: 'POST' });
 export const getReportRights = () => request('/admin/report-rights');
 export const saveReportRights = (role, body) => request(`/admin/report-rights/${encodeURIComponent(role)}`, { method: 'PUT', body });
 
@@ -572,6 +616,10 @@ export const removeDuplicateInvoices = (body) =>
 // delete body { group, confirm, admin_password (encrypted for "admin") } -> { deleted_items, sales_bills, ... }.
 export const previewDeleteNonLiquor = (group) => request(`/utilities/delete-non-liquor/preview${qs({ group })}`);
 export const deleteNonLiquorItems = (body) => request('/utilities/delete-non-liquor', { method: 'POST', body });
+// Carry Over tab: groups to pick, a preview of what goes and what is carried, and the run (Administrator; needs the ADMIN password).
+export const getCarryGroups = () => request('/utilities/delete-non-liquor/carry-groups');
+export const previewCarryOver = (groups) => request(`/utilities/delete-non-liquor/carry-preview${qs({ groups: groups.join(',') })}`);
+export const carryOverItems = (body) => request('/utilities/delete-non-liquor/carry-over', { method: 'POST', body });
 
 /** `mode` is 'merge' or 'replace' (Merge Items / Replace and Remove Duplicate items). */
 export const previewMergeItems = (mode, fromItem, toItem) =>
@@ -832,3 +880,12 @@ export const centralIndents = (params) => request(`/indents?${params}`, central)
 
 
 
+
+// Transaction Settings: the other UtlTransactions settings of the desktop's window (routers/utilities.py: /utilities/trn-settings).
+// getTrnSettings() -> { docs: [{doc_id, name, type, kind, values: {column: value}}], fields: [{column, caption, kind}] }
+export const getTrnSettings = () => request('/utilities/trn-settings');
+export const saveTrnSettings = (docId, values) => request(`/utilities/trn-settings/${docId}`, { method: 'PUT', body: { values } });
+// getBulkImportFields() -> { fields: [{name, datatype}] (the table UtlItemBulkUpdate), columns: [MstItem column names], types: ['Text','Integer','Date','Numeric'] }
+export const getBulkImportFields = () => request('/utilities/bulk-import-fields');
+// saveBulkImportFields([{name, datatype}]) replaces the whole list -> { message, fields }
+export const saveBulkImportFields = (fields) => request('/utilities/bulk-import-fields', { method: 'PUT', body: { fields } });

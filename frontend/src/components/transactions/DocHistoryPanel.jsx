@@ -12,7 +12,7 @@
 //   not listed (Held bills has its own list). Money the role may not see (purchase cost) shows as —.
 // - Refreshes itself when a document is saved or cancelled anywhere in the app (lib/api.js sends 'vlqms-docs-changed').
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ban, ChevronDown, History, Printer, RefreshCw, Search, X } from 'lucide-react';
 import PrintDialog from '../print/PrintDialog';
 import ActionBar, { ScreenFrame } from '../common/ActionBar';
@@ -33,6 +33,9 @@ import Kbd from '../common/Kbd';
 
 const KEY = 'vlqms_history_open';
 const SHOWN = 60;   // the latest documents listed
+const FETCH_DAYS = 90;   // the History panel and List window load documents of at least this many recent days
+const isoDaysAgo = (n) => { const d = new Date(Date.now() - n * 86_400_000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const DAY_PRESETS = [10, 20, 30, 60, 90];   // quick ranges in the "Show bills from" list; anything else is entered as Custom days
 const wide = () => (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 1536px)').matches) || false;
 const initiallyOpen = () => {
   if (!wide()) return false;
@@ -76,8 +79,11 @@ function describe(doc) {
 
 /** `onNew` starts a blank document on the screen (the action bar's New); `options` are the screen's extra actions for the bar's Options menu;
  *  `fetchDoc(no)` loads the whole document when the list only carries a summary (Physical Stock); `onEdit(doc)` loads a saved document into the
- *  screen to change it (Sales Invoice, Purchase Bill): List → Edit Selected, the viewer's Edit and the bar's Edit all call it */
-export default function WithHistory({ kind, title, children, onNew, options = [], fetchDoc, onEdit }) {
+ *  screen to change it (Sales Invoice, Purchase Bill): List → Edit Selected, the viewer's Edit and the bar's Edit all call it.
+ *  `navigate` adds the First / Previous / Search / Next / Last record buttons to the bar and the viewer: they walk through the saved documents (oldest
+ *  first) and show each read-only: in a dialog, or on the screen itself when `onView(doc)` is given (Purchase Bill: View mode; `focusDoc` is then the
+ *  number of the bill the screen shows, so the bar's Edit / Cancel Bill act on it). `mode` other than 'View' (a bill being entered or changed) turns the bar into Save and Cancel (`onSave`, `onCancel`). */
+export default function WithHistory({ kind, title, children, onNew, options = [], fetchDoc, onEdit, navigate = false, mode = 'View', onSave, onSavePrint, onCancel, saving = false, onView, focusDoc }) {
   const [open, setOpen] = useState(initiallyOpen);
   const [docs, setDocs] = useState(null);
   const [error, setError] = useState('');
@@ -86,12 +92,14 @@ export default function WithHistory({ kind, title, children, onNew, options = []
   const [opened, setOpened] = useState('');
   // Only the last N days of bills (kept in this browser only, edited in the panel's own box); 0 = the latest SHOWN
   const [days, setDays] = useState(getPurchaseDays);
+  const [custom, setCustom] = useState(() => days !== 0 && !DAY_PRESETS.includes(days));
   const changeDays = (v) => { const n = Math.max(0, Math.min(3650, Math.floor(Number(v)) || 0)); setDays(n); setPurchaseDays(n); };
   const [printNo, setPrintNo] = useState('');
   const [cancelNo, setCancelNo] = useState(null);   // Sales Invoice: the bill whose "reason" window is open (null = closed, '' = no bill picked yet)
   const [listOpen, setListOpen] = useState(false);   // the action bar's List window
   const { confirm, dialog: confirmDialog } = useConfirm();
-  const [viewNo, setViewNo] = useState('');
+  const [viewNoState, setViewNo] = useState('');
+  const viewNo = focusDoc ?? viewNoState;   // a screen that shows the bill itself (`focusDoc`) says which one
   const [attachOpen, setAttachOpen] = useState(false);
   const attachOn = Boolean(useScreenFields(`table:${HEADER_TABLES[kind] ?? ''}`).screen?.flags?.file_attach);   // UtlTransactions.FileAttachReq = 'Y'
   const [full, setFull] = useState(null);   // the whole document behind viewNo, when `fetchDoc` is given   // the document shown read-only (List → Open Selected, First / Previous / Next / Last)
@@ -103,19 +111,21 @@ export default function WithHistory({ kind, title, children, onNew, options = []
   useShortcuts({ 'Alt+H': toggle });
 
 
-  const fetchDocs = useCallback(() => listDocuments(kind)
+  // Only the recent documents are fetched (at least the last FETCH_DAYS, or the days chosen in the panel if more), not every document ever made.
+  const fetchDays = Math.max(days, FETCH_DAYS);   // typing days below FETCH_DAYS does not reload
+  const fetchDocs = useCallback(() => listDocuments(kind, { from_date: isoDaysAgo(fetchDays) })
     .then(list => { setDocs(list); setError(''); })
-    .catch(e => setError(errorText(e))), [kind]);
+    .catch(e => setError(errorText(e))), [kind, fetchDays]);
   const refresh = async () => { setBusy(true); await fetchDocs(); setBusy(false); };
 
   // Loaded when the panel or the List window opens, and again whenever a document is saved or cancelled anywhere in the app.
   useEffect(() => {
-    if (!open && !listOpen) return undefined;
+    if (!open && !listOpen && !navigate) return undefined;
     void fetchDocs();
     const onChange = () => { void fetchDocs(); };
     window.addEventListener(DOCS_CHANGED, onChange);
     return () => window.removeEventListener(DOCS_CHANGED, onChange);
-  }, [open, listOpen, fetchDocs]);
+  }, [open, listOpen, navigate, fetchDocs]);
 
   const rows = useMemo(() => {
     const q = find.trim().toLowerCase();
@@ -134,30 +144,48 @@ export default function WithHistory({ kind, title, children, onNew, options = []
     setViewNo(no);
     setFull(null);
     if (fetchDoc && no) fetchDoc(no).then(setFull).catch(() => undefined);
+    const picked = walk.find(d => d.doc_no === no);
+    if (onView && picked) onView(picked);   // the screen shows it itself
   };
+  // Move First / Previous / Next / Last (the exe's record buttons): through the saved documents, oldest first. With none shown yet, Previous goes to the
+  // newest and Next to the oldest.
+  const last = walk.length - 1;
+  const step = (to) => { if (walk[to]) showDoc(walk[to].doc_no); };
+  const nav = navigate ? {
+    onFirst: () => step(0), onPrev: () => step(at < 0 ? last : Math.max(0, at - 1)), onNext: () => step(at < 0 ? 0 : Math.min(last, at + 1)), onLast: () => step(last),
+    onFind: () => setListOpen(true), atStart: !walk.length || at === 0, atEnd: !walk.length || at === last,
+    label: walk.length ? (at >= 0 ? `${at + 1} / ${walk.length}` : `${walk.length} bills`) : '',
+  } : undefined;
   const moduleName = MODULES[kind] ?? title;
   const found = walk.find(d => d.doc_no === viewNo);
   const viewDoc = found && full?.doc_no === viewNo ? { ...found, ...full } : found;
+  // The bill on a screen that shows it itself follows the list: a cancel or an edit made elsewhere refreshes the picture.
+  const onViewRef = useRef(onView);
+  useEffect(() => { onViewRef.current = onView; }, [onView]);
+  useEffect(() => { if (found) onViewRef.current?.(found); }, [found]);
   // Sales Invoice has no action bar: its saved bills are found, re-printed, edited and cancelled in its Re-print / Edit window (SalesInvoiceDialogs.jsx).
   const sales = kind === 'sales_invoice';
   // Purchase Bill, Purchase Indent, Sales Return, Stock Deduction: the exe's Delete button with its CANCELLED choice (deleteDoc): the opened
   // document's stock effect is taken back and it is marked cancelled.
   const cancelable = ['closing_stock', 'expense', 'purchase_bill', 'purchase_indent', 'sales_return', 'stock_deduction'].includes(kind);
-  const cancelDocument = async () => {
-    if (!viewNo) { toast.error('Open a saved document from the List first.'); return; }
+  // `no` is the bill picked in the History panel (its "Cancel bill" button); the bar's Delete cancels the one opened from the List.
+  const cancelDocument = async (no = viewNo) => {
+    if (!no) { toast.error('Open a saved document from the List first.'); return; }
     if (!(await confirm('Are you sure to CANCEL this Document ?'))) return;
-    if (!(await toastStore.defer('delete', `${title ?? 'Document'} ${viewNo} will be cancelled when this closes.`, 'Not cancelled. Nothing was changed.'))) return;
-    cancelSavedDocument(kind, viewNo).then(() => toast.ok(`Cancelled ${title ?? 'document'} ${viewNo} Successfully!`)).catch(e => toast.error(errorText(e)));
+    if (!(await toastStore.defer('delete', `${title ?? 'Document'} ${no} will be cancelled when this closes.`, 'Not cancelled. Nothing was changed.'))) return;
+    cancelSavedDocument(kind, no).then(() => toast.ok(`Cancelled ${title ?? 'document'} ${no} Successfully!`)).catch(e => toast.error(errorText(e)));
   };
   const bar = sales ? null : (
     <ActionBar
+      mode={mode} onSave={onSave} onSavePrint={onSavePrint} onCancel={onCancel} saving={saving} nav={nav}
       onNew={sales ? undefined : onNew} canNew={canDo(moduleName, 'add')}
       listLabel={sales ? 'Edit' : 'List'}
       onEdit={!sales && onEdit && canDo(moduleName, 'edit') ? () => viewDoc && onEdit(viewDoc) : undefined} canEdit={!!viewDoc && !['CANCELLED', 'DELETED', 'HOLD'].includes(viewDoc.status)}
       noEditReason="Open a saved one from the List first (a cancelled one can't be edited)"
-      onDelete={kind === 'sales_invoice' ? () => setCancelNo(viewNo || '') : cancelable ? () => void cancelDocument() : undefined} deleteLabel={CANCEL_LABELS[kind] ?? 'Cancel Bill'} canDelete={canDo(moduleName, 'delete')}
-      onList={() => setListOpen(true)} onClose={goHome}
-      options={[...options, ...(attachOn ? [{ label: 'File Attachment', onClick: () => setAttachOpen(true), disabled: !viewNo }] : []), { label: open ? 'Hide history' : 'Show history', onClick: toggle }]}
+      onDelete={kind === 'sales_invoice' ? () => setCancelNo(viewNo || '') : cancelable ? () => void cancelDocument(viewNo) : undefined} deleteLabel={CANCEL_LABELS[kind] ?? 'Cancel Bill'} canDelete={canDo(moduleName, 'delete') && !(cancelable && viewDoc && ['CANCELLED', 'DELETED'].includes(viewDoc.status))}
+      noDeleteReason={viewDoc && ['CANCELLED', 'DELETED'].includes(viewDoc.status) ? 'This one is already cancelled' : undefined}
+      onList={() => setListOpen(true)} onAttach={attachOn ? () => setAttachOpen(true) : undefined} canAttach={!!viewNo} onClose={goHome}
+      options={[...options, { label: open ? 'Hide history' : 'Show history', onClick: toggle }]}
     />
   );
 
@@ -190,11 +218,19 @@ export default function WithHistory({ kind, title, children, onNew, options = []
           </div>
 
           <div className="flex items-center gap-2 border-b border-[#E3D9CD] px-3 py-1.5 text-[11px] text-stone-600 dark:border-[#2A2A2A] dark:text-stone-300">
-            <label htmlFor="hist-days">Show last</label>
-            <input id="hist-days" type="number" min={0} max={3650} value={days} onChange={e => changeDays(e.target.value)}
-              title="Days of bills listed here (0 = the latest 60). Kept on this computer only."
-              className="w-16 rounded-md border border-[#DCD1C5] bg-transparent px-1.5 py-0.5 text-right tabular-nums outline-none focus:border-[#64283A] dark:border-[#2A2A2A] dark:focus:border-[#D4A847]" />
-            <span>days</span>
+            <label htmlFor="hist-range" className="shrink-0 font-medium">Show bills from</label>
+            <select id="hist-range" value={custom ? 'custom' : String(days)}
+              onChange={e => { if (e.target.value === 'custom') setCustom(true); else { setCustom(false); changeDays(e.target.value); } }}
+              className="min-w-0 flex-1 rounded-md border border-[#DCD1C5] bg-transparent px-1.5 py-1 outline-none focus:border-[#64283A] dark:border-[#2A2A2A] dark:bg-[#141414] dark:focus:border-[#D4A847]">
+              {DAY_PRESETS.map(n => <option key={n} value={n}>Last {n} days</option>)}
+              <option value="0">Latest {SHOWN} bills</option>
+              <option value="custom">Custom days…</option>
+            </select>
+            {custom && (
+              <input id="hist-days" type="number" min={1} max={3650} value={days || ''} onChange={e => changeDays(e.target.value)} aria-label="Number of days"
+                title="Days of bills listed here. Kept on this computer only."
+                className="w-16 rounded-md border border-[#DCD1C5] bg-transparent px-1.5 py-1 text-right tabular-nums outline-none focus:border-[#64283A] dark:border-[#2A2A2A] dark:focus:border-[#D4A847]" />
+            )}
           </div>
 
           <div className="relative border-b border-[#E3D9CD] p-2 dark:border-[#2A2A2A]">
@@ -230,6 +266,12 @@ export default function WithHistory({ kind, title, children, onNew, options = []
                         className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#B08A45] px-2.5 py-1 font-semibold text-[#64283A] hover:bg-[#B08A45]/10 dark:border-[#D4A847]/40 dark:text-[#D4A847]">
                         <Printer size={12} />Print / preview
                       </button>
+                      {cancelable && !r.cancelled && canDo(moduleName, 'delete') && (
+                        <button type="button" onClick={() => void cancelDocument(r.no)}
+                          className="ml-2 mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-2.5 py-1 font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40">
+                          <Ban size={12} />{CANCEL_LABELS[kind] ?? 'Cancel Bill'}
+                        </button>
+                      )}
                       {kind === 'sales_invoice' && !r.cancelled && (
                         <button type="button" onClick={() => setCancelNo(r.no)}
                           className="ml-2 mt-2 inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-2.5 py-1 font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40">
@@ -256,9 +298,9 @@ export default function WithHistory({ kind, title, children, onNew, options = []
           canEditRow={r => !['CANCELLED', 'DELETED', 'HOLD'].includes(r.status)}
           renderDetail={r => { const d = walk.find(x => x.doc_no === r.doc_no); return d?.lines?.length ? <p className="leading-5">{d.lines.map(l => `${l.item_code ?? l.ledger ?? ''} × ${l.qty ?? l.amount ?? ''}`).join(' · ')}</p> : <p className="text-stone-500">No lines.</p>; }} />
       )}
-      {viewDoc && (
+      {viewDoc && !onView && (
         <DocViewDialog doc={viewDoc} kind={kind} title={title ? `${title[0].toUpperCase()}${title.slice(1)}` : 'Document'} position={at >= 0 ? `${at + 1} / ${walk.length}` : ''}
-          onClose={() => showDoc('')} onPrint={() => setPrintNo(viewDoc.doc_no)} onCancelBill={() => setCancelNo(viewDoc.doc_no)}
+          nav={nav} onClose={() => showDoc('')} onPrint={() => setPrintNo(viewDoc.doc_no)} onCancelBill={() => setCancelNo(viewDoc.doc_no)}
           onEdit={onEdit && canDo(moduleName, 'edit') ? () => { const d = viewDoc; showDoc(''); onEdit(d); } : undefined} />
       )}
       {cancelNo !== null && <CancelInvoiceDialog initialNo={cancelNo} onClose={() => setCancelNo(null)}

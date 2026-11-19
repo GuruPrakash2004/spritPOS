@@ -102,6 +102,6 @@ def carry_forward(start: str, user: str) -> dict:
                            GROUP BY ItemID, LocID HAVING SUM(StkMultiplier * Qty) > 0""", (opening,))
     admin_audit.write_now(user, "Company Master", "Changed", "Stock carry forward", "",
                           f"{previous['start']} to {previous['end']} into {target['start']} to {target['end']}: {len(rows)} line(s)")
-    db_store.load_items()   # the item list and the bills' stock read QOH from memory
+    db_store.reload_items()   # the item list and the bills' stock read QOH from memory
     return {"from_year": previous, "to_year": target, "lines": len(rows), "items": len({r["item_id"] for r in rows}),
             "qty": round(sum(r["qty"] for r in rows), 3)}

@@ -3,10 +3,12 @@
 // Nothing here is stored by the web app: providers and sent messages are the desktop's own UtlMsgSettings / TrnSMS rows.
 
 import { useEffect, useMemo, useState } from 'react';
+import { useShortcuts } from '../../lib/keys';
 import { Send } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
-import { errorText, getCustomers, getSmsHistory, getSmsProviders, sendSms, todayIso } from '../../lib/api';
+import { ProvidersTab, InvoiceSmsTab } from './SmsSettings';
+import { errorText, getAuthRole, getCustomers, getSmsHistory, getSmsProviders, sendSms, todayIso } from '../../lib/api';
 import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
 const MAX = 250;
@@ -40,6 +42,7 @@ function SendTab({ info }) {
       else toastStore.add('ok', `${r.sent} message${r.sent === 1 ? '' : 's'} sent.`);
     } catch (e) { setProblem(errorText(e)); }
   };
+  useShortcuts({ F6: () => { void send(); } });   // the desktop's F6 sends
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -59,7 +62,7 @@ function SendTab({ info }) {
         )}
         <div>
           <label htmlFor="sms-msg" className={label}>Message <span className="font-normal text-stone-400">({message.length}/{MAX})</span></label>
-          <textarea id="sms-msg" rows={5} maxLength={MAX} value={message} onChange={e => setMessage(e.target.value)} className={field} />
+          <textarea id="sms-msg" rows={5} maxLength={MAX} value={message} onChange={e => setMessage(e.target.value.replace(/'/g, '`'))} className={field} />
         </div>
         {problem && <InlineError message={problem} />}
         <button onClick={() => void send()} className={primaryButton}><Send size={14} />Send</button>
@@ -120,6 +123,7 @@ function HistoryTab() {
 
 export default function SmsScreen() {
   const [tab, setTab] = useState('send');
+  const admin = getAuthRole() === 'Administrator';   // the providers' URLs hold gateway keys
   const [info, setInfo] = useState({ enabled: true, providers: [] });
   useEffect(() => { getSmsProviders().then(setInfo).catch(() => {}); }, []);
   const tabBtn = (id, text) => (
@@ -132,8 +136,11 @@ export default function SmsScreen() {
         <div><h1 className={pageTitle}>SMS</h1><p className={pageSub}>Send messages through the shop's SMS provider, and see what was sent.</p></div>
       </div>
       {!info.enabled && <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">SMS is not switched on for this shop (UtlMisc.SMSFeature), or no provider is set up, so messages will not be sent.</p>}
-      <div role="tablist" className="inline-flex gap-1 rounded-lg bg-subtle p-1">{tabBtn('send', 'Send')}{tabBtn('history', 'History')}</div>
-      {tab === 'send' ? <SendTab info={info} /> : <HistoryTab />}
+      <div role="tablist" className="inline-flex gap-1 rounded-lg bg-subtle p-1">{tabBtn('send', 'Send')}{tabBtn('history', 'History')}{admin && tabBtn('providers', 'Providers')}{admin && tabBtn('invoice', 'Invoice SMS')}</div>
+      {tab === 'send' && <SendTab info={info} />}
+      {tab === 'history' && <HistoryTab />}
+      {admin && tab === 'providers' && <ProvidersTab />}
+      {admin && tab === 'invoice' && <InvoiceSmsTab />}
     </div>
   );
 }

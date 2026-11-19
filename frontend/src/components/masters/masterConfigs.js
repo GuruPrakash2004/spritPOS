@@ -62,7 +62,7 @@ export const LEDGER_FIELDS = [
 ];
 
 export const ITEM_FIELDS = [
-  // Required = the red labels of the desktop's Item Master: code, name, UOM, group, liquor category, MRP and package.
+  // Required = the red labels of the desktop's Item Master: code, name, UOM, group, liquor category and MRP (package and HSN code are optional: the owner's rule; the screen's "Pkg Item" box is mandatory through the Doc Designer; MRP must be above 0, 2026-11-19).
   // `section` groups the fields into the titled boxes of the desktop's Item Master (MasterCrud draws one box per run of fields).
   { key: 'code', label: 'Item Code', required: true, section: 'Item Details' },
   { key: 'name', label: 'Item Name', required: true, section: 'Item Details' },
@@ -70,19 +70,19 @@ export const ITEM_FIELDS = [
   { key: 'hsn_code', label: 'HSN Code', showInList: false, section: 'Item Details' },
   { key: 'group', label: 'Item Group', optionsFrom: 'item-groups', required: true, section: 'Classification' },
   { key: 'brand', label: 'Brand', optionsFrom: 'brands', showInList: false, section: 'Classification' },
-  { key: 'liqtype', label: 'Liquor Category', type: 'select', options: ['IML', 'Beer', 'Wine', 'Others'], required: true, showInList: false, default: 'IML', section: 'Classification' },
+  { key: 'liqtype', label: 'Liquor Category', type: 'select', options: ['IML', 'Beer', 'Wine', 'Others'], required: true, showInList: false, default: '', section: 'Classification' },
   { key: 'uom', label: 'UOM', optionsFrom: 'uoms', required: true, showInList: false, default: 'BTL', section: 'Classification' },
-  { key: 'package', label: 'Package', optionsFrom: 'packages', required: true, showInList: false, section: 'Classification' },
-  { key: 'bottles_per_case', label: 'Bottles per Case', type: 'number', showInList: false, default: 12, section: 'Classification' },
-  { key: 'mrp', label: 'MRP', type: 'number', required: true, section: 'Rates & Taxes' },
-  { key: 'purchase_rate', label: 'Purchase Rate', type: 'number', costField: true, section: 'Rates & Taxes' },
-  { key: 'cgst_per', label: 'CGST % (non-liquor only)', type: 'number', showInList: false, section: 'Rates & Taxes' },
-  { key: 'sgst_per', label: 'SGST % (non-liquor only)', type: 'number', showInList: false, section: 'Rates & Taxes' },
-  { key: 'rol', label: 'ROL (reorder level)', type: 'number', showInList: false, section: 'Stock' },
-  { key: 'roq', label: 'ROQ (reorder qty)', type: 'number', showInList: false, section: 'Stock' },
+  { key: 'package', label: 'Package', optionsFrom: 'packages', showInList: false, section: 'Classification' },
+  { key: 'bottles_per_case', label: 'Bottles per Case', type: 'number', showInList: false, default: '', section: 'Classification' },   // empty on New (the exe starts blank; blank saves 0)
+  { key: 'mrp', label: 'MRP', type: 'number', decimals: 2, required: true, positive: true, section: 'Rates & Taxes' },
+  { key: 'purchase_rate', label: 'Purchase Rate', type: 'number', decimals: 2, costField: true, section: 'Rates & Taxes' },
+  { key: 'cgst_per', label: 'CGST % (non-liquor only)', type: 'number', decimals: 2, showInList: false, section: 'Rates & Taxes' },
+  { key: 'sgst_per', label: 'SGST % (non-liquor only)', type: 'number', decimals: 2, showInList: false, section: 'Rates & Taxes' },
+  { key: 'rol', label: 'ROL (reorder level)', type: 'number', decimals: 2, showInList: false, section: 'Stock' },
+  { key: 'roq', label: 'ROQ (reorder qty)', type: 'number', decimals: 2, showInList: false, section: 'Stock' },
   // Opening stock: used only when the item is created. After that, stock changes through transactions
   // (the backend ignores QOH on edits so the stock ledger stays complete).
-  { key: 'qoh', label: 'Opening stock (new items only)', type: 'number', showInList: false, newOnly: true, section: 'Stock' },
+  { key: 'qoh', label: 'QOH', type: 'number', showInList: false, lockedAlways: true, small: true, section: 'Stock' },
   { key: 'non_stockable', label: 'Non Stockable', type: 'bool', showInList: false, default: false, section: 'Stock' },
   { key: 'active', label: 'Active', type: 'bool', showInList: false, default: true, section: 'Stock' },
 ];
@@ -92,7 +92,7 @@ export const ITEM_FIELDS = [
 // A file may leave out the optional columns (and name the brand column BRAND instead of BRANDCODE).
 export const ITEM_IMPORT_COLUMNS = [
   ['ITEMCODE', 'code', true], ['ITEMNAME', 'name', true], ['SHORTNAME', 'short_name', false], ['ITEMGROUPCode', 'group', true],
-  ['LIQTYPE', 'liqtype', false], ['UOMCode', 'uom', true], ['PKGCode', 'package', true], ['BOTPERCASES', 'bottles_per_case', true],
+  ['LIQTYPE', 'liqtype', false], ['UOMCode', 'uom', true], ['PKGCode', 'package', false], ['BOTPERCASES', 'bottles_per_case', true],
   ['MRP', 'mrp', true], ['PURRATE', 'purchase_rate', false], ['CGSTPER', 'cgst_per', false], ['SGSTPER', 'sgst_per', false],
   ['ROL', 'rol', false], ['ROQ', 'roq', false], ['HSNCODE', 'hsn_code', false], ['BRANDCODE', 'brand', false],
 ];
@@ -101,4 +101,4 @@ export const ITEM_IMPORT_ALIASES = { BRAND: 'BRANDCODE' };
 export const ITEM_IMPORT_NUMERIC = new Set(['bottles_per_case', 'mrp', 'purchase_rate', 'cgst_per', 'sgst_per', 'rol', 'roq']);
 // The template's other item columns (MstITEM columns the web has no typed field for): sent as `extras`, which the server
 // checks against the real table (a column the shop's table doesn't have is dropped).
-export const ITEM_IMPORT_EXTRAS = ['MAXLEVEL', 'MINLEVEL', 'NONSTKABLE', 'CESSPER', 'COMPCESS'];
+export const ITEM_IMPORT_EXTRAS = ['PKGITEM', 'MAXLEVEL', 'MINLEVEL', 'NONSTKABLE', 'CESSPER', 'COMPCESS'];   // PKGITEM = the sheet's "Pkg.ItemName" column (G)

@@ -8,7 +8,8 @@
 // database's own checks are shown too, read-only: those are fixed with Re Write Stock in the desktop app.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, AlertTriangle, RefreshCw, Wrench } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, FileSpreadsheet, RefreshCw, Wrench } from 'lucide-react';
+import { downloadXls } from '../../lib/xlsExport';
 import { useConfirm } from '../common/ConfirmDialog';
 import { toastStore } from '../common/toastStore';
 import { errorText, getRewriteStock, getRewriteStockDesktopTab, runRewriteStock, } from '../../lib/api';
@@ -127,6 +128,25 @@ export default function ReWriteStock() {
     if (await load(true)) toastStore.add('refresh', 'Stock checked again.');
   };
 
+  // Export to Excel (legacy btnExport: both difference grids). One sheet: the "Diff. in Transaction Qty and System Stock Qty"
+  // checks and the "Diff. in Stock Ledger and QOH" check side by side, one row per mismatching item.
+  const exportDiffs = async () => {
+    const rows = [];
+    [['Web app', data?.web], ['Desktop database', data?.desktop]].forEach(([source, check]) => {
+      (check?.tabs ?? []).forEach(t => t.rows.forEach(r => {
+        const ledger = t.key === 'ledger';
+        rows.push({ source, check: ledger ? 'Diff. in Stock Ledger and QOH' : `Diff. in Transaction Qty and System Stock Qty (${t.caption})`,
+          item: r.item_name, code: r.item_code, a: ledger ? r.ledger_stock : r.trn_stock, b: ledger ? r.qoh : r.sys_stock, diff: r.diff });
+      }));
+    });
+    if (!rows.length) return toastStore.add('error', 'Nothing to export: there are no differences.');
+    if (!(await toastStore.defer('ok', `${rows.length} rows will be exported to Excel when this closes.`, 'Export cancelled.'))) return;
+    const cols = [['source', 'Source'], ['check', 'Check'], ['item', 'Item Name'], ['code', 'Item Code'], ['a', 'Trn / Ledger Stock'], ['b', 'Sys Stock / QOH'], ['diff', 'Difference']]
+      .map(([key, label]) => ({ key, label, align: ['a', 'b', 'diff'].includes(key) ? 'right' : 'left' }));
+    await downloadXls('Re_Write_Stock_Differences', 'Re-Write Stock Balance', `${rows.length} rows`, cols, rows);
+    toastStore.add('ok', `${rows.length} rows exported to Excel.`);
+  };
+
   const reWrite = async () => {
     if (data && !data.web.rewrite_required) return toastStore.add('ok', 'Re-Write not Required');
     if (!(await confirm('Re-Write the stock now? Bills on every counter wait until it finishes (a few seconds). '
@@ -144,6 +164,8 @@ export default function ReWriteStock() {
     }
   };
 
+  const notRequired = !!data && !data.web.rewrite_required;   // legacy greys the button as "Re-Write not Required"
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
       {dialog}
@@ -154,7 +176,8 @@ export default function ReWriteStock() {
         </div>
         <div className="flex gap-2">
           <button className={secondaryButton} onClick={checkAgain} disabled={loading || writing}><RefreshCw size={14} className={loading ? 'animate-spin' : ''} />Check again</button>
-          <button className={dangerButton} onClick={reWrite} disabled={!data || loading || writing}><Wrench size={14} />{writing ? 'Re-Writing…' : 'Re-Write'}</button>
+          <button className={secondaryButton} onClick={exportDiffs} disabled={!data || loading || writing}><FileSpreadsheet size={14} />Export to Excel</button>
+          <button className={notRequired ? secondaryButton : dangerButton} onClick={reWrite} disabled={!data || loading || writing || notRequired}><Wrench size={14} />{writing ? 'Re-Writing…' : notRequired ? 'Re-Write not Required' : 'Re-Write'}</button>
         </div>
       </div>
 

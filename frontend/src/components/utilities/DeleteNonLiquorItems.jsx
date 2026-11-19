@@ -4,6 +4,7 @@
 // code typed again. Liquor items, or items used by documents made in the web app, block it (Merge Items instead).
 
 import { useEffect, useState } from 'react';
+import CarryOver from './CarryOver';
 import { Eye, Trash2 } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
@@ -13,7 +14,7 @@ import { encryptSecret } from '../../lib/secureField';
 import { deleteNonLiquorItems, errorText, getItemGroups, previewDeleteNonLiquor } from '../../lib/api';
 import { dangerButton, field, label, pageHeader, pageSub, pageTitle, panel, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 
-export default function DeleteNonLiquorItems() {
+function SingleGroup() {
   const [groups, setGroups] = useState([]);
   const [group, setGroup] = useState('');
   const [info, setInfo] = useState(null);
@@ -55,15 +56,9 @@ export default function DeleteNonLiquorItems() {
   };
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {dialog}
       {passwordDialog}
-      <div className={pageHeader}>
-        <div>
-          <h1 className={pageTitle}>Delete Non-Liquor Items</h1>
-          <p className={pageSub}>Delete a whole non-liquor item group with its stock and transactions. Take a database backup first.</p>
-        </div>
-      </div>
       <div className={`${panel} flex flex-wrap items-end gap-3 px-5 py-3`}>
         <div>
           <label htmlFor="dnl-group" className={label}>Select ItemGroup</label>
@@ -104,6 +99,29 @@ export default function DeleteNonLiquorItems() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// The desktop form's two tabs: delete one non-liquor group with its items, or carry over the stock of chosen groups after deleting their transactions.
+export default function DeleteNonLiquorItems() {
+  const [tab, setTab] = useState('single');
+  const tabBtn = (id, text) => (
+    <button role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+      className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold ${tab === id ? 'border-[#64283A] text-[#64283A] dark:border-[#D4A847] dark:text-[#D4A847]' : 'border-transparent text-stone-500'}`}>{text}</button>
+  );
+  return (
+    <div className="mx-auto flex max-w-4xl flex-col gap-4">
+      <div className={pageHeader}>
+        <div>
+          <h1 className={pageTitle}>Delete Non-Liquor Items</h1>
+          <p className={pageSub}>Delete a whole non-liquor item group with its stock and transactions, or carry over the stock of chosen groups. Take a database backup first.</p>
+        </div>
+      </div>
+      <div role="tablist" className="flex gap-1 border-b border-[#E3D9CD] dark:border-[#2A2A2A]">
+        {tabBtn('single', 'Single Group - Delete All - Items/Trn/Stock')}{tabBtn('carry', 'Carry Over')}
+      </div>
+      {tab === 'single' ? <SingleGroup /> : <CarryOver />}
     </div>
   );
 }

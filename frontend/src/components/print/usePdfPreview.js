@@ -4,6 +4,10 @@
 import { useEffect, useState, } from 'react';
 import { errorText } from '../../lib/api';
 
+// No cache of finished PDFs on purpose: the key (a format name, or document + format) does not say what was printed, so an earlier
+// PDF would be shown for a changed label list, another day's report, or a bill that was edited. A preview is ~0.3 s once the bridge is warm.
+const pageSizeOf = (value) => { const [w, h] = (value ?? '').split(',').map(Number); return w > 0 && h > 0 ? { w: w * 96 / 72, h: h * 96 / 72 } : null; };
+
 export function usePdfPreview(key, load) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,14 +20,15 @@ export function usePdfPreview(key, load) {
     if (!key) { setUrl(''); return; }
     let live = true;
     let made = '';
-    setLoading(true);
     setError('');
+    setLoading(true);
     load()
       .then(async res => {
         if (!live) return;
-        made = URL.createObjectURL(await res.blob());
-        const [w, h] = (res.headers.get('X-Page-Size') ?? '').split(',').map(Number);
-        setSize(w > 0 && h > 0 ? { w: w * 96 / 72, h: h * 96 / 72 } : null);
+        const blob = await res.blob();
+        const pageSize = pageSizeOf(res.headers.get('X-Page-Size'));
+        made = URL.createObjectURL(blob);
+        setSize(pageSize);
         setUrl(made);
       })
       .catch(e => { if (live) { setUrl(''); setError(errorText(e)); } })

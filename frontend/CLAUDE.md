@@ -13,7 +13,7 @@
 - New forms follow `.claude/rules/popups-and-errors.md`. Use `TextField` (`FormField.jsx`) and `InlineError` for per-field errors, `FormErrorSummary` for the summary card (both in `FormErrorSummary.jsx`), and `toastStore.js` for server results. `MasterCrud.jsx` shows the full pattern, including arrow-key field movement and ⌘/Ctrl+S.
 - Every screen must work without a mouse (billing counters rarely use one): screen keys with `useShortcuts()` and Enter-to-next-field with `enterMovesNext` (`lib/keys.js`), key hints with `<Kbd />`, dialogs through `Modal` (or `useDialogKeys` for a custom one). See `.claude/rules/popups-and-errors.md` §4.
 - Pop-up menus ("⋯ More options" and similar) use `common/DropdownMenu.jsx`, never an `absolute` div under the button: it renders in a portal, keeps the menu inside the screen on phones, and flips upwards near the bottom.
-- Export helpers are `csv.js` (CSV) and `xlsExport.js` (Excel-readable XLS). `formatters.js` has `numberToWords()` for amounts in words.
+- Export helpers are `csv.js` (CSV) and `xlsExport.js` (real .xlsx, built in the browser). `formatters.js` has `numberToWords()` for amounts in words.
 
 ## Motion
 

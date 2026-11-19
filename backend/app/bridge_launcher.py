@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from . import rpt_bridge, rpt_dsr, rpt_stock, store
+from . import rpt_barcode, rpt_bridge, rpt_dsr, rpt_stock, store
 
 logger = logging.getLogger("vlqms.bridge")
 EXE = rpt_bridge.EXE
@@ -45,6 +45,21 @@ def _key_accepted(base: str) -> bool | None:
     except httpx.HTTPError:
         return None
     return r.status_code != 401
+
+
+def _ready(base: str) -> bool | None:
+    """Whether the bridge there accepts our key AND has finished its start-up (GET /health "ready"): True, False (starting or wrong key),
+    None (no answer). A bridge built before the ready flag existed has none and counts as ready."""
+    try:
+        r = httpx.get(base + "/health", headers={"X-Bridge-Key": rpt_bridge.key()}, timeout=2.0)
+    except httpx.HTTPError:
+        return None
+    if r.status_code != 200:
+        return False
+    try:
+        return bool(r.json().get("ready", True))
+    except ValueError:
+        return True
 
 
 def _port() -> int | None:
@@ -99,7 +114,7 @@ def _warm_files() -> list[str]:
     on_disk = {f.lower(): f for f in rpt_bridge.rpt_files()}
     wanted = [str(o.get("CrptFileName") or "").strip() for o in store.UTL_OPTIONS]
     wanted = [w if w.lower().endswith(".rpt") else w + ".rpt" for w in wanted if w]
-    wanted += [*rpt_dsr.FILES, *rpt_stock.FILES, "FMTSINV.rpt", "fmtPSE.rpt"]
+    wanted += [*rpt_barcode.formats(), *rpt_dsr.FILES, *rpt_stock.FILES, "FMTSINV.rpt", "fmtPSE.rpt"]
     files: list[str] = []
     for w in wanted:
         real = on_disk.get(w.lower())
@@ -117,6 +132,9 @@ def _warm_up(port: int) -> None:
     for _ in range(40):   # wait for the listener
         if _key_accepted(base) is not None or _stop.wait(0.5):
             break
+    for _ in range(300):   # then for the bridge's own start-up (Windows' first printer call can take a minute): its requests wait for it anyway
+        if _ready(base) is not False or _stop.wait(1):
+            break
     try:
         _warm_engine(base)
     except Exception as exc:   # noqa: BLE001 - warm-up is only a speed-up
@@ -128,12 +146,27 @@ def _warm_up(port: int) -> None:
         files = _warm_files()
         if not files:
             return
-        job = {"folder": str(rpt_bridge.folder()), "files": files, "table_prefix": rpt_bridge.table_prefix(),
+        job = {"folder": str(rpt_bridge.folder()), "table_prefix": rpt_bridge.table_prefix(),
                "logon": rpt_bridge._logon(), "parameters": rpt_bridge.company_parameters(),
                "label_values": rpt_bridge.label_values(), "address_lines": rpt_bridge.address_lines(),
                "layout_printer": rpt_bridge.layout_printer()}   # the kept reports are already on the preview's layout printer
-        r = httpx.post(base + "/warm", json=job, headers={"X-Bridge-Key": rpt_bridge.key()}, timeout=170)
-        logger.info("Crystal Reports bridge warmed up: %s report(s) kept (%s ms)", r.json().get("kept"), r.json().get("ms"))
+        # ONE report per /warm call. The bridge runs one request at a time and kills itself when a request passes 55 s, so a single call
+        # for a dozen reports (each 1-4 s on a busy database, after the ~10 s engine start) could run past that, kill the bridge, and
+        # the restart would try the same again: a bridge that never answers. Per report, a slow or hung format costs only itself.
+        kept, failures = 0, 0
+        for name in files:
+            if _stop.is_set():
+                return
+            try:
+                r = httpx.post(base + "/warm", json={**job, "files": [name]}, headers={"X-Bridge-Key": rpt_bridge.key()}, timeout=70)
+                kept += int(r.json().get("kept") or 0)
+                failures = 0
+            except Exception as exc:   # noqa: BLE001 - this report is just not kept; the rest still are
+                failures += 1
+                logger.info("Crystal Reports bridge could not keep %s ready: %s", name, exc.__class__.__name__)
+                if failures >= 3 or not wait_ready(60):   # the bridge restarted (or keeps failing): leave the rest to the first real print
+                    break
+        logger.info("Crystal Reports bridge warmed up: %s of %s report(s) kept", kept, len(files))
     except Exception as exc:   # noqa: BLE001 - warm-up is only a speed-up
         logger.info("Crystal Reports bridge warm-up skipped: %s", exc)
 
@@ -175,6 +208,22 @@ def start() -> None:
     threading.Thread(target=_supervise, args=(port,), name="rpt-bridge", daemon=True).start()
 
 
+def wait_ready(seconds: float = 60) -> bool:
+    """Wait until the bridge this backend runs accepts our key again (it is restarting after a hung report or a restart request).
+    False at once when the bridge is not ours to wait for (started by hand, a service, the built-in print), or on timeout."""
+    port = _port()
+    if port is None or _proc is None or _stop.is_set():
+        return False
+    base = f"http://127.0.0.1:{port}"
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if _proc is not None and _proc.poll() is None and _ready(base) is True:
+            return True
+        if _stop.wait(0.5):
+            return False
+    return False
+
+
 _restart_lock = threading.Lock()
 _last_restart = 0.0
 
@@ -211,6 +260,8 @@ def restart(reason: str = "") -> bool:
 
 def stop() -> None:
     _stop.set()
+    if os.environ.get("RPT_BRIDGE_KEEP_ALIVE") == "1":
+        return   # leave the bridge running: the next backend start recognises it by its saved key and reuses it (no slow start-up again)
     if _proc and _proc.poll() is None:
         _proc.terminate()
         try:

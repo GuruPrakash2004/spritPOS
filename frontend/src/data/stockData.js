@@ -9,6 +9,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { getItems, } from '../lib/api';
+import { getDataVersion, subscribeDataVersion } from '../lib/dataVersion';
 
  
 
@@ -62,7 +63,8 @@ export function useStockItems() {
     cb => { listeners.add(cb); return () => listeners.delete(cb); },
     () => version,
   );
-  useEffect(() => { loadStockItems().catch(() => undefined); }, []);
+  const dataVersion = useSyncExternalStore(subscribeDataVersion, getDataVersion);   // items changed outside the app: read the catalogue again
+  useEffect(() => { loadStockItems().catch(() => undefined); }, [dataVersion]);
   return STOCK_ITEMS;
 }
 

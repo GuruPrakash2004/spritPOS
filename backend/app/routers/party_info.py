@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from .. import admin_audit, db, doc_engine, sqlstore, store
+from .. import codeseg
 from .auth import get_current_user, require_right
 
 router = APIRouter(prefix="/masters", tags=["Party records"])
@@ -73,6 +74,7 @@ def _check(kind: str, row: dict) -> None:
 
 @router.get("/{party}/{code}/{kind}")
 def list_rows(party: str, code: str, kind: str, user: dict = Depends(get_current_user)):
+    code = codeseg.dec(code)   # codes with "/" or "~" travel escaped (app/codeseg.py)
     if kind == "item-rates":   # Customer vs Item / Supplier vs Item
         return _rates_view(party, code, user)
     if kind not in KINDS:
@@ -89,6 +91,7 @@ def list_rows(party: str, code: str, kind: str, user: dict = Depends(get_current
 
 @router.put("/{party}/{code}/{kind}")
 def replace_rows(party: str, code: str, kind: str, body: RowsIn, user: dict = Depends(get_current_user)):
+    code = codeseg.dec(code)   # codes with "/" or "~" travel escaped (app/codeseg.py)
     if kind == "item-rates":
         try:
             items = PartyItemsIn(rows=[PartyItem(**r) for r in body.rows])
@@ -122,6 +125,7 @@ def replace_rows(party: str, code: str, kind: str, body: RowsIn, user: dict = De
 @router.post("/{party}/{code}/activities", status_code=201)
 def add_activity(party: str, code: str, body: RowsIn, user: dict = Depends(get_current_user)):
     """A dated note on the party, with the signed-in user (vLQMS.exe frmMstPartyActivities)."""
+    code = codeseg.dec(code)   # codes with "/" or "~" travel escaped (app/codeseg.py)
     master = PARTIES.get(party, ("", "", "", ""))[3]
     require_right("edit", master)(user)
     party_id, doc_id = _party(party, code)

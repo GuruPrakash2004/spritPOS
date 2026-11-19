@@ -32,8 +32,9 @@ from typing import Optional
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 
-from .. import admin_audit, db, legacy_crypto, secure_fields, security, sqlstore, store, validation
+from .. import admin_audit, codeseg, db, legacy_crypto, secure_fields, security, sqlstore, store, validation
 from ..passwords import hash_password, verify_password
 from ..schemas import (
     AdnlAdminPasswordIn, ChangePasswordIn, FieldRightsIn, LoginIn, LoginSettingsIn, MasterApprovalIn, ReportRightsIn, RoleIn,
@@ -305,6 +306,8 @@ def login(body: LoginIn, request: Request):
         raise HTTPException(401, "Invalid user name or password")
     if not u.get("active", True):
         raise HTTPException(403, "This user is inactive. Ask the administrator.")
+    if u.get("authorised") is False and username != "ADMIN":   # the exe: Authorised = 'N' is "Not a valid User!"
+        raise HTTPException(403, "Not a valid User! This user has not been authorised yet. Ask the administrator.")
     with _failures_lock:
         _failures.pop(user_key, None)
 
@@ -324,6 +327,22 @@ def _write_desktop_password(code: str, new: str) -> None:
             changed = cur.execute("UPDATE MstUser SET LoginPwd = ?, PwdResetDt = ? WHERE UserCode = ?", (legacy_crypto.encrypt(new), date.today().isoformat(), code))
     if not changed:
         raise HTTPException(409, "This user is not in the desktop's user table, so the password can't be changed here")
+
+
+def _create_desktop_user(code: str, u: dict, password: str, by: str) -> None:
+    """A new user is made in the desktop's MstUser as the exe's Insert does (frmMstUser.btnSave_Click): UserID = max + 1, the password in the
+    exe's cipher, authorised by the administrator, PwdResetDt today. The rest (role, details) the generic save then writes as for any edit."""
+    if not db.configured() or db.use_web_tables():
+        return
+    if not password.isascii() or len(password) > 31:
+        raise HTTPException(422, "The desktop keeps passwords of at most 31 plain (English) characters; choose a shorter one")
+    now = datetime.now()
+    with db.direct_writes():
+        with db.transaction() as cur:
+            if sqlstore.user_row_exists(cur, code):
+                return
+            sqlstore.create_user_row(cur, code, {"UserName": u.get("full_name") or code, "LoginPwd": legacy_crypto.encrypt(password), "Inactive": "N" if u.get("active", True) else "Y",
+                                                 "Authorised": "Y", "AuthBy": by, "AuthOn": now, "PwdResetDt": date.today().isoformat()})
 
 
 @router.post("/auth/change-password")
@@ -415,7 +434,9 @@ def create_user(body: UserIn, current_admin: dict = Depends(require_admin)):
     if not password:
         raise HTTPException(422, "Enter a password for the new user")
     _check_new_password(password, name)
-    u = {"user": name, "role": body.role, "role_set_in_web": True, "active": body.active, "pwv": 0, **_user_details(body)}
+    details = _user_details(body)
+    u = {"user": name, "role": body.role, "role_set_in_web": True, "active": body.active, "authorised": True, "pwv": 0, **details}
+    _create_desktop_user(name, u, password, current_admin["user"])
     _set_password(u, password)
     store.USERS[name] = u
     store.touch("USERS", name)
@@ -437,6 +458,7 @@ def update_user(name: str, body: UserIn, current_admin: dict = Depends(require_a
     password = secure_fields.decrypt(body.password, "user")
     if password:
         _check_new_password(password, u["user"])
+        _write_desktop_password(u["user"], password)   # the desktop's LoginPwd, so the desktop and a restart keep it
         _set_password(u, password)
     if u.get("active", True) and not body.active:
         u["pwv"] = u.get("pwv", 1) + 1   # sign the user out everywhere
@@ -545,6 +567,21 @@ def public_login_settings():
                               "require_special", "password_expiry_days", "show_remember_me")}
 
 
+class DesktopLoginIn(BaseModel):
+    policy: bool = False
+    rules: bool = False
+    never_expires: bool = False
+    expiry_days: int = 0
+    min_special: int = 0
+    min_numeric: int = 0
+    min_alpha: int = 0
+    min_length: int = 0
+    min_lower: int = 0
+    min_upper: int = 0
+    login_required: bool = False
+    user_based: bool = False
+
+
 @admin.get("/login-settings")
 def get_login_settings(current_admin: dict = Depends(require_admin)):
     return security.login_settings()
@@ -558,6 +595,37 @@ def save_login_settings(body: LoginSettingsIn, current_admin: dict = Depends(req
     if changed:
         admin_audit.record("Admin Master (Security)", "Login Settings saved", "Login Settings", earlier, changed)
     return security.login_settings()
+
+
+@admin.get("/desktop-login-settings")
+def get_desktop_login_settings(current_admin: dict = Depends(require_admin)):
+    """The desktop's Login Settings (UtlMisc), or {"available": false} when this database has none."""
+    d = security.desktop_login()
+    return {"available": True, **d} if d else {"available": False}
+
+
+@admin.put("/desktop-login-settings")
+def save_desktop_login_settings(body: DesktopLoginIn, current_admin: dict = Depends(require_admin)):
+    """frmUtlLoginSettings.saveDetails: UPDATE UtlMisc (the desktop's own password policy, rules and expiry)."""
+    before = security.desktop_login()
+    if before is None:
+        raise HTTPException(409, "This database has no Login Settings (UtlMisc.PwdPolicy).")
+    v = security.desktop_login_check(body.model_dump())
+    with db.direct_writes():
+        with db.transaction() as cur:
+            cur.execute("UPDATE UtlMisc SET PwdPolicy = ?, PwdRules = ?, NeverExpires = ?, PwdExpiryDays = ?, PwdMinSplChrs = ?, PwdMinNumeric = ?, "
+                        "PwdMinAlpha = ?, PwdMinLen = ?, PwdMinLCase = ?, PwdMinUCase = ?, LoginReq = ?, UserBased = ?",
+                        ("Y" if v["policy"] else "N", "Y" if v["rules"] else "N", "Y" if v["never_expires"] else "N", v["expiry_days"], v["min_special"],
+                         v["min_numeric"], v["min_alpha"], v["min_length"], v["min_lower"], v["min_upper"], "Y" if body.login_required else "N",
+                         "Y" if body.user_based else "N"))
+    from .. import designer, desktop_rights
+    designer.load()   # re-read UtlMisc
+    desktop_rights.load()   # rights by user or by role may have changed
+    now = security.desktop_login() or {}
+    earlier, changed = admin_audit.diff({k: str(x) for k, x in before.items()}, {k: str(x) for k, x in now.items()})
+    if changed:
+        admin_audit.record("Admin Master (Security)", "Login Settings saved", "Login Settings (UtlMisc)", earlier, changed)
+    return {"available": True, **now}
 
 
 @admin.get("/field-rights")
@@ -621,6 +689,7 @@ def save_master_approval(body: MasterApprovalIn, current_admin: dict = Depends(r
 
 @admin.post("/master-approval/{path}/{code}")
 def approve_master_row(path: str, code: str, current_admin: dict = Depends(require_admin)):
+    code = codeseg.dec(code)   # codes with "/" or "~" travel escaped (app/codeseg.py)
     if path not in security.APPROVABLE:
         raise HTTPException(404, f"Unknown master '{path}'")
     table = getattr(store, security.TABLES[path])

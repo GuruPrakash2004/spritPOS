@@ -1,6 +1,6 @@
 // Global Settings → Other Settings (the desktop's Global Settings → Other Settings window): Transaction Settings per
 // document (legacy FrmUtlTrnSettings), Doc Prefix Settings (frmUtlDocNumber) and Menu Sequence (frmUtlMenuSequence).
-// Print Settings is the tab beside it. Each save waits for its popup; mistakes are shown inline. Administrator only
+// Bulk Item Import Fields (UtlItemBulkUpdate) is the list Update Item Master Fields offers. Print Settings is the tab beside it. Each save waits for its popup; mistakes are shown inline. Administrator only
 // (backend: /utilities/doc-settings, /utilities/numbering, /utilities/menu).
 
 import { useCallback, useEffect, useState } from 'react';
@@ -8,21 +8,24 @@ import { Save } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
 import {
-  errorText, getDocSettingsAdmin, getMenuAdmin, getNumbering, saveDocSettings, saveMenuAdmin, saveNumbering,
+  errorText, getDocSettingsAdmin, getMenuAdmin, getNumbering, getTrnSettings, saveDocSettings, saveMenuAdmin, saveNumbering, saveTrnSettings,
 
 } from '../../lib/api';
+import BulkImportFields from './BulkImportFields';
+import DeleteLinkage from './DeleteLinkage';
+import InvoiceSettings from './InvoiceSettings';
 import { resetDocSettings } from '../../lib/docSettings';
 import { MODULE_GROUPS } from '../../lib/modules';
 import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton } from '../../lib/styles';
 
 
-const TABS = [['transaction', 'Transaction Settings'], ['prefix', 'Doc Prefix'], ['menu', 'Menu Sequence']];
+const TABS = [['transaction', 'Transaction Settings'], ['prefix', 'Doc Prefix'], ['menu', 'Menu Sequence'], ['invoice', 'Invoice Settings'], ['linkage', 'Delete Linkage'], ['bulkfields', 'Bulk Item Import Fields']];
 const select = 'rounded-md border border-[#E3D9CD] bg-white px-2 py-1 text-xs dark:border-[#2A2A2A] dark:bg-[#141414]';
 
 export default function OtherSettings({ embedded = false }) {
   const [tab, setTab] = useState('transaction');
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className={tab === 'linkage' || tab === 'invoice' ? '' : 'mx-auto max-w-5xl'}>
       {!embedded && (
         <div className={`${pageHeader} mb-4`}>
           <div>
@@ -40,15 +43,72 @@ export default function OtherSettings({ embedded = false }) {
       {tab === 'transaction' && <TransactionSettings />}
       {tab === 'prefix' && <DocPrefix />}
       {tab === 'menu' && <MenuSequence />}
+      {tab === 'invoice' && <InvoiceSettings onClose={() => setTab('transaction')} />}
+      {tab === 'bulkfields' && <BulkImportFields />}
+      {tab === 'linkage' &&<DeleteLinkage onClose={() => setTab('transaction')} />}
     </div>
   );
 }
 
 // ─── Transaction Settings ──────────────────────────────────────────────────────────────────────────
 
+// The desktop window's other settings of one document (UtlTransactions). The web app does not act on these; they are shown and
+// saved so the desktop and the web read the same row. Switches that clear their details when off do so on the server, as the desktop.
+function DesktopSettings({ doc, fields, skip = [], onSaved }) {
+  const [draft, setDraft] = useState(doc.values);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const shown = fields.filter(f => f.column in doc.values && !skip.includes(f.column));
+  const changed = Object.fromEntries(shown.filter(f => draft[f.column] !== doc.values[f.column]).map(f => [f.column, draft[f.column]]));
+  const save = async () => {
+    if (!(await toastStore.defer('ok', `Desktop settings of ${doc.name} will be saved when this closes.`, 'Save cancelled. Nothing was changed.'))) return;
+    setSaving(true);
+    try {
+      await saveTrnSettings(doc.doc_id, changed);
+      toastStore.add('ok', `Transaction settings of ${doc.name} saved.`);
+      onSaved();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+  if (!shown.length) return null;
+  return (
+    <section className={`${panel} space-y-3 p-4`} aria-label={`${doc.name} desktop settings`}>
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">Desktop settings: {doc.name}</h3>
+          <p className="text-[11px] text-stone-500">Saved in the shop's database for the desktop app. The web app does not act on these.</p>
+        </div>
+        <button onClick={save} disabled={!Object.keys(changed).length || saving} className={primaryButton}><Save size={14} />Save</button>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {shown.filter(f => f.kind === 'flag').map(f => (
+          <label key={f.column} className="flex items-center gap-2 text-xs">
+            <input type="checkbox" checked={!!draft[f.column]} onChange={e => { setDraft({ ...draft, [f.column]: e.target.checked }); setError(''); }} />{f.caption}
+          </label>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {shown.filter(f => f.kind !== 'flag').map(f => (
+          <label key={f.column}><span className={label}>{f.caption}</span>
+            <input value={draft[f.column] ?? ''} type={f.kind === 'number' ? 'number' : 'text'} className={field}
+              onChange={e => { setDraft({ ...draft, [f.column]: f.kind === 'number' ? Math.trunc(Number(e.target.value)) : e.target.value }); setError(''); }} /></label>
+        ))}
+      </div>
+      {error && <InlineError message={error} />}
+    </section>
+  );
+}
+
 function TransactionSettings() {
   const [all, setAll] = useState(null);
   const [kind, setKind] = useState('');
+  const [desktop, setDesktop] = useState(null);   // { docs, fields } of UtlTransactions, or null without it
+  const [otherDoc, setOtherDoc] = useState(null);  // a desktop-only document picked from "Other documents"
+  const loadDesktop = useCallback(() => getTrnSettings().then(setDesktop).catch(() => setDesktop(null)), []);
+  useEffect(() => { loadDesktop(); }, [loadDesktop]);
   const [draft, setDraft] = useState(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -95,12 +155,22 @@ function TransactionSettings() {
         <p className={label}>Transaction</p>
         <div role="listbox" aria-label="Transaction" className="space-y-1">
           {Object.entries(all).map(([k, s]) => (
-            <button key={k} role="option" aria-selected={k === kind} onClick={() => setKind(k)}
-              className={`w-full rounded-lg border px-3 py-2 text-left text-xs font-medium ${k === kind ? 'border-[#64283A] bg-[#64283A]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#E3D9CD] dark:border-[#2A2A2A]'}`}>{s.screen}</button>
+            <button key={k} role="option" aria-selected={k === kind && !otherDoc} onClick={() => { setKind(k); setOtherDoc(null); }}
+              className={`w-full rounded-lg border px-3 py-2 text-left text-xs font-medium ${k === kind && !otherDoc ? 'border-[#64283A] bg-[#64283A]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#E3D9CD] dark:border-[#2A2A2A]'}`}>{s.screen}</button>
+          ))}
+          {desktop?.docs.filter(d => !d.kind).length > 0 && <p className="pt-2 text-[11px] font-semibold uppercase text-stone-500">Other documents</p>}
+          {desktop?.docs.filter(d => !d.kind).map(d => (
+            <button key={d.doc_id} role="option" aria-selected={otherDoc === d.doc_id} onClick={() => setOtherDoc(d.doc_id)}
+              className={`w-full rounded-lg border px-3 py-2 text-left text-xs font-medium ${otherDoc === d.doc_id ? 'border-[#64283A] bg-[#64283A]/5 dark:border-[#D4A847] dark:bg-[#D4A847]/10' : 'border-[#E3D9CD] dark:border-[#2A2A2A]'}`}>{d.name}</button>
           ))}
         </div>
       </div>
-      <section className={`${panel} min-w-0 flex-1 space-y-4 p-4`} aria-label={`${cur.screen} settings`}>
+      <div className="min-w-0 flex-1 space-y-4">
+      {otherDoc && desktop && (() => {
+        const d = desktop.docs.find(x => x.doc_id === otherDoc);
+        return d ? <DesktopSettings key={d.doc_id + JSON.stringify(d.values)} doc={d} fields={desktop.fields} onSaved={loadDesktop} /> : null;
+      })()}
+      {!otherDoc && <section className={`${panel} space-y-4 p-4`} aria-label={`${cur.screen} settings`}>
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">{cur.screen}</h2>
           <button onClick={save} disabled={!dirty || saving} className={primaryButton}><Save size={14} />Save</button>
@@ -120,14 +190,20 @@ function TransactionSettings() {
           {check('allow_duplicate_items', 'Allow the same item on more than one line')}
           {check('allow_edit_date', 'Allow changing the document date', 'Off: the document must be dated today.')}
           {kind === 'purchase_bill' && check('allow_copy_from', 'Allow Copy From (a Purchase Indent)')}
-          {kind === 'purchase_bill' && check('update_rate_from_pb', "Update the item's purchase rate from the bill")}
+          {/* "Update Rate From PB to Item Master" lives in Invoice Settings (UtlMisc.RateFld), one switch for the desktop and the web */}
         </div>
         {kind === 'sales_invoice' && (
           <label className="block max-w-xs"><span className={label}>Bills older than this many days can't be cancelled (0 = no limit)</span>
             <input type="number" min={0} max={3650} value={draft.edit_days} onChange={e => set({ edit_days: Math.trunc(Number(e.target.value)) })} className={field} /></label>
         )}
         {error && <InlineError message={error} />}
-      </section>
+      </section>}
+      {!otherDoc && desktop && (() => {
+        const d = desktop.docs.find(x => x.kind === kind);
+        return d ? <DesktopSettings key={d.doc_id + JSON.stringify(d.values)} doc={d} fields={desktop.fields}
+          skip={kind === 'purchase_bill' ? ['RateFldMstItem'] : []} onSaved={loadDesktop} /> : null;
+      })()}
+      </div>
     </div>
   );
 }

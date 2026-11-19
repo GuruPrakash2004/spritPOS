@@ -107,7 +107,7 @@ export default function RemoveDuplicateInvoice() {
         </div>
         <div className="min-w-[180px]">
           <label htmlFor="rdi-no" className={label}>Invoice No.</label>
-          <input id="rdi-no" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} onKeyDown={e => e.key === 'Enter' && show()} className={field} placeholder="Part of the number" />
+          <input id="rdi-no" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} onKeyDown={e => e.key === 'Enter' && show()} className={field} placeholder="Full invoice number (dates ignored)" />
         </div>
         <label className="flex items-center gap-2 pb-2 text-xs text-stone-700 dark:text-stone-200">
           <input type="checkbox" checked={onlyDup} onChange={e => setOnlyDup(e.target.checked)} />Only possible duplicates

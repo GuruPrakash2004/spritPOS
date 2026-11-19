@@ -69,6 +69,15 @@ def load_company() -> None:
         logger.info("Loaded company: %s", store.COMPANY["name"])
 
 
+def reload_items() -> None:
+    """Read the items again after a bulk change made in the database (Update Item Rates, Update Item Master Fields, year-end carry forward). `load_items`
+    alone gives rows without their `extras` (Item Selling Rate, Cess, Comp.Cess, HotKey ... : the database's other columns), so the screens would show
+    them blank and the next save of an item could write the blanks back; the extras are read again here."""
+    load_items()
+    from . import sqlstore
+    sqlstore.reload_extras()
+
+
 def load_items() -> None:
     _nonstk = _optional("MstITEM", ("NonStkable",), "i.")   # a client without the column reads NULL
     rows = db.fetchall(f"""
@@ -363,7 +372,7 @@ def _role_for(user_code: str, role_code: str, role_name: str) -> str:
 
 def load_users() -> None:
     rows = db.fetchall("""
-        SELECT u.UserID, u.UserCode, u.LoginPwd, u.UserName, u.Inactive, r.ROLECODE, r.ROLENAME
+        SELECT u.UserID, u.UserCode, u.LoginPwd, u.UserName, u.Inactive, u.Authorised, r.ROLECODE, r.ROLENAME
         FROM MstUser u
         LEFT JOIN MstROLE r ON r.ROLEID = u.RoleID
         WHERE u.UserID > 0
@@ -386,6 +395,8 @@ def load_users() -> None:
             "legacy_password": pwd_raw,
             "role": _role_for(uname, _s(r.get("ROLECODE")), _s(r.get("ROLENAME"))),
             "active": _s(r.get("Inactive")) != "Y",
+            # The exe signs in only users it has authorised ("Not a valid User!"); ADMIN is exempt. A row with no value counts as authorised.
+            "authorised": _s(r.get("Authorised")).upper() != "N",
             "pwv": 1,
         }
     logger.info("Loaded %d users into store", len(store.USERS))

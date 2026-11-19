@@ -101,3 +101,17 @@ describe('ListModal', () => {
     expect(screen.getByText('Mysuru')).toBeInTheDocument()
   })
 })
+
+describe('ListModal closing', () => {
+  it('closes with the Close button or the X in the top-right corner, not by Esc or a click outside', async () => {
+    const user = userEvent.setup()
+    const { onClose } = setup()
+    await user.keyboard('{Escape}')
+    await user.click(document.querySelector('.modal-backdrop'))
+    expect(onClose).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Close' }))   // the footer button
+    expect(onClose).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', { name: 'Close list' }))   // the X in the header's corner
+    expect(onClose).toHaveBeenCalledTimes(2)
+  })
+})

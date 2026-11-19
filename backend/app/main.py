@@ -22,7 +22,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
-from . import admin_audit, boot, bridge_launcher, db, gsettings, held_bills, shop_hours, sqlstore, store
+from . import admin_audit, boot, bridge_launcher, db, designer, gsettings, held_bills, master_watch, shop_hours, sqlstore, store
 from .ai import bootstrap as ai_bootstrap, enabled as ai_enabled
 from .routers import accounting as accounting_router, ai as ai_router, auth, quotation as quotation_router, quick_selection, sms as sms_router, attachments, rights_admin, company_files, custom_reports, designer as designer_router, masters, party_info, printing, physical_stock, reports, setup, tools, transactions, utilities
 from .schemas import SettingsIn
@@ -51,8 +51,8 @@ IDEMPOTENT_KEEP = 500   # replies remembered for Idempotency-Key replays
 # never refused for a database that is offline (they are how it is reconnected) and nothing is saved after them.
 CONTROL_PATHS = {"/utilities/database/disconnect", "/utilities/database/reconnect"}
 # Features that write straight into the shop's own tables (db.direct_writes) and never use the generic save (no Web_ tables).
-DIRECT_WRITE_PATHS = ("/accounting/", "/transactions/quotation", "/transactions/expense", "/quick-selection", "/item-templates", "/sms/", "/admin/desktop-rights", "/masters/items/bulk-fields/import", "/masters/items/recalculate-rates", "/masters/item-groups/order", "/masters/packages/order")
-NOT_WRITES = {"/auth/login", "/print/bulk-pdf", "/print/render", "/print/pages", "/setup/scan", "/utilities/backup", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/email", "/designer/refresh", "/designer/reload", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/rpt-folder", "/setup/smtp", "/setup/smtp/test", "/setup/print-printer", "/setup/print-printer/add",
+DIRECT_WRITE_PATHS = ("/accounting/", "/transactions/quotation", "/transactions/expense", "/quick-selection", "/item-templates", "/sms/", "/admin/desktop-rights", "/masters/items/bulk-fields/import", "/utilities/doc-settings", "/sms/settings", "/utilities/trn-settings", "/utilities/print-settings", "/utilities/delete-linkage", "/utilities/invoice-settings", "/utilities/bulk-import-fields", "/masters/items/recalculate-rates", "/masters/item-groups/order", "/masters/packages/order")
+NOT_WRITES = {"/auth/login", "/print/bulk-pdf", "/print/render", "/print/pages", "/setup/scan", "/utilities/backup", "/print/dsr", "/print/custom-report", "/print/stock-balance", "/print/barcode", "/print/email", "/designer/refresh", "/designer/reload", "/reports/custom/email", "/tools/sql/execute", "/setup/test", "/setup/connect", "/setup/rpt-folder", "/setup/smtp", "/setup/smtp/test", "/setup/print-printer", "/setup/print-printer/add",
               # AI suggestions: generating may take a while (the forecast) and rejecting changes only the ai.* tables.
               "/ai/suggestions/generate"}
 
@@ -76,8 +76,7 @@ def _still_signed_in(request: Request) -> bool:
         return False
 
 
-@app.middleware("http")
-async def serialise_and_save_writes(request: Request, call_next):
+async def _save_writes(request: Request, call_next):
     if request.method not in WRITE_METHODS or request.url.path in NOT_WRITES:
         return await call_next(request)
     if request.url.path in CONTROL_PATHS or request.url.path.startswith(DIRECT_WRITE_PATHS):
@@ -107,8 +106,11 @@ async def serialise_and_save_writes(request: Request, call_next):
             admin_audit.discard()
             return response
         admin_audit.commit(getattr(request.state, "user", None))
+        touched_masters = any(store.EDITS.get(t) for t in sqlstore.LEGACY_MASTERS)   # this save changes master tables: not an outside change
         try:
             await run_in_threadpool(sqlstore.save, getattr(request.state, "user", None))
+            if touched_masters:
+                await run_in_threadpool(master_watch.rebaseline)
             if not db.use_web_tables():
                 await run_in_threadpool(held_bills.dump_if_changed)   # held bills are kept in a file beside the backend (direct mode)
         except sqlstore.SaveFailed as exc:
@@ -123,6 +125,20 @@ async def serialise_and_save_writes(request: Request, call_next):
                 del store.IDEMPOTENT[old]
             response = Response(body, status_code=response.status_code, headers=dict(response.headers))
         return response
+
+
+@app.middleware("http")
+async def serialise_and_save_writes(request: Request, call_next):
+    """Counts the writes in flight so master_watch never reloads the masters under one (see master_watch.py), then runs _save_writes."""
+    if request.method not in WRITE_METHODS or request.url.path in NOT_WRITES:
+        return await call_next(request)
+    while master_watch.RELOADING:
+        await asyncio.sleep(0.05)
+    master_watch.IN_FLIGHT += 1   # no await between the check above and this line
+    try:
+        return await _save_writes(request, call_next)
+    finally:
+        master_watch.IN_FLIGHT -= 1
 
 
 # The built frontend, served by this backend on a shop PC (SERVE_FRONTEND=0 turns it off).
@@ -158,7 +174,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Disposition", "Idempotent-Replay", "X-Page-Size"],
+    expose_headers=["Content-Disposition", "Idempotent-Replay", "X-Page-Size", "X-Data-Version"],
 )
 
 
@@ -185,12 +201,14 @@ class FrontendAndHeaders:
                          (b"cross-origin-resource-policy", b"cross-origin")]   # company images load from the frontend's page
                 if no_store:
                     extra.append((b"cache-control", b"no-store"))
+                extra.append((b"x-data-version", str(master_watch.VERSION).encode()))   # the browser re-reads open screens when this changes (master_watch.py)
                 headers.extend(h for h in extra if h[0] not in have)
             await send(message)
 
         if path == "/api" or path.startswith("/api/"):
             stripped = path[4:] or "/"
             scope = dict(scope, path=stripped, raw_path=stripped.encode())
+            master_watch.poke()   # checks the master tables for outside changes at most every 10 s, in the background
             return await self.inner(scope, receive, send_with_headers)
         if method in ("GET", "HEAD") and os.environ.get("SERVE_FRONTEND", "1") != "0" and (FRONTEND_DIST / "index.html").is_file():
             file = _dist_file(path)
@@ -199,6 +217,8 @@ class FrontendAndHeaders:
             accept = dict(scope["headers"]).get(b"accept", b"").decode("latin-1")
             if "text/html" in accept and path not in API_PAGES:   # a page load: the app
                 return await FileResponse(FRONTEND_DIST / "index.html", headers={"Cache-Control": "no-cache"})(scope, receive, send_with_headers)
+        if method != "OPTIONS":
+            master_watch.poke()   # (the Vite dev server's proxy has already taken the /api prefix off)
         return await self.inner(scope, receive, send_with_headers)
 
 
@@ -241,12 +261,23 @@ def _prepare_print_agent() -> None:
         logger.info("Print Agent not prepared: %s", getattr(exc, "detail", exc))
 
 
+def _after_reconnect() -> None:
+    """The connection came back. If the start-up load never ran (the database was unreachable then), load the data now."""
+    if not sqlstore.enabled():
+        boot.load_data()
+    else:
+        designer.ensure_loaded()   # the print formats may be missing if the database was down at start-up
+
+
 @app.on_event("startup")
 def startup_event():
     """Connect to SQL Server (if set up) and load the data into the in-memory store (app/boot.py)."""
     bridge_launcher.start()   # the Crystal Reports bridge runs whenever the backend does (Windows, bridge on this PC); started first so it warms up while the data loads
     threading.Thread(target=_prepare_print_agent, daemon=True).start()   # the counter PCs' Print Agent is ready to download
     boot.load_data()
+    db.ON_RECONNECT = _after_reconnect
+    master_watch.start()   # notices changes made in the database itself, even while nobody is using the app
+    db.start_watchdog()   # a dropped SQL Server connection is retried every 15 s instead of staying down until a restart
     if ai_enabled():   # tables, sales history and the forecasts are made in the background (app/ai/bootstrap.py)
         ai_bootstrap.start()
 

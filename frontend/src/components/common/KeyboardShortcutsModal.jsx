@@ -29,6 +29,7 @@ const SHORTCUT_GROUPS = [
       { keys: ['F6'], description: 'Next payment type (or Alt+P; Shift+F6 back)' },
       { keys: ['F9'], description: 'Cash tendered (Enter saves)' },
       { keys: ['F10'], description: 'Save & print' },
+      { keys: ['F12'], description: 'Save, then print / preview / nothing (F12, Ctrl+F12 and Alt+F12 as set in Invoice Settings)' },
       { keys: ['⌘', 'S'], description: 'Save only (no print)' },
       { keys: ['F7'], description: 'Hold this bill / start a new one' },
       { keys: ['F8'], description: 'Held bills (↑↓, Enter recalls)' },

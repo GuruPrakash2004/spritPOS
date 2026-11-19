@@ -12,7 +12,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronsDown, ChevronsUp, Copy, FileInput,
-  Info, Paperclip, PlusCircle, Printer, RefreshCw, Save, Search, Settings2, Trash2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
+  Info, Paperclip, PlusCircle, RefreshCw, Search, Settings2, Trash2, UserPlus, XCircle, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 import { useConfirm } from '../../common/ConfirmDialog';
 import PrintDialog from '../../print/PrintDialog';
@@ -33,13 +33,13 @@ import { applyDefinition, ruleHolds, ruleValues } from '../../../lib/designerFie
 import { errorText, getNextNumber, getPurchaseIndents, getSettingValues, getSuppliers, newIdempotencyKey, savePurchaseBill, updatePurchaseBill, } from '../../../lib/api';
 import { loadStockItems, sellable, STOCK_ITEMS, stockIndex, useStockItems } from '../../../data/stockData';
 import { numberToWords } from '../../../lib/formatters';
+import { takeOpeningDraft } from '../../../lib/billDraft';
 import {
   amt, blankRow, cell, cloneRow, field, headCell, iconButton, infoBar, isFilled,
   cgstOf, money, panel, pctOf, PURCHASE_TYPES, sgstOf, stockRow, today,
 } from './purchaseBillData';
-import { CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
+import { AddLineItemModal, CopyFromModal, ItemLookupModal } from './PurchaseBillModals';
 import { useDocSettings } from '../../../lib/docSettings';
-import Kbd from '../../common/Kbd';
 import { enterMovesNext, focusField, useShortcuts } from '../../../lib/keys';
 import WithHistory from '../DocHistoryPanel';
 
@@ -69,12 +69,22 @@ const HEADER_KEEP = new Set(['date', 'supplier', 'supplier_inv_no', 'supplier_in
 export default function PurchaseBill() {
   // The backend gives the PB number when the bill is saved; this is its preview (GET /transactions/next-number).
   const [pbDisplay, setPbDisplay] = useState('—');
-  const loadNextNo = useCallback(() => {
-    getNextNumber('purchase_bill').then(n => setPbDisplay(n.doc_no)).catch(() => setPbDisplay('—'));
+  // An opening-stock bill (from Update Item Stock) has its own number series: 26OP00001.
+  const loadNextNo = useCallback((forOpening = false) => {
+    getNextNumber(forOpening === true ? 'opening_purchase_bill' : 'purchase_bill').then(n => setPbDisplay(n.doc_no)).catch(() => setPbDisplay('—'));
   }, []);
   useEffect(() => { loadNextNo(); }, [loadNextNo]);
   const [pbDate, setPbDate] = useState(today);
   const [editing, setEditing] = useState(null);   // a saved bill opened from the List to change (PUT keeps its number): { no }
+  // The exe's modes: View (a saved bill, or nothing, shown read-only; the bar has New / Edit / Cancel Bill / List and the record buttons), New (a bill being
+  // entered: the bar has only Save and Cancel) and Edit (a saved bill being changed: Save and Cancel). Cancel / Save go back to View.
+  const [mode, setMode] = useState('View');
+  const view = mode === 'View';
+  const modeRef = useRef('View');
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  const [shownDoc, setShownDoc] = useState(null);   // the saved bill on screen in View mode
+  const lastDoc = useRef(null);                     // the bill that was on screen before New / Edit, shown again when that is cancelled
+  const [opening, setOpening] = useState(false);  // the bill is Update Item Stock's opening stock: OP number, no GST, nothing saved until the invoice value is entered
   // Transaction Settings for Purchase Bill: Copy From allowed, and whether the bill date can be changed.
   const docSettings = useDocSettings('purchase_bill');
   useStockItems();
@@ -94,6 +104,7 @@ export default function PurchaseBill() {
   const addMenuRef = useRef(null);
   const closeAddMenu = useCallback(() => setAddMenuOpen(false), []);
   const [lookupOpen, setLookupOpen] = useState(false);
+  const [lineOpen, setLineOpen] = useState(false);   // the Add item button's two-pane "Add Line Item" window (F4 keeps the one-window lookup)
   const [indents, setIndents] = useState(null);
   const [copyOpen, setCopyOpen] = useState(false);
   const [minMargin, setMinMargin] = useState(0);                   // Global Settings PurSellVarPer
@@ -140,9 +151,9 @@ export default function PurchaseBill() {
   // inputs read the rows themselves.
   const priced = useMemo(() => {
     const asked = rows.map(r => ({ item_code: r.code, qty: r.qty, rate: r.rate, cases: 0, bottles: r.qty }));
-    const itemOf = (code) => { const it = STOCK_ITEMS[stockIndex(code)]; return it && { cgst_per: it.cgstPct, sgst_per: it.sgstPct, mrp: it.rate, bottles_per_case: it.bottlesPerCase }; };
+    const itemOf = (code) => { const it = STOCK_ITEMS[stockIndex(code)]; return it && { cgst_per: opening ? 0 : it.cgstPct, sgst_per: opening ? 0 : it.sgstPct, mrp: it.rate, bottles_per_case: it.bottlesPerCase }; };
     return formulaAmounts('purchase_bill', live.screen, asked, itemOf).map((f, i) => ({ ...rows[i], fAmount: f.amount, fCgst: f.cgst, fSgst: f.sgst }));
-  }, [rows, live.screen]);
+  }, [rows, live.screen, opening]);
 
   const selectedIndex = rows.findIndex(r => r.uid === selectedUid);
   const selectedRow = rows[selectedIndex];
@@ -170,6 +181,12 @@ export default function PurchaseBill() {
   // The bill date, supplier and supplier invoice no. / date are mandatory too.
   const billDate = docSettings.allow_edit_date ? pbDate : today();
   const ready = billDate !== '' && supplier.trim() !== '' && invNo.trim() !== '' && invDate !== '' && Number(invValue) > 0;
+  // The exe (frmTrnPBM) lets the grid be edited in Add and Modify mode (vsfDet_BeforeEdit): only ADDING an item (F4) needs a balance, i.e. the invoice value
+  // ("Please change the invoice value.... Balance is going negative/empty..."), and saving needs the balance to be nil (CheckPBValue). So the lines that are
+  // already on the bill (Update Item Stock's draft, or a saved bill opened to change) can be edited at once, before the invoice value is typed.
+  const gridEditable = ready || opening || !!editing;
+  // On a bill being changed (the draft or a saved bill) the boxes show as boxes, so it is plain that they can be typed in.
+  const boxed = (!view && (opening || !!editing)) ? 'border-stone-300 bg-white dark:border-[#3A3A3A] dark:bg-[#1A1A1A]' : '';
   const needFirst = () => focusField(
     !billDate ? 'pb-date' : !supplier.trim() ? 'pb-supplier' : !invNo.trim() ? 'pb-inv-no' : !invDate ? 'pb-inv-date' : 'pb-inv-val');
 
@@ -207,6 +224,28 @@ export default function PurchaseBill() {
     return () => window.removeEventListener('focus', reload);
   }, []);
 
+  // Update Item Stock hands over the stock sheet's items (nothing is saved yet): they become this bill's lines, the supplier is KSBCL, and the bill has
+  // no GST or TCS and the OP number. The user enters the supplier invoice no., date and value; the bill saves when its total equals the invoice value.
+  useEffect(() => {
+    const draft = takeOpeningDraft();
+    if (!draft) return;
+    void loadStockItems().then(() => {
+      const lines = draft.lines
+        .map(l => ({ stock: STOCK_ITEMS.findIndex(i => i.code === l.item_code), qty: l.qty, rate: l.rate }))
+        .filter(l => l.stock !== -1)
+        .map(l => ({ ...stockRow(l.stock, l.qty), rate: l.rate, cgstPct: 0, sgstPct: 0 }));
+      setOpening(true);
+      setMode('New');
+      setSupplier(draft.supplier);
+      setRemarks(draft.remarks ?? '');
+      setTcsPct('0');
+      setRows(lines.length ? lines : [blankRow()]);
+      setSelectedUid((lines[0] ?? blankRow()).uid);
+      loadNextNo(true);
+      setToast({ kind: 'ok', text: `${lines.length} item${lines.length === 1 ? '' : 's'} from Update Item Stock are on this bill. Enter the invoice no., date and value to save it.` });
+    }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
+  }, [loadNextNo]);
+
   const updateRow = (uid, patch) => setRows(rows.map(r => (r.uid === uid ? { ...r, ...patch } : r)));
 
   // Typing an item code or name that matches stock fills in the rest of the row.
@@ -224,10 +263,10 @@ export default function PurchaseBill() {
 
   const numberCell = (row, key, label, extra = '') => (
     <input
-      type="number" min={0} step={key === 'qty' ? 1 : 0.01} disabled={!ready} readOnly={!!colOf(key)?.locked}
+      type="number" min={0} step={key === 'qty' ? 1 : 0.01} disabled={!gridEditable} readOnly={!!colOf(key)?.locked}
       value={row[key] || ''} placeholder="0"
       onChange={e => updateRow(row.uid, { [key]: Math.max(0, key === 'qty' ? Math.floor(Number(e.target.value)) || 0 : Number(e.target.value) || 0) })}
-      className={`${cell} text-right ${extra}`} aria-label={`${label} row ${rows.indexOf(row) + 1}`}
+      className={cn(cell, 'text-right', boxed, extra)} aria-label={`${label} row ${rows.indexOf(row) + 1}`}
     />
   );
 
@@ -322,7 +361,7 @@ export default function PurchaseBill() {
   };
 
   // The Add Item window's OK: the item with its total bottles and purchase rate goes into the selected empty row, or a new one.
-  const addFromLookup = ({ stock, qty, rate }) => {
+  const addFromLookup = ({ stock, qty, rate }, keepOpen = false) => {
     const row = { ...stockRow(stock, qty), rate };
     let at = rows.length;
     if (selectedRow && !isFilled(selectedRow)) {
@@ -332,7 +371,9 @@ export default function PurchaseBill() {
       setRows([...rows, row]);
       setSelectedUid(row.uid);
     }
+    if (keepOpen) return;   // "Add & next" in Add Line Item: the window stays for the next item
     setLookupOpen(false);
+    setLineOpen(false);
     // Back to the grid, on the new row's quantity.
     setTimeout(() => {
       const box = document.querySelector(`[aria-label="PB Qty row ${at + 1}"]`);
@@ -342,12 +383,16 @@ export default function PurchaseBill() {
   };
 
   const openLookup = () => { if (ready) setLookupOpen(true); else needFirst(); };
+  const openLineItem = () => { if (ready) setLineOpen(true); else needFirst(); };
 
-  const resetBill = () => {
+  const resetBill = (reloadNumber = true) => {
     saveKey.current = newIdempotencyKey();
     extrasBill.refresh();
     setEditing(null);
     setPbDate(today());
+    setOpening(false);
+    setTcsPct('1');
+    if (reloadNumber) loadNextNo(false);   // (back in View mode the bill's own number is shown instead)
     const fresh = blankRow();
     setSupplier('');
     setBillingAddress('');
@@ -362,19 +407,18 @@ export default function PurchaseBill() {
     setRemarks('');
   };
 
-  // List → Edit Selected: the saved bill goes onto the screen to be changed. Saving sends PUT: the old bill's stock goes out, the changed bill comes in.
-  const loadForEdit = async (doc) => {
-    if (rows.some(isFilled) && !(await confirm(`Open ${doc.doc_no} for editing? The bill on the screen is cleared.`))) return;
+  // A saved bill goes onto the screen (to be looked at, or to be changed). False when one of its items is no longer in Item Master.
+  const fillFromDoc = (doc) => {
     const lines = [];
     for (const l of doc.lines ?? []) {
       const stock = STOCK_ITEMS.findIndex(i => i.code === l.item_code);
-      if (stock === -1) return setToast({ kind: 'error', text: `${doc.doc_no} has an item (${l.item_code}) that is no longer in Item Master, so it can't be edited here.` });
+      if (stock === -1) { setToast({ kind: 'error', text: `${doc.doc_no} has an item (${l.item_code}) that is no longer in Item Master, so it can't be shown here.` }); return false; }
       lines.push({ ...stockRow(stock, l.qty), rate: l.rate });
     }
     const basic = doc.totals?.basic ?? 0;
     const supplierRow = suppliers.find(s => s.code === doc.supplier || s.name === doc.supplier);
     saveKey.current = newIdempotencyKey();
-    setEditing({ no: doc.doc_no });
+    setOpening(/^\d{2}OP\d{5}$/.test(doc.doc_no));   // an opening bill stays GST-free
     setPbDate(doc.date);
     setSupplier(supplierRow?.name ?? doc.supplier ?? '');
     setBillingAddress(supplierRow?.address ?? '');
@@ -388,12 +432,45 @@ export default function PurchaseBill() {
     setRows(lines.length ? lines : [blankRow()]);
     setSelectedUid((lines[0] ?? blankRow()).uid);
     extrasBill.load(doc.extras);
+    setPbDisplay(doc.doc_no);
+    return true;
+  };
+
+  // View mode: the bill (picked with the record buttons, the List window or after a save) is shown on the screen, read-only.
+  const loadForView = (doc) => {
+    if (!fillFromDoc(doc)) return;
+    setEditing(null);
+    setMode('View');
+    setShownDoc(doc);
+    lastDoc.current = doc;
+  };
+  // The History panel / record buttons hand over a bill: shown only while no bill is being entered or changed.
+  const showSaved = (doc) => { if (modeRef.current === 'View') loadForView(doc); };
+
+  // Back to View mode: the entry is cleared and the bill that was shown before (if any) is shown again.
+  const backToView = (doc = lastDoc.current) => {
+    resetBill(false);
+    setMode('View');
+    if (doc) loadForView(doc);
+    else { setShownDoc(null); lastDoc.current = null; }
+  };
+
+  // New: a blank bill to enter (the bar shows only Save and Cancel).
+  const startNew = () => { resetBill(); setShownDoc(null); setMode('New'); };
+
+  // Edit (the bar, or List → Edit Selected): the saved bill goes onto the screen to be changed. Saving sends PUT: the old bill's stock goes out, the changed bill comes in.
+  const loadForEdit = async (doc) => {
+    if (!view && rows.some(isFilled) && !(await confirm(`Open ${doc.doc_no} for editing? The bill on the screen is cleared.`))) return;
+    if (!fillFromDoc(doc)) return;
+    lastDoc.current = doc;
+    setEditing({ no: doc.doc_no });
+    setMode('Edit');
     setToast({ kind: 'ok', text: `Editing purchase bill ${doc.doc_no}. Save changes updates it.` });
   };
 
   const stopEditing = async () => {
     if (!(await confirm(`Stop editing ${editing.no}? Your changes are thrown away.`))) return;
-    resetBill();
+    backToView();
   };
 
   const saveBill = async (andPrint = false) => {
@@ -411,7 +488,7 @@ export default function PurchaseBill() {
     const key = saveKey.current;
     const body = {
       date: editing || docSettings.allow_edit_date ? pbDate : today(), supplier, supplier_inv_no: invNo, supplier_inv_date: invDate, supplier_inv_value: Number(invValue) || 0,
-      purchase_type: purchaseType, remarks, tcs: totals.tcs, cess: totals.cess + totals.compCess,
+      purchase_type: purchaseType, remarks, tcs: totals.tcs, cess: totals.cess + totals.compCess, ...(opening && !editing ? { opening: true } : {}),
       lines: filled.map(r => ({ item_code: r.code, bottles: r.qty, rate: r.rate })),
       ...(extrasBill.fields.length ? { extras: extrasBill.body() } : {}),
     };
@@ -421,8 +498,7 @@ export default function PurchaseBill() {
       updatePurchaseBill(no, body).then(doc => {
         setToast({ kind: 'ok', text: `Purchase Bill ${doc.doc_no} updated — ${doc.totals.qty} bottles.` });
         loadStockItems().catch(() => undefined);
-        loadNextNo();
-        resetBill();
+        backToView(doc);
         if (andPrint) setPrintDocNo(doc.doc_no);
       }).catch(e => setToast({ kind: 'error', text: errorText(e) }));
       return;
@@ -432,8 +508,7 @@ export default function PurchaseBill() {
       const moved = purchaseType === 'Purchase Return' ? 'returned to the supplier' : 'added to stock';
       setToast({ kind: 'ok', text: `Purchase Bill ${doc.doc_no} saved — ${doc.totals.qty} bottles ${moved}.` });
       loadStockItems().catch(() => undefined);
-      loadNextNo();
-      resetBill();
+      backToView(doc);
       // The Doc Designer's default print option decides (Global Settings is the fallback); F10 prints at once.
       afterSavePlan('purchase_bill', docSettings.after_save, andPrint).then(({ plan }) => {
         if (plan === 'dialog' || plan === 'direct') setPrintDocNo(doc.doc_no);
@@ -443,7 +518,7 @@ export default function PurchaseBill() {
   };
 
   const cancelBill = async () => {
-    if (await confirm('Cancel this purchase bill? Unsaved entries will be cleared.')) resetBill();
+    if (await confirm('Cancel this purchase bill? Unsaved entries will be cleared.')) backToView();
   };
 
   const totalRows = [
@@ -452,25 +527,31 @@ export default function PurchaseBill() {
   ];
 
   useShortcuts({
-    'Mod+S': () => { void saveBill(false); },
-    F10: () => { void saveBill(true); },
-    F4: openLookup,
-    F2: openLookup,
-    'Alt+A': () => { if (ready) addRows(1); else needFirst(); },
-    'Alt+X': () => { void cancelBill(); },
+    'Mod+S': () => { if (!view) void saveBill(false); },
+    F10: () => { if (!view) void saveBill(true); },
+    F4: () => { if (!view) openLookup(); },
+    F2: () => { if (!view) openLookup(); },
+    'Alt+A': () => { if (view) return; if (ready) addRows(1); else needFirst(); },
+    'Alt+X': () => { if (!view) void cancelBill(); },
   });
 
   const sep = <span className="mx-1 h-5 w-px bg-line" aria-hidden="true" />;
 
   return (
-    <WithHistory kind="purchase_bill" title="purchase bills" onNew={resetBill} onEdit={doc => void loadForEdit(doc)}>
+    <WithHistory kind="purchase_bill" title="purchase bills" onNew={startNew} onEdit={doc => void loadForEdit(doc)} navigate
+      onView={showSaved} focusDoc={shownDoc?.doc_no ?? ''}
+      mode={view ? 'View' : 'Edit'} onSave={() => void saveBill(false)} onSavePrint={() => void saveBill(true)} onCancel={() => void (editing ? stopEditing() : cancelBill())}>
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4" onKeyDown={e => enterMovesNext(e)}>
       {toast && <Toast kind={toast.kind} text={toast.text} />}
       {dialog}
-      {editing && (
+      {opening && !editing && !view && (
+        <div role="status" className="mb-3 rounded-xl border border-[#B08A45]/60 bg-[#B08A45]/10 px-4 py-2 text-xs font-semibold text-[#64283A] dark:text-[#D4A847]">
+          Opening stock from Update Item Stock: nothing is saved yet. Change the quantities and rates in the boxes below as needed, then enter the supplier invoice no., date and value; the bill is saved when its total equals the invoice value, with the OP bill number and no GST.
+        </div>
+      )}
+      {editing && !view && (
         <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#B08A45]/60 bg-[#B08A45]/10 px-4 py-2 text-xs font-semibold text-[#64283A] dark:text-[#D4A847]">
-          <span>Editing purchase bill {editing.no}: Save updates it in place (the old bill's stock goes out, then the changed bill comes in).</span>
-          <button type="button" onClick={() => void stopEditing()} className={secondaryButton}>Stop editing</button>
+          <span>Editing purchase bill {editing.no}: Save updates it in place (the old bill's stock goes out, then the changed bill comes in). Cancel goes back to the bill.</span>
         </div>
       )}
 
@@ -479,7 +560,7 @@ export default function PurchaseBill() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className={pageTitle}>Purchase bill</h1>
-            <span className={badge('accent')}>New</span>
+            <span className={badge(view && shownDoc?.status === 'CANCELLED' ? 'danger' : 'accent')}>{view ? (shownDoc?.status === 'CANCELLED' ? 'Cancelled' : 'View') : editing ? 'Editing' : 'New'}</span>
           </div>
           <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">PB <span className="font-mono font-medium text-stone-800 dark:text-stone-200">{pbDisplay}</span> · {totals.items} items · {totals.qty} bottles</p>
         </div>
@@ -487,18 +568,22 @@ export default function PurchaseBill() {
           <button onClick={() => setHeaderOpen(!headerOpen)} className={ghostButton} aria-expanded={headerOpen}>
             {headerOpen ? <ChevronsUp size={14} /> : <ChevronsDown size={14} />}{headerOpen ? 'Hide details' : 'Show details'}
           </button>
-          <button onClick={cancelBill} className={secondaryButton}><XCircle size={14} />Cancel<Kbd combo="Alt+X" /></button>
-          <button onClick={() => saveBill(true)} className={secondaryButton}><Printer size={14} />Save &amp; print<Kbd combo="F10" /></button>
-          <button onClick={() => saveBill(false)} className={primaryButton}><Save size={14} />Save bill<Kbd combo="Mod+S" /></button>
         </div>
       </div>
+      {view && !shownDoc && (
+        <p role="status" className="rounded-xl border border-line bg-subtle/60 px-4 py-3 text-xs text-stone-600 dark:text-stone-300">
+          View mode. Press New to enter a purchase bill, or open a saved one with the record buttons, the List window or the History panel.
+        </p>
+      )}
 
+      {/* Everything below is read-only in View mode (a disabled fieldset disables every box and button inside it). */}
+      <fieldset disabled={view} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0">
       {headerOpen && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
           {/* PB number, supplier, billing address */}
           <section aria-label="Bill details" className={`${panel} grid gap-4 p-5 sm:grid-cols-2`}>
             <div>
-              <label className={labelClass} htmlFor="pb-no">Next PB no.</label>
+              <label className={labelClass} htmlFor="pb-no">{(view && shownDoc) || editing ? 'PB no.' : 'Next PB no.'}</label>
               <input id="pb-no" value={pbDisplay} readOnly disabled title="Given when the bill is saved" className={`${field} font-mono`} />
             </div>
             <div>
@@ -563,7 +648,7 @@ export default function PurchaseBill() {
       {/* Line items */}
       <section aria-label="Line items" className={`${panel} overflow-hidden`} onKeyDown={e => enterMovesNext(e, () => addRows(1))}>
         <div className="flex flex-wrap items-center gap-1 border-b border-line px-3 py-2">
-          <button onClick={openLookup} className={`${primaryButton} mr-2`}><PlusCircle size={14} />Add item<Kbd combo="F4" /></button>
+          <button onClick={openLineItem} className={`${primaryButton} mr-2`}><PlusCircle size={14} />Add item</button>
           <div className="relative flex items-center">
             <button onClick={() => addRows(1)} className={iconButton} title="Add blank row (Alt+A)" aria-label="Add blank row"><PlusCircle size={16} /></button>
             <button ref={addMenuRef} onClick={() => setAddMenuOpen(!addMenuOpen)} className={`${iconButton} w-6`} aria-label="More add options" aria-expanded={addMenuOpen} aria-haspopup="menu"><ChevronDown size={14} /></button>
@@ -611,7 +696,7 @@ export default function PurchaseBill() {
                 const cells = {
                   no: <td className="whitespace-nowrap py-1 pl-2 pr-2 text-stone-400"><span className="inline-flex items-center gap-1">
                     <button tabIndex={-1} onClick={e => { e.stopPropagation(); deleteRowByUid(row.uid); }} className={`${iconButton} h-7 w-7 hover:!text-red-600`} aria-label={`Delete row ${i + 1}`} title="Delete this row"><Trash2 size={14} /></button>{i + 1}</span></td>,
-                  code: <td className="px-1 py-1"><input list="pb-codes" disabled={!ready} value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={`${cell} font-mono`} aria-label={`Item code row ${i + 1}`} /></td>,
+                  code: <td className="px-1 py-1"><input list="pb-codes" disabled={!gridEditable} value={row.code} onChange={e => setItem(row.uid, 'code', e.target.value)} className={cn(cell, 'font-mono', boxed)} aria-label={`Item code row ${i + 1}`} /></td>,
                   name: <td className="px-1 py-1"><input list="pb-names" disabled={!ready} value={row.name} onChange={e => setItem(row.uid, 'name', e.target.value)} className={`${cell} font-medium text-stone-900 dark:text-stone-50`} aria-label={`Item name row ${i + 1}`} /></td>,
                   qoh: <td className="px-2 py-1 text-right text-stone-500">{isFilled(row) ? row.qoh : ''}</td>,
                   qty: <td className="px-1 py-1">{numberCell(row, 'qty', 'PB Qty', 'font-semibold')}</td>,
@@ -693,14 +778,13 @@ export default function PurchaseBill() {
             <span className="text-2xl font-semibold tracking-tight tabular-nums text-stone-900 dark:text-stone-50">₹ {money(totals.net)}</span>
           </div>
           <p className="mt-1.5 text-[11px] text-stone-500">TCS on liquor purchases u/s 206C(1).</p>
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
-            <button onClick={cancelBill} className={secondaryButton}><XCircle size={14} />Cancel<Kbd combo="Alt+X" /></button>
-            <button onClick={() => saveBill(true)} className={secondaryButton}><Printer size={14} />Save &amp; print<Kbd combo="F10" /></button>
-            <button onClick={() => saveBill(false)} className={primaryButton}><Save size={14} />Save bill<Kbd combo="Mod+S" /></button>
-          </div>
         </section>
       </div>
+      </fieldset>
 
+      {lineOpen && (
+        <AddLineItemModal items={sellable().filter(i => i.cat !== 'Others')} minMarginPct={minMargin} onAdd={addFromLookup} onClose={() => setLineOpen(false)} />
+      )}
       {lookupOpen && (
         <ItemLookupModal items={sellable().filter(i => i.cat !== 'Others')} minMarginPct={minMargin} onAdd={addFromLookup} onClose={() => setLookupOpen(false)} />
       )}

@@ -11,6 +11,7 @@ import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
 import { errorText, getLoginSettings, getSecurity, saveLoginSettings, setAdditionalAdminPassword, } from '../../lib/api';
 import { encryptSecret } from '../../lib/secureField';
+import DesktopLoginSettings from './DesktopLoginSettings';
 import { passwordProblem, setPasswordRules } from '../../lib/passwords';
 import { badge, field, fieldError, label, panel, primaryButton, sectionTitle } from '../../lib/styles';
 
@@ -92,6 +93,7 @@ export default function LoginSettingsTab({ currentUser }) {
   );
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="lg:col-span-2"><DesktopLoginSettings /></div>
       <section className={`${panel} space-y-4 p-5`}>
         <h2 className={sectionTitle}>Password rules</h2>
         {num('min_length', 'Minimum length', 'At least 8.')}

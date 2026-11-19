@@ -15,7 +15,14 @@ import { exportButton, field, fieldError, label, pageHeader, pageSub, pageTitle,
 import { SkeletonTableRows } from '../common/Skeleton';
 
 const iso = (d) => d.toISOString().slice(0, 10);
-const weekAgo = () => { const d = new Date(); d.setDate(d.getDate() - 7); return iso(d); };
+// "2026-11-16T14:05:09" → "02:05:09PM", the desktop grid's hh:mm:sstt.
+const time12 = (at) => {
+  const m = /T(\d{2}):(\d{2}):(\d{2})/.exec(at || '');
+  if (!m) return (at || '').slice(11);
+  const h = Number(m[1]);
+  return `${String(h % 12 || 12).padStart(2, '0')}:${m[2]}:${m[3]}${h < 12 ? 'AM' : 'PM'}`;
+};
+const weekAgo =() => { const d = new Date(); d.setDate(d.getDate() - 7); return iso(d); };
 
 export default function AdminAuditLog() {
   const [screens, setScreens] = useState([]);
@@ -108,7 +115,7 @@ export default function AdminAuditLog() {
                     <td className="px-3 py-1.5">{r.screen}</td>
                     <td className="px-3 py-1.5 font-mono">{r.main_fld}</td>
                     <td className="px-3 py-1.5 tabular-nums">{r.at.slice(0, 10).split('-').reverse().join('-')}</td>
-                    <td className="px-3 py-1.5 tabular-nums">{r.at.slice(11)}</td>
+                    <td className="px-3 py-1.5 tabular-nums">{time12(r.at)}</td>
                     <td className="px-3 py-1.5">{r.action}</td>
                     <td className="px-3 py-1.5">{r.user_code}</td>
                     <td className="max-w-xs whitespace-pre-wrap break-words px-3 py-1.5 text-stone-500">{r.earlier}</td>
@@ -120,6 +127,7 @@ export default function AdminAuditLog() {
                   <td className="px-3 py-1.5 tabular-nums">{i?.details}</td>
                 </tr>
               )))}
+              {rows.length >= 5000 && <tr><td colSpan={12} className="px-3 py-2 text-center text-amber-700 dark:text-amber-400">Only the first 5,000 entries are shown. Narrow the dates or pick a screen to see the rest.</td></tr>}
               {!rows.length && (loading ? <SkeletonTableRows rows={6} cols={12} /> : <tr><td colSpan={12} className="px-3 py-6 text-center text-stone-500">No changes in this period.</td></tr>)}
             </tbody>
           </table>

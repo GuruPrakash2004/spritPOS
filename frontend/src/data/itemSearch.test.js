@@ -13,13 +13,26 @@ describe('searchItems', () => {
     expect(searchItems('').map(i => i.code)).toEqual(['A1', 'C3']);
   });
 
-  it('does not find an item with no stock by name or code', () => {
+  it('does not list an item with no stock by name, but an exact code is still found (the bill then says how much is in stock)', () => {
     expect(searchItems('beta')).toEqual([]);
-    expect(searchItems('B2')).toEqual([]);
+    expect(searchItems('B2').map(i => i.code)).toEqual(['B2']);
   });
 
   it('ranks an exact code first and matches the short name', () => {
     expect(searchItems('c3')[0].code).toBe('C3');
     expect(searchItems('gamm').map(i => i.code)).toEqual(['C3']);
+  });
+
+  it('finds an item by its alias, typed or scanned, and ranks an exact alias with an exact code', () => {
+    mergeStockItems([{ ...item('0000022', 'Chips', 12), aliases: ['0000023', '0000024'] }, item('0000230', 'Other', 4)]);
+    expect(searchItems('0000023').map(i => i.code)).toEqual(['0000022']);          // the exact alias first; 0000230 only starts with another code
+    expect(searchItems('0000024')[0].code).toBe('0000022');
+    expect(searchItems('000002')[0].code).toBe('0000022');                         // part of an alias still finds it
+  });
+
+  it('finds an exact alias even when the item has no stock', () => {
+    mergeStockItems([{ ...item('Z9', 'Zero Stock', 0), aliases: ['ZZ-ALIAS'] }]);
+    expect(searchItems('zz-alias').map(i => i.code)).toEqual(['Z9']);
+    expect(searchItems('zz-ali')).toEqual([]);                                     // only an exact match gets past the stock filter
   });
 });
