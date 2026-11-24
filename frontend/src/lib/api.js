@@ -411,7 +411,6 @@ export const updateClosingStock = (docNo, body) => request(`/transactions/closin
 export const generateClosingStockInvoice = (docNo, body) =>
   request(`/transactions/closing-stock/${docNo}/generate-invoice`, { method: 'POST', body });
 
-export const getDenomination = (on) => request(`/transactions/denomination${qs({ on })}`);
 // Physical Stock Entry (desktop frmTrnPSE). load: active items with system_qty for groups / packages / items (comma lists);
 // save posts only the changed rows: the excess becomes a purchase bill, the shortage a stock deduction (or a sales invoice).
 export const loadPhysicalStock = (params) => request(`/transactions/physical-stock/load${qs(params)}`);
@@ -445,7 +444,6 @@ export const updateItemStock = (body, idempotencyKey) => request('/utilities/upd
 // Expense Entry "Day's OP-Balance": { date, amount } cash in hand at the start of a day (desktop TrnExpOPBal).
 export const getExpenseOpening = (on) => request(`/transactions/expense/opening-balance${qs({ on })}`);
 export const saveExpenseOpening = (body) => request('/transactions/expense/opening-balance', { method: 'POST', body });
-export const saveDenomination = (body) => request('/transactions/denomination', { method: 'POST', body });
 
 // ─── Reports (routers/reports.py, routers/custom_reports.py) ───────────────────────────────────────
 

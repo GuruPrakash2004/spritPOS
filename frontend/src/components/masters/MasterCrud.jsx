@@ -17,6 +17,7 @@ import { goHome, openModule } from '../../lib/nav';
 import LookupSelect from '../common/LookupSelect';
 import PartyRecords from './PartyRecords';
 import AttachmentsDialog from './AttachmentsDialog';
+import { useAttachmentEnabled } from '../../hooks/useAttachmentEnabled';
 import { Plus } from 'lucide-react';
 import { getDesignerNextCode, getDesignerPickup, getSimilarMasters, listAttachments } from '../../lib/api';
 import Modal from '../common/Modal';
@@ -34,6 +35,7 @@ import { optionSortKind, sortOptions } from '../../lib/optionOrder';
 import { canDo, canSeeCost, createMaster, deleteMaster, errorText, fieldRight, listMaster, updateMaster } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { badge, field, fieldTone, label as labelClass, panel, primaryButton, sectionTitle } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 
 // vLQMS.exe's own compiled field set for these three forms (frmMstItem / frmMstParty), mirroring
 // backend/app/schema_meta.py's compiled_columns() exactly, by lower-case database column name (`f.column`).
@@ -115,12 +117,13 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
   const [listOpen, setListOpen] = useState(false);   // the List window (ListModal)
   const [attachOpen, setAttachOpen] = useState(false);   // File Attachment (the desktop's button on every master)
   const [attachCount, setAttachCount] = useState(0);   // the n of "File Attachment (n)": files kept for the shown record
+  const attachOn = useAttachmentEnabled(path);   // Global Settings → File Attachment: the master's Y/N row
   useEffect(() => {
-    if (!selected || attachOpen) return undefined;   // read again when the dialog closes
+    if (!selected || attachOpen || !attachOn) return undefined;   // read again when the dialog closes
     let live = true;
     listAttachments(path, selected).then(l => { if (live) setAttachCount(l.length); }).catch(() => { if (live) setAttachCount(0); });
     return () => { live = false; };
-  }, [path, selected, attachOpen]);
+  }, [path, selected, attachOpen, attachOn]);
   const [partyOpen, setPartyOpen] = useState(false);   // customer / supplier: the records kept beside the master
   const [form, setForm] = useState(() => blank(fields));
   const [formErrors, setFormErrors] = useState({});
@@ -537,7 +540,7 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
 
       // The item form's own keys (frmMstItem.KeyUp): F5 refills the group / UOM lists, Ctrl+A opens File Attachment (outside a text box).
       if (exeForm && e.key === 'F5') { e.preventDefault(); setOptionsKey(k => k + 1); if (partyForm) listMaster('state-city-country').then(setScc).catch(() => undefined); return; }
-      if (exeForm && modKey && e.key.toLowerCase() === 'a' && mode !== 'New' && selected
+      if (exeForm && attachOn && modKey && e.key.toLowerCase() === 'a' && mode !== 'New' && selected
         && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) { e.preventDefault(); setAttachOpen(true); return; }
 
       // Enter to save when editing/adding in form
@@ -688,7 +691,7 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
           <select id={id} required={required} disabled={(f.extra || (path === 'items' && f.key === 'uom')) && locked} value={String(value ?? '')} onChange={e => handleFieldChange(f.key, e.target.value)}
             aria-invalid={hasError} aria-errormessage={hasError ? `err-${path}-${f.key}` : undefined} className={`${fieldCls} ${errorClass}`}>
             <option value="">Select…</option>
-            {(path === 'items' ? sortOptions(opts, optionSortKind(f)) : opts).map(o => <option key={o}>{o}</option>)}
+            {(path === 'items' ? sortOptions(opts, optionSortKind(f)) : opts).map(o => <option key={o} value={o}>{path === 'items' && f.key === 'group' ? groupLabel(o) : o}</option>)}
           </select>
           {path === 'items' && (f.key === 'group' || f.key === 'uom') && (
             <button type="button" onClick={() => openModule(f.key === 'group' ? 'Item Group Master' : 'UOM Master')} className="mt-1 text-[11px] font-medium text-accent hover:underline"
@@ -864,7 +867,7 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
           {similar.list.map(r => <div key={r.code} className="flex justify-between gap-3 border-b border-line-soft py-1.5"><span className="font-mono">{r.code}</span><span>{r.name}</span></div>)}
         </Modal>
       )}
-      {attachOpen && selected && <AttachmentsDialog master={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setAttachOpen(false)} />}
+      {attachOn && attachOpen && selected && <AttachmentsDialog master={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setAttachOpen(false)} />}
       {partyOpen && selected && <PartyRecords party={path} code={selected} name={String(form.name ?? '')} canEdit={canEdit} onClose={() => setPartyOpen(false)} />}
       <section id={`mc-${path}-details`} aria-label="Record details" className={`${legacySkin ? '-mx-4 rounded-none border-0 bg-[#F3EEE6] dark:bg-[#141414] sm:-mx-6' : panel} scroll-mt-20 self-start`}>
           <div className={`flex items-center justify-between border-b border-line px-5 ${legacySkin ? 'py-2' : 'py-3.5'}`}>
@@ -890,10 +893,12 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
               <div className="space-y-4">
                 {leftSections.map((sec, i) => renderSection(sec, i))}
                 {/* The desktop's File Attachment (n) button, under the fields; it needs a saved record */}
-                <button type="button" onClick={() => setAttachOpen(true)} disabled={!selected || mode === 'New'}
-                  className={`${primaryButton} w-full max-w-md justify-between !py-3 text-sm`}>
-                  <span className="flex-1 text-center">File Attachment ({selected && mode !== 'New' ? attachCount : 0})</span><Plus size={18} aria-hidden="true" />
-                </button>
+                {attachOn && (
+                  <button type="button" onClick={() => setAttachOpen(true)} disabled={!selected || mode === 'New'}
+                    className={`${primaryButton} w-full max-w-md justify-between !py-3 text-sm`}>
+                    <span className="flex-1 text-center">File Attachment ({selected && mode !== 'New' ? attachCount : 0})</span><Plus size={18} aria-hidden="true" />
+                  </button>
+                )}
               </div>
 
               {rightFields.length > 0 && (legacySkin ? (

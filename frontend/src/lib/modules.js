@@ -21,7 +21,7 @@ export const MODULE_GROUPS = [
     group: 'Transactions',
     modules: [
       'Purchase Bill', 'Sales Invoice', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return',
-      'Closing Stock Entry', 'Physical Stock Entry', 'Cash Denomination', 'Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher', 'Quotation',
+      'Closing Stock Entry', 'Physical Stock Entry', 'Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher', 'Quotation',
     ],
   },
   {
@@ -68,7 +68,7 @@ export const NAV_TREE = [
         // The desktop's order first; the web's own screens (closing stock, cash count, vouchers) follow.
         label: 'Transactions',
         children: ['Sales Invoice', 'Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Quotation', 'Physical Stock Entry',
-          'Closing Stock Entry', 'Cash Denomination', 'Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher'],
+          'Closing Stock Entry', 'Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher'],
       },
       {
         // The desktop's order and captions first; the web's other reports follow.
@@ -136,7 +136,6 @@ export const MODULE_KEYWORDS = {
   'Sales Return': 'return refund',
   'Physical Stock Entry': 'pse physical stock take count stock excess shortage reconcile',
   'Closing Stock Entry': 'cse closing stock physical count day end',
-  'Cash Denomination': 'cash count denomination notes drawer day end',
   'Daily Summary Report': 'dsr daily summary day report',
   'Stock Balance Report': 'stock balance qoh closing',
   'Stock Ledger': 'stock ledger item movement history',

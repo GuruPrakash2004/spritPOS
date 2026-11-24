@@ -2,6 +2,7 @@
 
 
 import { money } from '../../../lib/styles';
+import { groupLabel } from '../../../lib/formatters';
 
 
 
@@ -110,7 +111,7 @@ export const StockBalancePrintLayout = ({
                   {row.name}
                   {row.brand && <span className="ml-1 text-[10px] text-stone-500">({row.brand})</span>}
                 </td>
-                <td className="border-r border-stone-300 px-2 py-1 text-stone-600">{row.group}</td>
+                <td className="border-r border-stone-300 px-2 py-1 text-stone-600">{groupLabel(row.group)}</td>
                 <td className="border-r border-stone-300 px-2 py-1 text-center text-stone-500 font-mono text-[11px]">{row.pkg}</td>
                 <td className="border-r border-stone-300 px-2 py-1 text-right tabular-nums">{row.opQty}</td>
                 <td className="border-r border-stone-300 px-2 py-1 text-right tabular-nums text-emerald-700">+{row.recQty}</td>

@@ -19,7 +19,6 @@ Tick a box when it is done and checked. Order inside each section is priority or
 - [x] Global Settings: now saved to the shop's own `UtlGSettings` (value, caption, hide flag; new settings added as rows) and the desktop-only rows (98 in BW) are shown too. Checked on BW with a real edit and revert.
 - [ ] Admin Master: rights, roles, field rights, master approvals, report rights, login settings
 - [ ] Number series, Menu Sequence, import field maps
-- [ ] Cash Denomination counts
 - [ ] Re Write Stock repair
 - [ ] New users (the desktop keeps the password encrypted)
 - [ ] Closing Stock Entry on clients without `TrnHdrCSE` (only NDROPSBLDR has it)
@@ -56,7 +55,7 @@ Tick a box when it is done and checked. Order inside each section is priority or
 
 ## 5b. Action bar and List window (2026-11-01)
 - [x] Floating bar and List / Select Columns windows on every master (`MasterCrud`), the document screens (`WithHistory`), the six vouchers, Quotation, Closing Stock, Physical Stock, Cash Denomination and Company Master. Tested with component tests; **not yet looked at in a browser** (Chrome could not reach the local server), so check the look once.
-- [ ] Not on: Price List Maintenance and the report / utility screens (they have no New / Edit / Delete). Cash Denomination has no List (counts have no list endpoint and cannot be saved in direct mode).
+- [ ] Not on: Price List Maintenance and the report / utility screens (they have no New / Edit / Delete).
 
 ## 6. Housekeeping
 - [x] The 9 backend and 5 frontend tests that were failing are fixed (they tested behaviour the owner had since changed: plain passwords accepted, settings open from the sign-in page, no year picker, a recent-days history). Backend 606 passed, frontend all passed.

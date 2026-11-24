@@ -14,6 +14,7 @@ import { Plus, RefreshCw, Save, Search } from 'lucide-react';
 import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
 import { addGlobalSetting, errorText, getGlobalSettings, saveGlobalSetting, } from '../../lib/api';
+import { ATTACHMENT_GROUP } from './AttachmentSettings';
 import { encryptSecret } from '../../lib/secureField';
 import PrintSettings from './PrintSettings';
 import SmtpSetting from '../common/SmtpSetting';
@@ -49,7 +50,7 @@ function SettingsGrid() {
   const [newErrors, setNewErrors] = useState({});
 
   const load = useCallback((all) => getGlobalSettings(all)
-    .then(r => { setRows(r); setDrafts({}); setErrors({}); return true; })
+    .then(r => { setRows(r.filter(x => x.group !== ATTACHMENT_GROUP)); setDrafts({}); setErrors({}); return true; })   // File Attachment rows have their own tab (Other Settings)
     .catch(e => { toastStore.add('error', errorText(e)); return false; })
     .finally(() => setLoading(false)), []);
 

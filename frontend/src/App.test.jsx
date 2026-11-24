@@ -7,7 +7,7 @@ const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 const COMPANY = { name: 'THE LIQUOR HOUSE', email: 'shop@example.com', address: 'Bengaluru', fy_start: '2026-04-01', fy_end: '2027-03-31' }
-const ME = { user: 'RAVI', role: 'Cashier', modules: ['Dashboard', 'Cash Denomination'], rights: {}, company: COMPANY }
+const ME = { user: 'RAVI', role: 'Cashier', modules: ['Dashboard', 'Sales Return'], rights: {}, company: COMPANY }
 
 beforeEach(() => {
   vi.resetModules()   // api.js reads the saved token when it is first imported
@@ -26,18 +26,17 @@ async function renderApp() {
 describe('page refresh', () => {
   it('signs the user back in and reopens the screen the address names', async () => {
     sessionStorage.setItem('vlqms_jwt_token', 'still-valid')
-    window.history.replaceState(null, '', '/cash-denomination')   // each screen has its own address
+    window.history.replaceState(null, '', '/sales-return')   // each screen has its own address
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (url.startsWith('/api/auth/me')) return json(ME)
       if (url.startsWith('/api/masters/company')) return json(COMPANY)
-      if (url.startsWith('/api/transactions/denomination')) return json(null)
       if (url.startsWith('/api/reports/dsr')) return json({ total_bills: 3, sales_incl_gst: 2500, cash_balance: 2500 })
       return json([])
     }))
 
     await renderApp()
 
-    expect((await screen.findAllByRole('heading', { name: /cash denomination/i })).length).toBeGreaterThan(0)
+    expect((await screen.findAllByRole('heading', { name: /sales return/i })).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /sign in|log in/i })).not.toBeInTheDocument()
   })
 

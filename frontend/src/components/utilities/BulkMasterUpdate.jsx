@@ -9,6 +9,7 @@ import { usePage } from '../common/usePage';
 import { toastStore } from '../common/toastStore';
 import { bulkUpdateItems, errorText, getBrands, getItemGroups, getItems, } from '../../lib/api';
 import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 
 
 const FIELDS = [
@@ -79,7 +80,7 @@ export default function BulkMasterUpdate() {
           <label htmlFor="bm-group" className={label}>Item Group</label>
           <select id="bm-group" value={group} onChange={e => setGroup(e.target.value)} className={field}>
             <option value="">All groups</option>
-            {groups.map(g => <option key={g}>{g}</option>)}
+            {groups.map(g => <option key={g} value={g}>{groupLabel(g)}</option>)}
           </select>
         </div>
         <button onClick={load} className={secondaryButton}><Download size={14} />Load</button>
@@ -125,7 +126,7 @@ export default function BulkMasterUpdate() {
                   <td className="px-3 py-1.5"><input type="checkbox" className="accent-accent" aria-label={`Select ${i.code}`} checked={picked.has(i.code)} onChange={() => toggle(i.code)} /></td>
                   <td className="px-3 py-1.5 font-medium">{i.code}</td>
                   <td className="px-3 py-1.5 font-sans">{i.name}</td>
-                  <td className="px-3 py-1.5 font-sans">{i.group}</td>
+                  <td className="px-3 py-1.5 font-sans">{groupLabel(i.group)}</td>
                   <td className="px-3 py-1.5">{String(i[fieldKey] ?? '')}</td>
                 </tr>
               ))}

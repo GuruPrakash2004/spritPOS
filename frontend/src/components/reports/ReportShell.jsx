@@ -8,6 +8,7 @@ import { FileDown, Play } from 'lucide-react';
 import { errorText, getBrands, getItemGroups, getItems, getReport, todayIso, } from '../../lib/api';
 import { downloadXls } from '../../lib/xlsExport';
 import { badge, field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow, exportButton } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 import { SkeletonTableRows } from '../common/Skeleton';
 import MultiSelectDropdown from './MultiSelectDropdown';
 
@@ -82,7 +83,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
   };
 
   const format = (c, v) =>
-    v === undefined || v === '' ? '—' : c.kind === 'money' ? money(Number(v)) : c.kind === 'number' ? String(Number(Number(v).toFixed(3))) : String(v);
+    v === undefined || v === '' ? '—' : c.kind === 'money' ? money(Number(v)) : c.kind === 'number' ? String(Number(Number(v).toFixed(3))) : c.key === 'group' ? groupLabel(v) : String(v);
 
   const pager = usePage(rows ?? []);
 
@@ -143,7 +144,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
         )}
         {filters.includes('stocklevel') && (<>
           <div className="w-44"><label htmlFor="rp-sl-groups" className={label}>Selected Group</label>
-            <MultiSelectDropdown id="rp-sl-groups" allLabel="All groups" options={groupList.map(g => ({ value: g.code, label: g.name || g.code }))} value={groupSel} onChange={setGroupSel} />
+            <MultiSelectDropdown id="rp-sl-groups" allLabel="All groups" options={groupList.map(g => ({ value: g.code, label: groupLabel(g.name || g.code) }))} value={groupSel} onChange={setGroupSel} />
           </div>
           <div className="w-44"><label htmlFor="rp-sl-items" className={label}>Select Item</label>
             <MultiSelectDropdown id="rp-sl-items" allLabel="All items" options={items.map(i => ({ value: i.code, label: i.name || i.code }))} value={itemSel} onChange={setItemSel} />
@@ -168,7 +169,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
             <MultiSelectDropdown id="rp-brands" allLabel="All brands" options={brandList.map(b => ({ value: b.code, label: b.name || b.code }))} value={brandSel} onChange={setBrandSel} />
           </div>
           <div className="w-48"><label htmlFor="rp-groups" className={label}>Select ItemGroup</label>
-            <MultiSelectDropdown id="rp-groups" allLabel="All groups" options={groupList.map(g => ({ value: g.code, label: g.name || g.code }))} value={groupSel} onChange={setGroupSel} />
+            <MultiSelectDropdown id="rp-groups" allLabel="All groups" options={groupList.map(g => ({ value: g.code, label: groupLabel(g.name || g.code) }))} value={groupSel} onChange={setGroupSel} />
           </div>
         </>)}
         {filters.includes('ageing') && (<>
@@ -181,7 +182,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
             {ageMode === 'ranges' && <div className="w-64"><label htmlFor="rp-ranges" className={label}>Age ranges (From-To days, last open)</label>
               <input id="rp-ranges" value={ageRanges} onChange={e => setAgeRanges(e.target.value)} className={`${field} tabular-nums`} /></div>}
             <div className="w-44"><label htmlFor="rp-ag-groups" className={label}>Selected Group</label>
-              <MultiSelectDropdown id="rp-ag-groups" allLabel="All groups" options={groupList.map(g => ({ value: g.code, label: g.name || g.code }))} value={groupSel} onChange={setGroupSel} /></div>
+              <MultiSelectDropdown id="rp-ag-groups" allLabel="All groups" options={groupList.map(g => ({ value: g.code, label: groupLabel(g.name || g.code) }))} value={groupSel} onChange={setGroupSel} /></div>
             <div className="w-44"><label htmlFor="rp-ag-pkgs" className={label}>Select Package</label>
               <MultiSelectDropdown id="rp-ag-pkgs" allLabel="All packages" options={[...new Set(items.map(i => i.package).filter(Boolean))].sort().map(p => ({ value: p, label: p }))} value={pkgSel} onChange={setPkgSel} /></div>
             {ageMode === 'ranges' && <div className="w-44"><label htmlFor="rp-valuation" className={label}>Valuation</label>

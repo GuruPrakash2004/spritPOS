@@ -44,7 +44,6 @@ export const MATRIX_SCREENS = [
   { id: 'Sales Return', name: 'Sales Return', group: 'TRANSACTIONS', sub: 'Customer bill returns, credit notes and refunds', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: true },
   { id: 'Physical Stock Entry', name: 'Physical Stock Entry', group: 'TRANSACTIONS', sub: 'Stock-take: counted stock posts the difference', hasOpen: true, hasAdd: true, hasEdit: false, hasDelete: false },
   { id: 'Closing Stock Entry', name: 'Closing Stock Entry', group: 'TRANSACTIONS', sub: 'Physical day-end inventory counts and verification', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: false },
-  { id: 'Cash Denomination', name: 'Cash Denomination', group: 'TRANSACTIONS', sub: 'End-of-day drawer note and coin tally', hasOpen: true, hasAdd: true, hasEdit: true, hasDelete: false },
 
   // Reports
   { id: 'Daily Summary Report', name: 'Daily Summary Report', group: 'REPORTS', sub: 'Day-end audit: bills, payments, excise litres, profit', hasOpen: true, hasAdd: false, hasEdit: false, hasDelete: false },

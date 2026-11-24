@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { companyFileUrl, fieldRight, getDailySales, getDsr, getItems, getPurchaseIndents, getRestock, getStockMovement, listCompanyFiles, todayIso, } from '../../lib/api';
 import { money, panel } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 import { IMAGES } from '../../constants/images';
 import RestockCarousel from './RestockCarousel';
 import CountUp from './CountUp';
@@ -127,47 +128,32 @@ export const Dashboard = () => {
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const hasInventoryValue = items?.some(item => item.qoh > 0 && item.mrp > 0) ?? false;
 
-  // Dynamic Inventory Mix calculation from real inventory stocks
+  // Inventory Mix follows the data: stock value (qoh x MRP) per item group of the connected database, the five biggest groups
+  // by name and the rest as "Others". No fixed categories, so it works whatever the shop's groups are called.
+  const MIX_COLORS = ['#0CBF82', '#3383FF', '#FE9E0C', '#FF2F60', '#8B5CF6', '#94A3B8'];
   const inventoryMixData = (() => {
-    const groupTotals = { whisky: 0, beer: 0, rum_vodka: 0, scotch: 0 };
+    const totals = new Map();
     items?.forEach(it => {
-      const g = (it.group || '').toLowerCase();
       const value = Math.max(0, it.qoh || 0) * Math.max(0, it.mrp || 0);
-      if (g.includes('beer')) groupTotals.beer += value;
-      else if (g.includes('rum') || g.includes('vodka') || g.includes('gin')) groupTotals.rum_vodka += value;
-      else if (g.includes('scotch') || g.includes('wine')) groupTotals.scotch += value;
-      else groupTotals.whisky += value;
+      if (!value) return;
+      const g = groupLabel(it.group) || 'Ungrouped';
+      totals.set(g, (totals.get(g) ?? 0) + value);
     });
-
-    const total = Object.values(groupTotals).reduce((a, b) => a + b, 0);
-    if (!total) {
-      return [
-        { category: 'whisky', share: 0, fill: '#0CBF82', color: '#0CBF82', label: 'Whisky' },
-        { category: 'beer', share: 0, fill: '#3383FF', color: '#3383FF', label: 'Beer' },
-        { category: 'rum_vodka', share: 0, fill: '#FE9E0C', color: '#FE9E0C', label: 'Rum & Vodka' },
-        { category: 'scotch', share: 0, fill: '#FF2F60', color: '#FF2F60', label: 'Scotch' },
-      ];
-    }
-    const w = Math.round((groupTotals.whisky / total) * 100);
-    const b = Math.round((groupTotals.beer / total) * 100);
-    const r = Math.round((groupTotals.rum_vodka / total) * 100);
-    const s = Math.max(0, 100 - w - b - r);
-
-    return [
-      { category: 'whisky', share: w, fill: '#0CBF82', color: '#0CBF82', label: 'Whisky' },
-      { category: 'beer', share: b, fill: '#3383FF', color: '#3383FF', label: 'Beer' },
-      { category: 'rum_vodka', share: r, fill: '#FE9E0C', color: '#FE9E0C', label: 'Rum & Vodka' },
-      { category: 'scotch', share: s, fill: '#FF2F60', color: '#FF2F60', label: 'Scotch' },
-    ];
+    const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+    const total = sorted.reduce((acc, [, v]) => acc + v, 0);
+    if (!total) return [];
+    const top = sorted.slice(0, 5);
+    const rest = sorted.slice(5).reduce((acc, [, v]) => acc + v, 0);
+    if (rest > 0) top.push(['Others', rest]);
+    const shares = top.map(([, v]) => Math.round((v / total) * 100));
+    shares[0] += 100 - shares.reduce((x, y) => x + y, 0);   // rounding left-over goes to the biggest slice
+    return top.map(([name], i) => ({ category: name, label: name, share: shares[i], fill: MIX_COLORS[i], color: MIX_COLORS[i] }));
   })();
 
   const inventoryMixConfig = {
     share: { label: 'Share of Stock' },
-    whisky: { label: 'Whisky', color: '#0CBF82' },
-    beer: { label: 'Beer', color: '#3383FF' },
-    rum_vodka: { label: 'Rum & Vodka', color: '#FE9E0C' },
-    scotch: { label: 'Scotch', color: '#FF2F60' },
-  } ;
+    ...Object.fromEntries(inventoryMixData.map(d => [d.category, { label: d.label, color: d.color }])),
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">

@@ -404,23 +404,6 @@ class CancelIn(BaseModel):
     remarks: str = Field(min_length=3, description="Reason for cancelling (mandatory in legacy)")
 
 
-DENOMINATIONS = ("2000", "500", "200", "100", "50", "20", "10", "coins")
-
-
-class DenominationIn(BaseModel):
-    date: date_type
-    counts: dict[str, int] = Field(description='Note/coin value → count, e.g. {"500": 12, "coins": 35}')
-
-    @field_validator("counts")
-    @classmethod
-    def known_notes(cls, value: dict[str, int]) -> dict[str, int]:
-        unknown = sorted(set(value) - set(DENOMINATIONS))
-        if unknown:
-            raise ValueError(f"Unknown note or coin value: {', '.join(unknown)}. Use {', '.join(DENOMINATIONS)}")
-        if any(n < 0 for n in value.values()):
-            raise ValueError("Counts cannot be negative")
-        return value
-
 
 class LoyaltySettings(BaseModel):
     points_per_rupee: float = Field(ge=0, le=1)

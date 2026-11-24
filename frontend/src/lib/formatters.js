@@ -21,6 +21,13 @@ export function numberToWords(amount) {
   return `${words}${paisa ? ` and ${indianNumberToWords(paisa).trim()} Paise` : ''} Only`;
 }
 
+/** An item group as shown on screen: the desktop numbers its groups ("1 BRANDY", "10 BEER") so they sort its way; the number is dropped
+ *  here ("BRANDY", "BEER"). Display only: the stored name and code, and what is sent to the server, keep the number. */
+export const groupLabel = (name) => {
+  const text = String(name ?? '').trim();
+  return text.replace(/^\d+[.\s_-]+/, '').trim() || text;
+};
+
 /** "01/04/2026 - 31/03/2027" from a financial year's ISO dates (MstCompFinYear); '' when unknown. */
 export const finYearLabel = (start, end) => {
   const dmy = (iso) => iso.slice(0, 10).split('-').reverse().join('/');

@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from .. import admin_audit, sms, db, db_store, doc_engine, expense_db, doc_meta, doc_settings, gsettings, invoice_numbers, schema_meta, security, sqlstore, store
 from ..schemas import (
-    CancelIn, ClosingStockIn, DenominationIn, ExpenseIn, ExpenseOpeningIn, GenerateInvoiceIn, Line, PurchaseBillIn, PurchaseIndentIn, SalesInvoiceIn,
+    CancelIn, ClosingStockIn, ExpenseIn, ExpenseOpeningIn, GenerateInvoiceIn, Line, PurchaseBillIn, PurchaseIndentIn, SalesInvoiceIn,
     SalesReturnIn, StockDeductionIn,
 )
 from .auth import get_current_user, hides_cost, require_right
@@ -1021,27 +1021,6 @@ def denomination_config():
     """The notes and coin row of the desktop's Denomination window (frmUtlDenom's grid): a fixed set, as the exe draws it with a picture per
     note. The shop's UtlDenom table is not read: it is a settings list some shops fill with other numbers (1500, 3000, ...)."""
     return {"values": ["2000", "500", "200", "100", "50", "20", "10", "coins"]}
-
-
-# ---------- Cash Denomination (day-end cash count) ----------
-@router.get("/denomination", tags=["Cash Denomination"])
-def get_denomination(on: date):
-    return store.DENOMINATIONS.get(on.isoformat())
-
-
-@router.post("/denomination", status_code=201, tags=["Cash Denomination"], dependencies=[Depends(require_right("add", "Cash Denomination"))])
-def save_denomination(body: DenominationIn):
-    gsettings.check_not_frozen(body.date, "This cash count")
-    total = 0.0
-    for key, n in body.counts.items():
-        # "coins" is entered as a rupee amount rather than a count.
-        total += n if key == "coins" else float(key) * n
-    doc = {"date": body.date.isoformat(), "counts": body.counts, "total": round(total, 2)}
-    old = store.DENOMINATIONS.get(doc["date"])
-    admin_audit.record("Cash Denomination", "Edited" if old else "Added", doc["date"],
-                       f"total {old['total']}" if old else "", f"total {doc['total']}")
-    store.DENOMINATIONS[doc["date"]] = doc
-    return doc
 
 
 # ---------- Expense Entry: Day's OP-Balance (legacy frmUtlDaysExpOPBalance, table TrnExpOPBal) ----------

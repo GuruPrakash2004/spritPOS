@@ -175,14 +175,6 @@ async def test_indent_needs_a_known_supplier(client):
     assert res.status_code == 422
 
 
-async def test_cash_count_rejects_unknown_notes(client):
-    bad = await client.post("/transactions/denomination", json={"date": TODAY, "counts": {"abc": 1}})
-    good = await client.post("/transactions/denomination", json={"date": TODAY, "counts": {"500": 2, "coins": 35}})
-
-    assert bad.status_code == 422
-    assert good.json()["total"] == 1035
-
-
 async def test_closing_stock_rejects_duplicate_items(client):
     res = await client.post("/transactions/closing-stock", json={"as_on": TODAY, "lines": [
         {"item_code": "VIN-750", "closing_qty": 1}, {"item_code": "VIN-750", "closing_qty": 2}]})

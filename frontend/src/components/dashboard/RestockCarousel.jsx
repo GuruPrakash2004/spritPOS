@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState, } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { iconButton, money } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 import { distinctProductPhotos } from '../../constants/images';
 
 const MAX_CARDS = 15;
@@ -227,7 +228,7 @@ export default function RestockCarousel({ rows, days, badge }) {
                       )}
                     </div>
                     <p className="mt-1.5 text-[10px] font-bold tracking-[0.15em] text-[#B08A45] dark:text-[#D4A847] uppercase">
-                      {clean(r.group || '') || 'LIQUOR'}
+                      {groupLabel(r.group) || 'LIQUOR'}
                     </p>
                     <h4 className="mt-1 truncate text-sm font-semibold text-[#29231F] dark:text-white" title={r.item_name}>
                       {clean(r.item_name)}

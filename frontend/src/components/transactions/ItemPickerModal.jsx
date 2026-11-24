@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { money, primaryButton, secondaryButton, field, iconButton } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 import { searchItems } from '../../data/itemSearch';
 import { stockVersion, useStockItems } from '../../data/stockData';
 import { useDialogKeys } from '../common/useDialogKeys';
@@ -17,7 +18,7 @@ const COLUMNS = [
   { key: 'rate', label: 'MRP', width: 90, right: true, get: i => money(i.rate) },
   { key: 'code', label: 'ItemCode', width: 150, mono: true, get: i => i.code },
   { key: 'name', label: 'ItemName', width: 380, get: i => i.name },
-  { key: 'group', label: 'ItemGroupName', width: 200, get: i => i.group },
+  { key: 'group', label: 'ItemGroupName', width: 200, get: i => groupLabel(i.group) },
 ];
 const WIDTHS_KEY = 'vlqms_item_picker_widths';
 const MIN_WIDTH = 40;

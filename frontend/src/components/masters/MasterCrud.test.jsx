@@ -7,6 +7,7 @@ import MasterCrud from './MasterCrud'
 import { ITEM_FIELDS } from './masterConfigs'
 import { setAuthRights } from '../../lib/api'
 import { money } from '../../lib/styles'
+import { resetAttachmentSettings } from '../../hooks/useAttachmentEnabled'
 
 const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 
@@ -211,5 +212,31 @@ describe('Item Master Edit mode', () => {
     expect(uom).toBeDisabled()                                    // Edit mode: not editable, even for an item with no bills
     expect(screen.getByText(/UOM can't be changed here/i)).toBeInTheDocument()
     expect(await screen.findByLabelText(/^Item Name/i)).not.toBeDisabled()   // the other boxes are
+  })
+})
+
+describe('File Attachment switch (Global Settings → File Attachment)', () => {
+  afterEach(() => resetAttachmentSettings())
+  const withSettings = (values) => vi.stubGlobal('fetch', vi.fn(async (url) => json(String(url).includes('/settings/values') ? values : [])))
+
+  it('shows the File Attachment button unless the master\'s row is N', async () => {
+    withSettings({})
+    setAuthRights(['Item Master'])
+    renderItems()
+
+    expect(await screen.findByRole('button', { name: /file attachment/i })).toBeInTheDocument()
+  })
+
+  it('hides it for the master whose row is N, and keeps it for another', async () => {
+    withSettings({ AttachFile_items: 'N' })
+    setAuthRights(['Item Master', 'Customer Master'])
+    const { unmount } = renderItems()
+
+    await screen.findByRole('region', { name: 'Record details' })
+    await waitFor(() => expect(screen.queryByRole('button', { name: /file attachment/i })).not.toBeInTheDocument())
+    unmount()
+
+    render(<MasterCrud title="UOM Master" subtitle="Units" path="uoms" fields={[{ key: 'code', label: 'Code', required: true }, { key: 'name', label: 'Name', required: true }]} />)
+    expect(await screen.findByRole('button', { name: /file attachment/i })).toBeInTheDocument()
   })
 })

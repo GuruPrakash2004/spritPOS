@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { money } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 
 const cell = 'truncate px-2 py-1.5';
 
@@ -88,7 +89,7 @@ function WindowsGrid({ id, items, at, onPick, className, empty, box, narrow, sor
               <td className={full}>{narrow ? (item.shortName || item.name) : item.shortName}</td>
               <td className={`${full} text-right tabular-nums`}>{item.clQty}</td>
               <td className={`${full} text-right tabular-nums`}>{money(item.rate)}</td>
-              {!narrow && <><td className={`${full} font-mono`}>{item.code}</td><td className={full}>{item.name}</td><td className={full}>{item.group}</td></>}
+              {!narrow && <><td className={`${full} font-mono`}>{item.code}</td><td className={full}>{item.name}</td><td className={full}>{groupLabel(item.group)}</td></>}
             </tr>
           ))}
         </tbody>

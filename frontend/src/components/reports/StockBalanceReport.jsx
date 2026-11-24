@@ -6,6 +6,7 @@ import { FileDown, Play, Printer } from 'lucide-react';
 import { errorText, getItemGroups, getItems, getStockBalance, getStockBalanceFormats, getStockBalanceView, renderStockBalancePrint, todayIso } from '../../lib/api';
 import { downloadXls } from '../../lib/xlsExport';
 import { field, label, primaryButton, exportButton } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import { badge, money, pageHeader, pageSub, pageTitle, panel, tableBody, tableHead, tableRow, printButton } from '../../lib/styles';
 import ReportPrintModal from '../print/ReportPrintModal';
@@ -100,7 +101,7 @@ export default function StockBalanceReport() {
         </div>
         {view !== 'group' && (<>
           <div className="w-44"><label htmlFor="sb-groups" className={label}>Selected Group</label>
-            <MultiSelectDropdown id="sb-groups" allLabel="All groups" options={groupList.map(g => ({ value: g.code, label: g.name || g.code }))} value={groupSel} onChange={setGroupSel} /></div>
+            <MultiSelectDropdown id="sb-groups" allLabel="All groups" options={groupList.map(g => ({ value: g.code, label: groupLabel(g.name || g.code) }))} value={groupSel} onChange={setGroupSel} /></div>
           <div className="w-44"><label htmlFor="sb-items" className={label}>Select Item</label>
             <MultiSelectDropdown id="sb-items" allLabel="All items" options={itemList.map(i => ({ value: i.code, label: i.name || i.code }))} value={itemSel} onChange={setItemSel} /></div>
           <div className="w-44"><label htmlFor="sb-pkgs" className={label}>Select Package</label>
@@ -162,7 +163,7 @@ export default function StockBalanceReport() {
                   <div className="font-medium text-[#29231F] dark:text-stone-50">{row.name}</div>
                   {row.brand && <div className="text-[11px] text-[#958B81] dark:text-stone-400">{row.brand}</div>}
                 </td>
-                <td className="px-4 py-2.5 text-[#70675F] dark:text-stone-300">{row.group}</td>
+                <td className="px-4 py-2.5 text-[#70675F] dark:text-stone-300">{groupLabel(row.group)}</td>
                 <td className="px-4 py-2.5 text-center text-[#958B81]">{row.pkg}</td>
                 <td className="px-4 py-2.5 text-right text-[#70675F] dark:text-stone-300">{row.opQty}</td>
                 <td className="px-4 py-2.5 text-right text-[#55745A] dark:text-emerald-400">+{row.recQty}</td>

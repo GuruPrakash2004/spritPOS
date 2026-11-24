@@ -15,6 +15,7 @@ import { readTableFile } from '../../lib/readTableFile';
 import { openModule } from '../../lib/nav';
 import { errorText, getBulkFieldDefs, getItems, importBulkFields, listMaster, loadBulkFields } from '../../lib/api';
 import { field, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 import BackToMaster from '../common/BackToMaster';
 
 const FILTERS = [['groups', 'Select Item Group'], ['packages', 'Select Item Packing'], ['items', 'Select Item']];
@@ -172,7 +173,7 @@ export default function ImportItemMasterFields() {
 
       {picking === 'groups' && (
         <MultiSelectDialog wide={false} title="Select [Multiple] Item Groups" rows={lists.groups} rowKey={r => r.code} chosen={filters.groups}
-          columns={[{ key: 'code', label: 'ItemGroupCode' }]} pasteBy={[{ label: 'ItemGroupCode', value: r => r.code }]}
+          columns={[{ key: 'code', label: 'ItemGroupCode', render: r => groupLabel(r.code) }]} pasteBy={[{ label: 'ItemGroupCode', value: r => r.code }]}
           onOk={keys => picked('groups', keys)} onClose={() => picked('groups', filters.groups)} />
       )}
       {picking === 'packages' && (

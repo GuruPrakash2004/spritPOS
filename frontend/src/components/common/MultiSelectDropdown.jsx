@@ -7,12 +7,12 @@ import { ChevronDown } from 'lucide-react';
 import DropdownMenu from './DropdownMenu';
 import { field } from '../../lib/styles';
 
-export default function MultiSelectDropdown({ id, value, options, onChange, placeholder = 'Select', className = '', width = 240 }) {
+export default function MultiSelectDropdown({ id, value, options, onChange, placeholder = 'Select', className = '', width = 240, labelOf = (o) => o }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const anchorRef = useRef(null);
-  const shown = useMemo(() => options.filter(o => String(o).toLowerCase().includes(q.trim().toLowerCase())), [options, q]);
-  const summary = value.length === 0 ? placeholder : value.length === 1 ? value[0] : `${value.length} selected`;
+  const shown = useMemo(() => options.filter(o => String(labelOf(o)).toLowerCase().includes(q.trim().toLowerCase())), [options, q, labelOf]);
+  const summary = value.length === 0 ? placeholder : value.length === 1 ? labelOf(value[0]) : `${value.length} selected`;
   const toggle = (o) => onChange(value.includes(o) ? value.filter(v => v !== o) : [...value, o]);
 
   return (
@@ -34,7 +34,7 @@ export default function MultiSelectDropdown({ id, value, options, onChange, plac
             {shown.map(o => (
               <label key={o} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-subtle">
                 <input type="checkbox" checked={value.includes(o)} onChange={() => toggle(o)} />
-                <span className="truncate">{o}</span>
+                <span className="truncate">{labelOf(o)}</span>
               </label>
             ))}
           </div>

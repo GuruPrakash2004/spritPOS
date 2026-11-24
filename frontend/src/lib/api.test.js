@@ -1,6 +1,6 @@
 // Tests for the API client: token header, error text, and ending the session on a 401.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, companyFileUrl, getDenomination, getItems, login, qs, setAuthUser, setSessionEndedHandler } from './api'
+import { ApiError, companyFileUrl, getItems, login, qs, setAuthUser, setSessionEndedHandler } from './api'
 
 const reply = (status, body) =>
   vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
@@ -27,7 +27,7 @@ describe('the backend functions', () => {
   it('turns FastAPI validation errors into one readable message', async () => {
     vi.stubGlobal('fetch', reply(422, { detail: [{ msg: 'Counts cannot be negative' }, { msg: 'Unknown note' }] }))
 
-    await expect(getDenomination('2026-10-01')).rejects.toThrow('Counts cannot be negative; Unknown note')
+    await expect(getItems()).rejects.toThrow('Counts cannot be negative; Unknown note')
   })
 
   it('ends the session on a 401 once logged in', async () => {

@@ -18,6 +18,7 @@ from datetime import date
 from fastapi import HTTPException
 
 from . import store
+from .attachment_masters import MASTER_MODULES, setting_code
 
 KINDS = ("yn", "number", "text", "date")
 
@@ -53,6 +54,12 @@ _SEED = [
     # Kept only so the older /settings API keeps its shape; hidden like a desktop HideSetting = 'Y' row.
     ("PointsAlertAbove", "Loyalty", "Alert when points above", "500", "number",
      "Older /settings field (loyalty.alert_when_points_above).", None),
+]
+# File Attachment on a master: one Y/N row each (Y shows the button, N hides it); see attachment_masters.py.
+_SEED += [
+    (setting_code(path), "File Attachment", f"Show File Attachment on {title}", "Y", "yn",
+     "Y: the master shows the File Attachment button. N: it is hidden and no new file can be attached.", f"{title} screen.")
+    for path, title in MASTER_MODULES.items()
 ]
 _HIDDEN = {"PointsAlertAbove"}
 # Highest value a number setting may take (the older /settings API caps points_per_rupee at 1 too).
@@ -215,6 +222,11 @@ def value(code: str, default: str = "") -> str:
 
 def yes(code: str) -> bool:
     return _bool(value(code))
+
+
+def attachment_enabled(path: str) -> bool:
+    """Whether a master shows File Attachment (its AttachFile_* row is not N; shown when the row isn't there)."""
+    return _bool(value(setting_code(path), "Y"))
 
 
 def number(code: str, default: float = 0.0) -> float:

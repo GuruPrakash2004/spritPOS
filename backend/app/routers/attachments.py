@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from ..master_specs import SPECS
+from .. import gsettings
+from ..attachment_masters import MASTER_MODULES
 from .auth import can_use, get_current_user, has_right
 
 router = APIRouter(prefix="/attachments", tags=["Attachments"])
@@ -31,9 +32,7 @@ TYPES = {
 
 # master path -> module name (the same names the rights use)
 MODULES = {
-    "items": "Item Master", "item-groups": "Item Group Master", "uoms": "UOM Master", "packages": "Package Master", "brands": "Brand Master",
-    "suppliers": "Supplier Master", "customers": "Customer Master", "ledger-groups": "Ledger Group Master", "ledgers": "Ledger Master",
-    "sales-counters": "Sales Counter Master", "sales-persons": "Sales Person Master", **{s["path"]: s["title"] for s in SPECS},
+    **MASTER_MODULES,
     # documents (UtlTransactions.FileAttachReq = 'Y'): the code is the document number
     "purchase_bill": "Purchase Bill", "purchase_indent": "Purchase Indent", "sales_return": "Sales Return", "stock_deduction": "Stock Deduction",
     "expense": "Expense Entry", "closing_stock": "Closing Stock Entry", "sales_invoice": "Sales Invoice",
@@ -91,6 +90,8 @@ def counts(master: str, user: dict = Depends(get_current_user)):
 def upload(master: str, body: FileIn, code: str = Query(min_length=1), user: dict = Depends(get_current_user)):
     module = _module(master)
     _need(user, module, "edit")
+    if master in MASTER_MODULES and not gsettings.attachment_enabled(master):   # Global Settings → File Attachment: switched off for this master
+        raise HTTPException(403, f"File Attachment is turned off for {module} in Global Settings")
     ext = Path(body.file_name).suffix.lower()
     if ext not in TYPES:
         raise HTTPException(422, f"{ext or 'This file type'} is not allowed. Use: {', '.join(sorted(TYPES))}")

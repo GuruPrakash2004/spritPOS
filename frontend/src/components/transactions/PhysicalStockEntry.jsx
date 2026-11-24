@@ -17,6 +17,7 @@ import { toastStore } from '../common/toastStore';
 import { useConfirm } from '../common/ConfirmDialog';
 import { errorText, getItems, getPhysicalStockEntry, getSalesCounters, getSalesPersons, loadPhysicalStock, newIdempotencyKey, savePhysicalStock } from '../../lib/api';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 
 const num = (v) => (v === '' || v == null ? 0 : Number(v));
 const uniq = (list, key) => [...new Set(list.map(i => i[key]).filter(Boolean))].sort();
@@ -44,7 +45,7 @@ export default function PhysicalStockEntry() {
     getSalesPersons().then(l => { setSalesPersons(l); setSalesPerson(l[0] ?? ''); }).catch(() => {});
   }, []);
 
-  const groupOptions = useMemo(() => uniq(catalogue, 'group'), [catalogue]);
+  const groupOptions = useMemo(() => uniq(catalogue, 'group').sort((a, b) => groupLabel(a).localeCompare(groupLabel(b))), [catalogue]);
   const packageOptions = useMemo(() => uniq(catalogue, 'package'), [catalogue]);
 
   const load = () => {
@@ -83,13 +84,13 @@ export default function PhysicalStockEntry() {
     if (!rows.length) return;
     if (!(await toastStore.defer('ok', `${rows.length} items will be exported to Excel when this closes.`, 'Export cancelled.'))) return;
     const cols = ['Group', 'Item name', 'Package', 'Pur Rate', 'MRP Rate', 'Physical Stock', 'System Stock', 'Diff'].map(l => ({ key: l, label: l }));
-    downloadXls('Physical_Stock_Entry', 'Physical Stock Entry', '', cols, rows.map(r => ({ Group: r.group, 'Item name': r.item_name, Package: r.package, 'Pur Rate': r.pur ?? '', 'MRP Rate': r.mrpNew, 'Physical Stock': num(r.physical), 'System Stock': r.system_qty, Diff: diff(r) })));
+    downloadXls('Physical_Stock_Entry', 'Physical Stock Entry', '', cols, rows.map(r => ({ Group: groupLabel(r.group), 'Item name': r.item_name, Package: r.package, 'Pur Rate': r.pur ?? '', 'MRP Rate': r.mrpNew, 'Physical Stock': num(r.physical), 'System Stock': r.system_qty, Diff: diff(r) })));
   };
   const exportSummary = async () => {
     if (!summary.length) return;
     if (!(await toastStore.defer('ok', 'The summary will be exported to Excel when this closes.', 'Export cancelled.'))) return;
     const cols = ['Group', 'Package', 'Physical Stock (Bottles)', 'System Stock (Bottles)', 'Difference', 'Physical Stock (Ltrs)', 'System Stock (Ltrs)', 'Physical Stock Cases', 'System Stock Cases'].map(l => ({ key: l, label: l }));
-    downloadXls('Physical_Stock_Summary', 'Physical Stock Summary Report', `as on ${new Date().toLocaleDateString('en-GB')}`, cols, summary.map(s => ({ Group: s.group, Package: s.package, 'Physical Stock (Bottles)': s.phys, 'System Stock (Bottles)': s.sys, Difference: s.phys - s.sys, 'Physical Stock (Ltrs)': Math.round(s.physL * 1000) / 1000, 'System Stock (Ltrs)': Math.round(s.sysL * 1000) / 1000, 'Physical Stock Cases': casesText(s.physCases, s.physLoose), 'System Stock Cases': casesText(s.sysCases, s.sysLoose) })));
+    downloadXls('Physical_Stock_Summary', 'Physical Stock Summary Report', `as on ${new Date().toLocaleDateString('en-GB')}`, cols, summary.map(s => ({ Group: groupLabel(s.group), Package: s.package, 'Physical Stock (Bottles)': s.phys, 'System Stock (Bottles)': s.sys, Difference: s.phys - s.sys, 'Physical Stock (Ltrs)': Math.round(s.physL * 1000) / 1000, 'System Stock (Ltrs)': Math.round(s.sysL * 1000) / 1000, 'Physical Stock Cases': casesText(s.physCases, s.physLoose), 'System Stock Cases': casesText(s.sysCases, s.sysLoose) })));
   };
 
   const save = async () => {
@@ -129,7 +130,7 @@ export default function PhysicalStockEntry() {
       <div className={`${panel} flex flex-wrap items-end gap-3 px-5 py-3`}>
         <div>
           <label htmlFor="ps-groups" className={label}>Selected Group</label>
-          <MultiSelectDropdown id="ps-groups" value={groups} options={groupOptions} onChange={v => { setGroups(v); setProblem(''); }} placeholder="Select groups" className="w-48" />
+          <MultiSelectDropdown id="ps-groups" value={groups} options={groupOptions} labelOf={groupLabel} onChange={v => { setGroups(v); setProblem(''); }} placeholder="Select groups" className="w-48" />
         </div>
         <div>
           <label htmlFor="ps-pkgs" className={label}>Selected Package</label>
@@ -169,7 +170,7 @@ export default function PhysicalStockEntry() {
             {!rows.length && <tr><td colSpan={8} className="px-4 py-14 text-center text-stone-500">Choose a group, package or item and press Load.</td></tr>}
             {rows.map((r, i) => (
               <tr key={r.item_code} className={changed(r) ? 'bg-amber-50/60 dark:bg-amber-500/5' : ''}>
-                <td className="px-3 py-1.5">{r.group}</td><td className="px-3 py-1.5">{r.item_name}</td><td className="px-3 py-1.5">{r.package}</td>
+                <td className="px-3 py-1.5">{groupLabel(r.group)}</td><td className="px-3 py-1.5">{r.item_name}</td><td className="px-3 py-1.5">{r.package}</td>
                 <td className="px-3 py-1.5 text-right">{r.pur === null ? '—' : <input type="number" min={0} step="0.01" value={r.pur} onChange={e => update(i, { pur: e.target.value })} className={`${field} w-24 text-right tabular-nums`} aria-label={`Purchase rate ${r.item_name}`} />}</td>
                 <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="0.01" value={r.mrpNew} onChange={e => update(i, { mrpNew: e.target.value })} className={`${field} w-24 text-right tabular-nums`} aria-label={`MRP ${r.item_name}`} /></td>
                 <td className="px-3 py-1.5 text-right"><input type="number" min={0} step="1" value={r.physical} onChange={e => update(i, { physical: e.target.value })} className={`${field} w-24 text-right tabular-nums`} aria-label={`Physical stock ${r.item_name}`} /></td>
@@ -197,7 +198,7 @@ export default function PhysicalStockEntry() {
             <tbody className={tableBody}>
               {summary.map(s => (
                 <tr key={`${s.group}-${s.package}`}>
-                  <td className="px-3 py-1.5">{s.group}</td><td className="px-3 py-1.5">{s.package}</td>
+                  <td className="px-3 py-1.5">{groupLabel(s.group)}</td><td className="px-3 py-1.5">{s.package}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{s.phys}</td><td className="px-3 py-1.5 text-right tabular-nums">{s.sys}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{s.phys - s.sys}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{money(s.physL)}</td><td className="px-3 py-1.5 text-right tabular-nums">{money(s.sysL)}</td>

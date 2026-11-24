@@ -14,6 +14,7 @@ import { errorText, getItemGroups, getItems, getRateColumns, setItemRates } from
 import { changedRate, ROUNDINGS } from '../../lib/priceRound';
 import { downloadXls } from '../../lib/xlsExport';
 import { field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
 
 // A rate column is a typed Item Master field (item.mrp) or one of the item's extra columns (item.extras.MINLEVEL); both read the same way.
 const rateOf = (item, key) => Number(item[key] ?? item.extras?.[key]) || 0;
@@ -113,7 +114,7 @@ export default function PriceListMaintenance() {
 
   const exportGrid = () => {
     const head = ['Code', 'Item', 'Group', ...cols.flatMap(c => [caption(c), `${caption(c)}-New`])];
-    const body = rows.map(i => [i.code, i.name, i.group, ...cols.flatMap(c => [rateOf(i, c), newOf(i, c)])]);
+    const body = rows.map(i => [i.code, i.name, groupLabel(i.group), ...cols.flatMap(c => [rateOf(i, c), newOf(i, c)])]);
     downloadXls('PriceList', 'Price List', '', head.map((label, k) => ({ key: k, label })), body.map(r => Object.fromEntries(r.map((v, k) => [k, v]))));
   };
 
@@ -144,7 +145,7 @@ export default function PriceListMaintenance() {
                   <button onClick={() => setPickedGroups(new Set())} className={`${secondaryButton} !px-3 !py-1 text-xs`}>Clear</button>
                 </div>
                 <div className="grid max-h-80 grid-cols-2 gap-1 overflow-auto rounded-lg border border-line p-2 sm:grid-cols-3">
-                  {groups.map(g => <label key={g} className={radio}><input type="checkbox" checked={pickedGroups.has(g)} onChange={() => toggleSet(pickedGroups, setPickedGroups, g)} />{g}</label>)}
+                  {groups.map(g => <label key={g} className={radio}><input type="checkbox" checked={pickedGroups.has(g)} onChange={() => toggleSet(pickedGroups, setPickedGroups, g)} />{groupLabel(g)}</label>)}
                 </div>
               </>
             ) : (
@@ -186,7 +187,7 @@ export default function PriceListMaintenance() {
                   const on = ticked.has(i.code);
                   return (
                     <tr key={i.code} className={on ? '' : 'opacity-50'}>
-                      <td className="px-3 py-1.5 font-sans">{i.group}</td>
+                      <td className="px-3 py-1.5 font-sans">{groupLabel(i.group)}</td>
                       <td className="px-3 py-1.5"><input type="checkbox" checked={on} onChange={() => toggleSet(ticked, setTicked, i.code)} className="accent-accent" aria-label={`Select ${i.name}`} /></td>
                       <td className="px-3 py-1.5">{i.code}</td>
                       <td className="px-3 py-1.5 font-sans text-stone-900 dark:text-stone-100">{i.name}</td>

@@ -29,7 +29,6 @@ import { SIMPLE_MASTERS } from './lib/simpleMasters';
 import { isTypingTarget, useAdvanceAfterSelect, useShortcuts } from './lib/keys';
 import { withViewTransition } from './lib/viewTransition';
 import { useConfirm } from './components/common/ConfirmDialog';
-import CashDenomination from './components/transactions/CashDenomination';
 import ClosingStockEntry from './components/transactions/ClosingStockEntry';
 import VoucherEntry from './components/accounting/VoucherEntry';
 import PhysicalStockEntry from './components/transactions/PhysicalStockEntry';
@@ -94,14 +93,14 @@ const PriceListMaintenance = lazyScreen('Price List Maintenance');
 // Per-tab memory for a page refresh (sessionStorage; cleared when the tab closes).
 const FY_KEY = 'vlqms_fin_year';
 // Screens whose unsaved rows Alt+B would throw away.
-const ENTRY_SCREENS = ['Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher', 'Quotation', 'Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Physical Stock Entry', 'Cash Denomination'];
+const ENTRY_SCREENS = ['Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher', 'Quotation', 'Purchase Bill', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Physical Stock Entry'];
 const SESSION_CHECK_MS = 60_000;
 // Whether the left navigation is a narrow icon rail (a per-browser convenience, so localStorage).
 const NAV_COLLAPSED_KEY = 'vlqms_nav_collapsed';
 // Billing screens start with the rail so the item grid gets the width.
 const BILLING_SCREENS = ['Sales Invoice', 'Purchase Bill'];
 // Screens that open with no transition: the user starts typing at once (billing and the other entry screens).
-const QUIET_SCREENS = [...BILLING_SCREENS, 'Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher', 'Quotation', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Physical Stock Entry', 'Cash Denomination'];
+const QUIET_SCREENS = [...BILLING_SCREENS, 'Payment Voucher', 'Receipt Voucher', 'Credit Note', 'Debit Note', 'Contra Voucher', 'Journal Voucher', 'Quotation', 'Expense Entry', 'Stock Deduction', 'Purchase Indent', 'Sales Return', 'Closing Stock Entry', 'Physical Stock Entry'];
 const readNavCollapsed = () => { try { return localStorage.getItem(NAV_COLLAPSED_KEY) === '1'; } catch { return false; } };
 const writeNavCollapsed = (on) => { try { localStorage.setItem(NAV_COLLAPSED_KEY, on ? '1' : '0'); } catch { /* storage blocked */ } };
 const readSaved = (key) => { try { return sessionStorage.getItem(key) || ''; } catch { return ''; } };
@@ -303,7 +302,6 @@ export default function App() {
       case 'Sales Return': return <SalesReturn />;
       case 'Closing Stock Entry': return <ClosingStockEntry />;
       case 'Physical Stock Entry': return <PhysicalStockEntry />;
-      case 'Cash Denomination': return <CashDenomination />;
       case 'Daily Summary Report': return <DailySummaryReport />;
       case 'Stock Balance Report': return <StockBalanceReport />;
       case 'Reports Dashboard':

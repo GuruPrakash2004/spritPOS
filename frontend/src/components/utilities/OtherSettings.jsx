@@ -11,6 +11,7 @@ import {
   errorText, getDocSettingsAdmin, getMenuAdmin, getNumbering, getTrnSettings, saveDocSettings, saveMenuAdmin, saveNumbering, saveTrnSettings,
 
 } from '../../lib/api';
+import AttachmentSettings from './AttachmentSettings';
 import BulkImportFields from './BulkImportFields';
 import DeleteLinkage from './DeleteLinkage';
 import InvoiceSettings from './InvoiceSettings';
@@ -19,7 +20,7 @@ import { MODULE_GROUPS } from '../../lib/modules';
 import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton } from '../../lib/styles';
 
 
-const TABS = [['transaction', 'Transaction Settings'], ['prefix', 'Doc Prefix'], ['menu', 'Menu Sequence'], ['invoice', 'Invoice Settings'], ['linkage', 'Delete Linkage'], ['bulkfields', 'Bulk Item Import Fields']];
+const TABS = [['transaction', 'Transaction Settings'], ['prefix', 'Doc Prefix'], ['menu', 'Menu Sequence'], ['attachment', 'File Attachment'], ['invoice', 'Invoice Settings'], ['linkage', 'Delete Linkage'], ['bulkfields', 'Bulk Item Import Fields']];
 const select = 'rounded-md border border-[#E3D9CD] bg-white px-2 py-1 text-xs dark:border-[#2A2A2A] dark:bg-[#141414]';
 
 export default function OtherSettings({ embedded = false }) {
@@ -43,6 +44,7 @@ export default function OtherSettings({ embedded = false }) {
       {tab === 'transaction' && <TransactionSettings />}
       {tab === 'prefix' && <DocPrefix />}
       {tab === 'menu' && <MenuSequence />}
+      {tab === 'attachment' && <AttachmentSettings />}
       {tab === 'invoice' && <InvoiceSettings onClose={() => setTab('transaction')} />}
       {tab === 'bulkfields' && <BulkImportFields />}
       {tab === 'linkage' &&<DeleteLinkage onClose={() => setTab('transaction')} />}

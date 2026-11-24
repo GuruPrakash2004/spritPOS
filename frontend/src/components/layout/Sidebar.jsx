@@ -13,7 +13,7 @@ import DevelopedBy from './DevelopedBy';
 import {
   BarChart2, Building, CreditCard, Database, FileText, LayoutDashboard,
   Monitor, Package, PackageMinus, RotateCcw, Scale, ShoppingCart, Tag, Truck,
-  Users, ClipboardList, X, Banknote, Boxes, CalendarCheck, ClipboardCheck,
+  Users, ClipboardList, X, Boxes, CalendarCheck, ClipboardCheck,
   Droplets, FolderTree, IndianRupee, ShieldCheck, SquareTerminal, RefreshCcwDot, SlidersHorizontal, FileX2, Replace, GitMerge, GitCompare, History, Info, UserCheck,
   PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, Warehouse, ArrowLeftRight, Wrench,
 } from 'lucide-react';
@@ -28,7 +28,7 @@ export const ICONS = {
   'Item Group Master': Database, 'UOM Master': Scale, 'Supplier Master': Truck, 'Customer Master': Users, 'Ledger Master': FileText,
   'Ledger Group Master': FolderTree, 'Sales Counter Master': Monitor, 'Sales Person Master': UserCheck, 'Package Master': Package, 'Brand Master': Tag,
   'Purchase Bill': ShoppingCart, 'Sales Invoice': FileText, 'Expense Entry': CreditCard, 'Stock Deduction': PackageMinus, 'Purchase Indent': ClipboardList,
-  'Sales Return': RotateCcw, 'Closing Stock Entry': ClipboardCheck, 'Cash Denomination': Banknote, 'Daily Summary Report': CalendarCheck,
+  'Sales Return': RotateCcw, 'Closing Stock Entry': ClipboardCheck, 'Daily Summary Report': CalendarCheck,
   'Stock Balance Report': BarChart2, 'SQL Query Execution': SquareTerminal, 'Re Write Stock': RefreshCcwDot, 'Global Settings': SlidersHorizontal,
   'Remove Duplicate Invoice': FileX2, 'Replace and Remove Duplicate items': Replace, 'Merge Items': GitMerge, 'Compare Stock': GitCompare,
   'ADMIN Audit Log': History, 'Bulk Master Update': Database, 'Label Printing': Tag, [ADMIN_MASTER]: ShieldCheck,
