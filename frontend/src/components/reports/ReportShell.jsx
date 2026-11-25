@@ -11,6 +11,7 @@ import { badge, field, label, money, pageHeader, pageSub, pageTitle, panel, prim
 import { groupLabel } from '../../lib/formatters';
 import { SkeletonTableRows } from '../common/Skeleton';
 import MultiSelectDropdown from './MultiSelectDropdown';
+import DateInput from '../common/DateInput';
 
  
 
@@ -131,7 +132,7 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
           </div>
         )}
         {filters.includes('on') && (
-          <div className="w-40"><label htmlFor="rp-on" className={label}>{endpoint.includes('ageing') ? 'As-on date' : 'Date'}</label><input id="rp-on" type="date" value={on} onChange={e => setOn(e.target.value)} className={`${field} tabular-nums`} /></div>
+          <div className="w-40"><label htmlFor="rp-on" className={label}>{endpoint.includes('ageing') ? 'As-on date' : 'Date'}</label><DateInput id="rp-on" value={on} onChange={e => setOn(e.target.value)} className={`${field} tabular-nums`} /></div>
         )}
         {filters.includes('level') && (
           <div className="w-56"><label htmlFor="rp-level" className={label}>Show</label>
@@ -155,8 +156,8 @@ export default function ReportShell({ title, subtitle, endpoint, filters, column
           <label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={litres} onChange={e => setLitres(e.target.checked)} />Show qty in Litres</label>
         </>)}
         {filters.includes('range') && (<>
-          <div className="w-40"><label htmlFor="rp-from" className={label}>From</label><input id="rp-from" type="date" value={from} onChange={e => setFrom(e.target.value)} className={`${field} tabular-nums`} /></div>
-          <div className="w-40"><label htmlFor="rp-to" className={label}>To</label><input id="rp-to" type="date" value={to} onChange={e => setTo(e.target.value)} className={`${field} tabular-nums`} /></div>
+          <div className="w-40"><label htmlFor="rp-from" className={label}>From</label><DateInput id="rp-from" value={from} onChange={e => setFrom(e.target.value)} className={`${field} tabular-nums`} /></div>
+          <div className="w-40"><label htmlFor="rp-to" className={label}>To</label><DateInput id="rp-to" value={to} onChange={e => setTo(e.target.value)} className={`${field} tabular-nums`} /></div>
         </>)}
         {filters.includes('brandwise') && (<>
           <div className="w-48"><label htmlFor="rp-kind" className={label}>Show</label>

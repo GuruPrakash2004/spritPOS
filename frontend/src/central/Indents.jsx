@@ -6,6 +6,7 @@ import { toastStore } from '../components/common/toastStore';
 import { InlineError } from '../components/common/FormErrorSummary';
 import { centralIndents, errorText, todayIso } from '../lib/api';
 import { field, fieldError, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow } from '../lib/styles';
+import DateInput from '../components/common/DateInput';
 
 
 export default function Indents({ shops }) {
@@ -53,7 +54,7 @@ export default function Indents({ shops }) {
         </div>
         <div>
           <label htmlFor="ci-day" className={label}>Day</label>
-          <input id="ci-day" type="date" value={day} onChange={e => { setDay(e.target.value); setDayError(''); }}
+          <DateInput id="ci-day" value={day} onChange={e => { setDay(e.target.value); setDayError(''); }}
             className={`${field} ${dayError ? fieldError : ''}`} aria-invalid={!!dayError} />
           <InlineError message={dayError} />
         </div>

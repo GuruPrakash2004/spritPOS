@@ -24,7 +24,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from .. import db, designer, gsettings, mailer, rpt_barcode, rpt_bridge, rpt_custom, rpt_dsr, rpt_print, rpt_stock, sqlstore, store
+from .. import db, designer, gsettings, mailer, rpt_barcode, rpt_bridge, rpt_custom, rpt_dsr, rpt_print, rpt_stock, rpt_zeroitems, sqlstore, store
 from .auth import get_current_user, has_right, require_admin, require_module
 
 # The documents whose screens in the desktop check the Print right (frmTrnPBM, frmTrnPartyDoc, frmTrnCloseStk): print kind -> module. The sales
@@ -145,6 +145,9 @@ class StockPrintIn(BaseModel):
     from_date: date
     to_date: date
     group: str | None = None
+    groups: str = ""      # the screen's Selected Group / Select Item / Select Package (comma-separated item group codes, item codes, PKGItem names)
+    items: str = ""
+    packages: str = ""
     rpt: str = ""
     printer: str = ""
     copies: int = 1
@@ -160,13 +163,36 @@ def stock_balance_formats(user: dict = Depends(get_current_user)):
 async def print_stock_balance(body: StockPrintIn, user: dict = Depends(get_current_user)):
     """The Stock Balance report of a period as a PDF, laid out by the desktop's RptStkBal*.rpt; with `printer` it is
     printed directly on that printer and the reply is JSON."""
-    pdf = await run_in_threadpool(rpt_stock.render, body.from_date, body.to_date, body.group, user, body.rpt, body.printer, body.copies)
+    pdf = await run_in_threadpool(rpt_stock.render, body.from_date, body.to_date, body.group, user, body.rpt, body.printer, body.copies, body.groups, body.items, body.packages)
     if pdf is None:
         return {"printed": True, "printer": body.printer, "copies": body.copies, "rpt": body.rpt or rpt_stock.FILES[0]}
     pdf, size = await run_in_threadpool(rpt_bridge.preview_pdf, pdf)
     return Response(pdf, media_type="application/pdf", headers={
         "Content-Disposition": f'inline; filename="StockBalance_{body.from_date.isoformat()}_{body.to_date.isoformat()}.pdf"',
         "X-Page-Size": size})
+
+
+class ZeroStockPrintIn(BaseModel):
+    rpt: str = ""
+    printer: str = ""
+    copies: int = 1
+
+
+@router.get("/print/zero-stock-formats")
+def zero_stock_formats(user: dict = Depends(get_current_user)):
+    """The Print Zero Stock Items format (RptZBItem.rpt) when it is in the report folder."""
+    return {"formats": rpt_zeroitems.formats(), "bridge_configured": rpt_bridge.configured(), "option": rpt_zeroitems.option()}
+
+
+@router.post("/print/zero-stock")
+async def print_zero_stock(body: ZeroStockPrintIn, user: dict = Depends(get_current_user)):
+    """The active items with zero stock as a PDF laid out by the desktop's RptZBItem.rpt; with `printer` it is printed
+    directly on that printer and the reply is JSON."""
+    pdf = await run_in_threadpool(rpt_zeroitems.render, body.rpt, body.printer, body.copies)
+    if pdf is None:
+        return {"printed": True, "printer": body.printer, "copies": body.copies, "rpt": body.rpt or rpt_zeroitems.FILES[0]}
+    pdf, size = await run_in_threadpool(rpt_bridge.preview_pdf, pdf)
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": 'inline; filename="ZeroStockItems.pdf"', "X-Page-Size": size})
 
 
 class BarcodeItemIn(BaseModel):

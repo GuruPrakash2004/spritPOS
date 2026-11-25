@@ -13,6 +13,7 @@ import Modal from '../common/Modal';
 import { errorText, getExpenseOpening, getLedgers, saveExpense, saveExpenseOpening, todayIso, updateDocument, } from '../../lib/api';
 import WithHistory from './DocHistoryPanel';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 
 const blank = () => ({ ledger: '', amount: '', narration: '' });
@@ -117,7 +118,7 @@ export default function ExpenseEntry() {
       </div>
 
       <div className={`${panel} flex flex-wrap items-end gap-3 px-5 py-3`}>
-        <div><label htmlFor="ex-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="ex-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} tabular-nums`} /></div>
+        <div><label htmlFor="ex-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><DateInput id="ex-date" value={date} onChange={e => setDate(e.target.value)} className={`${field} tabular-nums`} /></div>
         <div>
           <label htmlFor="ex-paid" className={label}>Paid From<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
           <select id="ex-paid" value={paidFrom} onChange={e => setPaidFrom(e.target.value )} className={field}>

@@ -13,6 +13,7 @@ import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { toastStore } from '../common/toastStore';
 import { errorText, generateClosingStockInvoice, getSalesCounters, getSalesPersons, loadClosingStock, saveClosingStock, todayIso, updateClosingStock, } from '../../lib/api';
 import { field, label, money, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, pageHeader } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 
 
@@ -104,7 +105,7 @@ export default function ClosingStockEntry() {
         <div className="flex flex-wrap items-end gap-2">
           <div>
             <label htmlFor="cse-date" className={label}>As-on Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
-            <input id="cse-date" type="date" value={asOn} onChange={e => setAsOn(e.target.value)} className={`${field} tabular-nums`} />
+            <DateInput id="cse-date" value={asOn} onChange={e => setAsOn(e.target.value)} className={`${field} tabular-nums`} />
           </div>
           <button onClick={load} className={secondaryButton}><Download size={14} />Load Items</button>
           <button onClick={save} disabled={!rows.length || Boolean(savedDoc)} className={primaryButton}><Save size={14} />Save<Kbd combo="Mod+S" /></button>

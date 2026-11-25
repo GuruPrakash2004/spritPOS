@@ -1,77 +1,127 @@
-// Stock Balance report: opening, receipts, issues, closing and value per item for a date
-// (GET /reports/stock-balance). Printable in the stock register formats.
+// Stock Balance report (frmRptStockBal): pick the view and filters, press View, and the result opens in a big window (StockBalanceResult) with the grid and
+// its Export Excel / Col Select / Col Freeze / Print buttons. Selected Group and Select Item open the exe's "Select [Multiple] ..." windows
+// (MultiSelectDialog; groups are the database's active item groups in Arrange Group Slno order). The rate is one of four radio buttons as in the exe:
+// Last Purchase Rate, FIFO, Sales Rate, Wt.Avg Rate; With Tax appears only with Last Purchase Rate; FIFO and Wt.Avg Rate appear only when Show Value is ticked (FIFO also on Group wise Summary Balance).
 
-import { useCallback, useEffect, useState } from 'react';
-import { FileDown, Play, Printer } from 'lucide-react';
-import { errorText, getItemGroups, getItems, getStockBalance, getStockBalanceFormats, getStockBalanceView, renderStockBalancePrint, todayIso } from '../../lib/api';
-import { downloadXls } from '../../lib/xlsExport';
-import { field, label, primaryButton, exportButton } from '../../lib/styles';
-import { groupLabel } from '../../lib/formatters';
-import MultiSelectDropdown from './MultiSelectDropdown';
-import { badge, money, pageHeader, pageSub, pageTitle, panel, tableBody, tableHead, tableRow, printButton } from '../../lib/styles';
 import ReportPrintModal from '../print/ReportPrintModal';
-import { SkeletonTableRows } from '../common/Skeleton';
+import { toast } from '../common/toastStore';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, Play } from 'lucide-react';
+import StockBalanceResult from './StockBalanceResult';
+import { errorText, getItemGroups, getItems, getMasterOrder, getStockBalanceFormats, getStockBalanceView, getZeroStockFormats, renderStockBalancePrint, renderZeroStockPrint, todayIso } from '../../lib/api';
+import { field, label, primaryButton } from '../../lib/styles';
+import { groupLabel } from '../../lib/formatters';
+import MultiSelectDialog from '../common/MultiSelectDialog';
+import { pageHeader, pageSub, pageTitle, panel } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
-
+// The button that opens a "Select [Multiple] ..." window: shows "All ..." when nothing is ticked, the one name, or "N selected".
+function PickButton({ id, text, onClick }) {
+  return (
+    <button type="button" id={id} onClick={onClick} aria-haspopup="dialog" className={`${field} flex items-center justify-between gap-2 text-left`}>
+      <span className="truncate">{text}</span><ChevronDown size={14} className="shrink-0" />
+    </button>
+  );
+}
+// The exe's "Selected Item" / "Selected Package" boxes: what was picked, one per line, each removable.
+function SelectedList({ title, names, onRemove }) {
+  return (
+    <section aria-label={title} className={`${panel} max-h-40 overflow-auto`}>
+      <h2 className="sticky top-0 border-b border-line bg-subtle px-3 py-1.5 text-center text-xs font-semibold">{title}</h2>
+      {!names.length && <p className="px-3 py-3 text-center text-xs text-stone-500">None selected: all are included.</p>}
+      <ul>{names.map((n, i) => (
+        <li key={n + i} className="flex items-center justify-between gap-2 px-3 py-1 text-xs hover:bg-subtle">
+          <span className="truncate">{n}</span>
+          <button type="button" onClick={() => onRemove(i)} aria-label={`Remove ${n}`} className="text-stone-500 hover:text-accent">✕</button>
+        </li>))}
+      </ul>
+    </section>
+  );
+}
+const comboKey = (view, rate, opt) => `vlqms_sb_cols_${view}_${rate}_${opt.values ? 'V' : opt.litres ? 'L' : ''}`;
+const pickedText = (keys, nameOf) => (keys.length === 1 ? nameOf(keys[0]) : `${keys.length} selected`);
+const fmtDate = (iso) => iso.split('-').reverse().join('/');
 
 export default function StockBalanceReport() {
-  const [rows, setRows] = useState(null);
-  const [error, setError] = useState('');
-  const [showPrintModal, setShowPrintModal] = useState(false);
   const [formats, setFormats] = useState([]);
   const day = todayIso();
   // The exe's view options (frmRptStockBal): which view, the period, filters and the valuation.
   const [view, setView] = useState('closing');
-  const [from, setFrom] = useState(`${day.slice(0, 8)}01`);
+  const [from, setFrom] = useState(day);
   const [to, setTo] = useState(day);
-  const [groupList, setGroupList] = useState([]);
+  const [groupList, setGroupList] = useState([]);   // the "Select [Multiple] Item Groups" rows: [{ code, slno }] in Arrange Group Slno order
+  const [picking, setPicking] = useState(null);   // which "Select [Multiple] ..." window is open: 'group' or 'item'
   const [itemList, setItemList] = useState([]);
   const [groupSel, setGroupSel] = useState([]);
   const [itemSel, setItemSel] = useState([]);
-  const [pkgSel, setPkgSel] = useState([]);
-  const [opt, setOpt] = useState({ litres: false, values: false, zero_hide: false, group_total: false, with_tax: false, act_sales: false });
+  const [opt, setOpt] = useState({ litres: false, values: false, zero_hide: false, group_total: false, with_tax: false, act_sales: false, aroed: false });
   const [rate, setRate] = useState('pur');
   const [result, setResult] = useState(null);
   const [viewError, setViewError] = useState('');
   const [running, setRunning] = useState(false);
+  const [resultOpen, setResultOpen] = useState(false);
+  const [shown, setShown] = useState(null);   // what the open result window was loaded with: { view, rate, opt, from, to }
   const flip = k => e => setOpt(o => ({ ...o, [k]: e.target.checked }));
+
+  // FIFO / Wt.Avg Rate appear when Show Value is ticked (the exe shows them for Closing Balance With Detailed; here Closing Balance Only values at them too),
+  // and FIFO also on Group wise Summary Balance; otherwise Last Purchase Rate stands in for a rate that is not offered.
+  const warOk = (view === 'closing' || view === 'detailed') && opt.values;
+  const fifoOk = warOk || view === 'group';
+  const rateNow = (rate === 'war' && !warOk) || (rate === 'fifo' && !fifoOk) ? 'pur' : rate;
+
   const runView = () => {
+    const sent = { view, rate: rateNow, opt, from, to, picks: { groups: groupSel.join(','), items: itemSel.join(',') } };
+    setShown(sent);
+    setResult(null);
+    setViewError('');
+    setResultOpen(true);
     setRunning(true);
-    getStockBalanceView({ from_date: from, to_date: to, view, groups: groupSel.join(','), items: itemSel.join(','), packages: pkgSel.join(','), ...opt,
-      values: view === 'package' ? false : opt.values, rate })
-      .then(r => { setResult(r); setViewError(''); })
-      .catch(e => { setResult(null); setViewError(errorText(e)); })
+    getStockBalanceView({ from_date: from, to_date: to, view, groups: groupSel.join(','), items: itemSel.join(','), ...opt,
+      values: view === 'package' ? false : opt.values, rate: rateNow })
+      .then(setResult)
+      .catch(e => setViewError(errorText(e)))
       .finally(() => setRunning(false));
   };
-  const shownCols = result ? result.columns.filter(c => !c.brand || result.brand_required) : [];
-  const cell = (c, v) => (v === undefined || v === null || v === '' ? '' : c.kind === 'money' ? money(Number(v)) : c.kind === 'number' ? Number(Number(v).toFixed(3)) : String(v));
   // Stable between renders, so the print window's preview is asked for once per format.
-  const renderOn = useCallback((rpt, printer) => renderStockBalancePrint(day, day, '', rpt, printer), [day]);
+
+  // The exe lists MstItemGroup (active only) ORDER BY GroupOrderBy: the Arrange Group Slno endpoint reads exactly that order from the database
+  // on every request; the group list only says which groups are inactive. With the order unavailable, the group list's own order is used.
+  const loadGroups = useCallback(() => {
+    Promise.all([getItemGroups().catch(() => []), getMasterOrder('item-groups').catch(() => null)]).then(([groups, order]) => {
+      const inactive = new Set(groups.filter(g => g.active === false).map(g => g.code));
+      const list = order ? order.map(o => ({ code: o.code, slno: o.slno })) : groups.map((g, i) => ({ code: g.code, slno: i + 1 }));
+      setGroupList(list.filter(g => !inactive.has(g.code)));
+    });
+  }, []);
 
   useEffect(() => {
-    getItemGroups().then(setGroupList).catch(() => undefined);
+    loadGroups();
     getItems().then(setItemList).catch(() => undefined);
-  }, []);
+  }, [loadGroups]);
 
   useEffect(() => {
     getStockBalanceFormats().then(f => setFormats(f.formats)).catch(() => { /* printing says why */ });
   }, []);
 
-  useEffect(() => {
-    const date = todayIso();
-    Promise.all([getItems(), getStockBalance(date)])
-      .then(([items, balance]) => {
-        const byCode = new Map(items.map(item => [item.code, item]));
-        setRows(balance.map(row => ({
-          group: row.group, brand: byCode.get(row.item_code)?.brand ?? '', name: row.item_name, pkg: row.package,
-          opQty: row.op_qty, recQty: row.rec_qty, issQty: row.iss_qty, clQty: row.cl_qty,
-          rate: byCode.get(row.item_code)?.mrp ?? 0, value: row.cl_value,
-        })));
-      })
-      .catch(error => setError(errorText(error)));
-  }, []);
+  // The exe lists active items by ItemCode (MstItem, InActive = 'N'); its package list is the distinct PKGItem values, A to Z (the server sends them).
+  const itemRows = useMemo(() => itemList.filter(i => i.active !== false).sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true })), [itemList]);
+  // Print Zero Stock Items (a button of the result window): the desktop's RptZBItem.rpt in the same print window as the other Stock Balance prints.
+  const [zeroFormats, setZeroFormats] = useState(null);   // the .rpt names while that window is open
+  const [zeroPrinter, setZeroPrinter] = useState('');   // the printer of its Print Settings entry (a UtlOption row for RptZBItem.rpt), if any
+  const printZero = () => {
+    getZeroStockFormats().then(f => {
+      if (f.formats.length) { setZeroPrinter(f.option?.printer || ''); setZeroFormats(f.formats); }
+      else toast.error('RptZBItem.rpt is not in the report folder. Copy it from the desktop report folder into backend/Rpts.');
+    }).catch(e => toast.error(errorText(e)));
+  };
+  const itemName = (code) => itemList.find(i => i.code === code)?.name || code;
+  const groupText = !groupSel.length ? 'All groups' : groupSel.length === 1 ? groupLabel(groupSel[0]) : `${groupSel.length} selected`;
+  const radio = (value, text) => (
+    <label key={value} className="flex items-center gap-1.5 text-xs">
+      <input type="radio" name="sb-rate" className="accent-accent" value={value} checked={rateNow === value} onChange={() => setRate(value)} />{text}
+    </label>
+  );
 
-  const th = 'px-4 py-2.5';
   return (
     <div className="mx-auto max-w-7xl">
       <div className={`${pageHeader} mb-5`}>
@@ -79,20 +129,10 @@ export default function StockBalanceReport() {
           <h1 className={pageTitle}>Stock balance</h1>
           <p className={pageSub}>Today's excise opening, receipt, issue and closing balances.</p>
         </div>
-        <div className="flex items-center gap-3">
-          {rows && <span className={badge('neutral')}>{rows.length} items</span>}
-          <button
-            onClick={() => setShowPrintModal(true)}
-            disabled={!rows || !rows.length}
-            className={printButton}
-          >
-            <Printer size={14} />Print Stock Sheet
-          </button>
-        </div>
       </div>
       <form onSubmit={e => { e.preventDefault(); runView(); }} aria-label="Stock balance options" className={`${panel} mb-4 flex flex-wrap items-end gap-3 p-4`}>
-        <div className="w-40"><label htmlFor="sb-from" className={label}>From</label><input id="sb-from" type="date" value={from} onChange={e => setFrom(e.target.value)} className={`${field} tabular-nums`} /></div>
-        <div className="w-40"><label htmlFor="sb-to" className={label}>To</label><input id="sb-to" type="date" value={to} onChange={e => setTo(e.target.value)} className={`${field} tabular-nums`} /></div>
+        <div className="w-40"><label htmlFor="sb-from" className={label}>From</label><DateInput id="sb-from" value={from} onChange={e => setFrom(e.target.value)} className={`${field} tabular-nums`} /></div>
+        <div className="w-40"><label htmlFor="sb-to" className={label}>To</label><DateInput id="sb-to" value={to} onChange={e => setTo(e.target.value)} className={`${field} tabular-nums`} /></div>
         <div className="w-56"><label htmlFor="sb-view" className={label}>View</label>
           <select id="sb-view" value={view} onChange={e => setView(e.target.value)} className={field}>
             <option value="closing">Closing Balance Only</option><option value="detailed">Closing Balance With Detailed</option>
@@ -101,89 +141,48 @@ export default function StockBalanceReport() {
         </div>
         {view !== 'group' && (<>
           <div className="w-44"><label htmlFor="sb-groups" className={label}>Selected Group</label>
-            <MultiSelectDropdown id="sb-groups" allLabel="All groups" options={groupList.map(g => ({ value: g.code, label: groupLabel(g.name || g.code) }))} value={groupSel} onChange={setGroupSel} /></div>
+            <PickButton id="sb-groups" text={groupText} onClick={() => { loadGroups(); setPicking('group'); }} /></div>
           <div className="w-44"><label htmlFor="sb-items" className={label}>Select Item</label>
-            <MultiSelectDropdown id="sb-items" allLabel="All items" options={itemList.map(i => ({ value: i.code, label: i.name || i.code }))} value={itemSel} onChange={setItemSel} /></div>
-          <div className="w-44"><label htmlFor="sb-pkgs" className={label}>Select Package</label>
-            <MultiSelectDropdown id="sb-pkgs" allLabel="All packages" options={[...new Set(itemList.map(i => i.package).filter(Boolean))].sort().map(p => ({ value: p, label: p }))} value={pkgSel} onChange={setPkgSel} /></div>
+            <PickButton id="sb-items" text={itemSel.length ? pickedText(itemSel, itemName) : 'All items'} onClick={() => setPicking('item')} /></div>
         </>)}
         {view !== 'group' && <label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={opt.litres} onChange={flip('litres')} />Show qty in Litres</label>}
         {(view === 'closing' || view === 'detailed') && <label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={opt.values} onChange={flip('values')} />Show Value</label>}
         {view !== 'group' && <label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={opt.zero_hide} onChange={flip('zero_hide')} />Do Not Show Items With Zero Balance</label>}
         {view !== 'group' && <label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={opt.group_total} onChange={flip('group_total')} />Group Wise Total Required</label>}
-        {(view === 'group' || ((view === 'closing' || view === 'detailed') && opt.values)) && (
-          <div className="w-48"><label htmlFor="sb-rate" className={label}>Value at</label>
-            <select id="sb-rate" value={rate} onChange={e => setRate(e.target.value)} className={field}>
-              <option value="pur">Last Purchase Rate</option><option value="mrp">Sales Rate (MRP)</option>
-              {(view === 'detailed' || view === 'group') && <option value="fifo">FIFO</option>}
-              {view === 'detailed' && <option value="war">Wt.Avg Rate</option>}
-            </select>
-          </div>)}
-        {rate === 'pur' && opt.values && (view === 'closing' || view === 'detailed') && <label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={opt.with_tax} onChange={flip('with_tax')} />With Tax</label>}
-        {view === 'detailed' && opt.values && <label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={opt.act_sales} onChange={flip('act_sales')} />Actual Sales Value</label>}
+        <fieldset className="flex basis-full flex-wrap items-center gap-x-5 gap-y-1 pb-1">
+          <legend className="sr-only">Rate</legend>
+          {radio('pur', 'Last Purchase Rate')}
+          {fifoOk && radio('fifo', 'FIFO')}
+          {radio('mrp', 'Sales Rate')}
+          {warOk && radio('war', 'Wt.Avg Rate')}
+        </fieldset>
+        {rateNow === 'pur' && <label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={opt.with_tax} onChange={flip('with_tax')} />With Tax</label>}
+        <label className="flex items-center gap-2 pb-2 text-xs" title="Used by Closing Balance With Detailed with Show Value (as in the exe)"><input type="checkbox" checked={opt.act_sales} onChange={flip('act_sales')} />Actual Sales Value</label>
+        <label className="flex items-center gap-2 pb-2 text-xs" title="Used by Closing Balance With Detailed with Show Value (as in the exe)"><input type="checkbox" checked={opt.aroed} onChange={flip('aroed')} />AROED Value</label>
         <button type="submit" className={primaryButton} disabled={running}><Play size={14} />View</button>
-        <button type="button" className={exportButton} disabled={!result} onClick={() => result && downloadXls('Stock_Balance', 'Stock Balance Report', `${from} to ${to}`, shownCols.map(c => ({ key: c.key, label: c.label })), result.rows)}><FileDown size={14} />Export Excel</button>
       </form>
-      {(result || viewError || running) && (
-        <div className={`${panel} mb-6 max-h-[560px] overflow-auto`}>
-          <table className="w-full text-xs">
-            <thead className={tableHead}><tr>{shownCols.map(c => <th key={c.key} className={`px-3 py-2 ${c.kind ? 'text-right' : 'text-left'}`}>{c.label}</th>)}</tr></thead>
-            <tbody className={tableBody}>
-              {viewError && <tr><td className="px-4 py-8 text-center text-red-600 dark:text-red-400">{viewError}</td></tr>}
-              {running && <SkeletonTableRows rows={8} cols={Math.max(shownCols.length, 6)} />}
-              {!running && result && !result.rows.length && <tr><td colSpan={shownCols.length} className="px-4 py-8 text-center text-stone-500">No data for these options.</td></tr>}
-              {!running && result && result.rows.map((r, i) => (
-                <tr key={i} className={`${tableRow} ${r.subtotal ? 'bg-subtle font-semibold' : ''}`}>
-                  {shownCols.map(c => <td key={c.key} className={`px-3 py-1.5 ${c.kind ? 'text-right tabular-nums' : ''}`}>{cell(c, r[c.key])}</td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {result && <div className="px-3 py-2 text-xs text-stone-500">Total Records: {result.rows.filter(r => !r.subtotal).length}</div>}
+      {view !== 'group' && itemSel.length > 0 && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <SelectedList title="Selected Item" names={itemSel.map(itemName)} onRemove={i => setItemSel(itemSel.filter((_, n) => n !== i))} />
         </div>
       )}
-      <div className={`${panel} overflow-x-auto`}>
-        <table className="w-full text-left text-xs">
-          <thead className={tableHead}>
-            <tr>
-              <th className={th}>Item</th><th className={th}>Group</th>
-              <th className={`${th} text-center`}>Pkg</th>
-              <th className={`${th} text-right`}>Opening</th><th className={`${th} text-right`}>Receipt</th>
-              <th className={`${th} text-right`}>Issued</th><th className={`${th} text-right`}>Closing</th>
-              <th className={`${th} text-right`}>Rate (₹)</th><th className={`${th} text-right`}>Closing value (₹)</th>
-            </tr>
-          </thead>
-          <tbody className={tableBody}>
-            {error && <tr><td colSpan={9} className="px-4 py-8 text-center text-[#9A4B45] dark:text-red-400">{error}</td></tr>}
-            {!error && !rows && <SkeletonTableRows rows={8} cols={9} />}
-            {rows && !rows.length && <tr><td colSpan={9} className="px-4 py-8 text-center text-[#70675F]">No stock on record.</td></tr>}
-            {rows?.map((row, index) => (
-              <tr key={index} className={tableRow}>
-                <td className="px-4 py-2.5">
-                  <div className="font-medium text-[#29231F] dark:text-stone-50">{row.name}</div>
-                  {row.brand && <div className="text-[11px] text-[#958B81] dark:text-stone-400">{row.brand}</div>}
-                </td>
-                <td className="px-4 py-2.5 text-[#70675F] dark:text-stone-300">{groupLabel(row.group)}</td>
-                <td className="px-4 py-2.5 text-center text-[#958B81]">{row.pkg}</td>
-                <td className="px-4 py-2.5 text-right text-[#70675F] dark:text-stone-300">{row.opQty}</td>
-                <td className="px-4 py-2.5 text-right text-[#55745A] dark:text-emerald-400">+{row.recQty}</td>
-                <td className="px-4 py-2.5 text-right text-[#9A4B45] dark:text-red-400">−{row.issQty}</td>
-                <td className="px-4 py-2.5 text-right font-semibold text-[#29231F] dark:text-stone-50">{row.clQty}</td>
-                <td className="px-4 py-2.5 text-right text-[#70675F] dark:text-stone-300">{money(row.rate)}</td>
-                <td className="px-4 py-2.5 text-right font-semibold text-[#29231F] dark:text-stone-50">{money(row.value)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {showPrintModal && rows && (
-        <ReportPrintModal
-          title={`Stock Balance (${day})`}
-          formats={formats}
-          render={renderOn}
-          onClose={() => setShowPrintModal(false)}
-        />
+      {resultOpen && shown && (
+        <StockBalanceResult result={result} running={running} error={viewError} view={shown.view} rate={shown.rate} layoutKey={comboKey(shown.view, shown.rate, shown.opt)}
+          title="Stock Balance Report" subtitle={`From ${fmtDate(shown.from)} to ${fmtDate(shown.to)}`} formats={formats} onPrintZero={itemList.length ? printZero : undefined} onClose={() => setResultOpen(false)}
+          renderPrint={(rpt, printer) => renderStockBalancePrint(shown.from, shown.to, '', rpt, printer, shown.picks)} />
+      )}
+      {zeroFormats && <ReportPrintModal title="Zero Stock Items" formats={zeroFormats} render={renderZeroStockPrint} defaultPrinter={zeroPrinter} directOnly onClose={() => setZeroFormats(null)} />}
+      {picking === 'group' && (
+        <MultiSelectDialog title="Select [Multiple] Item Groups" rows={groupList} rowKey={g => g.code} chosen={groupSel} wide={false}
+          onOk={keys => { setGroupSel(keys); setPicking(null); }} onClose={() => setPicking(null)}
+          columns={[{ key: 'code', label: 'ItemGroupCode', render: g => groupLabel(g.code) }, { key: 'slno', label: 'GroupOrderBy', align: 'right' }]}
+          pasteBy={[{ label: 'ItemGroupCode', value: g => g.code }]} />
+      )}
+      {picking === 'item' && (
+        <MultiSelectDialog title="Select [Multiple] Item" rows={itemRows} rowKey={i => i.code} chosen={itemSel} wide={false}
+          onOk={keys => { setItemSel(keys); setPicking(null); }} onClose={() => setPicking(null)}
+          columns={[{ key: 'code', label: 'ItemCode' }, { key: 'name', label: 'ItemName' }]}
+          pasteBy={[{ label: 'ItemCode', value: i => i.code }, { label: 'ItemName', value: i => i.name }]} />
       )}
     </div>
   );

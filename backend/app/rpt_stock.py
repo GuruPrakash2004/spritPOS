@@ -21,8 +21,17 @@ def _tag(user: dict) -> str:
     return ("WEB-" + str(user["user"]))[:50]
 
 
-def _rows(from_date: date, to_date: date, group: str | None, user: dict) -> list[dict]:
+def _picked(raw: str) -> set[str]:
+    return {v.strip() for v in (raw or "").split(",") if v.strip()}
+
+
+def _rows(from_date: date, to_date: date, group: str | None, user: dict, groups: str = "", items: str = "", packages: str = "") -> list[dict]:
     out = []
+    pick_groups, pick_items, pick_pkgs = _picked(groups), _picked(items), _picked(packages)
+    pkg_items: set[str] | None = None   # the item codes whose PKGItem was picked (the exe filters on i.PKGItem)
+    if pick_pkgs:
+        marks = ", ".join("?" * len(pick_pkgs))
+        pkg_items = {str(r["c"]).strip() for r in db.fetchall(f"SELECT ItemCode c FROM MstItem WITH (NOLOCK) WHERE PKGItem IN ({marks})", tuple(pick_pkgs))}
     by_type = reports.stock_list_by_doc_type(from_date, to_date)   # the stock list: the desktop's documents count too, not only the web's movements
     sales_value: dict[str, float] = {}
     if by_type is not None:
@@ -30,6 +39,8 @@ def _rows(from_date: date, to_date: date, group: str | None, user: dict) -> list
             for l in inv["lines"]:
                 sales_value[l["item_code"]] = sales_value.get(l["item_code"], 0.0) + l["amount"]
     for r in reports.stock_balance(from_date, to_date, group, user):
+        if (pick_groups and r["group"] not in pick_groups) or (pick_items and r["item_code"] not in pick_items) or (pkg_items is not None and r["item_code"] not in pkg_items):
+            continue
         it = store.ITEMS.get(r["item_code"]) or {}
         item_id = str(it.get("_itemid") or "")
         if not item_id.isdigit():
@@ -70,7 +81,7 @@ def _clear(cur, tag: str) -> None:
 
 
 def render(from_date: date, to_date: date, group: str | None, user: dict, rpt: str = "",
-           printer: str = "", copies: int = 1) -> bytes | None:
+           printer: str = "", copies: int = 1, groups: str = "", items: str = "", packages: str = "") -> bytes | None:
     """The report as a PDF laid out by Crystal; with a `printer` it is sent straight there (nothing returned)."""
     if not sqlstore.enabled():
         raise HTTPException(409, "The database is offline, so Crystal Reports has nothing to read.")
@@ -78,7 +89,7 @@ def render(from_date: date, to_date: date, group: str | None, user: dict, rpt: s
     if name.lower() not in {f.lower() for f in FILES}:
         raise HTTPException(422, f"'{name}' is not a Stock Balance format")
     tag = _tag(user)
-    rows = _rows(from_date, to_date, group, user)
+    rows = _rows(from_date, to_date, group, user, groups, items, packages)
     if not rows:
         raise HTTPException(404, "No stock movement or balance in this period: nothing to print.")
     header = f"Stock Balance Report From {from_date:%d-%m-%Y} To {to_date:%d-%m-%Y}" + (f" ({group})" if group else "")

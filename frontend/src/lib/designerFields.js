@@ -42,7 +42,7 @@ export function toFieldConfig(f, docId = 0) {
     lookup,
     options: select ? f.options : undefined,
     required: !!f.mandatory,
-    section: f.sub_section ? '' : (f.standard ? 'Other details' : 'Additional details'),
+    section: f.sub_section ? '' : (f.standard ? 'Other details' : ''),   // no "Additional details" box: every header field sits in the one Header Info block
     tab: f.sub_section || '',   // the designer's sub-section: a tab of its own (the first, nameless one is "Header Info")
     extra: true,                       // lives in row.extras, not in a typed field
     standard: !!f.standard,             // one of vLQMS.exe's own fixed fields (schema_meta.compiled_columns) — belongs with the typed fields, not the Additional Fields grid

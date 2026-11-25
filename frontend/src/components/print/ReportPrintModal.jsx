@@ -3,6 +3,7 @@
 //   Print            prints the PDF that is on show (the browser's print dialog, page size as the report's);
 //   Print directly   sends the report to the chosen printer through the bridge, without showing anything.
 // The caller passes `render(rpt, printer?)`: without a printer it answers the PDF, with one it prints and answers JSON.
+// `directOnly` (the Stock Balance result window): one Print button, and it prints directly on the chosen printer.
 
 import { useEffect, useRef, useState } from 'react';
 import { Printer, Send } from 'lucide-react';
@@ -22,10 +23,10 @@ import { printFrame, sheetStyle, usePdfPreview } from './usePdfPreview';
 const PRINTER_KEY = 'vlqms_report_printer';
 const savedPrinter = () => { try { return localStorage.getItem(PRINTER_KEY) || ''; } catch { return ''; } };
 
-export default function ReportPrintModal({ title, formats, render, onClose }) {
+export default function ReportPrintModal({ title, formats, render, onClose, directOnly = false, defaultPrinter = '' }) {   // defaultPrinter: a Print Settings entry's printer wins over the last one used
   const [chosen, setChosen] = useState(formats[0] ?? '');
   const [printers, setPrinters] = useState([]);
-  const [printer, setPrinter] = useState(savedPrinter());
+  const [printer, setPrinter] = useState(defaultPrinter || savedPrinter());
   const [sending, setSending] = useState(false);
   const frame = useRef(null);
   const { url, loading, error, size } = usePdfPreview(chosen, () => render(chosen));
@@ -56,9 +57,14 @@ export default function ReportPrintModal({ title, formats, render, onClose }) {
       wide
       footer={<>
         <button onClick={onClose} className={secondaryButton}>Close</button>
-        <button onClick={printDirect} disabled={!printer || !chosen || sending} className={secondaryButton}
-          title={printer ? `Prints on ${printer} without showing it` : 'Choose a printer first'}><Send size={14} />Print directly</button>
-        <button onClick={() => printFrame(frame, url)} disabled={!url || loading} className={primaryButton} data-autofocus><Printer size={14} />Print</button>
+        {directOnly ? (
+          <button onClick={printDirect} disabled={!printer || !chosen || sending} className={primaryButton} data-autofocus
+            title={printer ? `Prints on ${printer}` : 'Choose a printer first'}><Printer size={14} />Print</button>
+        ) : (<>
+          <button onClick={printDirect} disabled={!printer || !chosen || sending} className={secondaryButton}
+            title={printer ? `Prints on ${printer} without showing it` : 'Choose a printer first'}><Send size={14} />Print directly</button>
+          <button onClick={() => printFrame(frame, url)} disabled={!url || loading} className={primaryButton} data-autofocus><Printer size={14} />Print</button>
+        </>)}
       </>}
     >
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -74,7 +80,7 @@ export default function ReportPrintModal({ title, formats, render, onClose }) {
             ))}
           </div>
           <label className="mt-4 block">
-            <span className={labelClass}>Printer (for Print directly)</span>
+            <span className={labelClass}>{directOnly ? 'Printer' : 'Printer (for Print directly)'}</span>
             <select value={printer} onChange={e => setPrinter(e.target.value)} className={field}>
               <option value="">Choose a printer…</option>
               {printers.map(p => <option key={p} value={p}>{p}</option>)}

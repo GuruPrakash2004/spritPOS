@@ -57,14 +57,15 @@ export function zipStore(files) {   // files: [[name, text]]
 // ---- the workbook ----
 // House style of every export: row 1 the company name, row 2 the report title and period (both bold on cream, across the
 // whole width), then a burgundy header row with white bold text, then the data. Style ids: 1 company, 2 subtitle, 3 header, 4 bold,
-// 5 error cell (red fill, white bold text: a cell a check refused, see `marks` of downloadXls).
+// 5 error cell (red fill, white bold text: a cell a check refused, see `marks` of downloadXls), 6 group total (bold on gold), 7 grand total
+// (white bold on burgundy), 8 navy header (the `options` of downloadXls).
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="16"/><name val="Calibri"/></font><font><b/><sz val="12"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
-<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF5E9C8"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF7B1E22"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFF0000"/><bgColor indexed="64"/></patternFill></fill></fills>
+<fills count="7"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF5E9C8"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF7B1E22"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFF0000"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1B2B4B"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF5E1B0"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="3" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>
+<cellXfs count="9"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="3" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="4" fillId="6" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="3" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="3" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf></cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
@@ -78,12 +79,12 @@ const cell = (v, r, c, style) => {
 };
 
 // rows: [{ cells: [value], style?, cellStyles?: [style id per cell, 0 = the row's], height? }]; merges: ['A1:C1']; widths: characters per column; freezeRows: rows kept in view.
-function workbook({ sheetName, rows, merges = [], widths = [], freezeRows = 0 }) {
+function workbook({ sheetName, rows, merges = [], widths = [], hiddenCols = [], freezeRows = 0 }) {
   const data = rows.map((row, i) => {
     const r = i + 1, h = row.height ? ` ht="${row.height}" customHeight="1"` : '';
     return `<row r="${r}"${h}>${row.cells.map((v, c) => cell(v, r, c, row.cellStyles?.[c] || row.style)).join('')}</row>`;
   }).join('');
-  const cols = widths.length ? `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+  const cols = widths.length ? `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${hiddenCols.includes(i) ? 0 : w}"${hiddenCols.includes(i) ? ' hidden="1"' : ''} customWidth="1"/>`).join('')}</cols>` : '';
   const pane = freezeRows ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${freezeRows}" topLeftCell="A${freezeRows + 1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/></sheetView></sheetViews>` : '';
   const merge = merges.length ? `<mergeCells count="${merges.length}">${merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : '';
   const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -109,7 +110,8 @@ function save(blob, fileName) {
 }
 
 /** `marks` (optional): for each row, the indexes (in `columns` order) of the cells to paint red, e.g. the cells an import check refused. */
-export async function downloadXls(fileName, title, subtitle, columns, rows, marks = []) {
+/** `options` (optional): `headerStyle` (8 = navy heading) and `rowStyles` (per row: 6 = group total, 7 = grand total) for reports that colour them. */
+export async function downloadXls(fileName, title, subtitle, columns, rows, marks = [], options = {}) {
   let companyName = currentCompany();
   if (!companyName) {   // not known yet: ask the server (the company profile) so the name always heads the sheet
     try { setExportCompany((await getCompany())?.name); } catch { /* offline: the sheet goes without it */ }
@@ -125,11 +127,12 @@ export async function downloadXls(fileName, title, subtitle, columns, rows, mark
   const widths = columns.map(c => Math.min(Math.max(Math.max(String(c.label).length, ...rows.slice(0, 200).map(r => String(r[c.key] ?? '').length)), 8), 50) + 2);
   const all = [
     ...top,
-    { cells: columns.map(c => c.label), style: 3, height: 22 },
-    ...rows.map((r, i) => ({ cells: columns.map(c => r[c.key]), ...(marks[i]?.length ? { cellStyles: columns.map((_, c) => (marks[i].includes(c) ? 5 : 0)) } : {}) })),
+    { cells: columns.map(c => c.label), style: options.headerStyle || 3, height: 22 },
+    ...rows.map((r, i) => ({ cells: columns.map(c => r[c.key]), ...(options.rowStyles?.[i] ? { style: options.rowStyles[i] } : {}), ...(marks[i]?.length ? { cellStyles: columns.map((_, c) => (marks[i].includes(c) ? 5 : 0)) } : {}) })),
   ];
   const merges = top.flatMap((_, i) => span(i + 1));
-  save(workbook({ sheetName: 'Report', rows: all, merges, widths, freezeRows: top.length + 1 }), fileName);
+  const hiddenCols = columns.flatMap((c, i) => (c.hidden ? [i] : []));   // columns the exe's own export carries hidden (ItemID, Bottle PerCase)
+  save(workbook({ sheetName: 'Report', rows: all, merges, widths, hiddenCols, freezeRows: top.length + 1 }), fileName);
 }
 
 /** A plain workbook of rows (no title lines; the header row, the first unless `headerRow` says otherwise, is bold), e.g. an import template. */

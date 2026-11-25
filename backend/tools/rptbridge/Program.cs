@@ -111,9 +111,13 @@ static class Program
                     catch (Exception e) { try { Fail(ctx, 500, e.Message); } catch { } }
                 }) { IsBackground = true };
                 worker.Start();
-                if (!worker.Join(TimeSpan.FromSeconds(55)))
+                // A report whose own file is slow to open (RptZBItem.rpt takes ~45 s to load) may ask for longer in X-Bridge-Limit (seconds, up to 300).
+                int limit = 55;
+                int.TryParse(ctx.Request.Headers["X-Bridge-Limit"], out limit);
+                if (limit < 55 || limit > 300) limit = 55;
+                if (!worker.Join(TimeSpan.FromSeconds(limit)))
                 {
-                    Log("report did not finish in 55 s: " + ctx.Request.Url.AbsolutePath + " - bridge exits");
+                    Log("report did not finish in " + limit + " s: " + ctx.Request.Url.AbsolutePath + " - bridge exits");
                     try { Fail(ctx, 504, "Crystal Reports did not finish this report (it may be waiting for a database logon). The bridge is restarting."); } catch { }
                     System.Diagnostics.Process.GetCurrentProcess().Kill();   // Environment.Exit can itself hang on a stuck Crystal thread
                 }

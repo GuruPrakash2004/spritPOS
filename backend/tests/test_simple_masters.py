@@ -125,3 +125,17 @@ async def test_party_screen_rules_from_the_exe(client):
 async def test_similar_codes_work_for_every_master(client):
     assert [r["code"] for r in (await client.get("/masters/customers/similar", params={"code": "c-a-s-h"})).json()] == ["CASH"]
     assert (await client.get("/masters/nope/similar", params={"code": "x"})).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_item_group_list_follows_the_arrange_slno_order(client):
+    from app import store
+    groups = {
+        "C": {"code": "C", "name": "RUM", "liquor": True, "_order": 3},
+        "A": {"code": "A", "name": "BRANDY", "liquor": True, "_order": 1},
+        "B": {"code": "B", "name": "WINE", "liquor": True, "_order": 2},
+    }
+    store.ITEM_GROUPS.clear()   # conftest restores the store after each test
+    store.ITEM_GROUPS.update(groups)
+    rows = (await client.get("/masters/item-groups")).json()
+    assert [r["code"] for r in rows] == ["A", "B", "C"]

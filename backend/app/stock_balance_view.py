@@ -43,21 +43,23 @@ def _last_purchase_rates(to_date: date, with_tax: bool) -> dict[int, float]:
         f"SELECT ItemID, {col} rate FROM vwPBItemLastPrice WHERE Slno = 1 AND PBDate <= ?", (to_date.isoformat(),))}
 
 
-def _item_rows(from_date: date, to_date: date, groups: str, items: str, packages: str, upto: date | None = None) -> list[dict]:
+def _item_rows(from_date: date, to_date: date, groups: str, items: str, packages: str, upto: date | None = None, aroed: bool = False) -> list[dict]:
     """One row per item, movement bucket (before the From date or not), document type and direction."""
     args: list = []
     where = _filters(groups, items, packages, args)
     args += [(upto or to_date).isoformat()]
+    ar = ", ISNULL(i.AROEDPER, 0) AROEDPER" if aroed else ""   # the AROED Value option: the item's AROED per bottle
+    ar_group = ", ISNULL(i.AROEDPER, 0)" if aroed else ""   # GROUP BY takes the expression, never the SELECT alias (that was the 500)
     pre = f"CASE WHEN s.DocDate < '{from_date.isoformat()}' THEN 1 ELSE 0 END"   # an ISO date from a date object: safe to inline (a parameter would differ between SELECT and GROUP BY)
     return db.fetchall(
         "SELECT i.ItemID, i.ItemCode, i.ItemName, i.MRP, i.PURRATE, i.HSNCode, i.BotPerCases, i.PKGItem, g.ItemGroupName, g.GroupOrderBy, "
-        f"p.PkgCode, p.PkgOrderBy, b.BrandName, {pre} pre, s.DocType, s.StkMultiplier m, "
+        f"p.PkgCode, p.PkgOrderBy, b.BrandName, {pre} pre, s.DocType, s.StkMultiplier m{ar}, "
         "SUM(s.Qty * s.StkMultiplier) q, SUM(s.LtrQty * s.StkMultiplier) l, SUM(s.DocValue * s.StkMultiplier) v, SUM(s.DocValue) vr "
         "FROM UtlStockList s WITH (NOLOCK) JOIN MstItem i ON i.ItemID = s.ItemID JOIN MstItemGroup g ON g.ItemGroupID = i.ItemGroupID "
         "JOIN MstPkg p ON p.PkgID = i.PkgID JOIN MstBrand b ON b.BrandID = i.BrandID "
         f"WHERE i.Inactive = 'N' AND ISNULL(s.DelFlag, '') NOT IN ('Y', 'D'){where} AND s.DocDate <= ? "
         "GROUP BY i.ItemID, i.ItemCode, i.ItemName, i.MRP, i.PURRATE, i.HSNCode, i.BotPerCases, i.PKGItem, g.ItemGroupName, g.GroupOrderBy, "
-        f"p.PkgCode, p.PkgOrderBy, b.BrandName, {pre}, s.DocType, s.StkMultiplier",
+        f"p.PkgCode, p.PkgOrderBy, b.BrandName, {pre}, s.DocType, s.StkMultiplier{ar_group}",
         tuple(args))
 
 
@@ -136,14 +138,14 @@ def _war_update(item_ids: set[int]) -> None:
 
 def build(view: str, from_date: date, to_date: date, groups: str = "", items: str = "", packages: str = "", litres: bool = False,
           values: bool = False, rate: str = "pur", with_tax: bool = False, act_sales: bool = False, zero_hide: bool = False,
-          group_total: bool = False, hide_cost: bool = False) -> dict:
+          group_total: bool = False, hide_cost: bool = False, aroed: bool = False) -> dict:
     if to_date < from_date:
         raise HTTPException(422, "Invalid Date Range!")
     show_values = values and not hide_cost
     if view == "closing":
         return _closing(from_date, to_date, groups, items, packages, litres, show_values, rate, with_tax, zero_hide, group_total)
     if view == "detailed":
-        return _detailed(from_date, to_date, groups, items, packages, litres, show_values, rate, with_tax, act_sales, zero_hide, group_total)
+        return _detailed(from_date, to_date, groups, items, packages, litres, show_values, rate, with_tax, act_sales, zero_hide, group_total, aroed)
     if view == "package":
         return _package(to_date, groups, items, packages, litres, zero_hide, group_total)
     if view == "group":
@@ -161,10 +163,23 @@ def _rate_of(rate: str, it: dict, pur: dict[int, float]) -> float:
 def _closing(from_date, to_date, groups, items, packages, litres, values, rate, with_tax, zero_hide, group_total) -> dict:
     """Closing Balance Only (ViewClData): opening, receipts (+ movements), issues (- movements) and closing per item, value at the rate."""
     per = _per_item(_item_rows(from_date, to_date, groups, items, packages))
-    pur = _last_purchase_rates(to_date, with_tax) if values and rate != "mrp" else {}
+    stored = values and not litres and rate in ("war", "fifo")   # Wt.Avg / FIFO: the closing value is the stored DocValues, as in the detailed view
+    if stored and rate == "war":
+        _war_update(set(per))
+    elif stored:
+        with db.direct_writes():
+            db.execute("exec mSp_UpdateFIFORate")
+    if stored:
+        per = _per_item(_item_rows(from_date, to_date, groups, items, packages))
+    pur = _last_purchase_rates(to_date, with_tax) if values and rate == "pur" else {}
     key = "l" if litres else "q"
     out = []
-    for it in sorted(per.values(), key=lambda x: _order(x) + (-_rate_of(rate, x, pur),)):
+    # The exe: order by GroupOrderBy, ItemGroupName, PkgItem, PkgOrderBy, StkRate desc. Items equal on all of those (the same rate) come out in the
+    # order the database stores them, which is ItemID, so that is the last key (Windows shows ABCD, 222, 132 ... the same way).
+    def exe_order(x: dict) -> tuple:
+        g, p, o = _order(x)
+        return (g, str(x["r"]["ItemGroupName"] or "").strip(), p, o, -_rate_of(rate, x, pur), int(x["r"]["ItemID"]))
+    for it in sorted(per.values(), key=exe_order):
         op = sum(float(b[key] or 0) for b in it["b"] if b["pre"])
         rc = sum(float(b[key] or 0) for b in it["b"] if not b["pre"] and b["m"] > 0)
         iss = -sum(float(b[key] or 0) for b in it["b"] if not b["pre"] and b["m"] < 0)
@@ -174,7 +189,11 @@ def _closing(from_date, to_date, groups, items, packages, litres, values, rate, 
         row = {"group": str(it["r"]["ItemGroupName"] or "").strip(), "brand": str(it["r"]["BrandName"] or "").strip(),
                "item_name": str(it["r"]["ItemName"] or "").strip(), "pkg": str(it["r"]["PkgCode"] or "").strip(),
                "op": op, "rcpt": rc, "iss": iss, "cl": cl}
-        if values:
+        if stored:
+            vcl = sum(float((b["vr"] if rate == "war" else b["v"]) or 0) for b in it["b"])
+            row["cl_value"] = round(vcl, 2)
+            row["rate"] = round(vcl / qcl, 2) if qcl else 0.0
+        elif values:
             row["rate"] = round(rt, 2)
             row["cl_value"] = round(qcl * rt, 2)
         if zero_hide and not (op or rc or iss or cl or row.get("cl_value")):
@@ -190,23 +209,23 @@ def _closing(from_date, to_date, groups, items, packages, litres, values, rate, 
             {"key": "cl", "label": "Closing Quantity" + sfx, "kind": "number", "total": True}]
     if values:
         cols += [{"key": "cl_value", "label": "Closing Value", "kind": "money", "total": True},
-                 {"key": "rate", "label": "Rate [MRP]" if rate == "mrp" else "Rate [Last Purchase]", "kind": "money"}]
+                 {"key": "rate", "label": {"mrp": "Rate [MRP]", "war": "Rate [Wt.Avg]", "fifo": "Rate [FIFO]"}.get(rate, "Rate [Last Purchase]"), "kind": "money"}]
     del sfx2
     return {"columns": cols, "rows": _totals(out, cols, group_total), "brand_required": brand_required()}
 
 
-def _detailed(from_date, to_date, groups, items, packages, litres, values, rate, with_tax, act_sales, zero_hide, group_total) -> dict:
+def _detailed(from_date, to_date, groups, items, packages, litres, values, rate, with_tax, act_sales, zero_hide, group_total, aroed=False) -> dict:
     """Closing Balance With Detailed (ViewClDetailed): OP, PB (+ stock transfers in), SR, Inv, Ded, PR, SA, closing quantities per item and,
     with Show Value, their values at the rate (Last Purchase / MRP), at the running weighted average (Wt.Avg) or at the stored DocValue (FIFO)."""
-    per = _per_item(_item_rows(from_date, to_date, groups, items, packages))
+    per = _per_item(_item_rows(from_date, to_date, groups, items, packages, aroed=aroed))
     pur = _last_purchase_rates(to_date, with_tax) if values and rate in ("pur",) else {}
     if values and rate == "war" and not litres:   # as the exe: the stored DocValues are brought up to the weighted average first
         _war_update(set(per))
-        per = _per_item(_item_rows(from_date, to_date, groups, items, packages))
+        per = _per_item(_item_rows(from_date, to_date, groups, items, packages, aroed=aroed))
     if values and rate == "fifo" and not litres:   # as the exe: its FIFO rates are refreshed by the shop's own procedure first
         with db.direct_writes():
             db.execute("exec mSp_UpdateFIFORate")
-        per = _per_item(_item_rows(from_date, to_date, groups, items, packages))
+        per = _per_item(_item_rows(from_date, to_date, groups, items, packages, aroed=aroed))
     sales_amt: dict[int, float] = {}
     if values and act_sales:   # Actual Sales Value: the invoice lines' own ItemAmt
         for a in db.fetchall(
@@ -234,7 +253,7 @@ def _detailed(from_date, to_date, groups, items, packages, litres, values, rate,
         bpc = float(r0["BotPerCases"] or 0)
         row = {"group": str(r0["ItemGroupName"] or "").strip(), "item_code": str(r0["ItemCode"] or "").strip(), "item_name": str(r0["ItemName"] or "").strip(),
                "pkg": str(r0["PkgCode"] or "").strip(), "hsn": str(r0["HSNCode"] or "").strip(), "brand": str(r0["BrandName"] or "").strip(),
-               "op": q["op"], "pb": q["pb"], "sr": q["sr"], "inv": q["inv"], "sd": q["sd"], "pr": q["pr"], "sa": q["sa"], "cl": cl}
+               "item_id": iid, "bpc": bpc, "op": q["op"], "pb": q["pb"], "sr": q["sr"], "inv": q["inv"], "sd": q["sd"], "pr": q["pr"], "sa": q["sa"], "cl": cl}
         if q["pb"] and bpc:
             row["in_case"] = f"{int(q['pb'] // bpc)} Cases {q['pb'] % bpc:g} Bottles" if not litres else ""
         if values and not litres:
@@ -260,23 +279,37 @@ def _detailed(from_date, to_date, groups, items, packages, litres, values, rate,
                 row[n + "_value"] = round(v[n], 2)
             row["cl_value"] = round(v["cl"], 2)
             row["inv_rate"] = round(row["inv_value"] / q["inv"], 2) if q["inv"] > 0 else 0.0
+            if aroed:   # AROED Value (ChkAROED): the quantity x the item's AROED per bottle, and Total Value = that + the value
+                per_bottle = float(r0.get("AROEDPER") or 0)
+                for n in names + ["cl"]:
+                    qty_n = cl if n == "cl" else q[n]
+                    row[n + "_aroed"] = round(qty_n * per_bottle, 2)
+                    row[n + "_total"] = round(row[n + "_aroed"] + row[n + "_value"], 2)
         if zero_hide and not any(row[n] for n in names + ["cl"]):
             continue
         out.append(row)
     sfx = " in Ltrs" if litres else ""
     cols = [{"key": "group", "label": "Item Group Name"}, {"key": "brand", "label": "Item Brand Name", "brand": True},
-            {"key": "item_code", "label": "Item Code"}, {"key": "item_name", "label": "Item Name"}, {"key": "pkg", "label": "PKG"},
+            {"key": "item_code", "label": "Item Code"}, {"key": "item_name", "label": "Item Name"},
+            {"key": "item_id", "label": "ItemID", "export_only": True}, {"key": "pkg", "label": "PKG"},
             {"key": "hsn", "label": "HSNCODE"}]
     if values and not litres:
         cols += [{"key": "rate", "label": {"mrp": "MRP", "pur": "Pur.Rate"}.get(rate, "Rate"), "kind": "money"},
                  {"key": "rate_case", "label": "Rate Per Case", "kind": "money"}]
+    # the exe's column order and headings (an export of its grid): Inv Rate sits between Inv Qty and Inv Value, and the AROED headings read
+    # OP / PB / SP / INV / SD / PR / SA / CL
+    ar_lab = {"op": "OP", "pb": "PB", "sr": "SP", "inv": "INV", "sd": "SD", "pr": "PR", "sa": "SA", "cl": "CL"}
     for n, lab in (("op", "OP"), ("pb", "PB"), ("sr", "SR"), ("inv", "Inv"), ("sd", "Ded"), ("pr", "PR"), ("sa", "SA"), ("cl", "Cl")):
         cols.append({"key": n, "label": f"{lab} Qty{sfx}", "kind": "number", "total": True})
         if values and not litres:
+            if n == "inv":
+                cols.append({"key": "inv_rate", "label": "Inv Rate", "kind": "money"})
             cols.append({"key": n + "_value", "label": f"{lab} Value", "kind": "money", "total": True})
-    if values and not litres:
-        cols.append({"key": "inv_rate", "label": "Inv Rate", "kind": "money"})
+            if aroed:
+                cols += [{"key": n + "_aroed", "label": f"{ar_lab[n]} AROED Value", "kind": "money", "total": True},
+                         {"key": n + "_total", "label": f"{ar_lab[n]} Total Value", "kind": "money", "total": True}]
     if not litres:
+        cols.append({"key": "bpc", "label": "Bottle PerCase", "kind": "number", "total": True, "export_only": True})   # hidden in the grid, in the exe's Excel
         cols.append({"key": "in_case", "label": "In Case"})
     return {"columns": cols, "rows": _totals(out, cols, group_total), "brand_required": brand_required()}
 

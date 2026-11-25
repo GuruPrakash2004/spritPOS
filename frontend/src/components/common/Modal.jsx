@@ -1,7 +1,7 @@
 // Generic dialog. Portalled to <body> so it sits above the header and sidebar.
 // Keyboard (useDialogKeys): focus moves in on open (autoFocus, else the first field, else the main footer
 // button), Tab stays inside, Esc closes the top dialog, and focus returns afterwards. A backdrop click closes it.
-// Pass `footer` for the button row (put the main action last) and `wide` for large content.
+// Pass `footer` for the button row (put the main action last) and `wide` for large content (`wide="xl"`: almost the whole screen, for a report grid).
 
 import { useId, useRef, } from 'react';
 import { createPortal } from 'react-dom';
@@ -27,7 +27,7 @@ export default function Modal({ title, onClose, children, footer, wide = false }
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={e => e.stopPropagation()}
-        className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] text-[#29231F] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100 animate-slideUp ${wide ? 'max-w-4xl' : 'max-w-lg'}`}
+        className={`flex w-full flex-col overflow-hidden rounded-2xl border border-[#E3D9CD] bg-[#FFFCF7] text-[#29231F] shadow-2xl dark:border-[#2A2A2A] dark:bg-[#141414] dark:text-stone-100 animate-slideUp ${wide === 'xl' ? 'h-[92vh] max-w-[96vw]' : `max-h-[85vh] ${wide ? 'max-w-4xl' : 'max-w-lg'}`}`}
       >
         <div className="flex items-center justify-between gap-4 border-b border-[#E3D9CD] bg-[#FAF6EF] px-5 py-4 dark:border-[#2A2A2A] dark:bg-[#181818]">
           <h3 id={titleId} className="text-sm font-bold text-[#29231F] dark:text-stone-50">{title}</h3>

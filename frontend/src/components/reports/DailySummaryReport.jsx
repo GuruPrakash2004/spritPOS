@@ -9,6 +9,7 @@ import { toastStore } from '../common/toastStore';
 import { errorText, getDsr, getDsrFormats, renderDsrPrint, todayIso, } from '../../lib/api';
 import ReportPrintModal from '../print/ReportPrintModal';
 import {  field, money, pageSub, pageTitle, panel, secondaryButton, pageHeader , printButton } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 // Legacy frmRptDailySummary; fields follow Docs/WebDash.xlsx.
 export default function DailySummaryReport() {
@@ -82,7 +83,7 @@ export default function DailySummaryReport() {
           </p>
         </div>
         <div className="flex items-end gap-2 print:hidden">
-          <input type="date" value={on} onChange={e => setOn(e.target.value)} className={`${field} tabular-nums`} aria-label="Report date" />
+          <DateInput value={on} onChange={e => setOn(e.target.value)} className={`${field} tabular-nums`} aria-label="Report date" />
           <button onClick={handleRefresh} disabled={refreshing} className={secondaryButton}><RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
           <button onClick={() => setShowPrint(true)} disabled={!dsr?.total_bills} title={dsr?.total_bills ? undefined : 'No bills on this day: nothing to print'} className={printButton}><Printer size={14} />Print</button>
         </div>

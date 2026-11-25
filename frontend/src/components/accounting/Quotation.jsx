@@ -16,6 +16,7 @@ import { enterMovesNext, useShortcuts } from '../../lib/keys';
 import { goHome } from '../../lib/nav';
 import { canDo, cancelQuotation, errorText, getCustomers, getItems, getQuotation, listQuotations, saveQuotation, todayIso, updateQuotation } from '../../lib/api';
 import { field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 const blank = () => ({ text: '', qty: '', rate: '' });
 const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
@@ -124,7 +125,7 @@ export default function Quotation() {
       {editing && <p className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-accent-ink">Editing Quotation {editing.doc_no}: the number stays; saving replaces its lines.</p>}
 
       <div className={`${panel} flex flex-wrap items-end gap-3 px-5 py-3`}>
-        <div><label htmlFor="q-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="q-date" type="date" value={date} onChange={e => setDate(e.target.value)} className={`${field} tabular-nums`} /></div>
+        <div><label htmlFor="q-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><DateInput id="q-date" value={date} onChange={e => setDate(e.target.value)} className={`${field} tabular-nums`} /></div>
         <div>
           <label htmlFor="q-cust" className={label}>Customer</label>
           <select id="q-cust" value={customer} onChange={e => setCustomer(e.target.value)} className={`${field} w-64`}>

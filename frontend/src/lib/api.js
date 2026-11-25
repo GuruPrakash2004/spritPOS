@@ -490,8 +490,14 @@ export const renderDsrPrint = (on, rpt, printer = '') => requestRaw('/print/dsr'
 /** The Stock Balance .rpt formats that are in the report folder. */
 export const getStockBalanceFormats = () => request('/print/stock-balance-formats');
 /** The Stock Balance report of a period as a PDF laid out by the desktop's RptStkBal*.rpt (with a printer: printed there, JSON back). */
-export const renderStockBalancePrint = (from_date, to_date, group, rpt, printer = '') =>
-  requestRaw('/print/stock-balance', { method: 'POST', body: { from_date, to_date, group: group || null, rpt, printer } });
+export const renderStockBalancePrint = (from_date, to_date, group, rpt, printer = '', picks = {}) =>
+  requestRaw('/print/stock-balance', { method: 'POST', body: { from_date, to_date, group: group || null, rpt, printer, groups: picks.groups || '', items: picks.items || '', packages: picks.packages || '' } });
+/** The Print Zero Stock Items format (RptZBItem.rpt) when it is in the report folder: { formats, bridge_configured }. */
+export const getZeroStockFormats = () => request('/print/zero-stock-formats');
+/** The active zero-stock items laid out by the desktop's RptZBItem.rpt (with a printer: printed there, JSON back). */
+export const renderZeroStockPrint = (rpt, printer = '') => requestRaw('/print/zero-stock', { method: 'POST', body: { rpt, printer } });
+/** The Select Package list of the Stock Balance screen: the distinct PKGItem of active items (the exe's own list; the package filter is on this column). */
+export const getStockBalancePackages = () => request('/reports/stock-balance/packages');
 /** The barcode label formats (every RPTBC*.rpt) that are in the report folder. */
 export const getBarcodeFormats = () => request('/print/barcode-formats');
 /** Labels [{code, copies, qty, mrp, barcode}] laid out by the desktop's RPTBC*.rpt (with a printer: printed there, JSON back). */

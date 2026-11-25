@@ -1,6 +1,6 @@
 // Tests for the ADMIN Audit Log: entries load with their item lines, and a To date before the From date is
 // shown under the field without asking the server.
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toastStore } from '../common/toastStore'
@@ -37,8 +37,9 @@ describe('AdminAuditLog', () => {
     render(<AdminAuditLog />)
     await screen.findByText('26/c10-0083718')
     const calls = fetchMock.mock.calls.length
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-09-20' } })
-    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-09-10' } })
+    // the date boxes are typed as dd/mm/yyyy and committed when the box is left
+    await user.clear(screen.getByLabelText('From')); await user.type(screen.getByLabelText('From'), '20/09/2026'); await user.tab()
+    await user.clear(screen.getByLabelText('To')); await user.type(screen.getByLabelText('To'), '10/09/2026'); await user.tab()
     await user.click(screen.getByRole('button', { name: /view/i }))
     expect(screen.getAllByText('To date is before From date').length).toBeGreaterThan(0)
     expect(fetchMock.mock.calls.length).toBe(calls)

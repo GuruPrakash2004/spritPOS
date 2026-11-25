@@ -16,7 +16,7 @@ import { useDialogKeys } from './useDialogKeys';
 
 const small = 'inline-flex items-center gap-1 rounded-full border border-[#E3D9CD] px-3 py-1 text-[11px] font-semibold text-[#70675F] transition hover:bg-[#F3EEE6] disabled:pointer-events-none disabled:opacity-40 dark:border-[#2A2A2A] dark:text-stone-300 dark:hover:bg-[#1C1C1C]';
 
-export default function ColumnPicker({ columns, order, visible, defaults, onApply, onClose }) {
+export default function ColumnPicker({ columns, order, visible, defaults, reorder = true, onApply, onClose }) {   // reorder={false}: a fixed template, only ticking
   const titleId = useId();
   const ref = useRef(null);
   useDialogKeys(ref, onClose);
@@ -45,7 +45,7 @@ export default function ColumnPicker({ columns, order, visible, defaults, onAppl
     if (e.target.tagName === 'INPUT') { if (e.key === 'Enter') { e.preventDefault(); apply(); } return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      if (e.altKey) { move(e.key === 'ArrowDown' ? 'down' : 'up'); return; }
+      if (e.altKey) { if (reorder) move(e.key === 'ArrowDown' ? 'down' : 'up'); return; }
       const at = shown.indexOf(current);
       setCurrent(shown[Math.max(0, Math.min(shown.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))] ?? current);
     } else if (e.key === ' ' && current) { e.preventDefault(); toggle(current); }
@@ -71,14 +71,14 @@ export default function ColumnPicker({ columns, order, visible, defaults, onAppl
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 px-6 pt-3 text-[11px] text-stone-500">
+        {reorder && <div className="flex flex-wrap items-center gap-1.5 px-6 pt-3 text-[11px] text-stone-500">
           <span className="mr-1">Order:</span>
           <button type="button" onClick={() => move('top')} disabled={index <= 0} className={small}><ArrowUpToLine size={12} />Top</button>
           <button type="button" onClick={() => move('up')} disabled={index <= 0} className={small}><ArrowUp size={12} />Up</button>
           <button type="button" onClick={() => move('down')} disabled={index < 0 || index >= keys.length - 1} className={small}><ArrowDown size={12} />Down</button>
           <button type="button" onClick={() => move('bottom')} disabled={index < 0 || index >= keys.length - 1} className={small}><ArrowDownToLine size={12} />Bottom</button>
-        </div>
-        <p className="px-6 pt-2 text-right text-[11px] text-stone-500">Click a column to select it</p>
+        </div>}
+        <p className="px-6 pt-2 text-right text-[11px] text-stone-500">{reorder ? 'Click a column to select it' : 'Tick the columns to show'}</p>
 
         <ul role="listbox" aria-label="Columns" aria-multiselectable className="mx-6 mt-1 min-h-40 flex-1 overflow-y-auto rounded-xl border border-[#EFE9DF] dark:border-[#2A2A2A]">
           {shown.map(k => {

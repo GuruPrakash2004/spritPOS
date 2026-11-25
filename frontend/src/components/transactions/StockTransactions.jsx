@@ -9,6 +9,7 @@ import { errorText, getSuppliers, listSalesInvoices, todayIso, } from '../../lib
 import { toastStore } from '../common/toastStore';
 import { field, label } from '../../lib/styles';
 import { useDocSettings } from '../../lib/docSettings';
+import DateInput from '../common/DateInput';
 
 // The three stock transactions built on ItemLinesEntry. Each only adds its own header fields.
 
@@ -39,7 +40,7 @@ export function PurchaseIndent() {
       buildBody={lines => ({ date: dateLocked ? todayIso() : date, supplier, lines: toLines(lines) })}
       onEditLoad={d => { setDate(d.date); setSupplier(d.supplier || ''); }}
       header={<>
-        <div><label htmlFor="pi-date" className={label}>Indent Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="pi-date" type="date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
+        <div><label htmlFor="pi-date" className={label}>Indent Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><DateInput id="pi-date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div className="w-full min-w-0 sm:w-auto">
           <label htmlFor="pi-sup" className={label}>Supplier<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
           <select id="pi-sup" value={supplier} onChange={e => setSupplier(e.target.value)} className={`${field} w-full sm:w-80`}>
@@ -78,7 +79,7 @@ export function SalesReturn() {
       buildBody={lines => ({ date: dateLocked ? todayIso() : date, against_invoice: against || null, customer: invoice?.customer ?? 'CASH', remarks, lines: toLines(lines) })}
       onEditLoad={d => { setDate(d.date); setAgainst(d.against_invoice || ''); setRemarks(d.remarks || ''); }}
       header={<>
-        <div><label htmlFor="sr-date" className={label}>Return Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="sr-date" type="date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
+        <div><label htmlFor="sr-date" className={label}>Return Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><DateInput id="sr-date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div className="w-full min-w-0 sm:w-auto">
           <label htmlFor="sr-inv" className={label}>Against Invoice</label>
           <select id="sr-inv" value={against} onChange={e => setAgainst(e.target.value)} className={`${field} w-full font-mono sm:w-72`}>
@@ -113,7 +114,7 @@ export function StockDeduction() {
       buildBody={lines => ({ date: dateLocked ? todayIso() : date, reason, remarks, lines: toLines(lines) })}
       onEditLoad={d => { setDate(d.date); setReason(REASONS.includes(d.reason) ? d.reason : REASONS[0]); setRemarks(d.remarks || ''); }}
       header={<>
-        <div><label htmlFor="sd-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><input id="sd-date" type="date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
+        <div><label htmlFor="sd-date" className={label}>Date<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label><DateInput id="sd-date" value={dateLocked ? todayIso() : date} disabled={dateLocked} onChange={e => setDate(e.target.value)} className={`${field} font-mono`} /></div>
         <div>
           <label htmlFor="sd-reason" className={label}>Reason<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
           <select id="sd-reason" value={reason} onChange={e => setReason(e.target.value)} className={field}>{REASONS.map(r => <option key={r}>{r}</option>)}</select>

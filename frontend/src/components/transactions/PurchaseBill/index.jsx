@@ -42,6 +42,7 @@ import { AddLineItemModal, CopyFromModal, ItemLookupModal } from './PurchaseBill
 import { useDocSettings } from '../../../lib/docSettings';
 import { enterMovesNext, focusField, useShortcuts } from '../../../lib/keys';
 import WithHistory from '../DocHistoryPanel';
+import DateInput from '../../common/DateInput';
 
 // The line grid's columns in the desktop's order: [id, caption, Doc Designer column code | null, header width classes]. The designer's Detail
 // rows of TrnHdrPB give each coded column's caption, order, hidden and read-only state (lib/billGrid.js); # / Item code / Item name / Qty /
@@ -588,7 +589,7 @@ export default function PurchaseBill() {
             </div>
             <div>
               <label className={cn(labelClass, headTone('date'))} htmlFor="pb-date">{headLabel('date', true)}</label>
-              <input id="pb-date" type="date" value={docSettings.allow_edit_date ? pbDate : today()} disabled={!docSettings.allow_edit_date || headDef('date').locked} onChange={e => setPbDate(e.target.value)} className={`${field} tabular-nums`} />
+              <DateInput id="pb-date" value={docSettings.allow_edit_date ? pbDate : today()} disabled={!docSettings.allow_edit_date || headDef('date').locked} onChange={e => setPbDate(e.target.value)} className={`${field} tabular-nums`} />
             </div>
             <div className="sm:col-span-2">
               <label htmlFor="pb-supplier" className={cn(labelClass, headTone('supplier'))}>{headLabel('supplier', true)}</label>
@@ -627,7 +628,7 @@ export default function PurchaseBill() {
               </div>
               <div>
                 <label htmlFor="pb-inv-date" className={cn(labelClass, headTone('supplier_inv_date'))}>{headLabel('supplier_inv_date', true)}</label>
-                <input id="pb-inv-date" type="date" readOnly={headDef('supplier_inv_date').locked} value={invDate} onChange={e => setInvDate(e.target.value)} className={`${field} tabular-nums`} />
+                <DateInput id="pb-inv-date" readOnly={headDef('supplier_inv_date').locked} value={invDate} onChange={e => setInvDate(e.target.value)} className={`${field} tabular-nums`} />
               </div>
               <div>
                 <label htmlFor="pb-inv-val" className={cn(labelClass, headTone('supplier_inv_value'))}>{headLabel('supplier_inv_value')}</label>

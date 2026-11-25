@@ -9,6 +9,7 @@ import { InlineError } from '../components/common/FormErrorSummary';
 import { centralDsr, errorText, todayIso } from '../lib/api';
 import { badge, field, fieldError, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow } from '../lib/styles';
 import { isStale, when, } from './types';
+import DateInput from '../components/common/DateInput';
 
 
 
@@ -90,7 +91,7 @@ export default function ShopDashboard({ shops }) {
         </div>
         <div>
           <label htmlFor="cd-day" className={label}>Day</label>
-          <input id="cd-day" type="date" value={day} onChange={e => { setDay(e.target.value); setDayError(''); }}
+          <DateInput id="cd-day" value={day} onChange={e => { setDay(e.target.value); setDayError(''); }}
             className={`${field} ${dayError ? fieldError : ''}`} aria-invalid={!!dayError} />
           <InlineError message={dayError} />
         </div>

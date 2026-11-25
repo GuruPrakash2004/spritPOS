@@ -28,6 +28,7 @@ import DefinedExtras from './DefinedExtras';
 
 import { cn } from '../../lib/utils';
 import { badge, dangerButton, field, fieldTone, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 // The shop's map is a plain Google Maps frame searching the company name and registered premises address (no API, no key).
 const mapSrc = (name, address) => (address.trim() ? `https://www.google.com/maps?q=${encodeURIComponent(`${name} ${address}`.trim())}&output=embed` : '');
@@ -397,8 +398,8 @@ const CompanyMaster = ({ canEditFiles }) => {
             </div>
             {fyForm && (
               <div className="flex flex-wrap items-end gap-3 rounded-lg border border-line p-3">
-                <div><label htmlFor="fy-from" className={label}>From date</label><input id="fy-from" type="date" value={fyForm.start} onChange={e => setFyForm(f => ({ ...f, start: e.target.value }))} className={`${field} font-mono`} /></div>
-                <div><label htmlFor="fy-to" className={label}>To date</label><input id="fy-to" type="date" value={fyForm.end} onChange={e => setFyForm(f => ({ ...f, end: e.target.value }))} className={`${field} font-mono`} /></div>
+                <div><label htmlFor="fy-from" className={label}>From date</label><DateInput id="fy-from" value={fyForm.start} onChange={e => setFyForm(f => ({ ...f, start: e.target.value }))} className={`${field} font-mono`} /></div>
+                <div><label htmlFor="fy-to" className={label}>To date</label><DateInput id="fy-to" value={fyForm.end} onChange={e => setFyForm(f => ({ ...f, end: e.target.value }))} className={`${field} font-mono`} /></div>
                 <button onClick={saveFinYear} className={primaryButton}>Create</button>
                 <button onClick={() => setFyForm(null)} className={secondaryButton}>Cancel</button>
               </div>

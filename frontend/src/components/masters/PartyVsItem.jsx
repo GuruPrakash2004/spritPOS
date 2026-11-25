@@ -19,6 +19,7 @@ import { useShortcuts } from '../../lib/keys';
 import { readTableFile } from '../../lib/readTableFile';
 import { downloadXls, downloadXlsRows } from '../../lib/xlsExport';
 import { field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 const WORDS = {
   customers: { title: 'Customer Vs Item Master', party: 'Customer', master: 'Customer Master', load: getCustomers },
@@ -297,8 +298,8 @@ function PartyVsItem({ party }) {
                   <td className="px-2 py-1 text-stone-700 dark:text-stone-200">{r.item_name}</td>
                   <td className="px-2 py-1 text-stone-700 dark:text-stone-200">{r.uom}</td>
                   <td className="px-2 py-1 text-right"><input id={`pv-rate-${i}`} type="number" min={0} step="0.01" value={r.rate} onChange={e => edit(i, { rate: e.target.value })} disabled={!canEdit} aria-label={`Rate row ${i + 1}`} className={`${field} w-28 py-1 text-right tabular-nums`} placeholder={money(0)} /></td>
-                  <td className="px-2 py-1"><input type="date" value={r.eff_from} onChange={e => edit(i, { eff_from: e.target.value })} disabled={!canEdit} aria-label={`From row ${i + 1}`} className={`${field} py-1`} /></td>
-                  <td className="px-2 py-1"><input type="date" value={r.eff_to} onChange={e => edit(i, { eff_to: e.target.value })} disabled={!canEdit} aria-label={`To row ${i + 1}`} className={`${field} py-1`} /></td>
+                  <td className="px-2 py-1"><DateInput value={r.eff_from} onChange={e => edit(i, { eff_from: e.target.value })} disabled={!canEdit} aria-label={`From row ${i + 1}`} className={`${field} py-1`} /></td>
+                  <td className="px-2 py-1"><DateInput value={r.eff_to} onChange={e => edit(i, { eff_to: e.target.value })} disabled={!canEdit} aria-label={`To row ${i + 1}`} className={`${field} py-1`} /></td>
                   <td className="px-2 py-1"><input value={r.remarks} maxLength={250} onChange={e => edit(i, { remarks: e.target.value })} disabled={!canEdit} aria-label={`Remarks row ${i + 1}`} className={`${field} py-1`} /></td>
                   <td className="px-2 py-1">{canEdit && <button onClick={() => { setCur(i); setRows(rs => rs.filter((_, j) => j !== i)); setDirty(true); }} className="text-stone-400 hover:text-red-600" aria-label={`Remove row ${i + 1}`}><Trash2 size={14} /></button>}</td>
                 </tr>

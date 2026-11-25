@@ -138,20 +138,29 @@ def stock_balance(from_date: date, to_date: date, group: str | None = None, curr
     return rows
 
 
+@router.get("/stock-balance/packages")
+def stock_balance_packages(current_user: dict = Depends(get_current_user)):
+    """The exe's Select Package list (frmRptStockBal.showPkgPopup): Select Distinct PKGItem From MstItem Where InActive = 'N' Order By 1. The report's
+    package filter (the packages parameter of /stock-balance/view and /print/stock-balance) is on this column, not on the pack size."""
+    if not (sqlstore.enabled() and db.is_db_available()):
+        return []
+    return [str(r["p"]).strip() for r in db.fetchall("SELECT DISTINCT PKGItem p FROM MstItem WITH (NOLOCK) WHERE InActive = 'N' AND PKGItem IS NOT NULL ORDER BY 1") if str(r["p"] or "").strip()]
+
+
 @router.get("/stock-balance/view")
 def stock_balance_view(from_date: date, to_date: date, view: str = Query("closing", pattern="^(closing|detailed|package|group)$"),
                        groups: str = "", items: str = "", packages: str = "", litres: bool = False, values: bool = False,
                        rate: str = Query("pur", pattern="^(pur|mrp|war|fifo)$"), with_tax: bool = False, act_sales: bool = False,
-                       zero_hide: bool = False, group_total: bool = False, current_user: dict = Depends(get_current_user)):
+                       zero_hide: bool = False, group_total: bool = False, aroed: bool = False, current_user: dict = Depends(get_current_user)):
     """The exe's Stock Balance screen (frmRptStockBal): Closing Balance Only / With Detailed / Package wise / Group wise Summary, with the
     Selected Group / Select Item / Select Package filters, litres, Show Value (Last Purchase Rate, MRP, Wt.Avg, FIFO), With Tax, Actual Sales
-    Value, Do Not Show Zero Balance and Group Wise Total. See app/stock_balance_view.py."""
+    Value, Do Not Show Zero Balance, Group Wise Total and AROED Value (Closing Balance With Detailed). See app/stock_balance_view.py."""
     from .. import stock_balance_view as sbv
     _check_range(from_date, to_date)
     if not (sqlstore.enabled() and db.is_db_available()):
         raise HTTPException(503, "This report needs the shop's database")
     return sbv.build(view, from_date, to_date, groups, items, packages, litres, values, rate, with_tax, act_sales, zero_hide, group_total,
-                     hide_cost=hides_cost(current_user))
+                     hide_cost=hides_cost(current_user), aroed=aroed)
 
 
 @router.get("/stock-ledger")

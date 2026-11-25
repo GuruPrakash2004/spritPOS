@@ -13,6 +13,7 @@ import { errorText, getAuditLog, getAuditScreens, } from '../../lib/api';
 import { downloadXls } from '../../lib/xlsExport';
 import { exportButton, field, fieldError, label, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead } from '../../lib/styles';
 import { SkeletonTableRows } from '../common/Skeleton';
+import DateInput from '../common/DateInput';
 
 const iso = (d) => d.toISOString().slice(0, 10);
 // "2026-11-16T14:05:09" → "02:05:09PM", the desktop grid's hh:mm:sstt.
@@ -90,11 +91,11 @@ export default function AdminAuditLog() {
         </div>
         <div>
           <label htmlFor="aal-from" className={label}>From</label>
-          <input id="aal-from" type="date" value={from} onChange={e => { setFrom(e.target.value); setDateError(''); }} className={field} />
+          <DateInput id="aal-from" value={from} onChange={e => { setFrom(e.target.value); setDateError(''); }} className={field} />
         </div>
         <div>
           <label htmlFor="aal-to" className={label}>To</label>
-          <input id="aal-to" type="date" value={to} onChange={e => { setTo(e.target.value); setDateError(''); }}
+          <DateInput id="aal-to" value={to} onChange={e => { setTo(e.target.value); setDateError(''); }}
             className={`${field} ${dateError ? fieldError : ''}`} aria-invalid={!!dateError} />
           <InlineError message={dateError} />
         </div>

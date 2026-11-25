@@ -41,6 +41,7 @@ DEFAULT_FOLDER = Path(__file__).resolve().parents[1] / "Rpts"
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 THERMAL_PREVIEW_PT = 216   # 3 inches in points: the width of the thermal paper roll
 TIMEOUT = 60.0  # Crystal opens the report, runs its queries and lays out the pages
+SLOW_OPEN = {"rptzbitem.rpt": 200}   # reports whose file itself takes ~45 s to load (seen in data/bridge.log): the bridge's limit and this wait, in seconds
 
 
 def _env(key: str, default: str = "") -> str:
@@ -254,15 +255,18 @@ def _call_once(path: str, job: dict | None, method: str = "POST") -> httpx.Respo
                 # previews/exports are laid out on a local driver (see layout_printer()); a direct print uses its own printer
                 "layout_printer": layout_printer() if path == "/render" else ""}
     started = time.perf_counter()
+    limit = SLOW_OPEN.get(str((job or {}).get("rpt", "")).lower(), 0)
+    headers = {"X-Bridge-Key": key(), **({"X-Bridge-Limit": str(limit)} if limit else {})}
+    wait = limit + 10 if limit else TIMEOUT
     try:
         try:
-            r = _client().request(method, base + path, json=body, headers={"X-Bridge-Key": key()}, timeout=TIMEOUT)
+            r = _client().request(method, base + path, json=body, headers=headers, timeout=wait)
         except httpx.ConnectError:
             # The bridge is down for a moment (it restarts itself after a hung report): wait for the one this backend runs, then go again.
             from . import bridge_launcher   # imported here: bridge_launcher imports this module
             if not bridge_launcher.wait_ready(60):
                 raise
-            r = _client().request(method, base + path, json=body, headers={"X-Bridge-Key": key()}, timeout=TIMEOUT)
+            r = _client().request(method, base + path, json=body, headers=headers, timeout=wait)
     except httpx.HTTPError as e:
         logger.warning("Crystal bridge %s %s failed after %.1fs: %s", path, (job or {}).get("rpt", ""), time.perf_counter() - started, e.__class__.__name__)
         raise HTTPException(503, f"The Crystal Reports bridge can't be reached ({e.__class__.__name__}). Is it running?")

@@ -10,6 +10,7 @@ import { InlineError } from '../common/FormErrorSummary';
 import { ProvidersTab, InvoiceSmsTab } from './SmsSettings';
 import { errorText, getAuthRole, getCustomers, getSmsHistory, getSmsProviders, sendSms, todayIso } from '../../lib/api';
 import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 const MAX = 250;
 
@@ -103,9 +104,9 @@ function HistoryTab() {
     <div className={`${panel} p-4`}>
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
         <label htmlFor="sh-from" className="font-semibold">From</label>
-        <input id="sh-from" type="date" value={from} max={to} onChange={e => e.target.value && setFrom(e.target.value)} className={`${field} w-auto`} />
+        <DateInput id="sh-from" value={from} max={to} onChange={e => e.target.value && setFrom(e.target.value)} className={`${field} w-auto`} />
         <label htmlFor="sh-to" className="font-semibold">To</label>
-        <input id="sh-to" type="date" value={to} min={from} max={todayIso()} onChange={e => e.target.value && setTo(e.target.value)} className={`${field} w-auto`} />
+        <DateInput id="sh-to" value={to} min={from} max={todayIso()} onChange={e => e.target.value && setTo(e.target.value)} className={`${field} w-auto`} />
         <span className="ml-auto text-xs text-stone-500">{loading ? 'Loading…' : `${state.rows.length} message${state.rows.length === 1 ? '' : 's'}`}</span>
       </div>
       {state.error && <InlineError message={state.error} />}

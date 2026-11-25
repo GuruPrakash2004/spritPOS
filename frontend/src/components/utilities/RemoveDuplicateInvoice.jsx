@@ -17,6 +17,7 @@ import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
 import { errorText, listDuplicateInvoices, removeDuplicateInvoices, } from '../../lib/api';
 import { badge, dangerButton, field, fieldError, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead, tableRow } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -97,11 +98,11 @@ export default function RemoveDuplicateInvoice() {
       <section className={`${panel} flex flex-wrap items-end gap-3 p-4`}>
         <div>
           <label htmlFor="rdi-from" className={label}>From</label>
-          <input id="rdi-from" type="date" value={from} onChange={e => { setFrom(e.target.value); setDateError(''); }} className={field} />
+          <DateInput id="rdi-from" value={from} onChange={e => { setFrom(e.target.value); setDateError(''); }} className={field} />
         </div>
         <div>
           <label htmlFor="rdi-to" className={label}>To</label>
-          <input id="rdi-to" type="date" value={to} onChange={e => { setTo(e.target.value); setDateError(''); }}
+          <DateInput id="rdi-to" value={to} onChange={e => { setTo(e.target.value); setDateError(''); }}
             className={`${field} ${dateError ? fieldError : ''}`} aria-invalid={!!dateError} />
           <InlineError message={dateError} />
         </div>

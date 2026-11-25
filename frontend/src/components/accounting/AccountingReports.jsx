@@ -10,6 +10,7 @@ import { InlineError } from '../common/FormErrorSummary';
 import { downloadText, toCsv } from '../../lib/csv';
 import { errorText, getAccountingLedgers, getBillAgeing, getBillWise, getGeneralLedger, getPartyOutstanding, todayIso } from '../../lib/api';
 import { exportButton, field, label, money, pageHeader, pageSub, pageTitle, panel, primaryButton, tableBody, tableHead } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 function Page({ title, sub, controls, problem, children }) {
   return (
@@ -49,8 +50,8 @@ export function GeneralLedger() {
             <option value="">— pick a ledger —</option>
             {ledgers.map(l => <option key={l.id} value={l.id}>{l.name}{l.group ? ` — ${l.group}` : ''}</option>)}
           </select></div>
-        <div><label htmlFor="gl-from" className={label}>From</label><input id="gl-from" type="date" value={from} onChange={e => setFrom(e.target.value)} className={`${field} tabular-nums`} /></div>
-        <div><label htmlFor="gl-to" className={label}>To</label><input id="gl-to" type="date" value={to} onChange={e => setTo(e.target.value)} className={`${field} tabular-nums`} /></div>
+        <div><label htmlFor="gl-from" className={label}>From</label><DateInput id="gl-from" value={from} onChange={e => setFrom(e.target.value)} className={`${field} tabular-nums`} /></div>
+        <div><label htmlFor="gl-to" className={label}>To</label><DateInput id="gl-to" value={to} onChange={e => setTo(e.target.value)} className={`${field} tabular-nums`} /></div>
         <button onClick={show} className={primaryButton}><Eye size={14} />View</button>
         {data && <button onClick={csv} className={exportButton}><Download size={14} />Export CSV</button>}
       </>}>
@@ -125,7 +126,7 @@ export function BillWiseReport({ mode }) {
       controls={<>
         <div><label htmlFor="bw-type" className={label}>Parties</label>
           <select id="bw-type" value={type} onChange={e => { setType(e.target.value); setRows(null); }} className={field}><option value="">All</option><option value="R">Receivable (customers)</option><option value="P">Payable (suppliers)</option></select></div>
-        {ageing && <div><label htmlFor="bw-on" className={label}>As on</label><input id="bw-on" type="date" value={asOn} onChange={e => setAsOn(e.target.value)} className={`${field} tabular-nums`} /></div>}
+        {ageing && <div><label htmlFor="bw-on" className={label}>As on</label><DateInput id="bw-on" value={asOn} onChange={e => setAsOn(e.target.value)} className={`${field} tabular-nums`} /></div>}
         <button onClick={show} className={primaryButton}><Eye size={14} />View</button>
         {rows && <button onClick={() => downloadText(`${ageing ? 'Bill_wise_Ageing' : 'Bill_wise_Outstanding'}.csv`, toCsv([head, ...rows.map(cells)]))} className={exportButton}><Download size={14} />Export CSV</button>}
       </>}>

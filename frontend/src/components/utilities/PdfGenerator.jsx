@@ -8,6 +8,7 @@ import { toastStore } from '../common/toastStore';
 import { InlineError } from '../common/FormErrorSummary';
 import { downloadBulkPdf, errorText, getPrintOptions, listPurchaseBills, listSalesInvoices, getPurchaseIndents, todayIso } from '../../lib/api';
 import { field, label, pageHeader, pageSub, pageTitle, panel, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
+import DateInput from '../common/DateInput';
 
 const KINDS = [
   { id: 'sales_invoice', name: 'Sales Invoice', load: (from, to) => listSalesInvoices('SAVED', from, to) },
@@ -90,8 +91,8 @@ export default function PdfGenerator() {
             {printTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
           </select>
         </div>
-        <div><label htmlFor="pg-from" className={label}>From</label><input id="pg-from" type="date" value={from} max={to} onChange={e => e.target.value && setFrom(e.target.value)} className={field} /></div>
-        <div><label htmlFor="pg-to" className={label}>To</label><input id="pg-to" type="date" value={to} min={from} max={todayIso()} onChange={e => e.target.value && setTo(e.target.value)} className={field} /></div>
+        <div><label htmlFor="pg-from" className={label}>From</label><DateInput id="pg-from" value={from} max={to} onChange={e => e.target.value && setFrom(e.target.value)} className={field} /></div>
+        <div><label htmlFor="pg-to" className={label}>To</label><DateInput id="pg-to" value={to} min={from} max={todayIso()} onChange={e => e.target.value && setTo(e.target.value)} className={field} /></div>
         <button onClick={() => void load()} className={secondaryButton}><Download size={14} />Load</button>
         <button onClick={() => void generate()} disabled={busy || !ticked.size} className={`${primaryButton} ml-auto`}><FileDown size={14} />{busy ? 'Generating…' : `Generate PDF (${ticked.size})`}</button>
       </div>

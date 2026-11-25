@@ -423,6 +423,17 @@ def _open_stock(code: str, qty: float) -> None:
         store.move_stock(code, qty, "opening", "OPENING", date.today(), store.ITEMS[code]["purchase_rate"])
 
 
+def _group_slnos() -> dict[str, int]:
+    """{item group code: GroupOrderBy} as the database holds it now; empty when the database is off or has no such column (the store's own order is used)."""
+    try:
+        if not db.is_db_available():
+            return {}
+        rows = db.fetchall("SELECT ITEMGROUPCODE AS code, GroupOrderBy AS slno FROM MstITEMGROUP WITH (NOLOCK) WHERE ITEMGROUPID > 0")
+        return {str(r["code"]).strip(): int(r["slno"] or 0) for r in rows}
+    except Exception:   # noqa: BLE001 - the list still shows, in the store's order
+        return {}
+
+
 def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tuple[str, ...], store_name: str) -> None:
     can_add = [Depends(require_right("add", *modules))]
     can_edit = [Depends(require_right("edit", *modules))]
@@ -431,6 +442,9 @@ def crud(path: str, table: dict, model: type[BaseModel], tag: str, modules: tupl
     @router.get(f"/{path}", response_model=list[model], tags=[tag], name=f"List {tag}")
     def list_all(q: str | None = None, current_user: dict = Depends(get_current_user)):
         rows = table.values()
+        if path == "item-groups":   # Arrange Group Slno order, read from the database on every request so a change made in the Windows vLQMS shows at once
+            order = _group_slnos()
+            rows = sorted(rows, key=lambda r: (order.get(r["code"], r.get("_order") or 0), r["code"]))
         if q:
             ql = q.lower()
             def hit(r):   # the item find box (frmMstItem.txtSearch_KeyUp) also looks in ShortName and HotKey
@@ -1026,6 +1040,8 @@ def save_order(path: str, body: OrderSave, current_user: dict = Depends(get_curr
         with db.transaction() as cur:
             for slno, row_id in enumerate(body.ids, 1):
                 cur.execute(f"UPDATE {table} SET {order_col} = ? WHERE {id_col} = ?", (slno, row_id))
+    if path == "item-groups":
+        db_store.load_item_groups()   # group lists follow the new Slno at once
     admin_audit.record("Item Group Master" if path == "item-groups" else "Package Master", "Edited", "Arrange Slno", "", f"{len(body.ids)} rows")
     return {"saved": len(body.ids)}
 

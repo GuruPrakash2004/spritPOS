@@ -13,6 +13,7 @@ import { downloadXls, } from '../../lib/xlsExport';
 import { useCompanyProfile } from '../../hooks/useCompanyProfile';
 import ReportPrintModal from '../print/ReportPrintModal';
 import ReportEmailDialog, { } from './ReportEmailDialog';
+import DateInput from '../common/DateInput';
 
 const toDmy = (iso) => iso.split('-').reverse().join('/');
 
@@ -306,12 +307,12 @@ const ReportsDashboard = () => {
               {hasDate && (<>
               <div>
                 <label htmlFor="cr-from" className={label}>From</label>
-                <input id="cr-from" type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setDateError(''); }}
+                <DateInput id="cr-from" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setDateError(''); }}
                   aria-invalid={!!dateError} className={`${field} tabular-nums ${dateError ? fieldError : ''}`} />
               </div>
               <div>
                 <label htmlFor="cr-to" className={label}>To</label>
-                <input id="cr-to" type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setDateError(''); }}
+                <DateInput id="cr-to" value={toDate} onChange={(e) => { setToDate(e.target.value); setDateError(''); }}
                   aria-invalid={!!dateError} className={`${field} tabular-nums ${dateError ? fieldError : ''}`} />
                 <InlineError message={dateError} />
               </div>

@@ -258,6 +258,15 @@ def _custom(job: dict) -> bytes:
                       cols=[head[k] for k in keys], keys=keys, rows=rows), len(keys) > 8)
 
 
+def _zero_items(job: dict) -> bytes:
+    from . import store
+    items = [i for i in store.ITEMS.values() if i.get("active") is not False and float(i.get("qoh") or 0) == 0]
+    items.sort(key=lambda i: (str(i.get("group") or ""), str(i.get("name") or "")))
+    rows = [{"Fld1": i.get("group") or "", "Fld2": i.get("name") or "", "Fld3": i.get("package") or "", "Fld4": _money(i.get("mrp"))} for i in items]
+    return _pdf(_html(TABLE, co=_company(job["parameters"]), head={"HdrText": f"Zero Stock Items ({len(rows)})"}, name="Zero Stock Items",
+                      cols=["Item Group", "Item Name", "PKG", "MRP"], keys=["Fld1", "Fld2", "Fld3", "Fld4"], rows=rows), False)
+
+
 def _stock(job: dict) -> bytes:
     user = _tag(job["selection"], "UserName")
     rows = db.fetchall("SELECT s.*, i.ITEMNAME FROM dbo.RptStk s LEFT JOIN dbo.MstITEM i ON i.ITEMID = s.itemID "
@@ -278,6 +287,8 @@ def render(job: dict) -> bytes:
         return _dsr(job)
     if name.startswith("rptstkbal"):
         return _stock(job)
+    if name.startswith("rptzbitem"):
+        return _zero_items(job)
     if "RptUDR" in str(job.get("selection") or ""):
         return _custom(job)
     raise HTTPException(501, f"The built-in print has no layout for {job.get('rpt')} yet "

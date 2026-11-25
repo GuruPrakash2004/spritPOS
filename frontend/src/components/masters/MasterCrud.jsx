@@ -917,7 +917,7 @@ export default function MasterCrud({ title, path, fields: baseFields = [], optio
                   </div>
                 </div>
               ) : (
-                <GroupBox title="Additional Information">
+                <GroupBox title={tabNames.length > 1 || tabNames[0] ? 'Additional Information' : ''}>
                   <div role="tablist" aria-label="Sections" className="mb-3 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line">
                     {tabNames.map(name => (
                       <button key={name || 'header'} type="button" role="tab" aria-selected={shownTab === name} onClick={() => setActiveTab(name)}

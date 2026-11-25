@@ -210,6 +210,8 @@ def load_item_groups() -> None:
         WHERE ITEMGROUPID > 0
     """)
     store.ITEM_GROUPS.clear()
+    # Item Group "Arrange Slno" order, so every group list (Stock Balance, report filters ...) follows it
+    rows = sorted(rows, key=lambda r: (int(_f(r.get("GroupOrderBy"))), _s(r.get("ITEMGROUPCODE"))))
     for r in rows:
         code = _s(r.get("ITEMGROUPCODE")) or str(r.get("ITEMGROUPID"))
         store.ITEM_GROUPS[code] = {

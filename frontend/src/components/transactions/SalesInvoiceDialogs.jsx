@@ -15,6 +15,7 @@ import { toastStore } from '../common/toastStore';
 import { cancelSalesInvoice, deleteSavedSalesInvoice, errorText, listSalesInvoices, todayIso } from '../../lib/api';
 import { dangerButton, field, iconButton, label, money, primaryButton, secondaryButton, tableBody, tableHead } from '../../lib/styles';
 import { SkeletonTableRows } from '../common/Skeleton';
+import DateInput from '../common/DateInput';
 
 
 // Re-Print Bill (the desktop's window): a Search box and the bills of the chosen dates (today to start with; From / To and refresh are the only
@@ -96,9 +97,9 @@ export function ReprintDialog({ onClose, onEdit, onPrint }) {
           <input id="rp-search" data-autofocus autoFocus value={search} onChange={e => { setSearch(e.target.value); setPicked(''); }} autoComplete="off" className={`${field} !w-72`} />
           <div className="ml-auto flex items-center gap-2 text-xs">
             <label htmlFor="rp-from" className="font-semibold">From</label>
-            <input id="rp-from" type="date" value={from} max={to} onChange={e => { if (e.target.value) { setFrom(e.target.value); setPicked(''); } }} className={dateBox} />
+            <DateInput id="rp-from" value={from} max={to} onChange={e => { if (e.target.value) { setFrom(e.target.value); setPicked(''); } }} className={dateBox} />
             <label htmlFor="rp-to" className="font-semibold">To</label>
-            <input id="rp-to" type="date" value={to} min={from} max={todayIso()} onChange={e => { if (e.target.value) { setTo(e.target.value); setPicked(''); } }} className={dateBox} />
+            <DateInput id="rp-to" value={to} min={from} max={todayIso()} onChange={e => { if (e.target.value) { setTo(e.target.value); setPicked(''); } }} className={dateBox} />
             <button type="button" onClick={() => setAgain(n => n + 1)} className={`${iconButton} border border-line`} aria-label="Refresh" title="Refresh"><RefreshCw size={14} /></button>
           </div>
         </div>
